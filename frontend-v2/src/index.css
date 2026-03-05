@@ -1,0 +1,123 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── 品牌色：星际金 ── */
+  --color-gold-50:  #fdf8ec;
+  --color-gold-100: #faefc9;
+  --color-gold-200: #f5dc8a;
+  --color-gold-300: #f0c44f;
+  --color-gold-400: #e8a91e;
+  --color-gold-500: #d4941a;
+  --color-gold-600: #b87316;
+  --color-gold-700: #8f5311;
+  --color-gold-800: #6b3b0d;
+  --color-gold-900: #4a290a;
+
+  /* ── 背景层次（暗黑系） ── */
+  --color-dark-950: #080808;
+  --color-dark-900: #0d0d0d;
+  --color-dark-800: #141414;
+  --color-dark-700: #1a1a1a;
+  --color-dark-600: #222222;
+  --color-dark-500: #2d2d2d;
+  --color-dark-400: #3d3d3d;
+  --color-dark-300: #555555;
+
+  /* ── 字体 ── */
+  --font-sans: 'Inter', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
+
+  /* ── 圆角 ── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+}
+
+/* ── 基础重置 ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #080808;
+  color: rgba(255,255,255,0.92);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ── 滚动条美化 ── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.10);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212,148,26,0.45);
+}
+
+/* ── 选中高亮 ── */
+::selection {
+  background: rgba(212,148,26,0.28);
+  color: #fff;
+}
+
+/* ── 毛玻璃工具类 ── */
+.glass {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.glass-gold {
+  background: rgba(212,148,26,0.07);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(212,148,26,0.18);
+}
+
+/* ── 金色渐变文字 ── */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #f0c44f 0%, #d4941a 60%, #f0c44f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── 金色光晕按钮 ── */
+.btn-gold {
+  background: linear-gradient(135deg, #e8a91e 0%, #b87316 100%);
+  color: #000;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: all 0.22s ease;
+}
+.btn-gold:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 28px rgba(212,148,26,0.38), 0 2px 8px rgba(212,148,26,0.2);
+}
+.btn-gold:active { transform: translateY(0); }
+
+/* ── 卡片阴影 ── */
+.card-shadow {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 8px 32px rgba(0,0,0,0.5);
+}
+
+/* ── 焦点环 ── */
+:focus-visible {
+  outline: 2px solid rgba(212,148,26,0.7);
+  outline-offset: 2px;
+}
