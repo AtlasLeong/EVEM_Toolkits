@@ -176,7 +176,6 @@ function MobileSearch() {
       },
       {
         onSuccess: (data) => {
-          console.log(data);
           setPathData(data);
         },
         onError: (error) => {

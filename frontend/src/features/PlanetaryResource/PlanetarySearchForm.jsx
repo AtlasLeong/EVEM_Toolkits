@@ -4,7 +4,7 @@ import PlanetarySelecter from "./PlanetarySelecter";
 import Button from "../../ui/Button";
 import Form from "../../ui/Form";
 import styled from "styled-components";
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { searchPlanetResources } from "../../services/apiPlanetaryResource";
 import ErrorMessage from "../../ui/ErrorMessage";
 

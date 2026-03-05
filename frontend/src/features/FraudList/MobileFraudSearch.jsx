@@ -150,7 +150,6 @@ function MobileFraudSearch() {
     ];
   });
 
-  console.log(fraudList);
   return (
     <PageContainer>
       <CustomFlexContainer>

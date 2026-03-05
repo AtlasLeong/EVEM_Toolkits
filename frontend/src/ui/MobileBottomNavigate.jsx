@@ -53,7 +53,6 @@ function MobileBottomNavigate() {
     navigate(value);
   };
 
-  console.log(location.pathname);
   return (
     <FixedTabBar
       activeKey={activeKey}

@@ -116,7 +116,6 @@ function ModalApproveReport({ reportDetail, formatDate, onCloseModal }) {
           <Image.PreviewGroup
             preview={{
               onChange: (current, prev) =>
-                console.log(`current index: ${current}, prev index: ${prev}`),
             }}
           >
             {urlList.map((url) => (

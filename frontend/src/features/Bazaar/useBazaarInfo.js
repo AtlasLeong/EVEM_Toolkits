@@ -1,8 +1,7 @@
-import { useQuery } from "react-query";
+import { useQuery } from '@tanstack/react-query';
 import { getBazaarInfo } from "../../services/apiBazaar";
 
 export function useBazaarInfo({ bazaarName, server, selectDate }) {
-  console.log(bazaarName, server, selectDate);
   const {
     isLoading,
     data: bazaarInfo,

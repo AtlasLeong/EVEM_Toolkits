@@ -1,9 +1,9 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { postJumpInfo } from "../../services/apiTacticalBoard";
 import { message } from "antd";
 
 function usePostJumpInfo() {
-  return useMutation(postJumpInfo, {
+  return useMutation({ mutationFn: postJumpInfo,
     onSuccess: (data) => {
       message.success("获取诱导方案成功"); // 显示成功提示
     },

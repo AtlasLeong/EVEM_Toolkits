@@ -1,14 +1,14 @@
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { savePlanetaryProgramme } from "../../services/apiPlanetaryResource";
 import { message } from "antd";
 
 function useSaveProgramme({ onCloseModal, handleSetProgremma }) {
   const queryClient = useQueryClient();
-  return useMutation(savePlanetaryProgramme, {
+  return useMutation({ mutationFn: savePlanetaryProgramme,
     onSuccess: (data) => {
       message.success("成功保存方案"); // 显示成功提示
       onCloseModal();
-      queryClient.invalidateQueries("progremmaList");
+      queryClient.invalidateQueries({ queryKey: ["progremmaList"] });
       handleSetProgremma(data.programme_id);
     },
     onError: (error) => {

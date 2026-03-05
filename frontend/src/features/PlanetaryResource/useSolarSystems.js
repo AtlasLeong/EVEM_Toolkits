@@ -1,4 +1,4 @@
-import { useQuery } from "react-query";
+import { useQuery } from '@tanstack/react-query';
 import { getSolarSystems } from "../../services/apiStarField";
 import { solarsystemListTrans } from "./regionListTrans";
 export const useSolarSystems = (constellationId) => {

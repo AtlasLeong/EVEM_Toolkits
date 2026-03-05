@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { editFraudRecord } from "../../services/apiFraudList";
 import { message } from "antd";
 
@@ -7,10 +7,10 @@ export function useEditFraudRecord() {
   return useMutation({
     mutationFn: editFraudRecord,
     onSuccess: () => {
-      queryClient.invalidateQueries([
+      queryClient.invalidateQueries({ queryKey: [
         "adminFraudList",
         "adminFraudBehaviorFlow",
-      ]);
+      ] });
       message.success("成功保存记录");
     },
     onError: () => {

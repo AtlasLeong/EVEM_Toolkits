@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { submitReportApprove } from "../../services/apiFraudList";
 import { message } from "antd";
 
@@ -7,7 +7,7 @@ export function useSubmitReportApprove() {
   return useMutation({
     mutationFn: submitReportApprove,
     onSuccess: () => {
-      queryClient.invalidateQueries(["adminFraudReportList"]);
+      queryClient.invalidateQueries({ queryKey: ["adminFraudReportList"] });
       message.success("审核完成");
     },
     onError: (error) => {

@@ -89,12 +89,9 @@ function TwoDStarMap() {
   const [isOnlyClearJumpPath, setIsOnlyClearJumpPath] = useState(false);
 
   const handleRemoveInductionGroup = (startSystem, endSystem) => {
-    console.log(startSystems);
-    console.log("Removing induction group:", startSystem, endSystem);
 
     if (lineMode === "Single induction") {
       // 单选模式：移除所有自定义路径和图形元素
-      console.log("Removing in Single induction mode");
 
       setCustomPaths([]);
       setStartSystems([]);
@@ -106,7 +103,6 @@ function TwoDStarMap() {
             const shouldRemove =
               child.isCustom || child.isStartMarker || child.isEndMarker;
             if (shouldRemove) {
-              console.log("Removing child:", child);
             }
             return !shouldRemove;
           }
@@ -120,12 +116,10 @@ function TwoDStarMap() {
         prevTexts.filter((text) => !text.isCustom)
       );
 
-      console.log(
         "Removed all custom paths and elements in Single induction mode"
       );
     } else {
       // 多选模式：移除特定的诱导组
-      console.log("Removing in Multiple induction mode");
 
       // 检查是否为自定义路线
       const customPathIndex = customPaths.findIndex(
@@ -134,7 +128,6 @@ function TwoDStarMap() {
           path.end.system_id === endSystem.system_id
       );
 
-      console.log("Custom path index:", customPathIndex);
 
       if (customPathIndex !== -1) {
         // 删除自定义路线
@@ -234,10 +227,8 @@ function TwoDStarMap() {
           );
         }
 
-        console.log("Removed custom path and related elements");
       } else {
         // 处理 API 获取的诱导路径的删除逻辑
-        console.log("Removing API-fetched induction path");
 
         // 找到要删除的路径的起始和结束索引
         let startIndex = -1;
@@ -253,7 +244,6 @@ function TwoDStarMap() {
           }
         }
 
-        console.log("Start index:", startIndex, "End index:", endIndex);
 
         if (startIndex === -1 || endIndex === -1) {
           console.error("未找到要删除的路线");
@@ -263,7 +253,6 @@ function TwoDStarMap() {
         // 获取要删除的路径段
         const pathToRemove = pathData.slice(startIndex, endIndex + 1);
 
-        console.log(pathToRemove);
 
         // 设置只清除诱导路线
         setIsOnlyClearJumpPath(true);
@@ -282,7 +271,6 @@ function TwoDStarMap() {
                 child.endSystemId === segment.end.system_id
             );
             if (lineToRemove) {
-              console.log("Removing path line:", lineToRemove);
               pixiGraphics.current.removeChild(lineToRemove);
             }
 
@@ -292,7 +280,6 @@ function TwoDStarMap() {
                 (child) => child.systemId === segment.start.system_id
               );
               if (markerToRemove) {
-                console.log("Removing intermediate marker:", markerToRemove);
                 pixiGraphics.current.removeChild(markerToRemove);
               }
             }
@@ -305,7 +292,6 @@ function TwoDStarMap() {
                 child.isDistanceText
             );
             if (textToRemove) {
-              console.log("Removing distance text:", textToRemove);
               pixiGraphics.current.removeChild(textToRemove);
             }
           });
@@ -318,7 +304,6 @@ function TwoDStarMap() {
               child.isInductionPath
           );
           if (startMarkerToRemove) {
-            console.log("Removing start marker:", startMarkerToRemove);
             pixiGraphics.current.removeChild(startMarkerToRemove);
           }
 
@@ -327,19 +312,14 @@ function TwoDStarMap() {
               child.systemId === endSystem.system_id && child.isEndMarker
           );
           if (endMarkerToRemove) {
-            console.log("Removing end marker:", endMarkerToRemove);
             pixiGraphics.current.removeChild(endMarkerToRemove);
           }
         }
 
-        console.log("Removed API-fetched induction path and related elements");
       }
     }
 
-    console.log("Induction group removal complete");
   };
-  // console.log(startSystems);
-  // console.log(pathData);
   // 使用useMemo来缓存搜索选项
   const options = useMemo(() => {
     return boardSystems
@@ -973,7 +953,6 @@ function TwoDStarMap() {
   };
 
   const drawLines = (currentStartSystems, currentEndSystems) => {
-    console.log("Drawing lines:", currentStartSystems, currentEndSystems);
 
     // 移除之前的所有自定义线和文本
     distanceLines.forEach((line) => {
@@ -1090,7 +1069,6 @@ function TwoDStarMap() {
       ...newTexts,
     ]);
 
-    console.log(
       "Lines drawn:",
       newLines.length,
       "Texts added:",
@@ -1118,7 +1096,6 @@ function TwoDStarMap() {
       setSelectionState("start");
 
       // 第二个 useEffect 的逻辑
-      console.log("lineMode changed:", lineMode);
       if (startSystems.length > 0 && endSystems.length > 0) {
         drawLines(startSystems, endSystems, startCircles, endCircles);
       }
@@ -1604,7 +1581,6 @@ function TwoDStarMap() {
         <Spinner />
       </StyledDiv>
     );
-  console.log(pathData);
   return (
     <div style={{ position: "relative", width: "100vw", height: "100vh" }}>
       <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000 }}>

@@ -1,4 +1,4 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { register } from "../../services/apiAuthentication";
 import { useNavigate } from "react-router-dom";
 import { message } from "antd";
@@ -9,7 +9,7 @@ function useRegister({ setError }) {
   const navigate = useNavigate();
   const { login: loginAction } = useContext(AuthContext);
 
-  return useMutation(register, {
+  return useMutation({ mutationFn: register,
     onSuccess: (data) => {
       localStorage.setItem("access_token", data.access);
       localStorage.setItem("refresh_token", data.refresh);

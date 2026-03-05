@@ -245,7 +245,6 @@ function SearchBox({
     setIsVisible((prev) => !prev);
   };
 
-  // console.log(dirtRoad, jumpPathStart, jumpPathEnd, jumpRange, inHighSecurity);
   const handlePostJumpInfo = useCallback(() => {
     if (!jumpPathEnd || !jumpPathStart || !jumpRange) {
       message.warning("请选择完整诱导信息");
@@ -282,7 +281,6 @@ function SearchBox({
     setPathData,
   ]);
 
-  console.log(startSystems);
   return (
     <>
       <TopContainer $isVisible={isVisible} ref={containerRef}>

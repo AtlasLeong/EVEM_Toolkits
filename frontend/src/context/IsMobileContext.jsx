@@ -1,19 +1,24 @@
 import { createContext, useEffect, useState } from "react";
 
-// 创建一个 React 上下文
 const isMobileContext = createContext();
 
+function getIsMobile() {
+  const ua = navigator.userAgent;
+  if (/Mobi|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+    return true;
+  }
+  return window.innerWidth <= 767;
+}
+
 function IsMobileProvider({ children }) {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+  const [isMobile, setIsMobile] = useState(getIsMobile);
 
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 767);
-    };
-
+    const handleResize = () => setIsMobile(getIsMobile());
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
   return (
     <isMobileContext.Provider value={{ isMobile }}>
       {children}
@@ -22,3 +27,4 @@ function IsMobileProvider({ children }) {
 }
 
 export { isMobileContext, IsMobileProvider };
+

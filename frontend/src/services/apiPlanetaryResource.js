@@ -107,7 +107,6 @@ export async function deleteProgremmaByID(programme_id) {
   }
   // 检查是否是 204 No Content 响应
   if (res.status === 204) {
-    console.log("No content to return.");
     return {}; // 返回一个空对象或其他合适的值
   }
   const data = await res.json();

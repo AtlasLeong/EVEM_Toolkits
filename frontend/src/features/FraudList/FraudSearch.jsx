@@ -208,7 +208,6 @@ function FraudSearch() {
     },
   ];
 
-  console.log(fraudList);
 
   const items = fraudList.map((item, index) => {
     return [

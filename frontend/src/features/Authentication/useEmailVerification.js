@@ -1,4 +1,4 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { emailVerification } from "../../services/apiAuthentication";
 
 export function useEmailVerification({ setError }) {
@@ -13,7 +13,6 @@ export function useEmailVerification({ setError }) {
     },
     onError: (error) => {
       // 处理错误情况
-      console.log(error);
     },
   });
 }

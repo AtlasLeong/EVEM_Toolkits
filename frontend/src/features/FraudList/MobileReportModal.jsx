@@ -118,7 +118,6 @@ function MobileReportMoadl({ onCloseModal }) {
       onError(error);
     }
   };
-  console.log(fileList);
 
   function handleSubmitForm(data) {
     if (fileList.length <= 0) {

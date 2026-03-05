@@ -94,7 +94,6 @@ const StarMap = () => {
       }));
   }, [boardSystems]);
 
-  console.log(boardStarGate);
 
   const drawStarMap = useCallback(
     (stars, stargates, constellations, transform) => {

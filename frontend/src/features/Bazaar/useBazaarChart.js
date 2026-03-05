@@ -1,9 +1,9 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { getBazaarChart } from "../../services/apiBazaar";
 
 export function useBazaarChart() {
-  const { mutate, data, isSuccess, isError, error, isLoading } =
-    useMutation(getBazaarChart);
+  const { mutate, data, isSuccess, isError, error, isPending } =
+    useMutation({ mutationFn: getBazaarChart });
 
   return {
     mutate,
@@ -11,6 +11,7 @@ export function useBazaarChart() {
     isSuccess,
     isError,
     error,
-    isLoading,
+    isLoading: isPending,
   };
 }
+

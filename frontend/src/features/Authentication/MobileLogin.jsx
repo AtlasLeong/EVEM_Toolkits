@@ -319,7 +319,6 @@ function MobileLogin() {
   }, [isButtonDisabled, countdown]);
 
   useEffect(() => {
-    console.log(isForgetPassword);
     if (!isForgetPassword) {
       setLoginState("login");
     }

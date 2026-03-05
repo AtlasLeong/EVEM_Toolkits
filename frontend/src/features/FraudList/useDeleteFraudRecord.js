@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteFraudByID } from "../../services/apiFraudList";
 import { message } from "antd";
 
@@ -7,10 +7,10 @@ export function useDeleteFraudRecord() {
   return useMutation({
     mutationFn: deleteFraudByID,
     onSuccess: () => {
-      queryClient.invalidateQueries([
+      queryClient.invalidateQueries({ queryKey: [
         "adminFraudList",
         "adminFraudBehaviorFlow",
-      ]);
+      ] });
       message.success("成功删除记录");
     },
     onError: () => {

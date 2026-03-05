@@ -244,7 +244,6 @@ function FraudAdmin() {
     },
   ];
 
-  console.log(fraudBehaviorFlow);
   function handleDelete(record) {
     deleteFraudRecord.mutate({ fraudID: record.id });
   }

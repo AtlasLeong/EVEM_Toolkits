@@ -62,7 +62,6 @@ function FraudReportList({ fraudReportList, isLoading, setShowReportPage }) {
   }
 
   function handleShowReportDetails(data) {
-    console.log(data);
     setReportDetail(data);
     setShowReportDetails(true);
   }

@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "react-query";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteProgremmaByID } from "../../services/apiPlanetaryResource";
 import { message } from "antd";
 
@@ -7,7 +7,7 @@ export function useDeleteProgramme() {
   return useMutation({
     mutationFn: (programme_id) => deleteProgremmaByID({ programme_id }),
     onSuccess: () => {
-      queryClient.invalidateQueries("progremmaList");
+      queryClient.invalidateQueries({ queryKey: ["progremmaList"] });
       message.success("成功删除方案");
     },
     onError: () => {

@@ -1,4 +1,4 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { fraudAdminLogin } from "../../services/apiFraudList";
 import { message } from "antd";
 import { useContext } from "react";
@@ -17,7 +17,6 @@ function useFraudAdminLogin({ setError }) {
     },
     onError: (error) => {
       const errorMessage = error.message; // 获取错误信息
-      console.log(errorMessage);
       switch (errorMessage) {
         case "Invalid email or password.":
           setError("adminPassword", { message: "密码错误" });

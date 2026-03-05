@@ -1,9 +1,9 @@
 import { message } from "antd";
 import { searchFraud } from "../../services/apiFraudList";
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 
 function useFraudSearch(setFraudList) {
-  const mutation = useMutation(searchFraud, {
+  const mutation = useMutation({ mutationFn: searchFraud,
     onSuccess: (data) => {
       // 处理成功的情况，比如更新UI或状态
       if (data.length === 0) message.warning("无该账号信息");

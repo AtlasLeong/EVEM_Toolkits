@@ -1,4 +1,5 @@
-import { useQuery } from "react-query";
+import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { getUserProgremmaByID } from "../../services/apiPlanetaryResource";
 
 export function useGetProgremma({
@@ -8,23 +9,26 @@ export function useGetProgremma({
   setCalculatorData,
   setCurrentProgremma,
 }) {
-  console.log(selectedProgrammeId);
   const {
     isLoading,
     data: programme,
     error,
   } = useQuery({
     queryFn: () => getUserProgremmaByID(selectedProgrammeId),
-    queryKey: ["planetary_programme"],
+    queryKey: ["planetary_programme", selectedProgrammeId],
     enabled: startSelect,
-    onSuccess: (data) => {
-      setCalculatorData(data[0].programme_element);
-      setCurrentProgremma(data[0].programme_name);
-      setStartSelect(false);
-    },
-    staleTime: 0, // 数据立即过时
-    cacheTime: 0, // 不缓存数据
+    staleTime: 0,
+    gcTime: 0,
   });
+
+  useEffect(() => {
+    if (programme && startSelect) {
+      setCalculatorData(programme[0].programme_element);
+      setCurrentProgremma(programme[0].programme_name);
+      setStartSelect(false);
+    }
+  }, [programme, startSelect, setCalculatorData, setCurrentProgremma, setStartSelect]);
 
   return { isLoading, programme, error };
 }
+

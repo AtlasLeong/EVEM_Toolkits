@@ -1,4 +1,4 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { signupCheck } from "../../services/apiAuthentication";
 
 function useSignUpCheck({ setError }) {
@@ -21,7 +21,6 @@ function useSignUpCheck({ setError }) {
     },
     onError: (error) => {
       // 处理错误情况
-      console.log(error);
     },
   });
 }

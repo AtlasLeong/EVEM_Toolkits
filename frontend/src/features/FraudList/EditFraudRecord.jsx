@@ -74,7 +74,6 @@ function EditFraudRecord({ record, onCloseModal }) {
   const editFraudRecord = useEditFraudRecord();
 
   function handleEditRecord() {
-    console.log(fraudAccount, accountType, fraudType, remark, groupID);
     if (!fraudAccount || !accountType || !fraudType || !groupID) {
       message.warning("请填写完整信息");
       return;

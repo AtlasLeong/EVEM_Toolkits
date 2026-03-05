@@ -1,4 +1,4 @@
-import { useMutation } from "react-query";
+import { useMutation } from '@tanstack/react-query';
 import { changePassword } from "../../services/apiAuthentication";
 import { message } from "antd";
 

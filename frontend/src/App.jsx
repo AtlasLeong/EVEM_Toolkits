@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "react-query";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider } from "antd";
 import zhCN from "antd/es/locale/zh_CN";
 import GlobalStyles from "./styles/GlobalStyles";
@@ -28,18 +28,16 @@ import { SearchProvider } from "./context/SearchContext";
 
 dayjs.locale("zh-cn");
 
-function App() {
-  // 创建一个查询客户端，设置默认查询选项
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 180 * 1000, // 数据保鲜时间为180秒
-      },
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 180 * 1000,
     },
-  });
+  },
+});
 
+function App() {
   return (
-    // 提供查询客户端的上下文
     <QueryClientProvider client={queryClient}>
       <IsMobileProvider>
         <AuthProvider>
