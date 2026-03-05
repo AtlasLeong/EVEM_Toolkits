@@ -122,7 +122,6 @@ function FraudReportDetails({
         <ImageConatiner>
           <Image.PreviewGroup
             preview={{
-              onChange: (current, prev) =>
             }}
           >
             {urlList.map((url) => (

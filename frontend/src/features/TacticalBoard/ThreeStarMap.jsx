@@ -115,9 +115,6 @@ function TwoDStarMap() {
       setDistanceTexts((prevTexts) =>
         prevTexts.filter((text) => !text.isCustom)
       );
-
-        "Removed all custom paths and elements in Single induction mode"
-      );
     } else {
       // 多选模式：移除特定的诱导组
 
@@ -1069,11 +1066,6 @@ function TwoDStarMap() {
       ...newTexts,
     ]);
 
-      "Lines drawn:",
-      newLines.length,
-      "Texts added:",
-      newTexts.length
-    );
   };
   // 移除起点和终点的标记
   const handleRemoveTag = useCallback(() => {

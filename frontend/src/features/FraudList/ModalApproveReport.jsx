@@ -115,7 +115,6 @@ function ModalApproveReport({ reportDetail, formatDate, onCloseModal }) {
         <ImageConatiner>
           <Image.PreviewGroup
             preview={{
-              onChange: (current, prev) =>
             }}
           >
             {urlList.map((url) => (
