@@ -19,6 +19,14 @@ frontend/yarn-error.log*
 frontend/pnpm-debug.log*
 frontend/lerna-debug.log*
 
+# Front Codex (Node/React)
+front-codex/node_modules
+front-codex/dist
+front-codex/*.local
+front-codex/*.log
+front-codex/playwright-report
+front-codex/test-results
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
