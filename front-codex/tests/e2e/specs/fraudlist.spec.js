@@ -75,6 +75,8 @@ test('登录态下可查看我的举报并提交新举报', async ({ page }) => 
 
   await page.goto('/fraudlist')
   await expect(page.getByText('我的举报记录 1')).toBeVisible()
+  await expect(page.locator('table.compact tbody tr').first()).toContainText('等待审核')
+  await expect(page.locator('table.compact tbody tr').first()).not.toContainText('pending')
 
   await page.getByRole('button', { name: '举报' }).click()
   const modal = page.locator('.report-card')

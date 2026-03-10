@@ -110,6 +110,14 @@ function normalizeResetError(message) {
   }
 }
 
+function resolveForgetEmailCheckMessage(result) {
+  if (!result) return ''
+  if (result.duplicate === 'error') {
+    return normalizeAuthMessage(result.error || result.message, '该邮箱未注册')
+  }
+  return ''
+}
+
 function AuthMessage({ message, tone = 'error' }) {
   if (!message) return null
 
@@ -274,6 +282,7 @@ export default function LoginPage() {
   const sendRegisterCode = async () => {
     if (registerCountdown || registerCodePending) return
 
+    setNotice('')
     const emailOk = await checkRegisterField('email', registerForm.email)
     if (!emailOk) return
 
@@ -295,6 +304,7 @@ export default function LoginPage() {
 
   const sendResetCode = async () => {
     if (resetCountdown || resetCodePending) return
+    setNotice('')
     const email = resetForm.forgetEmail.trim()
 
     if (!email) {
@@ -309,7 +319,18 @@ export default function LoginPage() {
 
     setResetCodePending(true)
     try {
-      await forgetEmaillCheck({ email })
+      const checkResult = await forgetEmaillCheck({ email })
+      const checkMessage = resolveForgetEmailCheckMessage(checkResult)
+
+      if (checkMessage) {
+        setResetErrors((current) => ({
+          ...current,
+          forgetEmail: checkMessage,
+          forgetEmailVerification: '',
+        }))
+        return
+      }
+
       await emailVerification({ email })
       setResetCountdown(60)
       setNotice('找回密码验证码已发送，请检查邮箱')

@@ -20,10 +20,46 @@ import {
 } from '../services/apiFraudList'
 import { AuthContext } from '../context/AuthContext'
 import { hasActiveSession } from '../services/fetchWithAuth'
-import { EmptyState, PageHeader, Panel } from '../components/ui/Primitives'
+import { EmptyState, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 
 const accountTypeOptions = ['游戏ID', 'QQ', '微信', '其他']
 const allowedFileTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
+
+function getReportStatusLabel(status) {
+  if (!status) return '-'
+
+  switch (String(status).toLowerCase()) {
+    case 'pending':
+      return '等待审核'
+    case 'accept':
+    case 'accepted':
+    case 'approve':
+    case 'approved':
+      return '审核通过'
+    case 'reject':
+    case 'rejected':
+      return '审核拒绝'
+    default:
+      return status
+  }
+}
+
+function getReportStatusTone(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'pending':
+      return 'warning'
+    case 'accept':
+    case 'accepted':
+    case 'approve':
+    case 'approved':
+      return 'success'
+    case 'reject':
+    case 'rejected':
+      return 'danger'
+    default:
+      return 'neutral'
+  }
+}
 
 function ReportModal({ open, onClose }) {
   const [form, setForm] = useState({
@@ -488,7 +524,11 @@ export default function FraudListPage() {
                     <tr key={item.id}>
                       <td>{item.fraud_account}</td>
                       <td>{item.account_type}</td>
-                      <td>{item.report_status}</td>
+                      <td>
+                        <Pill tone={getReportStatusTone(item.report_status)}>
+                          {getReportStatusLabel(item.report_status)}
+                        </Pill>
+                      </td>
                       <td>{item.approver_group || '-'}</td>
                       <td>{item.create_time || '-'}</td>
                     </tr>

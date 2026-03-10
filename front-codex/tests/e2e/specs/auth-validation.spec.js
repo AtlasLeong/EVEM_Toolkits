@@ -75,3 +75,28 @@ test('reset password shows chinese error for unregistered email', async ({ page 
 
   await expect(resetForm.locator('.form-error')).toContainText('该邮箱未注册')
 })
+
+test('reset code is blocked when forget email check returns duplicate error payload', async ({ page }) => {
+  let emailCodeCalled = false
+
+  await installApiMock(page, async ({ url, method }) => {
+    if (method === 'POST' && url.pathname === '/api/user/forgetemailcheck') {
+      return json({ duplicate: 'error', message: 'Email has not been signup.' })
+    }
+    if (method === 'POST' && url.pathname === '/api/user/emailcode') {
+      emailCodeCalled = true
+      return json({ ok: true })
+    }
+  })
+
+  await page.goto('/login')
+  await page.locator('.auth-tabs .auth-tab').nth(2).click()
+
+  const resetForm = page.locator('form.auth-section')
+  await resetForm.locator('input[type="email"]').fill('unknown@example.com')
+  await resetForm.locator('.auth-code-btn').click()
+
+  await expect(resetForm.locator('.form-error')).toContainText('该邮箱未注册')
+  expect(emailCodeCalled).toBeFalsy()
+  await expect(resetForm).not.toContainText('找回密码验证码已发送，请检查邮箱')
+})
