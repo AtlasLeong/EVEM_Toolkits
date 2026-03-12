@@ -1,4 +1,4 @@
-from django.shortcuts import render
+﻿from django.shortcuts import render
 from rest_framework.views import APIView, Response, status
 from .models import (FraudList, FraudAuthUserGroup, FraudBehaviorFlow, FraudAuthGroup, FraudListReportFlow,
                      FraudEvidenceFlow)
@@ -52,7 +52,7 @@ class FraudAdminCheck(APIView):
 
 
 class AdminFraudList(APIView):
-    # 更改管理员视图，只允许已认证用户访问
+    # 仅允许已认证管理员访问
     permission_classes = [IsAuthenticated]
 
     @staticmethod
@@ -98,7 +98,7 @@ class AdminFraudList(APIView):
                 change_time=timezone.now()
             )
             target_fraud.delete()
-            delete_record.save()  # 确保记录被保存到数据库
+            delete_record.save()
             return Response({'message': '诈骗记录删除成功'}, status=status.HTTP_204_NO_CONTENT)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -119,7 +119,12 @@ class AdminFraudList(APIView):
             return Response({"message": "No permission."}, status=status.HTTP_403_FORBIDDEN)
 
         try:
-            # 从FraudAuthGroup模型中获取source_group_name
+            target_group = FraudAuthGroup.objects.get(group_id=target_group_id)
+        except FraudAuthGroup.DoesNotExist:
+            return Response({"error": "Target group not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            # 从 FraudAuthGroup 中获取 source_group_name 与 icon
             target_group = FraudAuthGroup.objects.get(group_id=target_group_id)
             source_group_name = target_group.group_name
             icon = target_group.icon
@@ -177,21 +182,30 @@ class AdminFraudList(APIView):
         except FraudList.DoesNotExist:
             return Response({"error": "Fraud record not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        target_group_id = existing_fraud.source_group_id
+        target_group_id = fraud_record.get("source_group_id", existing_fraud.source_group_id)
+        try:
+            target_group_id = int(target_group_id)
+        except (TypeError, ValueError):
+            return Response({"error": "Target group is invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 检查用户是否属于目标组
+        # 检查用户是否属于目标群组
         group_id_list = FraudAuthUserGroup.objects.filter(user_id=user_id).values_list('group_id', flat=True)
 
         if target_group_id not in group_id_list:
             return Response({"message": "No permission."}, status=status.HTTP_403_FORBIDDEN)
 
+        try:
+            target_group = FraudAuthGroup.objects.get(group_id=target_group_id)
+        except FraudAuthGroup.DoesNotExist:
+            return Response({"error": "Target group not found."}, status=status.HTTP_404_NOT_FOUND)
+
         shared_operation_id = str(uuid.uuid4())
-        # 记录更新前的状态
+        # 记录更新前状态
         operation_record_before = FraudBehaviorFlow(
             operation_user_id=user_id,
             operation_id=shared_operation_id,
             action_type='update',
-            change='B',  # Before update
+            change='B',
             fraud_id=existing_fraud.id,
             fraud_account=existing_fraud.fraud_account,
             account_type=existing_fraud.account_type,
@@ -205,18 +219,23 @@ class AdminFraudList(APIView):
         operation_record_before.save()
 
         try:
-            # 更新FraudList中的记录
+            # 更新 FraudList 记录
             for key, value in fraud_record.items():
+                if key in ("source_group_name", "icon"):
+                    continue
                 if hasattr(existing_fraud, key) and value is not None:
                     setattr(existing_fraud, key, value)
+            existing_fraud.source_group_id = target_group_id
+            existing_fraud.source_group_name = target_group.group_name
+            existing_fraud.icon = target_group.icon
             existing_fraud.save()
 
-            # 记录更新后的状态
+            # 记录更新后状态
             operation_record_after = FraudBehaviorFlow(
                 operation_user_id=user_id,
                 operation_id=shared_operation_id,
                 action_type='update',
-                change='F',  # After update
+                change='F',
                 fraud_id=existing_fraud.id,
                 fraud_account=existing_fraud.fraud_account,
                 account_type=existing_fraud.account_type,
@@ -235,22 +254,22 @@ class AdminFraudList(APIView):
 
 
 class GetFraudAdminUserGroup(APIView):
-    # 更改管理员视图，只允许已认证用户访问
+    # 仅允许已认证管理员访问
     permission_classes = [IsAuthenticated]
 
     @staticmethod
     def get(request):
         user_id = request.user.id
-        # 获取用户相关的所有组ID
+        # 获取用户所属的全部群组 ID
         user_groups = FraudAuthUserGroup.objects.filter(user_id=user_id).values_list('group_id', flat=True)
 
         if not user_groups:
             return Response({"message": "Unauthorized User"}, status=status.HTTP_403_FORBIDDEN)
 
-        # 使用group_id列表去FraudAuthGroup查询对应的group_name
+        # 根据 group_id 查询群组名称
         group_details = FraudAuthGroup.objects.filter(group_id__in=user_groups).values('group_id', 'group_name')
 
-        # 构建响应数据，调整格式为{value: group_id, label: group_name-group_id}
+        # 组装前端下拉选项
         groups = [
             {'value': group['group_id'], 'label': f"{group['group_name']}-{group['group_id']}"}
             for group in group_details
@@ -259,7 +278,7 @@ class GetFraudAdminUserGroup(APIView):
 
 
 class GetAdminBehaviorFlow(APIView):
-    # 更改管理员视图，只允许已认证用户访问
+    # 仅允许已认证管理员访问
     permission_classes = [IsAuthenticated]
 
     @staticmethod
@@ -368,36 +387,36 @@ class FraudListReport(APIView):
     def post(request):
         create_user = request.user.id
 
-        # 检查是否存在待审核的记录
+        # 检查是否存在待审核记录
         pending_reports = FraudListReportFlow.objects.filter(
             create_user_id=create_user,
             report_status='pending'
         )
 
         if pending_reports.exists():
-            return Response({"error": "已存在待审核记录，审核完成前无法添加新记录"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "已存在等待审核记录，审核完成前无法添加新记录"}, status=status.HTTP_400_BAD_REQUEST)
 
         # 获取请求数据
         fraud_account = request.data.get('fraud_account')
         account_type = request.data.get('account_type')
         description = request.data.get('description')
         contact_number = request.data.get('contact_number')
-        evidence_list = request.data.get('evidence_dict', [])  # 假设前端发送的是一个列表
+        evidence_list = request.data.get('evidence_dict', [])
 
         # 验证必填字段
         if not all([fraud_account, account_type, description, contact_number]):
-            return Response({"error": "缺少必填字段"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "必填字段未填写"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 验证evidence_list中的URL是否都存在于FraudEvidenceFlow中
+        # 验证 evidence_list 中的 URL 是否都存在于 FraudEvidenceFlow
         valid_evidence = []
         for evidence_url in evidence_list:
             if FraudEvidenceFlow.objects.filter(image_url=evidence_url, user_id=create_user).exists():
                 valid_evidence.append(evidence_url)
 
         if not valid_evidence:
-            return Response({"error": "没有有效的证据URL"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "没有有效的证据 URL"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 将evidence_list转换为逗号分隔的字符串
+        # 将 evidence_list 转成逗号分隔字符串
         evidence_string = ','.join(valid_evidence)
 
         # 创建新的举报记录
@@ -408,7 +427,7 @@ class FraudListReport(APIView):
             account_type=account_type,
             description=description,
             contact_number=contact_number,
-            evidence_dict=evidence_string,  # 存储为逗号分隔的字符串
+            evidence_dict=evidence_string,
             create_time=timezone.now()
         )
 
@@ -450,7 +469,7 @@ class FraudAdminListReport(APIView):
 
         # 验证必填字段
         if not all([approve_status, approve_remark]):
-            return Response({"error": "缺少必填字段"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "必填字段未填写"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             report = FraudListReportFlow.objects.get(id=report_id)
@@ -458,14 +477,14 @@ class FraudAdminListReport(APIView):
             return Response({"error": "举报记录不存在"}, status=status.HTTP_404_NOT_FOUND)
 
         if report.report_status != 'pending':
-            return Response({"error": "该举报已经被处理"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "该举报已被处理"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 筛选出不等于 99 的 group_id
+        # 过滤掉公共举报组 99，只允许真实审核组审批
         valid_group_ids = [gid for gid in group_id_list if gid != 99]
         if not valid_group_ids:
             return Response({"error": "没有有效的审核组"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 选择第一个有效的 group_id
+        # 选择第一个有效的审核组
         selected_group_id = valid_group_ids[0]
 
         try:
@@ -481,7 +500,7 @@ class FraudAdminListReport(APIView):
         report.approve_time = timezone.now()
         report.save()
 
-        # 如果审核通过，将举报的信息添加到 FraudList
+        # 审核通过时，将举报内容写入 FraudList
         if approve_status == 'accept':
             new_fraud = FraudList.objects.create(
                 fraud_account=report.fraud_account,
@@ -493,12 +512,12 @@ class FraudAdminListReport(APIView):
                 icon=PUBLIC_REPORT_GROUP_ICON
             )
 
-            # 记录审核操作
+            # 记录审核通过行为
             FraudBehaviorFlow.objects.create(
                 operation_user_id=user_id,
-                operation_id=str(uuid.uuid4()),  # 生成一个新的 UUID
+                operation_id=str(uuid.uuid4()),
                 action_type='accept',
-                change='AR',  # Approve
+                change='AR',
                 fraud_id=new_fraud.id,
                 fraud_account=new_fraud.fraud_account,
                 account_type=new_fraud.account_type,
@@ -510,13 +529,13 @@ class FraudAdminListReport(APIView):
                 change_time=timezone.now()
             )
         else:
-            # 如果审核不通过，也记录一条操作记录
+            # 审核拒绝时，记录拒绝行为
             FraudBehaviorFlow.objects.create(
                 operation_user_id=user_id,
-                operation_id=str(uuid.uuid4()),  # 生成一个新的 UUID
+                operation_id=str(uuid.uuid4()),
                 action_type='reject',
-                change='RR',  # Reject
-                fraud_id=report.id,  # 使用举报的 ID
+                change='RR',
+                fraud_id=report.id,
                 fraud_account=report.fraud_account,
                 account_type=report.account_type,
                 remark=report.description,
@@ -530,3 +549,6 @@ class FraudAdminListReport(APIView):
             "message": "完成审核",
             "report_id": report.id
         }, status=status.HTTP_200_OK)
+
+
+

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { changePassword } from '../services/apiAuthentication'
 import { getDefaultResourcePriceSetting, getPlanetResources, saveUserPrePrice } from '../services/apiPlanetaryResource'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
@@ -118,6 +118,7 @@ function ChangePasswordCard() {
 }
 
 function PriceSettingCard() {
+  const queryClient = useQueryClient()
   const [typeFilter, setTypeFilter] = useState('')
   const [rows, setRows] = useState([])
   const [msg, setMsg] = useState('')
@@ -137,7 +138,10 @@ function PriceSettingCard() {
 
   const saveMutation = useMutation({
     mutationFn: saveUserPrePrice,
-    onSuccess: () => setMsg('预设价格已保存'),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['price-user'] })
+      setMsg('预设价格已保存')
+    },
     onError: (e) => setMsg(e.message || '保存失败'),
   })
 
@@ -161,7 +165,7 @@ function PriceSettingCard() {
 
   useEffect(() => {
     if (!rows.length && userPriceQuery.data?.length) {
-      setRows(userPriceQuery.data)
+      setRows(userPriceQuery.data.map((item) => ({ ...item })))
     }
   }, [rows.length, userPriceQuery.data])
 
@@ -174,7 +178,7 @@ function PriceSettingCard() {
   }
 
   const onReset = () => {
-    setRows(defaultPriceQuery.data || [])
+    setRows((defaultPriceQuery.data || []).map((item) => ({ ...item })))
     setMsg('已恢复默认价格')
   }
 

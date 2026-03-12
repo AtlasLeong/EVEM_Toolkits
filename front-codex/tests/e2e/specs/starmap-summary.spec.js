@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 
 test('星系导航计算后显示分段预览与聚合结果', async ({ page }) => {
@@ -11,12 +11,15 @@ test('星系导航计算后显示分段预览与聚合结果', async ({ page }) 
         { system_id: 4, zh_name: '德尔塔', en_name: 'DELTA-4', x: 2.8383e16, y: 0, z: 0, security_status: -0.4 },
       ])
     }
+
     if (method === 'GET' && url.pathname === '/api/boardregions') {
       return json([{ region_id: 10, zh_name: '德里克' }])
     }
+
     if (method === 'GET' && url.pathname === '/api/boardconstellations') {
       return json([{ constellation_id: 100, region_id: 10, zh_name: '静寂谷', x: 1.41915e16, y: 0, z: 0 }])
     }
+
     if (method === 'GET' && url.pathname === '/api/boardstargate') {
       return json([
         { system_id: 1, destination_system_id: 2 },
@@ -24,6 +27,7 @@ test('星系导航计算后显示分段预览与聚合结果', async ({ page }) 
         { system_id: 3, destination_system_id: 4 },
       ])
     }
+
     if (method === 'POST' && url.pathname === '/api/jumppath') {
       expect(body).toMatchObject({ start_system: '阿尔法', end_system: '德尔塔' })
       return json([
@@ -47,8 +51,8 @@ test('星系导航计算后显示分段预览与聚合结果', async ({ page }) 
   })
 
   await page.goto('/starmap')
-  await page.locator('input[list="systems-list"]').nth(0).fill('阿尔法')
-  await page.locator('input[list="systems-list"]').nth(1).fill('德尔塔')
+  await page.getByLabel('起点星系').fill('阿尔法')
+  await page.getByLabel('终点星系').fill('德尔塔')
   await page.getByRole('button', { name: '计算路径' }).click()
 
   const summaryPanel = page

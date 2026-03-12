@@ -20,6 +20,14 @@ from django.db.models import F, FloatField
 from django.db.models.functions import Round
 
 
+def coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "on"}
+    return bool(value)
+
+
 class GetBoardRegionCoordinates(APIView):
     @staticmethod
     def get(request):
@@ -92,8 +100,8 @@ class AStarLocation(APIView):
         start_system = request.data.get('start_system')
         end_system = request.data.get('end_system')
         max_distance = float(request.data.get('max_distance'))
-        dict_road = request.data.get("dict_road", False)
-        in_high_security = request.data.get("inHighSecurity", False)
+        dict_road = coerce_bool(request.data.get("dict_road", False))
+        in_high_security = coerce_bool(request.data.get("inHighSecurity", False))
 
         if isCrossNew8System(start_system,end_system):
             return Response({"error": "无法跨越新八星域进行诱导"}, status=status.HTTP_404_NOT_FOUND)

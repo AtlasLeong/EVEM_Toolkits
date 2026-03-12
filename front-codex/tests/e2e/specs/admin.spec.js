@@ -34,7 +34,7 @@ test('管理员后台可新增记录并审核举报', async ({ page }) => {
   ]
 
   await installApiMock(page, async ({ url, method, body }) => {
-    if (method === 'GET' && url.pathname === '/api/fraudlogin') {
+    if (method === 'GET' && url.pathname === '/api/fraudadmincheck') {
       return json({ message: 'Authorized Users' })
     }
     if (method === 'GET' && url.pathname === '/api/fraudadmingroup') {
@@ -118,6 +118,7 @@ test('管理员后台可新增记录并审核举报', async ({ page }) => {
 
   await page.locator('.admin-tab-row .tab-btn').nth(2).click()
   await page.locator('.data-table tbody .ghost-btn').first().click()
+  await page.locator('.admin-review-choice.approve').click()
   await page.locator('.admin-report-modal textarea').fill('自动化通过')
   await page.locator('.admin-modal-actions .primary-btn').click()
   await expect(page.locator('.admin-report-modal')).toBeHidden()

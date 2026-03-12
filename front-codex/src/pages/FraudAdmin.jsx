@@ -1,4 +1,4 @@
-import { useContext, useMemo, useState } from 'react'
+﻿import { useContext, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -217,7 +217,7 @@ function RecordEditorModal({
             className="text-input textarea"
             value={form.remark}
             onChange={(event) => setForm((current) => ({ ...current, remark: event.target.value }))}
-            placeholder="补充交易背景、可核验信息或处理说明"
+            placeholder="填写补充说明、交易背景或可核验信息"
           />
         </div>
       </div>
@@ -240,10 +240,33 @@ function ReportDetailModal({
   onApprove,
   isPending,
 }) {
-  const [approveStatus, setApproveStatus] = useState('accept')
+  const [approveStatus, setApproveStatus] = useState('')
   const [approveRemark, setApproveRemark] = useState('')
+  const [reviewErrors, setReviewErrors] = useState({})
   const evidenceList = normalizeEvidenceList(report?.evidence_dict)
   const isReviewMode = report?.report_status === 'pending'
+
+  const handleSubmit = () => {
+    const nextErrors = {}
+
+    if (!approveRemark.trim()) {
+      nextErrors.approve_remark = '审核备注为必填字段'
+    }
+
+    if (!approveStatus) {
+      nextErrors.approve_status = '请选择审核结果'
+    }
+
+    setReviewErrors(nextErrors)
+
+    if (Object.keys(nextErrors).length) return
+
+    onApprove({
+      report_id: report.id,
+      approve_status: approveStatus,
+      approve_remark: approveRemark.trim(),
+    })
+  }
 
   return (
     <AdminModal
@@ -313,52 +336,68 @@ function ReportDetailModal({
       {isReviewMode ? (
         <>
           <div className="field-row">
-            <label>审核备注</label>
+            <label>审核备注（必填）</label>
             <textarea
-              className="text-input textarea"
+              className={`text-input textarea ${reviewErrors.approve_remark ? 'is-invalid' : ''}`}
               value={approveRemark}
-              onChange={(event) => setApproveRemark(event.target.value)}
-              placeholder="填写通过或拒绝的处理说明"
+              onChange={(event) => {
+                setApproveRemark(event.target.value)
+                if (reviewErrors.approve_remark) {
+                  setReviewErrors((current) => ({ ...current, approve_remark: '' }))
+                }
+              }}
+              placeholder="必填：填写通过或拒绝的处理说明"
             />
+            {reviewErrors.approve_remark ? <p className="form-error">{reviewErrors.approve_remark}</p> : null}
           </div>
 
-          <div className="pill-row">
-            <button
-              type="button"
-              className={`ghost-btn ${approveStatus === 'accept' ? 'active-approve' : ''}`}
-              onClick={() => setApproveStatus('accept')}
-            >
-              <CheckCircle2 size={14} />
-              通过
-            </button>
-            <button
-              type="button"
-              className={`ghost-btn danger ${approveStatus === 'reject' ? 'active-approve' : ''}`}
-              onClick={() => setApproveStatus('reject')}
-            >
-              <XCircle size={14} />
-              拒绝
-            </button>
-          </div>
+          <div className="admin-review-toolbar">
+            <div className="admin-review-decision">
+              <p className="admin-review-label">审核结果（必填）</p>
+              <div className="admin-review-choice-row">
+                <button
+                  type="button"
+                  className={`admin-review-choice approve ${approveStatus === 'accept' ? 'active' : ''}`}
+                  onClick={() => {
+                    setApproveStatus('accept')
+                    if (reviewErrors.approve_status) {
+                      setReviewErrors((current) => ({ ...current, approve_status: '' }))
+                    }
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  通过
+                </button>
+                <button
+                  type="button"
+                  className={`admin-review-choice reject ${approveStatus === 'reject' ? 'active' : ''}`}
+                  onClick={() => {
+                    setApproveStatus('reject')
+                    if (reviewErrors.approve_status) {
+                      setReviewErrors((current) => ({ ...current, approve_status: '' }))
+                    }
+                  }}
+                >
+                  <XCircle size={16} />
+                  拒绝
+                </button>
+              </div>
+              {reviewErrors.approve_status ? <p className="form-error">{reviewErrors.approve_status}</p> : null}
+            </div>
 
-          <div className="right-actions admin-modal-actions">
-            <button type="button" className="ghost-btn" onClick={onClose}>
-              取消
-            </button>
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() =>
-                onApprove({
-                  report_id: report.id,
-                  approve_status: approveStatus,
-                  approve_remark: approveRemark.trim(),
-                })
-              }
-              disabled={isPending}
-            >
-              {isPending ? '提交中...' : '提交审核'}
-            </button>
+            <div className="right-actions admin-modal-actions admin-review-actions">
+              <button type="button" className="ghost-btn" onClick={onClose}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="primary-btn admin-review-submit"
+                onClick={handleSubmit}
+                disabled={isPending}
+              >
+                {isPending ? '提交中...' : '提交审核'}
+              </button>
+            </div>
           </div>
         </>
       ) : null}
@@ -734,19 +773,19 @@ export default function FraudAdminPage() {
           >
             {(adminListQuery.isPending || deleteMutation.isPending) && <LoadingBar />}
             {!adminListQuery.data?.length ? (
-              <EmptyState title="暂无可管理名单" desc="当前管理员账户还没有分配到可维护的数据。" />
+              <EmptyState title="暂无可管理名单" desc="当前管理员账号还没有分配到可维护的数据。" />
             ) : (
-              <div className="table-shell">
-                <table className="data-table">
+              <div className="table-shell admin-record-table-shell">
+                <table className="data-table admin-record-table">
                   <thead>
                     <tr>
                       <th>ID</th>
                       <th>账号</th>
                       <th>类型</th>
                       <th>纠纷类型</th>
-                      <th>来源群组</th>
-                      <th>备注</th>
-                      <th>操作</th>
+                      <th className="admin-col-source">来源群组</th>
+                      <th className="admin-col-remark">备注</th>
+                      <th className="admin-col-actions">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -756,14 +795,16 @@ export default function FraudAdminPage() {
                         <td>{row.fraud_account}</td>
                         <td>{row.account_type}</td>
                         <td>{row.fraud_type}</td>
-                        <td>
+                        <td className="admin-col-source" title={row.source_group_name || ''}>
                           <span className="source-cell">
                             {row.icon ? <img src={row.icon} alt={row.source_group_name} className="source-icon" /> : null}
-                            <span>{row.source_group_name}</span>
+                            <span className="admin-cell-ellipsis">{row.source_group_name}</span>
                           </span>
                         </td>
-                        <td>{row.remark || '-'}</td>
-                        <td>
+                        <td className="admin-col-remark" title={row.remark || '-'}>
+                          <span className="admin-cell-ellipsis">{row.remark || '-'}</span>
+                        </td>
+                        <td className="admin-col-actions">
                           <div className="admin-row-actions">
                             <button
                               type="button"

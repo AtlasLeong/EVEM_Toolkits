@@ -17,7 +17,7 @@ test('authenticated user visiting login is redirected to fraud list', async ({ p
 
 test('admin login failure stays on page and shows chinese error', async ({ page }) => {
   await installApiMock(page, async ({ url, method }) => {
-    if (method === 'POST' && url.pathname === '/api/fraudlogin') {
+    if (method === 'POST' && url.pathname === '/api/user/login') {
       return json({ error: 'Invalid credentials' }, 401)
     }
   })

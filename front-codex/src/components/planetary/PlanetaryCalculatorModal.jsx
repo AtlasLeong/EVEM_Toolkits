@@ -2,7 +2,7 @@
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { ChevronDown, Clock3, Coins, Copy, Database, Flame, Gauge, LoaderCircle, Save, Trash2, Upload, X } from 'lucide-react'
+import { CircleAlert, ChevronDown, Clock3, Coins, Copy, Database, Flame, Gauge, LoaderCircle, Save, Trash2, Upload, X } from 'lucide-react'
 import {
   deleteProgremmaByID,
   getDefaultResourcePriceSetting,
@@ -555,7 +555,17 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
           )}
         </div>
 
-        {!isAuthenticated ? <p className="calculator-auth-hint">当前未登录，可正常计算；登录后可保存、加载和删除方案。</p> : null}
+        {!isAuthenticated ? (
+          <div className="calculator-auth-hint" role="note" aria-live="polite">
+            <span className="calculator-auth-hint-icon">
+              <CircleAlert size={16} />
+            </span>
+            <span className="calculator-auth-hint-copy">
+              <strong>未登录无法保存方案</strong>
+              <span>当前仍可正常计算，但无法保存、加载或删除方案。登录后即可管理方案。</span>
+            </span>
+          </div>
+        ) : null}
 
         <div className="calculator-batch-grid">
           <div className="field-row">

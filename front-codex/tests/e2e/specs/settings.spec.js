@@ -28,8 +28,9 @@ test('用户设置支持修改密码和保存预设价格', async ({ page }) => 
       ])
     }
     if (method === 'POST' && url.pathname === '/api/planetresourceprice') {
-      expect(Array.isArray(body)).toBeTruthy()
-      expect(body[0]).toMatchObject({ resource_name: '光泽合金' })
+      expect(body).toHaveProperty('prePriceElement')
+      expect(Array.isArray(body.prePriceElement)).toBeTruthy()
+      expect(body.prePriceElement[0]).toMatchObject({ resource_name: '光泽合金' })
       return json({ ok: true })
     }
   })

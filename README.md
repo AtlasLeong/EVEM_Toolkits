@@ -1,14 +1,21 @@
-# EVEM Toolkits
+﻿# EVEM Toolkits
 
-EVE Echoes Mobile (EVEM) 工具集 - 为 EVE Echoes 游戏玩家提供各类实用工具的全栈应用。
+- 本地开发与联调说明：[LOCAL_DEV.md](./LOCAL_DEV.md)
+- 自动化测试说明：[front-codex/AUTOMATION_TESTS.md](./front-codex/AUTOMATION_TESTS.md)
+- 手动测试清单：[front-codex/TEST_CHECKLIST.md](./front-codex/TEST_CHECKLIST.md)
+- 测试覆盖对照表：[front-codex/TEST_CHECKLIST_MATRIX.md](./front-codex/TEST_CHECKLIST_MATRIX.md)
+
+EVEM Toolkits 是一套面向 EVE Echoes 玩家和群组管理者的全栈工具集合，覆盖诈骗名单、行星资源、星系导航、集市分析和激活码等功能。
 
 ## 项目结构
 
-```
+```text
 EVEM_Toolkits/
-├── backend/          # Django REST Framework 后端
-├── frontend/         # Vue 3 前端
-└── README.md         # 本文件
+├─ backend/         Django REST Framework 后端
+├─ frontend/        旧版前端
+├─ front-codex/     当前重构后的前端
+├─ LOCAL_DEV.md     本地开发说明
+└─ README.md        项目说明
 ```
 
 ## 快速开始
@@ -20,54 +27,52 @@ cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env      # 配置环境变量
 python manage.py migrate
-python manage.py runserver
+python manage.py runserver 127.0.0.1:8000
 ```
 
-后端运行在 http://127.0.0.1:8000
+后端默认运行在 `http://127.0.0.1:8000`。
 
-### 前端启动
+### 当前前端启动
 
 ```bash
-cd frontend
+cd front-codex
 npm install
 npm run dev
 ```
 
-前端运行在 http://localhost:5173
+前端默认运行在 `http://localhost:5173`。
 
-## 功能模块
+## 主要功能
 
-- 🔐 用户认证与授权
-- 🌍 星域/星系/星座搜索
-- 🪐 行星资源查询与方案管理
-- 🗺️ 战术地图与 A* 路径规划
-- 🛡️ 诈骗名单管理与举报
-- 🎰 泛星集市数据分析
-- 🔑 软件激活码管理
+- 用户认证、注册、找回密码
+- 防诈名单查询、举报、管理员审核
+- 行星资源查询、预设价格、计算器与方案管理
+- 星系导航、星图交互与路径规划
+- 集市分析与价格数据展示
+- 激活码相关功能
 
 ## 技术栈
 
-**后端**: Django 4.2.5 + Django REST Framework + MySQL 8.0+ + JWT
+**后端**：Django 4.2 + Django REST Framework + MySQL + JWT  
+**前端**：React + Vite + TanStack Query + Playwright
 
-**前端**: Vue 3 + Vite + Element Plus + Pinia
+## 文档
 
-## 详细文档
-
-- [后端文档](./backend/README.md)
-- [前端文档](./frontend/README.md)
+- [后端说明](./backend/README.md)
+- [旧版前端说明](./frontend/README.md)
+- [重构前端自动化说明](./front-codex/AUTOMATION_TESTS.md)
 
 ## 环境要求
 
-- Python 3.10+
-- Node.js 16+
+- Python 3.11+
+- Node.js 20+
 - MySQL 8.0+
 
-## 许可证
+## 说明
 
-本项目仅供学习交流使用。
+本项目仅用于学习、联调和工具开发。
 
 ---
 
-**注意**: 本项目为 EVE Echoes 游戏工具，与 CCP Games 无关。
+本项目为 EVE Echoes 游戏工具，与 CCP Games 无官方关联。

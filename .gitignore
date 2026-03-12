@@ -1,8 +1,9 @@
-# Backend (Python/Django)
+﻿# Backend (Python/Django)
 backend/*.pyc
 backend/.env
 backend/__pycache__/
 backend/*.log
+backend/logs/
 backend/static/uploads/
 backend/db.sqlite3
 
@@ -37,3 +38,4 @@ front-codex/test-results
 *.sln
 *.sw?
 .DS_Store
+

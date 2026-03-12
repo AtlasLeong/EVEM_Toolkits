@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { Crosshair, LocateFixed, RefreshCw, Route } from 'lucide-react'
+import { LocateFixed, RefreshCw, X } from 'lucide-react'
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1600
@@ -19,6 +19,21 @@ function getSecurityColor(value) {
   if (level < 0.5) return '#f59e0b'
   if (level < 0.8) return '#10b981'
   return '#60a5fa'
+}
+
+function getRouteTypeKind(moveType) {
+  const value = String(moveType || '')
+  if (value.includes('土路')) return 'dirt'
+  if (value.includes('不安全')) return 'unsafe-induction'
+  if (value.includes('诱导')) return 'induction'
+  return 'standard'
+}
+
+function getRouteStrokeColor(kind) {
+  if (kind === 'dirt') return 'rgba(245, 158, 11, 0.96)'
+  if (kind === 'unsafe-induction') return 'rgba(239, 68, 68, 0.96)'
+  if (kind === 'induction') return 'rgba(244, 114, 182, 0.96)'
+  return 'rgba(96, 165, 250, 0.94)'
 }
 
 function average(items) {
@@ -213,6 +228,7 @@ export default function TacticalStarMap({
   endSystem,
   onSetStart,
   onSetEnd,
+  onClearRoute,
 }) {
   const containerRef = useRef(null)
   const searchRef = useRef(null)
@@ -231,7 +247,6 @@ export default function TacticalStarMap({
   const [isViewAnimating, setIsViewAnimating] = useState(false)
   const [systemLabelAlpha, setSystemLabelAlpha] = useState(0)
   const [regionLabelAlpha, setRegionLabelAlpha] = useState(0)
-  const [pickMode, setPickMode] = useState(null)
 
   const model = useMemo(
     () => createMapModel(systems, stargates, constellations, regions),
@@ -300,6 +315,7 @@ export default function TacticalStarMap({
   const startMarkerPoint = useMemo(() => getScreenPoint(startSystemRecord, view), [startSystemRecord, view])
   const endMarkerPoint = useMemo(() => getScreenPoint(endSystemRecord, view), [endSystemRecord, view])
   const selectedMarkerPoint = useMemo(() => getScreenPoint(selectedSystem, view), [selectedSystem, view])
+  const hasPinnedRoute = Boolean(startSystemRecord || endSystemRecord)
 
   const pathSegments = useMemo(() => {
     return (pathRows || [])
@@ -313,6 +329,7 @@ export default function TacticalStarMap({
           end,
           distance: Number(item?.distance || 0),
           moveType: item?.end?.move_type || item?.start?.move_type || '',
+          routeKind: getRouteTypeKind(item?.end?.move_type || item?.start?.move_type || ''),
         }
       })
       .filter(Boolean)
@@ -529,11 +546,30 @@ export default function TacticalStarMap({
     if (pathSegments.length) {
       ctx.lineWidth = 2.4 / view.zoom
       pathSegments.forEach((segment) => {
-        ctx.strokeStyle = segment.moveType === '鍦熻矾' ? 'rgba(245, 158, 11, 0.92)' : 'rgba(96, 165, 250, 0.92)'
+        ctx.strokeStyle = getRouteStrokeColor(segment.routeKind)
         ctx.beginPath()
         ctx.moveTo(segment.start.px, segment.start.py)
         ctx.lineTo(segment.end.px, segment.end.py)
         ctx.stroke()
+      })
+
+      pathSegments.forEach((segment) => {
+        if (segment.routeKind !== 'induction' && segment.routeKind !== 'unsafe-induction') return
+        if (!Number.isFinite(segment.distance) || segment.distance <= 0) return
+
+        const midX = (segment.start.px + segment.end.px) / 2
+        const midY = (segment.start.py + segment.end.py) / 2
+        const labelText = `${segment.distance.toFixed(2)} 光年`
+
+        ctx.save()
+        ctx.font = `600 ${11.5 / view.zoom}px "Segoe UI", sans-serif`
+        ctx.textAlign = 'center'
+        ctx.lineWidth = 4 / view.zoom
+        ctx.strokeStyle = 'rgba(2, 6, 23, 0.94)'
+        ctx.strokeText(labelText, midX, midY - 9 / view.zoom)
+        ctx.fillStyle = getRouteStrokeColor(segment.routeKind)
+        ctx.fillText(labelText, midX, midY - 9 / view.zoom)
+        ctx.restore()
       })
     }
 
@@ -659,13 +695,22 @@ export default function TacticalStarMap({
   }
 
   const resetView = () => {
-    stopViewAnimation()
+    if (!size.width || !size.height) return
     const fitScale = fitScaleRef.current
-    setView({
+    animateToView({
       zoom: fitScale,
       panX: (size.width - WORLD_WIDTH * fitScale) / 2,
       panY: (size.height - WORLD_HEIGHT * fitScale) / 2,
-    })
+    }, 760)
+  }
+
+  const clearPinnedRoute = () => {
+    if (onClearRoute) {
+      onClearRoute()
+      return
+    }
+    onSetStart('')
+    onSetEnd('')
   }
 
   const handlePointerDown = (event) => {
@@ -716,14 +761,6 @@ export default function TacticalStarMap({
 
     if (!nearest) return
     setSelectedSystemId(nearest.system_id)
-
-    if (pickMode === 'start') {
-      onSetStart(nearest.zh_name)
-      setPickMode(null)
-    } else if (pickMode === 'end') {
-      onSetEnd(nearest.zh_name)
-      setPickMode(null)
-    }
   }
 
   useEffect(() => {
@@ -765,6 +802,7 @@ export default function TacticalStarMap({
           <div className="tactical-map-search-shell">
             <input
               className="text-input tactical-map-search-input"
+              aria-label="搜索并定位星系"
               value={locateQuery}
               onFocus={() => setIsLocateOpen(Boolean(locateMatches.length))}
               onChange={(event) => {
@@ -819,19 +857,12 @@ export default function TacticalStarMap({
         <div className="pill-row">
           <button
             type="button"
-            className={`ghost-btn ${pickMode === 'start' ? 'active-map-btn' : ''}`}
-            onClick={() => setPickMode((current) => (current === 'start' ? null : 'start'))}
+            className="ghost-btn danger-ghost-btn"
+            onClick={clearPinnedRoute}
+            disabled={!hasPinnedRoute}
           >
-            <Crosshair size={14} />
-            点选起点
-          </button>
-          <button
-            type="button"
-            className={`ghost-btn ${pickMode === 'end' ? 'active-map-btn' : ''}`}
-            onClick={() => setPickMode((current) => (current === 'end' ? null : 'end'))}
-          >
-            <Route size={14} />
-            点选终点
+            <X size={14} />
+            清除起终点
           </button>
           <button type="button" className="ghost-btn" onClick={resetView}>
             <RefreshCw size={14} />

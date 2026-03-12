@@ -6,7 +6,7 @@ test('已登录但非管理员访问诈骗后台会被导向管理员登录页',
   await seedAuthenticatedSession(page, { userName: 'normalUser' })
 
   await installApiMock(page, async ({ url, method }) => {
-    if (method === 'GET' && url.pathname === '/api/fraudlogin') {
+    if (method === 'GET' && url.pathname === '/api/fraudadmincheck') {
       return json({ message: 'UnAuthorized Users' })
     }
   })
@@ -33,7 +33,7 @@ test('管理员可编辑并删除诈骗记录', async ({ page }) => {
   ]
 
   await installApiMock(page, async ({ url, method, body }) => {
-    if (method === 'GET' && url.pathname === '/api/fraudlogin') {
+    if (method === 'GET' && url.pathname === '/api/fraudadmincheck') {
       return json({ message: 'Authorized Users' })
     }
     if (method === 'GET' && url.pathname === '/api/fraudadmingroup') {

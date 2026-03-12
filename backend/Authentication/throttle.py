@@ -1,32 +1,36 @@
+from django.conf import settings
 from rest_framework.throttling import SimpleRateThrottle
 
 
-# 节流器，限制邮箱验证码接口每个邮箱只能访问5次
+def extract_email(request):
+    data = getattr(request, 'data', None)
+    if not hasattr(data, 'get'):
+        return None
+
+    email = data.get('email')
+    if isinstance(email, str):
+        email = email.strip()
+
+    return email or None
+
+
 class DailyThrottle(SimpleRateThrottle):
-    rate = '5/day'
+    # Local development needs a much looser cap, otherwise repeated manual
+    # registration testing quickly hits a full-day cooldown.
+    rate = '100/day' if settings.DEBUG else '5/day'
 
     def get_cache_key(self, request, view):
-        email = request.data.get("email")
+        email = extract_email(request)
         if not email:
             return None
         return f"DailyThrottle:{email.replace('.', '_')}"
 
-    def allow_request(self, request, view):
-        self.scope = request.data.get("email")
-        return super().allow_request(request, view)
 
-
-# 节流器，限制访问1分钟1次，通过缓存中存储的key来实现每个邮箱一分钟只能访问一次邮箱验证码接口
 class MinuteThrottle(SimpleRateThrottle):
-    rate = '1/min'
+    rate = '10/min' if settings.DEBUG else '1/min'
 
     def get_cache_key(self, request, view):
-        email = request.data.get("email")
+        email = extract_email(request)
         if not email:
             return None
         return f"MinuteThrottle:{email.replace('.', '_')}"
-
-    def allow_request(self, request, view):
-        self.scope = request.data.get("email")
-        return super().allow_request(request, view)
-

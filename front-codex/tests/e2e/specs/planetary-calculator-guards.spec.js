@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 
 async function installPlanetaryBaseMock(page) {
@@ -11,10 +11,12 @@ async function installPlanetaryBaseMock(page) {
         },
       ])
     }
+
     if (method === 'GET' && url.pathname === '/api/regions') return json([])
     if (method === 'GET' && url.pathname === '/api/constellations') return json([])
     if (method === 'GET' && url.pathname === '/api/solarsystem') return json([])
     if (method === 'GET' && url.pathname === '/api/planetresourceprice') return json([])
+
     if (method === 'POST' && url.pathname === '/api/searchplanetresource') {
       expect(Array.isArray(body.planetaryResources)).toBeTruthy()
       return json([
@@ -23,7 +25,7 @@ async function installPlanetaryBaseMock(page) {
           resource_type: '船菜',
           region: '德里克',
           region_security: 0.5,
-          constellation: '静寂谷',
+          constellation: '寂静谷',
           constellation_security: 0.4,
           solar_system: 'Q-TBHW',
           solar_system_security: -0.8,
@@ -47,11 +49,14 @@ async function openCalculatorWithOneRow(page) {
   return page.locator('.calculator-card')
 }
 
-test('未登录时计算器显示登录提示且不展示方案管理按钮', async ({ page }) => {
+test('未登录时计算器显示方案限制提示且不展示方案管理按钮', async ({ page }) => {
   await installPlanetaryBaseMock(page)
 
   const modal = await openCalculatorWithOneRow(page)
-  await expect(modal.locator('.calculator-auth-hint')).toContainText('当前未登录，可正常计算；登录后可保存、加载和删除方案。')
+  await expect(modal.locator('.calculator-auth-hint')).toContainText('未登录无法保存方案')
+  await expect(modal.locator('.calculator-auth-hint')).toContainText(
+    '当前仍可正常计算，但无法保存、加载或删除方案。登录后即可管理方案。',
+  )
   await expect(modal.getByRole('button', { name: '保存新方案' })).toHaveCount(0)
   await expect(modal.getByRole('button', { name: '更新当前方案' })).toHaveCount(0)
   await expect(modal.getByRole('button', { name: '删除方案' })).toHaveCount(0)

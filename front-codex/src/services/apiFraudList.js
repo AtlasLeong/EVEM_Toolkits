@@ -1,49 +1,73 @@
-import API_URL from "./backendSetting";
+﻿import API_URL from "./backendSetting";
 import fetchWithAuth from "./fetchWithAuth";
 
-export async function searchFraud(FraudNumber) {
+async function parseError(response, fallback) {
+  const errorData = await response.json().catch(() => ({}));
+  throw new Error(errorData.error || errorData.message || errorData.detail || fallback);
+}
+
+export async function searchFraud(fraudNumber) {
   const res = await fetch(`${API_URL}/fraudsearch`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(FraudNumber),
+    body: JSON.stringify(fraudNumber),
   });
+
   if (!res.ok) {
-    throw new Error("Error to search Fraud list");
+    throw new Error("诈骗名单查询失败");
   }
-  const data = await res.json();
-  return data;
+
+  return res.json();
 }
 
 export async function checkFraudAdmin() {
-  const res = await fetchWithAuth(`${API_URL}/fraudlogin`);
-  if (!res.ok) throw Error("Failed check fraud admin login");
-  const data = await res.json();
-  return data;
+  const res = await fetchWithAuth(`${API_URL}/fraudadmincheck`);
+  if (!res.ok) {
+    throw new Error("管理员权限校验失败");
+  }
+  return res.json();
 }
 
 export async function fraudAdminLogin({ adminEmail, adminPassword }) {
-  const res = await fetchWithAuth(`${API_URL}/fraudlogin`, {
+  const loginRes = await fetch(`${API_URL}/user/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ adminEmail, adminPassword }),
+    body: JSON.stringify({ login_email: adminEmail, login_password: adminPassword }),
   });
-  if (!res.ok) {
-    const errorMessage = await res.json();
-    throw new Error(errorMessage.error);
+
+  if (!loginRes.ok) {
+    await parseError(loginRes, "管理员登录失败");
   }
-  const data = await res.json();
-  return data;
+
+  const tokens = await loginRes.json();
+  const adminCheckRes = await fetch(`${API_URL}/fraudadmincheck`, {
+    headers: {
+      Authorization: `Bearer ${tokens.access}`,
+    },
+  });
+
+  if (!adminCheckRes.ok) {
+    await parseError(adminCheckRes, "管理员权限校验失败");
+  }
+
+  const adminCheckData = await adminCheckRes.json();
+  if (adminCheckData?.message !== "Authorized Users") {
+    throw new Error(adminCheckData?.message || "管理员权限校验失败");
+  }
+
+  return tokens;
 }
 
 export async function getAdminFraudByAuth() {
   const res = await fetchWithAuth(`${API_URL}/fraudadminlist`);
-  if (!res.ok) throw Error("Failed check fraud admin login");
-  const data = await res.json();
-  return data;
+  if (!res.ok) {
+    throw new Error("获取管理员名单失败");
+  }
+  return res.json();
 }
 
 export async function deleteFraudByID(fraudID) {
@@ -54,18 +78,19 @@ export async function deleteFraudByID(fraudID) {
     },
     body: JSON.stringify(fraudID),
   });
+
   if (!res.ok) {
     const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    throw new Error(errorMessage.message || "删除诈骗记录失败");
   }
-  // 检查是否是 204 No Content 响应
-  if (res.status === 204) {
-    return {}; // 返回一个空对象或其他合适的值
-  }
-  const data = await res.json();
 
-  return data;
+  if (res.status === 204) {
+    return {};
+  }
+
+  return res.json();
 }
+
 export async function addFraudRecord(record) {
   const res = await fetchWithAuth(`${API_URL}/fraudadminlist`, {
     method: "POST",
@@ -77,11 +102,10 @@ export async function addFraudRecord(record) {
 
   if (!res.ok) {
     const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    throw new Error(errorMessage.message || "新增诈骗记录失败");
   }
-  const data = await res.json();
 
-  return data;
+  return res.json();
 }
 
 export async function editFraudRecord(record) {
@@ -95,36 +119,38 @@ export async function editFraudRecord(record) {
 
   if (!res.ok) {
     const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    throw new Error(errorMessage.message || "编辑诈骗记录失败");
   }
-  // 检查是否是 204 No Content 响应
-  if (res.status === 204) {
-    return {}; // 返回一个空对象或其他合适的值
-  }
-  const data = await res.json();
 
-  return data;
+  if (res.status === 204) {
+    return {};
+  }
+
+  return res.json();
 }
 
 export async function getFraudAdminGroup() {
   const res = await fetchWithAuth(`${API_URL}/fraudadmingroup`);
-  if (!res.ok) throw Error("Failed get fraud admin group");
-  const data = await res.json();
-  return data;
+  if (!res.ok) {
+    throw new Error("获取管理员群组失败");
+  }
+  return res.json();
 }
 
 export async function getFraudBehaviorFlow() {
   const res = await fetchWithAuth(`${API_URL}/fraudbehaviorflow`);
-  if (!res.ok) throw Error("Failed get fraud behavior flow");
-  const data = await res.json();
-  return data;
+  if (!res.ok) {
+    throw new Error("获取操作流水失败");
+  }
+  return res.json();
 }
 
 export async function getFraudListReportFlowByUserId() {
   const res = await fetchWithAuth(`${API_URL}/fraudlistreport`);
-  if (!res.ok) throw Error("Failed get fraud list report");
-  const data = await res.json();
-  return data;
+  if (!res.ok) {
+    throw new Error("获取举报记录失败");
+  }
+  return res.json();
 }
 
 export async function submitFraudReport(report) {
@@ -138,11 +164,10 @@ export async function submitFraudReport(report) {
 
   if (!res.ok) {
     const errorMessage = await res.json();
-    throw new Error(errorMessage.error);
+    throw new Error(errorMessage.error || "提交举报失败");
   }
-  const data = await res.json();
 
-  return data;
+  return res.json();
 }
 
 export async function uploadFraudEvidence(file) {
@@ -156,18 +181,18 @@ export async function uploadFraudEvidence(file) {
 
   if (!res.ok) {
     const errorMessage = await res.json().catch(() => ({}));
-    throw new Error(errorMessage.error || errorMessage.message || "Failed to upload image");
+    throw new Error(errorMessage.error || errorMessage.message || "上传证据图片失败");
   }
 
-  const data = await res.json();
-  return data;
+  return res.json();
 }
 
 export async function getFraudReportListAdmin() {
   const res = await fetchWithAuth(`${API_URL}/fraudadminlistreport`);
-  if (!res.ok) throw Error("Failed get admin fraud list report");
-  const data = await res.json();
-  return data;
+  if (!res.ok) {
+    throw new Error("获取举报审核列表失败");
+  }
+  return res.json();
 }
 
 export async function submitReportApprove(report) {
@@ -181,9 +206,8 @@ export async function submitReportApprove(report) {
 
   if (!res.ok) {
     const errorMessage = await res.json();
-    throw new Error(errorMessage.error);
+    throw new Error(errorMessage.error || "提交审核失败");
   }
-  const data = await res.json();
 
-  return data;
+  return res.json();
 }

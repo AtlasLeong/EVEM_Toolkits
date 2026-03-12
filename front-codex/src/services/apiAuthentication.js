@@ -3,7 +3,7 @@ import fetchWithAuth from './fetchWithAuth'
 
 async function parseError(response, fallback) {
   const errorData = await response.json().catch(() => ({}))
-  throw new Error(errorData.error || errorData.message || fallback)
+  throw new Error(errorData.error || errorData.message || errorData.detail || fallback)
 }
 
 export async function register({ userName, email, password, verificationCode }) {

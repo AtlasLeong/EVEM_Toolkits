@@ -56,6 +56,30 @@ function LevelBadge({ value }) {
   return <span className={`level-badge level-${value}`}>{label}</span>
 }
 
+function buildLocationPayload({ regionIds, constellationIds, systemIds }) {
+  if (systemIds.length) {
+    return {
+      regionValue: [],
+      constellationValue: [],
+      systemValue: systemIds,
+    }
+  }
+
+  if (constellationIds.length) {
+    return {
+      regionValue: [],
+      constellationValue: constellationIds,
+      systemValue: [],
+    }
+  }
+
+  return {
+    regionValue: regionIds,
+    constellationValue: [],
+    systemValue: [],
+  }
+}
+
 function SearchableMultiPicker({
   label,
   placeholder,
@@ -268,11 +292,10 @@ export default function PlanetaryPage() {
     }
 
     const selectedResources = flatResources.filter((item) => resourceValues.includes(item.value))
+    const locationPayload = buildLocationPayload({ regionIds, constellationIds, systemIds })
 
     searchMutation.mutate({
-      regionValue: regionIds,
-      constellationValue: constellationIds,
-      systemValue: systemIds,
+      ...locationPayload,
       planetaryResources: selectedResources,
     })
   }

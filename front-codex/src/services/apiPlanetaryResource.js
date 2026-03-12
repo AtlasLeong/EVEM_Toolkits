@@ -1,137 +1,129 @@
-import API_URL from "./backendSetting";
-import fetchWithAuth from "./fetchWithAuth";
+import API_URL from './backendSetting'
+import fetchWithAuth from './fetchWithAuth'
+
+async function parseApiError(response, fallback) {
+  const payload = await response.json().catch(async () => {
+    const text = await response.text().catch(() => '')
+    return { message: text || fallback }
+  })
+
+  throw new Error(payload.error || payload.message || payload.detail || fallback)
+}
 
 export async function getPlanetResources() {
-  const res = await fetch(`${API_URL}/planetresources`);
+  const res = await fetch(`${API_URL}/planetresources`)
   if (!res.ok) {
-    throw new Error("Error to fetch Planet Resource");
+    throw new Error('Error to fetch Planet Resource')
   }
-  const data = await res.json();
-  return data;
+  return res.json()
 }
 
 export async function searchPlanetResources(searchForm) {
   const res = await fetch(`${API_URL}/searchplanetresource`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify(searchForm),
-  });
+  })
   if (!res.ok) {
-    throw new Error("Error to fetch Planet Resource");
+    throw new Error('Error to fetch Planet Resource')
   }
-  const data = await res.json();
-  return data;
+  return res.json()
 }
 
 export async function getDefaultResourcePriceSetting(resetPrice) {
-  const res = await fetchWithAuth(
-    `${API_URL}/planetresourceprice?resetPrice=${resetPrice}`
-  );
+  const res = await fetchWithAuth(`${API_URL}/planetresourceprice?resetPrice=${resetPrice}`)
   if (!res.ok) {
-    throw new Error("Error to fetch default Resource Price");
+    throw new Error('Error to fetch default Resource Price')
   }
-  const data = await res.json();
-  return data;
+  return res.json()
 }
 
 export async function saveUserPrePrice({ prePriceElement }) {
   const res = await fetchWithAuth(`${API_URL}/planetresourceprice`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(prePriceElement),
-  });
+    body: JSON.stringify({ prePriceElement }),
+  })
 
   if (!res.ok) {
-    const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    await parseApiError(res, '保存价格失败')
   }
-  const data = await res.json();
 
-  return data;
+  return res.json()
 }
 
 export async function savePlanetaryProgramme({ calculatorData }) {
   const res = await fetchWithAuth(`${API_URL}/programme`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify(calculatorData),
-  });
+  })
 
   if (!res.ok) {
-    const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    await parseApiError(res, '保存方案失败')
   }
-  const data = await res.json();
 
-  return data;
+  return res.json()
 }
 
 export async function getUserProgremmaList() {
-  const res = await fetchWithAuth(`${API_URL}/programme`);
+  const res = await fetchWithAuth(`${API_URL}/programme`)
   if (!res.ok) {
-    throw new Error("Error to fetch programme");
+    throw new Error('Error to fetch programme')
   }
-  const data = await res.json();
-  return data;
+  return res.json()
 }
 
 export async function getUserProgremmaByID(programme_id) {
-  const res = await fetchWithAuth(
-    `${API_URL}/programme?programme_id=${programme_id}`
-  );
+  const res = await fetchWithAuth(`${API_URL}/programme?programme_id=${programme_id}`)
   if (!res.ok) {
-    throw new Error(`Error to fetch programme by id: ${programme_id}`);
+    throw new Error(`Error to fetch programme by id: ${programme_id}`)
   }
-  const data = await res.json();
-  return data;
+  return res.json()
 }
 
 export async function deleteProgremmaByID(programme_id) {
   const res = await fetchWithAuth(`${API_URL}/programme`, {
-    method: "DELETE",
+    method: 'DELETE',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify(programme_id),
-  });
+  })
 
   if (!res.ok) {
-    const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    await parseApiError(res, '删除方案失败')
   }
-  // 检查是否是 204 No Content 响应
-  if (res.status === 204) {
-    return {}; // 返回一个空对象或其他合适的值
-  }
-  const data = await res.json();
 
-  return data;
+  if (res.status === 204) {
+    return {}
+  }
+
+  return res.json()
 }
 
 export async function updateProgremma({ programme_id, element }) {
   const res = await fetchWithAuth(`${API_URL}/programme`, {
-    method: "PATCH",
+    method: 'PATCH',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({ programme_id, element }),
-  });
+  })
 
   if (!res.ok) {
-    const errorMessage = await res.json();
-    throw new Error(errorMessage.message);
+    await parseApiError(res, '更新方案失败')
   }
-  // 检查是否是 204 No Content 响应
-  if (res.status === 204) {
-    return {}; // 返回一个空对象或其他合适的值
-  }
-  const data = await res.json();
 
-  return data;
+  if (res.status === 204) {
+    return {}
+  }
+
+  return res.json()
 }

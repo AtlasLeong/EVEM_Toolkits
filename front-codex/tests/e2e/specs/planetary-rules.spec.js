@@ -124,3 +124,49 @@ test('只选地点不选资源时由后端返回该地点结果', async ({ page 
   await expect(firstRow).toContainText('光彩合金')
   await expect(firstRow).toContainText('Q-TBHW')
 })
+
+test('同时选到星系时只把最深一级 systemValue 发给后端', async ({ page }) => {
+  await installPlanetaryBaseMock(page, async ({ url, method, body }) => {
+    if (method === 'POST' && url.pathname === '/api/searchplanetresource') {
+      expect(body).toMatchObject({
+        regionValue: [],
+        constellationValue: [],
+        systemValue: [21],
+        planetaryResources: [],
+      })
+
+      return json([
+        {
+          resource_name: '光彩合金',
+          resource_type: '船菜',
+          region: '德里克',
+          region_security: 0.5,
+          constellation: '静寂谷',
+          constellation_security: 0.4,
+          solar_system: 'Q-TBHW',
+          solar_system_security: -0.8,
+          planet_id: 'P2',
+          resource_level: 3,
+          resource_yield: 95,
+          fuel_value: 190,
+          icon: TINY_ICON,
+        },
+      ])
+    }
+  })
+
+  await page.goto('/planetary')
+
+  const regionPicker = page.locator('.picker-field').nth(0)
+  const constellationPicker = page.locator('.picker-field').nth(1)
+  const systemPicker = page.locator('.picker-field').nth(2)
+
+  await regionPicker.locator('.picker-option').first().click()
+  await constellationPicker.locator('.picker-option').first().click()
+  await systemPicker.locator('.picker-option').first().click()
+  await page.getByRole('button', { name: '搜索' }).click()
+
+  const firstRow = page.locator('tbody tr').first()
+  await expect(firstRow).toContainText('Q-TBHW')
+  await expect(firstRow).toContainText('光彩合金')
+})
