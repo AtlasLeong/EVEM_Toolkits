@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 import os
 from datetime import timedelta
-from decouple import AutoConfig, Config, RepositoryEnv
 from distutils.util import strtobool
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -33,10 +32,15 @@ if ENV_FILE.exists():
             # DEBUG=release during local development.
             os.environ[key.strip()] = value.strip()
 
-if ENV_FILE.exists():
-    config = Config(RepositoryEnv(str(ENV_FILE)))
-else:
-    config = AutoConfig(search_path=str(BASE_DIR))
+_MISSING = object()
+
+
+def config(key, default=_MISSING):
+    if key in os.environ:
+        return os.environ[key]
+    if default is not _MISSING:
+        return default
+    raise RuntimeError(f'{key} not found. Define it in backend/.env or system environment variables.')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/

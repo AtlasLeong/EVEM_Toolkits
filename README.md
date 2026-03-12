@@ -1,6 +1,7 @@
 ﻿# EVEM Toolkits
 
 - 本地开发与联调说明：[LOCAL_DEV.md](./LOCAL_DEV.md)
+- 生产部署说明：[DEPLOY_PRODUCTION.md](./DEPLOY_PRODUCTION.md)
 - 自动化测试说明：[front-codex/AUTOMATION_TESTS.md](./front-codex/AUTOMATION_TESTS.md)
 - 手动测试清单：[front-codex/TEST_CHECKLIST.md](./front-codex/TEST_CHECKLIST.md)
 - 测试覆盖对照表：[front-codex/TEST_CHECKLIST_MATRIX.md](./front-codex/TEST_CHECKLIST_MATRIX.md)
