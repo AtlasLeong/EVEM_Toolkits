@@ -1,14 +1,14 @@
-# views.py
+import datetime
 import uuid
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from django.utils import timezone
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
 from .models import ActivationCode
 from .serializers import ActivationCodeSerializer
-import datetime
 
 
 class GenerateActivationCode(APIView):
@@ -30,22 +30,31 @@ class ValidateActivationCode(APIView):
         code = request.data.get('code')
         pc_identifier = request.data.get('pc_identifier')
 
+        if not code or not pc_identifier:
+            return Response({'valid': False, 'message': '缺少必填字段'}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             activation = ActivationCode.objects.get(code=code)
-            if activation.is_active == 0:
-                return Response({'valid': False, 'message': '激活码已被使用'}, status=status.HTTP_400_BAD_REQUEST)
-            if activation.expires_at < timezone.now():
-                return Response({'valid': False, 'message': '激活码已过期'}, status=status.HTTP_400_BAD_REQUEST)
-            if activation.pc_identifier and activation.pc_identifier != pc_identifier:
-                return Response({'valid': False, 'message': '该激活码已绑定其他PC电脑'},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            activation.pc_identifier = pc_identifier
-            activation.last_used = timezone.now()
-            activation.is_active = 0
-            activation.save()
-
-            serializer = ActivationCodeSerializer(activation)
-            return Response({'valid': True, 'activation': serializer.data}, status=status.HTTP_200_OK)
         except ActivationCode.DoesNotExist:
-            return Response({'valid': False, 'message': 'Invalid code'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'valid': False, 'message': '激活码不存在'}, status=status.HTTP_404_NOT_FOUND)
+
+        if activation.expires_at < timezone.now():
+            return Response({'valid': False, 'message': '激活码已过期'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if activation.pc_identifier and activation.pc_identifier != pc_identifier:
+            return Response({'valid': False, 'message': '该激活码已绑定其他电脑'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # is_active now represents whether the code is enabled, not whether it has
+        # already been used once. For compatibility, previously consumed codes that
+        # were incorrectly written as inactive remain valid on their bound machine.
+        if activation.is_active == 0 and not activation.pc_identifier:
+            return Response({'valid': False, 'message': '激活码已停用'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not activation.pc_identifier:
+            activation.pc_identifier = pc_identifier
+
+        activation.last_used = timezone.now()
+        activation.save(update_fields=['pc_identifier', 'last_used'])
+
+        serializer = ActivationCodeSerializer(activation)
+        return Response({'valid': True, 'activation': serializer.data}, status=status.HTTP_200_OK)
