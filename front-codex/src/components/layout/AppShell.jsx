@@ -10,7 +10,7 @@ const navItems = [
   { to: '/starmap', label: '星系导航', icon: Compass },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/usersetting', '/fraudadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))

@@ -27,5 +27,6 @@ urlpatterns = [
     path('api/', include("FraudList.urls")),
     path('api/', include("TacticalBoard.urls")),
     path('api/user/', include("Authentication.urls")),
-    path('api/activationcode/', include("ActivationCode.urls"))
+    path('api/activationcode/', include("ActivationCode.urls")),
+    path('api/license/', include("License.urls")),
 ]

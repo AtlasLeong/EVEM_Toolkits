@@ -14,6 +14,7 @@ class ActivationCode(models.Model):
     expires_at = models.DateTimeField()
     pc_identifier = models.CharField(max_length=255, null=True, blank=True)
     last_used = models.DateTimeField(null=True, blank=True)
+    remark = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return str(self.code)

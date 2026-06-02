@@ -1319,6 +1319,141 @@ a {
   z-index: 2;
 }
 
+.license-admin-page {
+  gap: 18px;
+}
+
+.inline-notice {
+  border: 1px solid rgba(29, 78, 216, 0.18);
+  background: rgba(239, 246, 255, 0.92);
+  color: #1e3a8a;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.license-create-form {
+  align-items: end;
+}
+
+.license-form-actions {
+  grid-column: 1 / -1;
+}
+
+.license-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 160px 140px 150px;
+  align-items: center;
+}
+
+.license-toolbar .compact-search {
+  min-height: 42px;
+}
+
+.license-extend-control {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.license-extend-control .text-input {
+  min-width: 0;
+}
+
+.license-table {
+  min-width: 1320px;
+}
+
+.license-table .admin-col-actions {
+  width: 260px;
+  min-width: 260px;
+}
+
+.license-code-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+}
+
+.license-code-cell span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.license-code-copy {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.license-code-copy:hover {
+  color: #1d4ed8;
+  border-color: rgba(37, 99, 235, 0.36);
+}
+
+.license-pc-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.license-script-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 280px;
+}
+
+.license-script-list span,
+.license-script-reference span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  background: rgba(241, 245, 249, 0.92);
+  color: #334155;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.license-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.license-script-reference {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.license-script-reference strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  color: #0f172a;
+}
+
 .source-icon {
   width: auto;
   height: 36px;

@@ -9,6 +9,8 @@ from .models import ActivationCode
 
 
 class ValidateActivationCodeTests(APITestCase):
+    databases = {'default', 'license'}
+
     def setUp(self):
         self.url = reverse('validate_code')
 
@@ -40,6 +42,7 @@ class ValidateActivationCodeTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['valid'])
+        self.assertIn('permissions', response.data)
 
     def test_legacy_inactive_code_bound_to_same_machine_still_valid(self):
         activation = self.create_code(code='legacy-code', is_active=0, pc_identifier='pc-a')

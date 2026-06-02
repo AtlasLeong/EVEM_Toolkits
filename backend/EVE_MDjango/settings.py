@@ -89,7 +89,8 @@ INSTALLED_APPS = [
     'Bazaar',
     'FraudList',
     'TacticalBoard',
-    'ActivationCode'
+    'ActivationCode',
+    'License',
 ]
 
 MIDDLEWARE = [
@@ -139,8 +140,21 @@ DATABASES = {
         'OPTIONS': {
             'charset': 'utf8mb4',
         }
+    },
+    'license': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': config('LICENSE_DB_NAME', default='evem_license'),
+        'USER': config('LICENSE_DB_USER', default=config('DB_USER')),
+        'PASSWORD': config('LICENSE_DB_PASSWORD', default=config('DB_PASSWORD')),
+        'HOST': config('LICENSE_DB_HOST', default=config('DB_HOST')),
+        'PORT': config('LICENSE_DB_PORT', default=config('DB_PORT')),
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+        }
     }
 }
+
+DATABASE_ROUTERS = ['EVE_MDjango.db_routers.LicenseDatabaseRouter']
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

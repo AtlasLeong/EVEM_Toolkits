@@ -10,6 +10,7 @@ import TacticalBoardPage from './pages/TacticalBoard'
 import SettingPage from './pages/Setting'
 import FraudAdminLoginPage from './pages/FraudAdminLogin'
 import FraudAdminPage from './pages/FraudAdmin'
+import LicenseAdminPage from './pages/LicenseAdmin'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -55,6 +56,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <FraudAdminPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/licenseadmin"
+            element={
+              <RequireAuth>
+                <LicenseAdminPage />
               </RequireAuth>
             }
           />
