@@ -40,13 +40,17 @@ function getStatusText(item) {
 
 function LicenseCodeRow({ item, onCopy, onExtend, onUnbind, onToggle }) {
   const scripts = item?.permissions?.scripts || []
+  const visibleScripts = scripts.slice(0, 3)
+  const scriptTitle = scripts.map((scriptId) => scriptLabel(scriptId)).join(' / ')
   return (
     <tr>
       <td className="license-code-cell">
-        <button type="button" className="license-code-copy" onClick={() => onCopy(item.code)} title="复制激活码">
-          <Copy size={14} />
-        </button>
-        <span>{item.code}</span>
+        <div className="license-code-wrap">
+          <button type="button" className="license-code-copy" onClick={() => onCopy(item.code)} title="复制激活码">
+            <Copy size={14} />
+          </button>
+          <span>{item.code}</span>
+        </div>
       </td>
       <td>{getPlanLabel(item.plan)}</td>
       <td>
@@ -55,27 +59,29 @@ function LicenseCodeRow({ item, onCopy, onExtend, onUnbind, onToggle }) {
       <td>{formatDate(item.expires_at)}</td>
       <td className="license-pc-cell">{item.pc_identifier || '未绑定'}</td>
       <td>
-        <div className="license-script-list">
-          {scripts.slice(0, 4).map((scriptId) => (
+        <div className="license-script-list" title={scriptTitle}>
+          {visibleScripts.map((scriptId) => (
             <span key={scriptId}>{scriptLabel(scriptId)}</span>
           ))}
-          {scripts.length > 4 ? <span>+{scripts.length - 4}</span> : null}
+          {scripts.length > visibleScripts.length ? <span className="license-script-more">+{scripts.length - visibleScripts.length}</span> : null}
         </div>
       </td>
       <td>{item.remark || '-'}</td>
-      <td className="admin-row-actions license-actions">
-        <button type="button" className="ghost-btn compact" onClick={() => onExtend(item.id)}>
-          <TimerReset size={14} />
-          延期
-        </button>
-        <button type="button" className="ghost-btn compact" onClick={() => onUnbind(item.id)} disabled={!item.pc_identifier}>
-          <Link2Off size={14} />
-          解绑
-        </button>
-        <button type="button" className="ghost-btn compact" onClick={() => onToggle(item)}>
-          {item.is_active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-          {item.is_active ? '停用' : '启用'}
-        </button>
+      <td className="license-actions-cell">
+        <div className="license-actions">
+          <button type="button" className="ghost-btn compact" onClick={() => onExtend(item.id)}>
+            <TimerReset size={14} />
+            延期
+          </button>
+          <button type="button" className="ghost-btn compact" onClick={() => onUnbind(item.id)} disabled={!item.pc_identifier}>
+            <Link2Off size={14} />
+            解绑
+          </button>
+          <button type="button" className="ghost-btn compact" onClick={() => onToggle(item)}>
+            {item.is_active ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+            {item.is_active ? '停用' : '启用'}
+          </button>
+        </div>
       </td>
     </tr>
   )
@@ -313,6 +319,16 @@ export default function LicenseAdminPage() {
         {items.length > 0 ? (
           <div className="admin-record-table-shell license-table-shell">
             <table className="admin-record-table license-table">
+              <colgroup>
+                <col className="license-col-code" />
+                <col className="license-col-plan" />
+                <col className="license-col-status" />
+                <col className="license-col-expiry" />
+                <col className="license-col-device" />
+                <col className="license-col-scripts" />
+                <col className="license-col-remark" />
+                <col className="license-col-actions" />
+              </colgroup>
               <thead>
                 <tr>
                   <th>激活码</th>
@@ -356,4 +372,3 @@ export default function LicenseAdminPage() {
     </div>
   )
 }
-

@@ -1341,14 +1341,25 @@ a {
   grid-column: 1 / -1;
 }
 
-.license-toolbar {
+.admin-review-toolbar.license-toolbar {
+  margin-top: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 160px 140px 150px;
-  align-items: center;
+  grid-template-columns: minmax(280px, 1fr) 160px 140px 150px;
+  align-items: end;
+  justify-content: stretch;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.74);
 }
 
 .license-toolbar .compact-search {
   min-height: 42px;
+}
+
+.license-toolbar .compact-search input {
+  min-width: 0;
 }
 
 .license-extend-control {
@@ -1365,23 +1376,96 @@ a {
   min-width: 0;
 }
 
-.license-table {
-  min-width: 1320px;
+.license-table-shell {
+  margin-top: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 10px;
+  background: #ffffff;
 }
 
-.license-table .admin-col-actions {
-  width: 260px;
-  min-width: 260px;
+.license-table {
+  width: 100%;
+  min-width: 1280px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.license-table th,
+.license-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.86);
+  text-align: left;
+  vertical-align: middle;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.license-table th {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.license-table tbody tr:hover td {
+  background: rgba(248, 250, 252, 0.62);
+}
+
+.license-col-code {
+  width: 322px;
+}
+
+.license-col-plan {
+  width: 84px;
+}
+
+.license-col-status {
+  width: 82px;
+}
+
+.license-col-expiry {
+  width: 168px;
+}
+
+.license-col-device {
+  width: 210px;
+}
+
+.license-col-scripts {
+  width: 300px;
+}
+
+.license-col-remark {
+  width: 150px;
+}
+
+.license-col-actions {
+  width: 226px;
+}
+
+.license-table .admin-col-actions,
+.license-table .license-actions-cell {
+  position: static;
+  right: auto;
+  width: auto;
+  min-width: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: auto;
 }
 
 .license-code-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 280px;
+  min-width: 0;
 }
 
-.license-code-cell span {
+.license-code-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.license-code-wrap span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1410,7 +1494,7 @@ a {
 }
 
 .license-pc-cell {
-  max-width: 180px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1418,9 +1502,11 @@ a {
 
 .license-script-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
-  max-width: 280px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .license-script-list span,
@@ -1438,9 +1524,39 @@ a {
   line-height: 1.2;
 }
 
+.license-script-list span {
+  max-width: 112px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.license-script-list .license-script-more {
+  flex: 0 0 auto;
+  max-width: none;
+  color: #1d4ed8;
+  background: rgba(219, 234, 254, 0.82);
+  border-color: rgba(96, 165, 250, 0.28);
+}
+
+.license-actions-cell {
+  min-width: 0;
+}
+
 .license-actions {
   display: flex;
   gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+}
+
+.license-actions .ghost-btn.compact {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 .license-script-reference {
@@ -1452,6 +1568,12 @@ a {
 .license-script-reference strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   color: #0f172a;
+}
+
+@media (max-width: 1280px) {
+  .admin-review-toolbar.license-toolbar {
+    grid-template-columns: minmax(220px, 1fr) 150px;
+  }
 }
 
 .source-icon {
