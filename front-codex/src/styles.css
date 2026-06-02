@@ -1360,6 +1360,18 @@ a {
 
 .license-toolbar .compact-search input {
   min-width: 0;
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.license-toolbar .compact-search input::placeholder {
+  color: #94a3b8;
 }
 
 .license-extend-control {
@@ -1440,7 +1452,7 @@ a {
 }
 
 .license-col-actions {
-  width: 226px;
+  width: 306px;
 }
 
 .license-table .admin-col-actions,
@@ -1554,9 +1566,76 @@ a {
 
 .license-actions .ghost-btn.compact {
   height: 32px;
-  padding: 0 10px;
+  padding: 0 9px;
   border-radius: 8px;
   white-space: nowrap;
+}
+
+.license-script-modal {
+  width: min(820px, calc(100vw - 104px));
+}
+
+.license-script-modal .modal-head h3 {
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.license-script-check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.license-script-check {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-areas:
+    "check label"
+    "check code";
+  column-gap: 10px;
+  row-gap: 3px;
+  align-items: center;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.72);
+  cursor: pointer;
+}
+
+.license-script-check.selected {
+  border-color: rgba(37, 99, 235, 0.3);
+  background: rgba(239, 246, 255, 0.86);
+}
+
+.license-script-check input {
+  grid-area: check;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+}
+
+.license-script-check span {
+  grid-area: label;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.license-script-check code {
+  grid-area: code;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #64748b;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 .license-script-reference {
@@ -1573,6 +1652,10 @@ a {
 @media (max-width: 1280px) {
   .admin-review-toolbar.license-toolbar {
     grid-template-columns: minmax(220px, 1fr) 150px;
+  }
+
+  .license-script-check-grid {
+    grid-template-columns: 1fr;
   }
 }
 

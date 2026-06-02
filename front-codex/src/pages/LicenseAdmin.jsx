@@ -1,6 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, KeyRound, Link2Off, Plus, RefreshCw, Search, TimerReset, ToggleLeft, ToggleRight } from 'lucide-react'
+import {
+  Copy,
+  KeyRound,
+  Link2Off,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  TimerReset,
+  ToggleLeft,
+  ToggleRight,
+  X,
+} from 'lucide-react'
 import {
   createLicenseCode,
   extendLicenseCode,
@@ -38,10 +50,12 @@ function getStatusText(item) {
   return '可用'
 }
 
-function LicenseCodeRow({ item, onCopy, onExtend, onUnbind, onToggle }) {
+function LicenseCodeRow({ item, onCopy, onEditScripts, onExtend, onUnbind, onToggle }) {
   const scripts = item?.permissions?.scripts || []
   const visibleScripts = scripts.slice(0, 3)
+  const hiddenScripts = scripts.slice(visibleScripts.length)
   const scriptTitle = scripts.map((scriptId) => scriptLabel(scriptId)).join(' / ')
+  const hiddenScriptTitle = hiddenScripts.map((scriptId) => scriptLabel(scriptId)).join(' / ')
   return (
     <tr>
       <td className="license-code-cell">
@@ -61,14 +75,22 @@ function LicenseCodeRow({ item, onCopy, onExtend, onUnbind, onToggle }) {
       <td>
         <div className="license-script-list" title={scriptTitle}>
           {visibleScripts.map((scriptId) => (
-            <span key={scriptId}>{scriptLabel(scriptId)}</span>
+            <span key={scriptId} title={scriptLabel(scriptId)}>{scriptLabel(scriptId)}</span>
           ))}
-          {scripts.length > visibleScripts.length ? <span className="license-script-more">+{scripts.length - visibleScripts.length}</span> : null}
+          {hiddenScripts.length > 0 ? (
+            <span className="license-script-more" title={hiddenScriptTitle}>
+              +{hiddenScripts.length}
+            </span>
+          ) : null}
         </div>
       </td>
       <td>{item.remark || '-'}</td>
       <td className="license-actions-cell">
         <div className="license-actions">
+          <button type="button" className="ghost-btn compact" onClick={() => onEditScripts(item)}>
+            <SlidersHorizontal size={14} />
+            编辑权限
+          </button>
           <button type="button" className="ghost-btn compact" onClick={() => onExtend(item.id)}>
             <TimerReset size={14} />
             延期
@@ -87,6 +109,49 @@ function LicenseCodeRow({ item, onCopy, onExtend, onUnbind, onToggle }) {
   )
 }
 
+function ScriptPermissionModal({ item, selectedScriptIds, onClose, onSave, onToggleScript, isPending }) {
+  const selected = new Set(selectedScriptIds)
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-card admin-modal license-script-modal" role="dialog" aria-modal="true" aria-labelledby="license-script-modal-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <p className="modal-kicker">{item?.code}</p>
+            <h3 id="license-script-modal-title">编辑额外脚本</h3>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose} aria-label="关闭">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="license-script-check-grid">
+          {SCRIPT_OPTIONS.map((script) => (
+            <label key={script.value} className={`license-script-check ${selected.has(script.value) ? 'selected' : ''}`.trim()}>
+              <input
+                type="checkbox"
+                aria-label={script.label}
+                checked={selected.has(script.value)}
+                onChange={() => onToggleScript(script.value)}
+              />
+              <span>{script.label}</span>
+              <code>{script.value}</code>
+            </label>
+          ))}
+        </div>
+
+        <div className="right-actions admin-modal-actions">
+          <button type="button" className="ghost-btn" onClick={onClose} disabled={isPending}>
+            取消
+          </button>
+          <button type="button" className="primary-btn" onClick={onSave} disabled={isPending}>
+            保存权限
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function LicenseAdminPage() {
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState({ search: '', plan: '', is_active: '' })
@@ -98,6 +163,8 @@ export default function LicenseAdminPage() {
   })
   const [extendDays, setExtendDays] = useState('30')
   const [notice, setNotice] = useState('')
+  const [scriptEditorItem, setScriptEditorItem] = useState(null)
+  const [selectedExtraScriptIds, setSelectedExtraScriptIds] = useState([])
 
   const queryParams = useMemo(
     () => ({
@@ -153,6 +220,17 @@ export default function LicenseAdminPage() {
     onError: (error) => setNotice(error.message),
   })
 
+  const updateScriptsMutation = useMutation({
+    mutationFn: ({ id, extra_script_ids }) => updateLicenseCode(id, { extra_script_ids }),
+    onSuccess: () => {
+      setNotice('脚本权限已更新')
+      setScriptEditorItem(null)
+      setSelectedExtraScriptIds([])
+      invalidateCodes()
+    },
+    onError: (error) => setNotice(error.message),
+  })
+
   const items = codesQuery.data?.results || []
 
   const handleCreate = (event) => {
@@ -186,6 +264,27 @@ export default function LicenseAdminPage() {
       return
     }
     extendMutation.mutate({ id, days })
+  }
+
+  const openScriptEditor = (item) => {
+    setScriptEditorItem(item)
+    setSelectedExtraScriptIds(item.extra_script_ids || [])
+  }
+
+  const toggleExtraScript = (scriptId) => {
+    setSelectedExtraScriptIds((current) => (
+      current.includes(scriptId)
+        ? current.filter((item) => item !== scriptId)
+        : [...current, scriptId]
+    ))
+  }
+
+  const saveExtraScripts = () => {
+    if (!scriptEditorItem) return
+    updateScriptsMutation.mutate({
+      id: scriptEditorItem.id,
+      extra_script_ids: selectedExtraScriptIds,
+    })
   }
 
   return (
@@ -347,6 +446,7 @@ export default function LicenseAdminPage() {
                     key={item.id}
                     item={item}
                     onCopy={copyCode}
+                    onEditScripts={openScriptEditor}
                     onExtend={runExtend}
                     onUnbind={(id) => unbindMutation.mutate(id)}
                     onToggle={(code) => toggleMutation.mutate(code)}
@@ -369,6 +469,17 @@ export default function LicenseAdminPage() {
           ))}
         </div>
       </Panel>
+
+      {scriptEditorItem ? (
+        <ScriptPermissionModal
+          item={scriptEditorItem}
+          selectedScriptIds={selectedExtraScriptIds}
+          onClose={() => setScriptEditorItem(null)}
+          onSave={saveExtraScripts}
+          onToggleScript={toggleExtraScript}
+          isPending={updateScriptsMutation.isPending}
+        />
+      ) : null}
     </div>
   )
 }
