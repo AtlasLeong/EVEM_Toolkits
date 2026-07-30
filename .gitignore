@@ -39,3 +39,6 @@ front-codex/test-results
 *.sw?
 .DS_Store
 
+# Isolated feature worktrees
+.worktrees/
+
