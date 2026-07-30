@@ -37,6 +37,52 @@ a {
   text-decoration: none;
 }
 
+.site-frame {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-content {
+  min-height: 0;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-content > .app-shell,
+.site-content > .login-screen,
+.site-content > .desktop-only-mask {
+  min-height: 0;
+  flex: 1 0 auto;
+}
+
+.site-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.site-footer a {
+  transition: color 0.18s ease;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .desktop-only-mask {
   display: none;
   min-height: 100vh;
@@ -58,7 +104,7 @@ a {
 .app-shell {
   max-width: none;
   margin: 0;
-  min-height: 100vh;
+  min-height: 100%;
   padding: 0 0 28px;
 }
 
@@ -2883,7 +2929,7 @@ a {
 }
 
 .login-screen {
-  min-height: 100vh;
+  min-height: 100%;
   display: grid;
   place-items: center;
   padding: 30px;
