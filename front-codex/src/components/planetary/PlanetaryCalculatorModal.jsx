@@ -2,7 +2,23 @@
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { CircleAlert, ChevronDown, Clock3, Coins, Copy, Database, Flame, Gauge, LoaderCircle, Save, Trash2, Upload, X } from 'lucide-react'
+import {
+  ArrowDownUp,
+  CircleAlert,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Coins,
+  Copy,
+  Database,
+  Flame,
+  Gauge,
+  LoaderCircle,
+  Save,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-react'
 import {
   deleteProgremmaByID,
   getDefaultResourcePriceSetting,
@@ -32,6 +48,17 @@ const skillOptions = [
   { value: '554', label: '技能554' },
   { value: '555', label: '技能555' },
 ]
+
+const calculatorSortFields = {
+  resource_yield: '产量',
+  fuel_value: '单位热值',
+  arrays_number: '阵列数量',
+  computation_time: '计算时长',
+  total_fuel: '总热值',
+  total_output: '总产量',
+  unit_price: '单价',
+  total_price: '总价',
+}
 
 function getSecurityClass(value) {
   const num = Number(value)
@@ -132,6 +159,7 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
   const [saveForm, setSaveForm] = useState({ programmeName: '', programmeDesc: '' })
   const [batchValues, setBatchValues] = useState({ arrays_number: '', computation_time: '', unit_price: '' })
   const [status, setStatus] = useState({ tone: '', message: '' })
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
 
   const programmeListQuery = useQuery({
     queryKey: ['planetary-programme-list'],
@@ -273,6 +301,52 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
     const target = (programmeListQuery.data || []).find((item) => String(item.programme_id) === selectedProgrammeId)
     return target?.programme_name || currentProgrammeName || '选择已保存方案'
   }, [selectedProgrammeId, programmeListQuery.data, currentProgrammeName])
+
+  const displayRows = useMemo(() => {
+    if (!sortConfig.key) return rows
+
+    const indexedRows = rows.map((row, index) => ({ row, index }))
+    indexedRows.sort((left, right) => {
+      const direction = sortConfig.direction === 'desc' ? -1 : 1
+      const valueDiff = toNumber(left.row[sortConfig.key]) - toNumber(right.row[sortConfig.key])
+      return valueDiff ? valueDiff * direction : left.index - right.index
+    })
+
+    return indexedRows.map(({ row }) => row)
+  }, [rows, sortConfig])
+
+  const toggleSort = (key) => {
+    setSortConfig((current) => {
+      if (current.key === key) {
+        return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      }
+      return { key, direction: 'asc' }
+    })
+  }
+
+  const renderSortIcon = (key) => {
+    if (sortConfig.key !== key) return <ArrowDownUp size={14} />
+    return sortConfig.direction === 'asc' ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+  }
+
+  const renderSortableHeader = (key) => {
+    const label = calculatorSortFields[key]
+    const ariaSort = sortConfig.key === key ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : 'none'
+
+    return (
+      <th key={key} aria-sort={ariaSort}>
+        <button
+          type="button"
+          className="sort-header"
+          aria-label={`${label}排序`}
+          onClick={() => toggleSort(key)}
+        >
+          <span>{label}</span>
+          {renderSortIcon(key)}
+        </button>
+      </th>
+    )
+  }
 
   useEffect(() => {
     if (!programmeMenuOpen) return undefined
@@ -633,19 +707,19 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
                 <tr>
                   <th>资源</th>
                   <th>星系</th>
-                  <th>产量</th>
-                  <th>单位热值</th>
-                  <th>阵列数量</th>
-                  <th>计算时长</th>
-                  <th>总热值</th>
-                  <th>总产量</th>
-                  <th>单价</th>
-                  <th>总价</th>
+                  {renderSortableHeader('resource_yield')}
+                  {renderSortableHeader('fuel_value')}
+                  {renderSortableHeader('arrays_number')}
+                  {renderSortableHeader('computation_time')}
+                  {renderSortableHeader('total_fuel')}
+                  {renderSortableHeader('total_output')}
+                  {renderSortableHeader('unit_price')}
+                  {renderSortableHeader('total_price')}
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {displayRows.map((row) => (
                   <tr key={row.key}>
                     <td>
                       <div className="resource-result-cell">
