@@ -86,10 +86,22 @@ test('计算器数值列支持升降序排序并保留编辑后的排序状态',
 
   const yieldSort = modal.getByRole('button', { name: '产量排序', exact: true })
   await yieldSort.click()
+  await expect(yieldSort.locator('..')).toHaveAttribute('aria-sort', 'ascending')
   await expect(rows.nth(0)).toContainText('光彩合金')
   await expect(rows.nth(1)).toContainText('光泽合金')
 
   await yieldSort.click()
+  await expect(yieldSort.locator('..')).toHaveAttribute('aria-sort', 'descending')
+  await expect(rows.nth(0)).toContainText('光泽合金')
+  await expect(rows.nth(1)).toContainText('光彩合金')
+
+  const unitPriceSort = modal.getByRole('button', { name: '单价排序', exact: true })
+  await unitPriceSort.click()
+  await expect(unitPriceSort.locator('..')).toHaveAttribute('aria-sort', 'ascending')
+  await expect(rows.nth(0)).toContainText('光泽合金')
+  await expect(rows.nth(1)).toContainText('光彩合金')
+  await unitPriceSort.click()
+  await expect(unitPriceSort.locator('..')).toHaveAttribute('aria-sort', 'descending')
   await expect(rows.nth(0)).toContainText('光泽合金')
   await expect(rows.nth(1)).toContainText('光彩合金')
 
@@ -103,6 +115,7 @@ test('计算器数值列支持升降序排序并保留编辑后的排序状态',
   await lowYieldRow.locator('.table-inline-input').nth(2).fill('100')
 
   await modal.getByRole('button', { name: '总价排序', exact: true }).click()
+  await expect(modal.getByRole('button', { name: '总价排序', exact: true }).locator('..')).toHaveAttribute('aria-sort', 'ascending')
   await expect(rows.nth(0)).toContainText('光彩合金')
   await expect(rows.nth(1)).toContainText('光泽合金')
 
