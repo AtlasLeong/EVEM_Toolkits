@@ -248,7 +248,8 @@ def prepare_backend(root, staged, manifest, config):
     command([python, 'manage.py', 'check'], cwd=backend)
     # Read-only gate. Version 1 NEVER migrates or installs packages on the live server.
     for database in ('default', 'license'):
-        command([python, 'manage.py', 'migrate', '--check', '--database', database], cwd=backend)
+        command([python, str(Path(__file__).with_name('migration_check.py')),
+                 '--database', database], cwd=backend)
 
 
 def prepare_assets(root, frontend):
@@ -342,8 +343,9 @@ def publish(root, archive=None, rollback=False):
                 if 'backend' in changed:
                     backend = Path(new['backend']['path'])
                     for database in ('default', 'license'):
-                        command([str(backend / '.venv/bin/python'), 'manage.py', 'migrate',
-                                 '--check', '--database', database], cwd=backend)
+                        command([str(backend / '.venv/bin/python'),
+                                 str(Path(__file__).with_name('migration_check.py')),
+                                 '--database', database], cwd=backend)
         else:
             manifest = validate(archive)
             changed = changed_components(old, manifest)

@@ -26,7 +26,7 @@ v1 不自动安装生产依赖，不自动执行数据库迁移。
 
 `shared/environments.json` 用 requirements.txt 的 SHA-256 映射到在这台 CentOS 上验证过的 venv 绝对路径。现有 4.9 GB 环境只登记复用，不能每次复制，也不能在唯一可回滚环境中 pip install。依赖变更先准备独立环境、验证、登记，再发布。
 
-发布前对 default 和 license 执行 `manage.py migrate --check`；有未应用迁移就停在切换前。需要迁移时先审查迁移、备份、验证兼容性并在维护流程中执行，然后重新运行发布。代码回滚不还原数据库；旧代码的兼容性仍需人工确认，`--check` 不是数据兼容性证明。
+发布前用候选版本的 Python、settings 和数据库路由运行 `migration_check.py --database default/license`，读取迁移计划，忽略项目 app-level router 明确禁止在该库执行的迁移；真实未应用迁移会阻止切换。不执行 migrate、不 fake、不补记数据库记录。需要迁移时先审查、备份、验证兼容性并在维护流程中执行。代码回滚不还原数据库；迁移检查不是数据兼容性证明。若未来更改 router 为依赖 model/hints 的路由，须同步审查此检查器，不能假定 app-level 过滤仍适用。
 
 ## 首次初始化检查清单（尚未执行）
 
@@ -34,7 +34,7 @@ v1 不自动安装生产依赖，不自动执行数据库迁移。
 2. 核验服务器 ED25519 指纹 `SHA256:oVFu/exNwy532ZBJrH0xal5ep2U1Ra82sf3hHgLEwlc`；保存实际主机公钥行作为 known_hosts，不能用指纹字符串代替，也不能用未经核验的 ssh-keyscan 直接信任。
 3. 备份 Nginx 配置、systemd service/drop-in、当前真实前端目录、后端受跟踪代码；检查可用磁盘、数据库备份恢复流程。不要以旧 git HEAD 推断手工上传的前端版本。
 4. 创建 `evem-deploy` 和独立 CI 密钥；保留管理员原有 SSH 登录途径。只允许该账户非交互 sudo `/bin/systemctl restart evem-backend.service`，不授权任意 shell、任意 systemctl、pip 或 Git。生产凭据只授予可信维护者。
-5. 将审查后的 `release.py` 安装到 root 管理的 `/usr/local/lib/evem-deploy/release.py`；同目录 `runtime` 链接指向已验证 Python 3.10 venv。CI 不更新发布器本身。
+5. 将审查后的 `release.py`、`migration_check.py` 安装到 root 管理的 `/usr/local/lib/evem-deploy/`；同目录 `runtime` 链接指向已验证 Python 3.10 venv。CI 不更新发布器本身。
 6. 创建 `/EVEMTK/deploy/{releases,incoming,shared,current}`。deploy 可写发布数据；nginx 能遍历读取 releases；bin/运行时、sudoers、Nginx/systemd 配置由 root 管理。为 deploy 与 nginx 配置持久化日志/上传目录的最小所需权限；`.env` 不公开，不能盲目递归 chmod 原项目。
 7. 将当前真实文件建立一个 `legacy` baseline 快照。backend snapshot 排除 `.venv`、`.env`、uploads、logs 后分别链接到原位置，保持原始数据不移动。frontend snapshot 必须来自线上现有 dist，并将其 assets 预置到 `shared/assets`。保留旧手工包不清理。
 8. 为 `current/frontend`、`current/backend` 建立 baseline 符号链接；写入 `state.json`，每个组件包含 `source`（实际 tree hash，不能确认前端时使用全零40位强制首发）、`sha`、绝对 `path`、`legacy:true`。已验证新版本不允许 legacy 标记。首次 `previous.json` 可复制 baseline 状态。登记环境哈希，配置 `config.json`（参考示例）。

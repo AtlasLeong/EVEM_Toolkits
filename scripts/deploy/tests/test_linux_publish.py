@@ -30,7 +30,15 @@ class LinuxPublishTests(unittest.TestCase):
                      'env/bin', 'data/uploads', 'data/logs', 'commands'):
             (self.root / name).mkdir(parents=True, exist_ok=True)
         (self.root / 'data/.env').write_text('FAKE_TEST_CONFIGURATION=1')
-        (self.root / 'env/bin/python').symlink_to(sys.executable)
+        # Intercept the fixture's database preflight at the interpreter boundary.
+        # Actual router/recorder behavior is covered by isolated Django DB tests.
+        runner = self.root / 'env/bin/python'
+        runner.write_text(f'#!{sys.executable}\nimport os,sys\n'
+                          'args=sys.argv[1:]\n'
+                          'if args and args[0].endswith("migration_check.py"):\n'
+                          '    args=["manage.py", "migrate", "--check", *args[1:]]\n'
+                          f'os.execv({sys.executable!r}, [{sys.executable!r}, *args])\n')
+        runner.chmod(0o755)
         self.env = dict(os.environ, EVEM_TEST_ROOT=str(self.root),
                         PATH=str(self.root / 'commands') + os.pathsep + os.environ['PATH'])
         self.executable('systemctl', '#!/bin/sh\nprintf "%s\\n" "$*" >> "$EVEM_TEST_ROOT/service-events"\n')
