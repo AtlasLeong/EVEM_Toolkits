@@ -50,6 +50,21 @@ class FeedbackTestBase(TestCase):
 
 
 class FeedbackTests(FeedbackTestBase):
+    def test_json_success_and_error_responses_are_private_and_uncached(self):
+        ticket = self.create()
+        responses = [self.client.get(self.url), self.client.get(self.detail_url(ticket)),
+                     self.client.post(self.url, {}, format='json')]
+        self.login(self.other)
+        responses.append(self.client.get(self.detail_url(ticket)))
+        self.client.credentials()
+        responses.append(self.client.get(self.url))
+        for response in responses:
+            with self.subTest(status=response.status_code):
+                self.assertEqual(response.get('Cache-Control'), 'private, no-store')
+                vary = {item.strip().lower() for item in response.get('Vary', '').split(',')}
+                self.assertIn('authorization', vary)
+                self.assertIn('accept', vary)
+
     def test_create_list_and_detail(self):
         ticket = self.create()
         self.assertEqual(ticket['status'], 'pending')
@@ -319,6 +334,19 @@ class FeedbackAttachmentTests(FeedbackTestBase):
 
     def test_upload_rejects_oversize(self):
         self.assertEqual(self.upload(body=b'a' * (10 * 1024 * 1024 + 1)).status_code, 400)
+
+    def test_corrupt_png_idat_crc_is_a_validation_error(self):
+        from PIL import Image
+        stream = BytesIO()
+        Image.new('RGB', (2, 2)).save(stream, format='PNG')
+        broken = bytearray(stream.getvalue())
+        offset = broken.index(b'IDAT')
+        length = int.from_bytes(broken[offset - 4:offset], 'big')
+        broken[offset + 4 + length] ^= 1
+        self.client.raise_request_exception = False
+        response = self.upload('broken.png', bytes(broken))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('file', response.json())
 
     def test_upload_rejects_excessive_image_pixels_and_animation(self):
         from PIL import Image

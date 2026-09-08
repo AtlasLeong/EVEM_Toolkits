@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Count, Sum
 from django.http import FileResponse
 from django.utils import timezone
+from django.utils.cache import patch_vary_headers
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, Throttled, ValidationError
 from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -97,6 +98,12 @@ class FeedbackAPI(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response['Cache-Control'] = 'private, no-store'
+        patch_vary_headers(response, ['Authorization'])
+        return response
 
 
 class FeedbackList(FeedbackAPI):

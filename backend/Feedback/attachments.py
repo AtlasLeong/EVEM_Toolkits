@@ -69,7 +69,7 @@ def validated_upload(upload):
             data.decode('utf-8-sig')
             if b'\x00' in data:
                 raise ValueError
-    except (ValueError, OSError, UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+    except (ValueError, OSError, SyntaxError, UnidentifiedImageError, Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise ValidationError({'file': '文件内容无效、格式不匹配或图片尺寸过大。'})
     return dict(name=name, size=len(data), content_type=CONTENT_TYPES[extension],
                 sha256=hashlib.sha256(data).hexdigest()), data
