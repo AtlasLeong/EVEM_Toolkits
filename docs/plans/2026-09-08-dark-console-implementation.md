@@ -14,16 +14,28 @@
 
 ---
 
+## Stage 1 checkpoint — 2026-09-08
+
+- Implemented console token foundation and fixed left navigation; preserved business-page colors pending staged migration.
+- Added semantic keyboard home link, active navigation, guest/account actions, dark footer and narrow-screen framing.
+- Added 7 shell/theme regression cases. Fixed pre-existing missing API isolation in registration validation tests after an initial 82/83 full run exposed a real-server duplicate-name response.
+- Final verification: 84/84 E2E tests passed with 2 workers; Vite production build passed; diff whitespace check passed.
+- Independent code review: no blocking issue for this checkpoint; logo visibility fixed, low-height authenticated sidebar test added. Loaded-table internal clipping evidence remains a later-stage follow-up.
+- `design-qa.md` records full-redesign acceptance as blocked until remaining page/state comparisons are complete; do not present this checkpoint as final visual delivery.
+- No branch push, master merge, SSH operation or deployment performed. Local build output exists only inside this worktree.
+
 ## Execution rules
 
 - Read the approved design and applicable TDD, review and verification skills before implementation.
-- Do not modify backend/services/auth rules, API payloads, CI workflows or production. Do not push master.
+- Do not modify backend/services/auth rules, API payloads, CI workflows or production. User explicitly requires staged local work: no push of any branch, no merge to master, no SSH or deployment.
 - Existing untracked ZIPs/proposal in the original workspace are not part of this task.
 - Run shell/test commands inside the worktree. Only one agent/process owns a given browser/test server port; never kill an unrelated server. Make the Playwright config accept a dedicated `PLAYWRIGHT_PORT` if port isolation becomes necessary, and ensure tests do not silently reuse another checkout's server.
 - Inspect complete relevant CSS sections before editing. Convert shared values at their source instead of retaining conflicting white backgrounds underneath appended overrides.
 - Keep each task independently reviewable and commit only its exact files after tests pass.
 
 ## Task 1: Semantic theme and shared controls
+
+**Staged delivery adjustment (2026-09-08):** First checkpoint delivers console tokens and the navigation shell from Task 2 only. Existing business-page colors stay isolated in `.page-stage` while pages are migrated in later checkpoints. Do not mark all of Task 1 complete: global forms/tables/auth still require dark-theme migration and visual verification. This prevents partially converted text/background pairs from becoming unreadable. No production release is authorized.
 
 **Files:** modify `front-codex/src/styles.css`, `front-codex/src/components/ui/Primitives.jsx` only as necessary; create `front-codex/tests/e2e/specs/dark-console.spec.js`.
 

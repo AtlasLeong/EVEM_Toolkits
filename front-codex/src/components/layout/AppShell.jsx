@@ -1,7 +1,7 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
 import { Shield, Globe, Compass, LogOut, Settings, User } from 'lucide-react'
 import { useContext, useEffect, useRef } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
 
 const navItems = [
@@ -20,7 +20,7 @@ function routeIndex(pathname) {
 function DesktopOnlyMask() {
   return (
     <div className="desktop-only-mask">
-      <h1>Front Codex</h1>
+      <h1>EVEMToolkit</h1>
       <p>当前版本为桌面重构版，请在宽屏设备使用。</p>
     </div>
   )
@@ -53,12 +53,13 @@ export default function AppShell() {
     <>
       <DesktopOnlyMask />
       <div className="app-shell">
-        <header className="shell-topbar">
-          <div className="brand" onClick={() => navigate('/')} role="button" tabIndex={0}>
-            <img src="/Guristas_Logo_new.png" alt="EVEMToolkit" className="brand-icon" />
+        <aside className="shell-sidebar" aria-label="工具导航">
+          <Link className="brand" to="/" aria-label="EVEMToolkit 首页">
+            <img src="/Guristas_Logo_new.png" alt="" className="brand-icon" />
             <span className="brand-name">EVEMToolkit</span>
-          </div>
-          <nav className="nav-row">
+          </Link>
+          <div className="sidebar-section-label">工作空间</div>
+          <nav className="nav-row" aria-label="主导航">
             {navItems.map((item) => {
               const Icon = item.icon
               return (
@@ -68,7 +69,7 @@ export default function AppShell() {
                   className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
                 >
                   <span className="nav-icon-wrap">
-                    <Icon size={14} />
+                    <Icon size={18} aria-hidden="true" />
                   </span>
                   <span className="nav-label">{item.label}</span>
                 </NavLink>
@@ -99,7 +100,7 @@ export default function AppShell() {
               </button>
             )}
           </div>
-        </header>
+        </aside>
 
         <main className="shell-main">
           <div className="page-stage">

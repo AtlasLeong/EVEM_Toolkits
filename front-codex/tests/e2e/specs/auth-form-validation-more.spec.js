@@ -1,4 +1,14 @@
 import { test, expect } from '@playwright/test'
+import { installApiMock, json } from '../helpers/api'
+
+test.beforeEach(async ({ page }) => {
+  // Blur validation must not depend on a real server's account database.
+  await installApiMock(page, async ({ url, method }) => {
+    if (method === 'POST' && url.pathname === '/api/user/signupcheck') {
+      return json({ duplicate: null })
+    }
+  })
+})
 
 test('注册时密码格式错误会阻止提交并显示错误', async ({ page }) => {
   await page.goto('/login')
