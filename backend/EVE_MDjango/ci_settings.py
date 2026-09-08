@@ -1,4 +1,4 @@
-"""Isolated License/ActivationCode CI settings. NEVER imports production settings/.env.
+"""Isolated License/ActivationCode/Feedback CI settings. NEVER imports production settings/.env.
 
 These tests are not a substitute for a full MySQL application integration suite.
 """
@@ -8,7 +8,7 @@ USE_TZ = True
 ALLOWED_HOSTS = ['testserver', 'localhost']
 INSTALLED_APPS = [
     'django.contrib.auth', 'django.contrib.contenttypes', 'rest_framework',
-    'ActivationCode', 'License',
+    'ActivationCode', 'License', 'Feedback',
 ]
 DATABASES = {alias: {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}
              for alias in ('default', 'license')}

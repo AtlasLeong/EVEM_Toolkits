@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from .deployment import deployment_version
 
 urlpatterns = [
+    path('api/feedback/', include('Feedback.urls')),
     path('api/deploy-version/', deployment_version, name='deployment_version'),
     path('admin/', admin.site.urls),
     path('api/', include("StarFieldSearch.urls")),
