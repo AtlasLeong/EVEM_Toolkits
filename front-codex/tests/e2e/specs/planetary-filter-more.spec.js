@@ -83,6 +83,7 @@ test('结果列表支持按等级筛选', async ({ page }) => {
   const rows = page.locator('tbody tr')
   await expect(rows).toHaveCount(2)
 
+  await page.locator('.advanced-filters > summary').click()
   await page.locator('select.table-filter-input').selectOption('4')
 
   await expect(rows).toHaveCount(1)

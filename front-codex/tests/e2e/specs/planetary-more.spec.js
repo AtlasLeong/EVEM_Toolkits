@@ -102,7 +102,7 @@ test('行星资源结果支持全选和取消全选', async ({ page }) => {
 
   await selectAll.click()
   await expect(page.getByText('已选 2 项')).toHaveCount(0)
-  await expect(page.getByText('请先勾选资源')).toBeVisible()
+  await expect(page.getByText('勾选资源后可加入计算器')).toBeVisible()
 })
 
 test('计算器支持批量复制计算时长和单价', async ({ page }) => {

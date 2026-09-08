@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, RefreshCw, X } from 'lucide-react'
+import { getSecurityTextColor } from '../../utils/securityColor'
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1600
@@ -837,7 +838,7 @@ export default function TacticalStarMap({
                     </span>
                     <span
                       className="tactical-search-security"
-                      style={{ color: getSecurityColor(item.security_status) }}
+                      style={{ color: getSecurityTextColor(item.security_status) }}
                     >
                       {item.securityLabel}
                     </span>
@@ -929,7 +930,7 @@ export default function TacticalStarMap({
               <>
                 <div className="tactical-system-head">
                   <strong>{selectedSystem.zh_name}</strong>
-                  <span style={{ color: getSecurityColor(selectedSystem.security_status) }}>
+                  <span style={{ color: getSecurityTextColor(selectedSystem.security_status) }}>
                     安等 {selectedSystem.securityLabel}
                   </span>
                 </div>

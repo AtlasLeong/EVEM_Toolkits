@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { resolvePreviewRequest } from './fixtures.mjs'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
+const port = Number(process.env.PREVIEW_PORT || 4182)
 const assetRoot = fileURLToPath(new URL('../../../backend/static/planet-nobg/', import.meta.url))
 const token = () => {
   const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -13,7 +14,7 @@ const token = () => {
 const preview = await createServer({
   root,
   define: { 'import.meta.env.VITE_API_URL': JSON.stringify('/api') },
-  server: { host: '127.0.0.1', port: 4182, strictPort: true },
+  server: { host: '127.0.0.1', port, strictPort: true },
   plugins: [{
     name: 'local-only-visual-fixtures',
     transformIndexHtml(html) {
@@ -22,7 +23,7 @@ const preview = await createServer({
     },
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const url = new URL(req.url, 'http://127.0.0.1:4182')
+        const url = new URL(req.url, `http://127.0.0.1:${port}`)
         if (url.pathname.startsWith('/preview-assets/')) {
           const filename = path.basename(url.pathname)
           if (!/^[A-Za-z-]+\.png$/.test(filename)) { res.statusCode = 404; res.end(); return }

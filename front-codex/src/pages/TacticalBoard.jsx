@@ -9,6 +9,7 @@ import {
   postJumpInfo,
 } from '../services/apiTacticalBoard'
 import TacticalStarMap from '../components/tactical/TacticalStarMap'
+import { getSecurityTextColor } from '../utils/securityColor'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 
 function getSystemDisplayName(system) {
@@ -44,16 +45,6 @@ function rankAlias(alias, query) {
     index: index === -1 ? Number.MAX_SAFE_INTEGER : index,
     length: alias.length,
   }
-}
-
-function getSecurityColor(value) {
-  const level = Number(value)
-  if (Number.isNaN(level)) return '#94a3b8'
-  if (level <= 0) return '#ef4444'
-  if (level < 0.2) return '#f97316'
-  if (level < 0.5) return '#f59e0b'
-  if (level < 0.8) return '#10b981'
-  return '#60a5fa'
 }
 
 function getRouteTypeMeta(moveType) {
@@ -204,7 +195,7 @@ function RouteSystemCombobox({ label, value, onChange, systems, placeholder }) {
                   </span>
                   <span
                     className="tactical-search-security"
-                    style={{ color: getSecurityColor(match.item.security_status) }}
+                    style={{ color: getSecurityTextColor(match.item.security_status) }}
                   >
                     {Number(match.item.security_status).toFixed(1)}
                   </span>

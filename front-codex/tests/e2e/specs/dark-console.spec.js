@@ -6,13 +6,13 @@ test.beforeEach(async ({ page }) => {
   await installApiMock(page, async () => json([]))
 })
 
-test('深空导航使用深色底和可读的青色登录按钮', async ({ page }) => {
+test('客户导航使用暖白底和可读的炭黑登录按钮', async ({ page }) => {
   await page.goto('/infocenter')
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(11, 17, 23)')
-  await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(13, 20, 27)')
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 246)')
+  await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(240, 239, 235)')
   const login = page.getByRole('button', { name: '登录 \\ 注册' })
-  await expect(login).toHaveCSS('background-color', 'rgb(24, 191, 220)')
-  await expect(login).toHaveCSS('color', 'rgb(7, 21, 29)')
+  await expect(login).toHaveCSS('background-color', 'rgb(36, 36, 34)')
+  await expect(login).toHaveCSS('color', 'rgb(255, 255, 255)')
 })
 
 for (const width of [1280, 1440, 1920]) {
@@ -25,7 +25,7 @@ for (const width of [1280, 1440, 1920]) {
       const sidebarBox = await sidebar.boundingBox()
       const mainBox = await page.getByRole('main').boundingBox()
       expect(sidebarBox.x).toBe(0)
-      expect(sidebarBox.width).toBe(216)
+      expect(sidebarBox.width).toBe(240)
       expect(mainBox.x).toBeGreaterThanOrEqual(sidebarBox.x + sidebarBox.width)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
     }
@@ -58,7 +58,7 @@ test('低高度登录态侧栏的设置和退出均可滚动访问', async ({ pa
   await page.setViewportSize({ width: 1280, height: 400 })
   await page.goto('/infocenter')
   const footerBox = await page.locator('.site-footer').boundingBox()
-  expect(footerBox.x).toBe(216)
+  expect(footerBox.x).toBe(240)
   await page.getByRole('button', { name: '设置', exact: true }).click()
   await expect(page).toHaveURL(/\/usersetting$/)
   await page.getByRole('button', { name: '退出', exact: true }).click()

@@ -435,18 +435,9 @@ export default function PlanetaryPage() {
       <PageHeader
         title="行星资源"
         subtitle="按星域、星座、星系和资源组合搜索产出"
-        action={
-          <div className="head-actions">
-            <button type="button" className="ghost-btn planetary-toolbar-btn planetary-open-btn" onClick={() => setShowCalculator(true)}>
-              <Calculator size={18} />
-              打开计算器
-              <span className="calculator-open-count">{calculatorRows.length}</span>
-            </button>
-          </div>
-        }
       />
 
-      <div className="layout-main-stack">
+      <div className="layout-main-stack planetary-layout">
         <Panel className="planetary-filters">
           <div className="picker-grid">
             <SearchableMultiPicker
@@ -562,7 +553,18 @@ export default function PlanetaryPage() {
           {searchMutation.isPending ? <LoadingBar /> : null}
         </Panel>
 
-        <details className="query-help">
+        <details className="advanced-filters">
+          <summary><ChevronDown size={14} />高级筛选{Object.entries(tableFilters).some(([key, value]) => key === 'resource_level' ? value !== 'all' : !!value) && <span className="advanced-active">已启用</span>}</summary>
+          <div className="table-filter-row">
+            {[
+              ['resource_name', '筛选资源'], ['region', '筛选星域'],
+              ['constellation', '筛选星座'], ['solar_system', '筛选星系'],
+            ].map(([key, label]) => <input key={key} className="table-filter-input" aria-label={label} placeholder={label} value={tableFilters[key]} onChange={e => setTableFilters(prev => ({ ...prev, [key]: e.target.value }))} />)}
+            <select className="table-filter-input" aria-label="筛选资源等级" value={tableFilters.resource_level} onChange={e => setTableFilters(prev => ({ ...prev, resource_level: e.target.value }))}>
+              <option value="all">全部等级</option><option value="4">完美</option><option value="3">富饶</option><option value="2">中等</option><option value="1">贫瘠</option>
+            </select>
+          </div>
+          <details className="query-help">
           <summary>搜索说明与当前筛选概览 <ChevronDown size={14} /></summary>
           <ul className="hint-list">
             <li>同时选择地点和资源：按当前筛选范围直接查询目标资源。</li>
@@ -574,56 +576,27 @@ export default function PlanetaryPage() {
             <Pill>星域 {regionIds.length}</Pill><Pill>星座 {constellationIds.length}</Pill>
             <Pill>星系 {systemIds.length}</Pill><Pill>资源类型 {activeResourceTypeCount}</Pill>
           </div>
+          </details>
         </details>
 
-        <Panel
-          title="结果列表"
-          className="planetary-results"
-          subtitle={`${displayRows.length} 条结果 · 点击表头排序，勾选资源后加入计算器`}
-          action={
-            <Pill>{activeResourceTypeCount} 个资源类型</Pill>
-          }
-        >
+        <Panel className="planetary-results">
+          <div className="planetary-results-header planetary-bulk-bar">
+            <div className="planetary-results-title"><h2>结果列表</h2><span>{displayRows.length} 条结果</span></div>
+            <div className="planetary-bulk-actions">
+              <button type="button" className="primary-btn planetary-add-btn" disabled={!selectedCalculatorKeys.length} onClick={addToCalculator}>
+                <Plus size={20} />{selectedCalculatorKeys.length ? `加入计算器 · ${selectedCalculatorKeys.length} 项` : '加入计算器'}
+              </button>
+              <button type="button" className="ghost-btn planetary-open-btn" onClick={() => setShowCalculator(true)}>
+                <Calculator size={20} />打开计算器<span className="calculator-open-count">{calculatorRows.length}</span>
+              </button>
+            </div>
+            <div className="planetary-selection-copy" aria-live="polite">
+              <span>{selectedCalculatorKeys.length ? `已选 ${selectedCalculatorKeys.length} 项` : '勾选资源后可加入计算器'}</span>
+              {!!selectedCalculatorKeys.length && <button className="text-btn" onClick={() => setSelectedCalculatorKeys([])}>取消选择</button>}
+            </div>
+          </div>
           {rows.length ? (
             <div className="table-shell tall">
-              <div className="table-filter-row">
-                <input
-                  className="table-filter-input"
-                  placeholder="筛选资源"
-                  value={tableFilters.resource_name}
-                  onChange={(e) => setTableFilters((prev) => ({ ...prev, resource_name: e.target.value }))}
-                />
-                <input
-                  className="table-filter-input"
-                  placeholder="筛选星域"
-                  value={tableFilters.region}
-                  onChange={(e) => setTableFilters((prev) => ({ ...prev, region: e.target.value }))}
-                />
-                <input
-                  className="table-filter-input"
-                  placeholder="筛选星座"
-                  value={tableFilters.constellation}
-                  onChange={(e) => setTableFilters((prev) => ({ ...prev, constellation: e.target.value }))}
-                />
-                <input
-                  className="table-filter-input"
-                  placeholder="筛选星系"
-                  value={tableFilters.solar_system}
-                  onChange={(e) => setTableFilters((prev) => ({ ...prev, solar_system: e.target.value }))}
-                />
-                <select
-                  className="table-filter-input"
-                  value={tableFilters.resource_level}
-                  onChange={(e) => setTableFilters((prev) => ({ ...prev, resource_level: e.target.value }))}
-                >
-                  <option value="all">全部等级</option>
-                  <option value="4">完美</option>
-                  <option value="3">富饶</option>
-                  <option value="2">中等</option>
-                  <option value="1">贫瘠</option>
-                </select>
-              </div>
-
               <table className="data-table planetary-table">
                 <thead>
                   <tr>
@@ -735,23 +708,7 @@ export default function PlanetaryPage() {
           ) : (
             <EmptyState title="暂无数据" desc="请先设置筛选条件后点击搜索" />
           )}
-          <div className="planetary-bulk-bar">
-            <div className="planetary-selection-copy" aria-live="polite">
-              <strong>{selectedCalculatorKeys.length ? `已选 ${selectedCalculatorKeys.length} 项` : '请先勾选资源'}</strong>
-              {selectedCalculatorKeys.length ? <button className="text-btn" onClick={() => setSelectedCalculatorKeys([])}>取消选择</button> : <span>可将多个星系的资源一起计算</span>}
-            </div>
-            <div className="planetary-bulk-actions">
-              <button type="button" className="ghost-btn planetary-open-btn" onClick={() => setShowCalculator(true)}>
-                <Calculator size={20} />
-                打开计算器
-                <span className="calculator-open-count">{calculatorRows.length}</span>
-              </button>
-              <button type="button" className="primary-btn planetary-add-btn" disabled={!selectedCalculatorKeys.length} onClick={addToCalculator}>
-                <Plus size={20} />
-                {selectedCalculatorKeys.length ? `加入计算器 · ${selectedCalculatorKeys.length} 项` : '加入计算器'}
-              </button>
-            </div>
-          </div>
+          {!!rows.length && <p className="planetary-result-count">显示 {displayRows.length} 条结果 · 点击表头排序</p>}
         </Panel>
       </div>
 

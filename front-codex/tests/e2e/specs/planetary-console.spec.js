@@ -36,7 +36,7 @@ test('搜索失败时给出明确提示并保留筛选', async ({ page }) => {
   await expect(page.locator('.resource-disclosure summary')).toContainText('光泽合金')
 })
 
-test('批量操作显眼、选中计数正确、滚动后仍可加入且计算器统一深色', async ({ page }) => {
+test('批量操作显眼、选中计数正确、滚动后仍可加入且计算器统一浅色', async ({ page }) => {
   const add = page.getByRole('button', { name: /加入计算器/ })
   await expect(add).toBeDisabled()
   await expect(add).toHaveCSS('height', '48px')
@@ -47,7 +47,7 @@ test('批量操作显眼、选中计数正确、滚动后仍可加入且计算�
   await expect(page.locator('tbody tr').first()).toHaveCSS('height', '58px')
   await page.locator('tbody .table-check-trigger').first().click()
   await expect(add).toHaveText(/加入计算器 · 1 项/)
-  await expect(add).toHaveCSS('background-color', 'rgb(24, 191, 220)')
+  await expect(add).toHaveCSS('background-color', 'rgb(166, 83, 62)')
   await expect(page.locator('tbody tr').first()).toHaveClass(/is-selected/)
   for (const width of [1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1080 })
@@ -57,17 +57,17 @@ test('批量操作显眼、选中计数正确、滚动后仍可加入且计算�
   await page.locator('tbody tr').last().scrollIntoViewIfNeeded()
   await expect(add).toBeInViewport()
   await add.click()
-  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(19, 28, 36)')
-  await expect(page.locator('.table-inline-input').first()).toHaveCSS('background-color', 'rgb(11, 17, 23)')
+  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await expect(page.locator('.table-inline-input').first()).toHaveCSS('background-color', 'rgb(250, 249, 246)')
 })
 
-test('上下计算器入口保持醒目且底部可直接打开已有内容', async ({ page }) => {
-  const bottom = page.locator('.planetary-bulk-bar').getByRole('button', { name: /打开计算器/ })
-  const top = page.locator('.head-actions').getByRole('button', { name: /打开计算器/ })
-  await expect(bottom).toBeEnabled()
-  await expect(bottom).toHaveCSS('height', '48px')
-  await expect(top).toHaveCSS('border-top-color', 'rgb(24, 191, 220)')
-  await bottom.click()
+test('结果区计算器入口保持醒目且可直接打开已有内容', async ({ page }) => {
+  const open = page.locator('.planetary-results-header').getByRole('button', { name: /打开计算器/ })
+  await expect(page.getByRole('button', { name: /打开计算器/ })).toHaveCount(1)
+  await expect(open).toBeEnabled()
+  await expect(open).toHaveCSS('height', '48px')
+  await expect(open).toHaveCSS('border-top-color', 'rgb(36, 36, 34)')
+  await open.click()
   await expect(page.locator('.calculator-card')).toBeVisible()
   await page.locator('.calculator-card').getByRole('button', { name: '关闭', exact: true }).click()
   await page.locator('.resource-disclosure summary').click()
@@ -76,16 +76,15 @@ test('上下计算器入口保持醒目且底部可直接打开已有内容', as
   await page.locator('tbody .table-check-trigger').first().click()
   await page.getByRole('button', { name: /加入计算器/ }).click()
   await page.locator('.calculator-card').getByRole('button', { name: '关闭', exact: true }).click()
-  await expect(top).toContainText('1')
-  await expect(bottom).toContainText('1')
+  await expect(open).toContainText('1')
   for (const width of [1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1080 })
-    await expect(bottom).toBeInViewport()
+    await expect(open).toBeInViewport()
     const bar = await page.locator('.planetary-bulk-bar').boundingBox()
     const buttons = await page.locator('.planetary-bulk-actions').boundingBox()
     expect(buttons.x + buttons.width).toBeLessThanOrEqual(bar.x + bar.width)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
   }
-  await bottom.click()
+  await open.click()
   await expect(page.locator('.calculator-card tbody tr')).toHaveCount(1)
 })

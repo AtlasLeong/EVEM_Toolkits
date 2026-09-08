@@ -64,4 +64,11 @@ Files: `front-codex/tests/preview/server.mjs`, `docs/design/`, `design-qa.md`.
 
 ## Execution record
 
-- Worktree created; approved design confirmed. Baseline test run in progress.
+- Baseline: 111 existing Playwright tests passed before implementation.
+- New shell/layout tests: 5 observed failing before implementation, then passing. Palette migration assertions updated only where the approved design intentionally changed them.
+- Shared shell/tokens and planetary layout implemented; all existing routes inherit the palette. API payloads, calculator formulas and backend unchanged.
+- Independent review identified two P2 contrast issues; hover and six-level security foreground tests reproduced failures before fixes. DOM security colors separated from the dark canvas palette.
+- Resource image review led to a 64×40 contain slot, avoiding clipping any supplied resource image; regression assertion added.
+- Final post-refinement regression run: **118 passed (1.6m)** with 4 workers, exit 0. Final Vite production build passed (4.96s), CSS 67.86 kB / JS 492.04 kB; no new runtime dependency.
+- Visual gate: see `design-qa.md`; same-state 1487×1058 comparison passed after spacing/icon iterations, plus 1280×720 / 1920×1080 checks and whole-route captures.
+- Integration decision remains user-requested local only: keep `codex/ui-warm-neutral` and preview port 4183, no merge/push/deployment.
