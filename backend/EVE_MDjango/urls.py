@@ -18,8 +18,10 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from .deployment import deployment_version
 
 urlpatterns = [
+    path('api/deploy-version/', deployment_version, name='deployment_version'),
     path('admin/', admin.site.urls),
     path('api/', include("StarFieldSearch.urls")),
     path('api/', include("PlanetaryResource.urls")),

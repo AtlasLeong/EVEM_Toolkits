@@ -6,7 +6,7 @@ async function installAdminDetailMock(page) {
   await seedAuthenticatedSession(page, { userName: 'adminUser' })
 
   await installApiMock(page, async ({ url, method }) => {
-    if (method === 'GET' && url.pathname === '/api/fraudlogin') {
+    if (method === 'GET' && url.pathname === '/api/fraudadmincheck') {
       return json({ message: 'Authorized Users' })
     }
     if (method === 'GET' && url.pathname === '/api/fraudadmingroup') {

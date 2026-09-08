@@ -21,7 +21,7 @@ test('管理员可拒绝举报并写入拒绝备注', async ({ page }) => {
   ]
 
   await installApiMock(page, async ({ url, method, body }) => {
-    if (method === 'GET' && url.pathname === '/api/fraudlogin') {
+    if (method === 'GET' && url.pathname === '/api/fraudadmincheck') {
       return json({ message: 'Authorized Users' })
     }
     if (method === 'GET' && url.pathname === '/api/fraudadmingroup') {

@@ -1,0 +1,6 @@
+{
+  "origin": "https://evemtk.com",
+  "env_file": "/EVEMTK/EVEM_Toolkits/backend/.env",
+  "uploads": "/EVEMTK/EVEM_Toolkits/backend/static/uploads",
+  "logs": "/EVEMTK/EVEM_Toolkits/backend/logs"
+}

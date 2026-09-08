@@ -1,0 +1,62 @@
+name: Production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Publish current master or restore last successful release
+        type: choice
+        options: [publish, rollback]
+        default: publish
+        required: true
+
+permissions:
+  contents: read
+
+# Do not cancel a process while it is switching production. The server also locks.
+concurrency:
+  group: evem-production
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/master' && inputs.action != 'rollback'
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: verify
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'workflow_dispatch' || vars.EVEM_AUTO_DEPLOY == 'true')
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ github.sha }}
+      - name: Upload verified artifact and publish
+        env:
+          EVEM_SSH_KEY: ${{ secrets.EVEM_SSH_KEY }}
+          EVEM_KNOWN_HOSTS: ${{ secrets.EVEM_KNOWN_HOSTS }}
+        run: bash scripts/deploy/transport.sh publish
+
+  rollback:
+    if: github.ref == 'refs/heads/master' && github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    runs-on: ubuntu-24.04
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Restore previous release (no database rollback)
+        env:
+          EVEM_SSH_KEY: ${{ secrets.EVEM_SSH_KEY }}
+          EVEM_KNOWN_HOSTS: ${{ secrets.EVEM_KNOWN_HOSTS }}
+        run: bash scripts/deploy/transport.sh rollback

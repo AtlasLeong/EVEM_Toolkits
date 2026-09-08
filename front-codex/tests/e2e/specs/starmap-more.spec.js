@@ -51,7 +51,7 @@ test('星系导航设置起终点后显示直线距离', async ({ page }) => {
   await installStarMapMock(page)
   await page.goto('/starmap')
 
-  const searchInput = page.locator('.tactical-map-search-input')
+  const searchInput = page.getByLabel('搜索并定位星系')
   await searchInput.fill('alpha')
   await page.locator('.tactical-search-option').first().click()
   await page.locator('.tactical-system-card .ghost-btn').first().click()
@@ -67,7 +67,7 @@ test('星系导航重置视图后缩放不再停留在定位倍率', async ({ pa
   await installStarMapMock(page)
   await page.goto('/starmap')
 
-  const searchInput = page.locator('.tactical-map-search-input')
+  const searchInput = page.getByLabel('搜索并定位星系')
   await searchInput.fill('alpha')
   await page.locator('.tactical-search-option').first().click()
   await expect(page.locator('.tactical-map-hud')).toContainText('缩放 7.56x')
