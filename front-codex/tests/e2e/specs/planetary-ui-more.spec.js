@@ -97,7 +97,7 @@ test('清空筛选会重置资源与地点选择', async ({ page }) => {
   await expect(constellationPicker.locator('.picker-tag')).toHaveCount(1)
   await expect(systemPicker.locator('.picker-tag')).toHaveCount(1)
   await openFilter(page.locator('.resource-disclosure'))
-  await expect(page.getByRole('button', { name: '光泽合金' })).toHaveClass(/active/)
+  await expect(page.locator('.resource-card').filter({ hasText: '光泽合金' })).toHaveClass(/active/)
 
   await page.getByRole('button', { name: '清空筛选' }).click()
 
@@ -105,7 +105,7 @@ test('清空筛选会重置资源与地点选择', async ({ page }) => {
   await expect(constellationPicker.locator('.picker-tag')).toHaveCount(0)
   await expect(systemPicker.locator('.picker-tag')).toHaveCount(0)
   await openFilter(page.locator('.resource-disclosure'))
-  await expect(page.getByRole('button', { name: '光泽合金' })).not.toHaveClass(/active/)
+  await expect(page.locator('.resource-card').filter({ hasText: '光泽合金' })).not.toHaveClass(/active/)
   await expect(constellationPicker.locator('.picker-input')).toBeDisabled()
   await expect(systemPicker.locator('.picker-input')).toBeDisabled()
 })

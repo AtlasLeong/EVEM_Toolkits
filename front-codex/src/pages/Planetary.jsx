@@ -1,4 +1,5 @@
 ﻿import { useContext, useEffect, useMemo, useState } from 'react'
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowDownUp, Calculator, CheckSquare, ChevronDown, ChevronUp, Plus, Search, Square, X } from 'lucide-react'
@@ -52,6 +53,19 @@ function SecurityBadge({ value }) {
   return <span className={`security-badge ${getSecurityClass(value)}`}>{value}</span>
 }
 
+function SelectionSummary({ items }) {
+  const first = items[0]
+  if (!first) return null
+  return (
+    <span className="filter-selection">
+      {first.icon ? <img className="filter-selection-icon" src={first.icon} alt="" /> : null}
+      <span className="filter-selection-name">{first.label || first.value}</span>
+      <SecurityBadge value={first.security} />
+      {items.length > 1 ? <span className="filter-selection-count">+{items.length - 1} 项</span> : null}
+    </span>
+  )
+}
+
 function LevelBadge({ value }) {
   const label = levelMap[value] || value
   return <span className={`level-badge level-${value}`}>{label}</span>
@@ -91,6 +105,7 @@ function SearchableMultiPicker({
   loading = false,
 }) {
   const [query, setQuery] = useState('')
+  const searchRef = useRef(null)
 
   const selectedSet = useMemo(() => new Set(selectedValues), [selectedValues])
 
@@ -115,6 +130,7 @@ function SearchableMultiPicker({
   }
 
   const clearOne = (value) => {
+    searchRef.current?.focus()
     onChange(selectedValues.filter((item) => item !== value))
   }
 
@@ -122,13 +138,15 @@ function SearchableMultiPicker({
     <FilterDisclosure
       className="picker-field"
       label={label}
-      value={disabled ? '请先完成上一级筛选' : selectedOptions.length ? selectedOptions.map(item => item.label).join('、') : '全部'}
+      value={disabled ? '请先完成上一级筛选' : selectedOptions.length ? selectedOptions.map(item => `${item.label}${item.security != null && item.security !== '' ? `（安等 ${item.security}）` : ''}`).join('、') : '全部'}
+      valueContent={!disabled && selectedOptions.length ? <SelectionSummary items={selectedOptions} /> : undefined}
       disabled={disabled}
     >
       <div className="picker-shell">
         <div className="picker-search">
           <Search size={14} />
           <input
+            ref={searchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={disabled ? '请先完成上一级筛选' : placeholder}
@@ -139,12 +157,12 @@ function SearchableMultiPicker({
         </div>
 
         {selectedOptions.length ? (
-          <div className="picker-selected">
+          <div className="picker-selected" role="group" aria-label="已选地点">
             {selectedOptions.map((item) => (
-              <button key={item.value} type="button" className="picker-tag" onClick={() => clearOne(item.value)}>
-                <span>{item.label}</span>
+              <button key={item.value} type="button" className="picker-tag" aria-label={`移除${item.label}`} onClick={() => clearOne(item.value)}>
+                <span className="picker-tag-name" title={item.label}>{item.label}</span>
                 {item.security !== undefined ? <SecurityBadge value={item.security} /> : null}
-                <X size={12} />
+                <X size={12} aria-hidden="true" />
               </button>
             ))}
           </div>
@@ -183,6 +201,7 @@ export default function PlanetaryPage() {
   const [systemIds, setSystemIds] = useState([])
   const [resourceValues, setResourceValues] = useState([])
   const [resourceQuery, setResourceQuery] = useState('')
+  const resourceSearchRef = useRef(null)
   const [rows, setRows] = useState([])
   const [selectedCalculatorKeys, setSelectedCalculatorKeys] = useState([])
   const [calculatorRows, setCalculatorRows] = useState([])
@@ -284,6 +303,11 @@ export default function PlanetaryPage() {
       })
     return Array.from(map.entries())
   }, [flatResources, resourceQuery])
+
+  const selectedResourceOptions = useMemo(() => {
+    const byValue = new Map(flatResources.map(item => [item.value, item]))
+    return resourceValues.map(value => byValue.get(value) || { value, label: value })
+  }, [flatResources, resourceValues])
 
   const resultResourceTypeCount = useMemo(() => {
     return new Set(rows.map((row) => row.resource_name).filter(Boolean)).size
@@ -475,7 +499,12 @@ export default function PlanetaryPage() {
               disabled={!constellationIds.length}
               loading={systemsQuery.isPending}
             />
-          <FilterDisclosure className="resource-disclosure" label="资源（可多选）" value={resourceValues.length ? resourceValues.join('、') : '全部资源'}>
+          <FilterDisclosure
+            className="resource-disclosure"
+            label="资源（可多选）"
+            value={selectedResourceOptions.length ? selectedResourceOptions.map(item => item.label || item.value).join('、') : '全部资源'}
+            valueContent={selectedResourceOptions.length ? <SelectionSummary items={selectedResourceOptions} /> : undefined}
+          >
           <div className="resource-box planetary-resource-box">
             <div className="planetary-resource-head">
               <div>
@@ -485,6 +514,7 @@ export default function PlanetaryPage() {
               <div className="planetary-resource-search">
                 <Search size={14} />
                 <input
+                  ref={resourceSearchRef}
                   value={resourceQuery}
                   onChange={(e) => setResourceQuery(e.target.value)}
                   placeholder="搜索资源名称"
@@ -493,6 +523,27 @@ export default function PlanetaryPage() {
                 />
               </div>
             </div>
+
+            {selectedResourceOptions.length ? (
+              <div className="picker-selected resource-selected" role="group" aria-label="已选资源">
+                {selectedResourceOptions.map(item => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className="picker-tag"
+                    aria-label={`移除${item.label || item.value}`}
+                    onClick={() => {
+                      resourceSearchRef.current?.focus()
+                      setResourceValues(prev => prev.filter(value => value !== item.value))
+                    }}
+                  >
+                    {item.icon ? <img className="filter-selection-icon" src={item.icon} alt="" /> : null}
+                    <span className="picker-tag-name" title={item.label || item.value}>{item.label || item.value}</span>
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
 
             {groupedResources.map(([groupName, list]) => (
               <div className="resource-group" key={groupName}>

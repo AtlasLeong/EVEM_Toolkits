@@ -649,6 +649,11 @@ a {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.filter-selection { display: flex; align-items: center; gap: 6px; min-width: 0; height: 22px; }
+.filter-selection-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filter-selection-icon { width: 22px; height: 22px; object-fit: contain; flex: 0 0 auto; }
+.filter-selection .security-badge, .filter-selection-count { flex: 0 0 auto; }
+.filter-selection-count { margin-left: auto; font-size: 12px; color: var(--text-soft); white-space: nowrap; }
 .filter-toggle > svg { grid-column: 2; grid-row: 2; align-self: center; margin-left: -10px; pointer-events: none; color: var(--text-soft); }
 .filter-disclosure[open] > .filter-toggle .filter-value { border-color: var(--accent); }
 .filter-disclosure[open] > .filter-toggle > svg { transform: rotate(180deg); }
@@ -753,9 +758,18 @@ a {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  max-height: 120px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: 4px;
 }
+.resource-selected { margin-bottom: 12px; }
+.picker-tag-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-tag > svg, .picker-tag .security-badge { flex-shrink: 0; }
 
 .picker-tag {
+  max-width: 100%;
+  flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--panel);
@@ -1353,6 +1367,16 @@ a {
   width: 100%;
   font-size: 15px;
   background: transparent;
+}
+
+/* Composite fields own a single rounded focus ring; standalone inputs keep theirs. */
+:is(.search-box, .picker-search, .planetary-resource-search, .auth-input-shell):focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-surface);
+}
+:is(.search-box, .picker-search, .planetary-resource-search, .auth-input-shell) input:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 .right-actions {

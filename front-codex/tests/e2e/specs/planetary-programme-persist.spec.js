@@ -102,7 +102,7 @@ test('计算器关闭再打开后仍保留当前方案并可更新', async ({ pa
   await page.goto('/planetary')
 
   await openFilter(page.locator('.resource-disclosure'))
-  await page.locator('.resource-disclosure').getByRole('button', { name: '光泽合金' }).click()
+  await page.locator('.resource-card').filter({ hasText: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('tbody .table-check-trigger').first().click()
   await page.getByRole('button', { name: '加入计算器' }).click()
@@ -118,7 +118,7 @@ test('计算器关闭再打开后仍保留当前方案并可更新', async ({ pa
   await expect(modal).toBeHidden()
 
   await openFilter(page.locator('.resource-disclosure'))
-  await page.locator('.resource-disclosure').getByRole('button', { name: '光泽合金' }).click()
+  await page.locator('.resource-card').filter({ hasText: '光泽合金' }).click()
   await openFilter(page.locator('.resource-disclosure'))
   await page.locator('.resource-disclosure').getByRole('button', { name: '光彩合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()

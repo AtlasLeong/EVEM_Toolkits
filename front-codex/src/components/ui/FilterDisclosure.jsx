@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { ChevronDown } from 'lucide-react'
 
 // Native disclosure semantics keep keyboard and screen-reader state in sync.
-export default function FilterDisclosure({ label, value, disabled = false, className = '', children }) {
+export default function FilterDisclosure({ label, value, valueContent, disabled = false, className = '', children }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -36,10 +36,11 @@ export default function FilterDisclosure({ label, value, disabled = false, class
       <summary
         className="filter-toggle"
         aria-disabled={disabled}
+        aria-label={`${label}：${value}`}
         onClick={(event) => { if (disabled) event.preventDefault() }}
       >
         <span className="filter-label">{label}</span>
-        <span className="filter-value" title={value}>{value}</span>
+        <span className="filter-value" title={value}>{valueContent ?? value}</span>
         <ChevronDown size={16} aria-hidden="true" />
       </summary>
       <div className="filter-popover">{children}</div>
