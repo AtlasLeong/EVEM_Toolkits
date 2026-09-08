@@ -435,7 +435,7 @@ export default function TacticalStarMap({
     const duration = 220
 
     const step = (timestamp) => {
-      const progress = Math.min(1, (timestamp - startAt) / duration)
+      const progress = clamp((timestamp - startAt) / duration, 0, 1)
       setSystemLabelAlpha(easeOutCubic(progress))
 
       if (progress < 1) {
@@ -463,7 +463,7 @@ export default function TacticalStarMap({
     const duration = 220
 
     const step = (timestamp) => {
-      const progress = Math.min(1, (timestamp - startAt) / duration)
+      const progress = clamp((timestamp - startAt) / duration, 0, 1)
       setRegionLabelAlpha(easeOutCubic(progress))
 
       if (progress < 1) {
@@ -490,7 +490,8 @@ export default function TacticalStarMap({
     const startAt = performance.now()
 
     const step = (timestamp) => {
-      const progress = Math.min(1, (timestamp - startAt) / duration)
+      // A frame timestamp can precede performance.now() sampled within that frame.
+      const progress = clamp((timestamp - startAt) / duration, 0, 1)
       const eased = easeOutCubic(progress)
 
       setView({
@@ -522,10 +523,7 @@ export default function TacticalStarMap({
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
     ctx.clearRect(0, 0, size.width, size.height)
 
-    const gradient = ctx.createLinearGradient(0, 0, size.width, size.height)
-    gradient.addColorStop(0, '#000000')
-    gradient.addColorStop(1, '#000000')
-    ctx.fillStyle = gradient
+    ctx.fillStyle = getComputedStyle(canvas).getPropertyValue('--console-bg').trim() || '#0b1117'
     ctx.fillRect(0, 0, size.width, size.height)
 
     ctx.save()

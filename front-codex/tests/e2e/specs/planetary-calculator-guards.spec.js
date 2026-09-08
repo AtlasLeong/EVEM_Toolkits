@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 
 async function installPlanetaryBaseMock(page) {
@@ -42,6 +43,7 @@ async function installPlanetaryBaseMock(page) {
 
 async function openCalculatorWithOneRow(page) {
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('tbody .table-check-trigger').first().click()
@@ -66,6 +68,7 @@ test('已加入计算器的结果行会被禁用避免重复加入', async ({ pa
   await installPlanetaryBaseMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
 

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
@@ -74,6 +75,7 @@ async function installCalculatorBaseMock(page, extraResolver = () => undefined) 
 
 async function openCalculatorWithOneRow(page) {
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('tbody .table-check-trigger').first().click()

@@ -62,6 +62,7 @@ test('星系导航支持英文搜索定位并计算路径', async ({ page }) => 
 
   await page.goto('/starmap')
   await expect(page.locator('.tactical-system-card strong')).toHaveText('交互星图')
+  await expect.poll(() => page.locator('canvas').evaluate(canvas => Array.from(canvas.getContext('2d').getImageData(1, 1, 1, 1).data))).toEqual([11, 17, 23, 255])
 
   const searchInput = page.getByLabel('搜索并定位星系')
   await searchInput.fill('alpha')

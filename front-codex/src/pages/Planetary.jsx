@@ -7,6 +7,7 @@ import { getPlanetResources, searchPlanetResources } from '../services/apiPlanet
 import PlanetaryCalculatorModal, { buildCalculatorRow } from '../components/planetary/PlanetaryCalculatorModal'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 import { AuthContext } from '../context/AuthContext'
+import FilterDisclosure from '../components/ui/FilterDisclosure'
 
 const levelMap = {
   1: '贫瘠',
@@ -118,8 +119,12 @@ function SearchableMultiPicker({
   }
 
   return (
-    <div className={`picker-field ${disabled ? 'is-disabled' : ''}`}>
-      <label>{label}</label>
+    <FilterDisclosure
+      className="picker-field"
+      label={label}
+      value={disabled ? '请先完成上一级筛选' : selectedOptions.length ? selectedOptions.map(item => item.label).join('、') : '全部'}
+      disabled={disabled}
+    >
       <div className="picker-shell">
         <div className="picker-search">
           <Search size={14} />
@@ -128,6 +133,7 @@ function SearchableMultiPicker({
             onChange={(e) => setQuery(e.target.value)}
             placeholder={disabled ? '请先完成上一级筛选' : placeholder}
             className="picker-input"
+            aria-label={placeholder}
             disabled={disabled}
           />
         </div>
@@ -155,6 +161,7 @@ function SearchableMultiPicker({
                 className={`picker-option ${selectedSet.has(item.value) ? 'active' : ''}`}
                 onClick={() => toggleValue(item.value)}
                 disabled={disabled}
+                aria-pressed={selectedSet.has(item.value)}
               >
                 <span className="picker-option-name">{item.label}</span>
                 {item.security !== undefined ? <SecurityBadge value={item.security} /> : null}
@@ -165,7 +172,7 @@ function SearchableMultiPicker({
           )}
         </div>
       </div>
-    </div>
+    </FilterDisclosure>
   )
 }
 
@@ -214,6 +221,7 @@ export default function PlanetaryPage() {
 
   const searchMutation = useMutation({
     mutationFn: searchPlanetResources,
+    onError: () => setSearchHint('查询失败，请稍后重试'),
     onSuccess: (data) => {
       setSearchHint('')
       setRows(Array.isArray(data) ? data.map((item, index) => enrichSearchRow(item, index)) : [])
@@ -429,14 +437,17 @@ export default function PlanetaryPage() {
         subtitle="按星域、星座、星系和资源组合搜索产出"
         action={
           <div className="head-actions">
-            <Pill>{rows.length} 条结果</Pill>
-            <Pill>{activeResourceTypeCount} 个资源类型</Pill>
+            <button type="button" className="ghost-btn planetary-toolbar-btn" onClick={() => setShowCalculator(true)}>
+              <Calculator size={18} />
+              打开计算器
+              <span className="calculator-open-count">{calculatorRows.length}</span>
+            </button>
           </div>
         }
       />
 
       <div className="layout-main-stack">
-        <Panel title="筛选器" subtitle="支持搜索、多选和安全等级识别">
+        <Panel className="planetary-filters">
           <div className="picker-grid">
             <SearchableMultiPicker
               label="星域（可多选）"
@@ -473,8 +484,7 @@ export default function PlanetaryPage() {
               disabled={!constellationIds.length}
               loading={systemsQuery.isPending}
             />
-          </div>
-
+          <FilterDisclosure className="resource-disclosure" label="资源（可多选）" value={resourceValues.length ? resourceValues.join('、') : '全部资源'}>
           <div className="resource-box planetary-resource-box">
             <div className="planetary-resource-head">
               <div>
@@ -488,6 +498,7 @@ export default function PlanetaryPage() {
                   onChange={(e) => setResourceQuery(e.target.value)}
                   placeholder="搜索资源名称"
                   className="picker-input"
+                  aria-label="搜索资源名称"
                 />
               </div>
             </div>
@@ -503,6 +514,7 @@ export default function PlanetaryPage() {
                         key={item.value}
                         type="button"
                         className={`resource-card ${active ? 'active' : ''}`}
+                        aria-pressed={active}
                         onClick={() => {
                           setResourceValues((prev) =>
                             prev.includes(item.value)
@@ -526,6 +538,7 @@ export default function PlanetaryPage() {
 
             {!groupedResources.length ? <p className="picker-empty">没有匹配的资源</p> : null}
           </div>
+          </FilterDisclosure>
 
           <div className="right-actions">
             <button
@@ -544,42 +557,31 @@ export default function PlanetaryPage() {
               搜索
             </button>
           </div>
+          </div>
 
           {searchMutation.isPending ? <LoadingBar /> : null}
         </Panel>
 
-        <Panel title="搜索说明" subtitle="与旧版相同的查询语义" className="compact-hint">
+        <details className="query-help">
+          <summary>搜索说明与当前筛选概览 <ChevronDown size={14} /></summary>
           <ul className="hint-list">
             <li>同时选择地点和资源：按当前筛选范围直接查询目标资源。</li>
             <li>只选地点不选资源：返回该地点下所有资源里表现更好的结果。</li>
             <li>只选资源不选地点：返回每个星域里该资源产出更高的位置。</li>
             <li>结果表可直接勾选并加入计算器，继续做阵列和价格联动。</li>
           </ul>
-        </Panel>
+          <div className="pill-row">
+            <Pill>星域 {regionIds.length}</Pill><Pill>星座 {constellationIds.length}</Pill>
+            <Pill>星系 {systemIds.length}</Pill><Pill>资源类型 {activeResourceTypeCount}</Pill>
+          </div>
+        </details>
 
         <Panel
           title="结果列表"
-          subtitle="资源列带图标，表内支持筛选、排序、热值查看和加入计算器"
+          className="planetary-results"
+          subtitle={`${displayRows.length} 条结果 · 点击表头排序，勾选资源后加入计算器`}
           action={
-            <div className="planetary-panel-actions">
-              <Pill tone="neutral">
-                {selectedCalculatorKeys.length ? `已选 ${selectedCalculatorKeys.length} 项` : '勾选结果加入计算器'}
-              </Pill>
-              <button
-                type="button"
-                className="ghost-btn planetary-toolbar-btn"
-                disabled={!selectedCalculatorKeys.length}
-                onClick={addToCalculator}
-              >
-                <Plus size={16} />
-                加入计算器
-              </button>
-              <button type="button" className="primary-btn planetary-toolbar-btn" onClick={() => setShowCalculator(true)}>
-                <Calculator size={16} />
-                计算器
-                <span className="calculator-open-count">{calculatorRows.length}</span>
-              </button>
-            </div>
+            <Pill>{activeResourceTypeCount} 个资源类型</Pill>
           }
         >
           {rows.length ? (
@@ -626,7 +628,7 @@ export default function PlanetaryPage() {
                 <thead>
                   <tr>
                     <th className="checkbox-col">
-                      <button type="button" className="table-check-trigger" onClick={toggleSelectAll}>
+                      <button type="button" className="table-check-trigger" aria-label="选择全部可用结果" aria-pressed={allVisibleSelected} onClick={toggleSelectAll}>
                         {allVisibleSelected ? <CheckSquare size={16} /> : <Square size={16} />}
                       </button>
                     </th>
@@ -680,13 +682,15 @@ export default function PlanetaryPage() {
                     const inCalculator = calculatorKeySet.has(row.key)
 
                     return (
-                      <tr key={row.key}>
+                      <tr key={row.key} className={checked ? 'is-selected' : inCalculator ? 'is-added' : ''}>
                         <td className="checkbox-col">
                           <button
                             type="button"
                             className={`table-check-trigger ${checked ? 'active' : ''}`}
                             onClick={() => toggleSelectedRow(row.key)}
                             disabled={inCalculator}
+                            aria-label={`${inCalculator ? '已加入' : '选择'} ${row.resource_name} ${row.solar_system} ${row.planet_id}`}
+                            aria-pressed={checked}
                             title={inCalculator ? '已在计算器中' : '选择此行'}
                           >
                             {checked ? <CheckSquare size={16} /> : <Square size={16} />}
@@ -731,26 +735,15 @@ export default function PlanetaryPage() {
           ) : (
             <EmptyState title="暂无数据" desc="请先设置筛选条件后点击搜索" />
           )}
-        </Panel>
-
-        <Panel title="筛选概览" subtitle="当前筛选范围概览">
-          <div className="metric-grid">
-            <article className="metric-card">
-              <span>星域</span>
-              <p>{regionIds.length}</p>
-            </article>
-            <article className="metric-card">
-              <span>星座</span>
-              <p>{constellationIds.length}</p>
-            </article>
-            <article className="metric-card">
-              <span>星系</span>
-              <p>{systemIds.length}</p>
-            </article>
-            <article className="metric-card">
-              <span>资源类型</span>
-              <p>{activeResourceTypeCount}</p>
-            </article>
+          <div className="planetary-bulk-bar">
+            <div className="planetary-selection-copy" aria-live="polite">
+              <strong>{selectedCalculatorKeys.length ? `已选 ${selectedCalculatorKeys.length} 项` : '请先勾选资源'}</strong>
+              {selectedCalculatorKeys.length ? <button className="text-btn" onClick={() => setSelectedCalculatorKeys([])}>取消选择</button> : <span>可将多个星系的资源一起计算</span>}
+            </div>
+            <button type="button" className="primary-btn planetary-add-btn" disabled={!selectedCalculatorKeys.length} onClick={addToCalculator}>
+              <Plus size={20} />
+              {selectedCalculatorKeys.length ? `加入计算器 · ${selectedCalculatorKeys.length} 项` : '加入计算器'}
+            </button>
           </div>
         </Panel>
       </div>

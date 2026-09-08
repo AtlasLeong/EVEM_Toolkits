@@ -22,7 +22,7 @@ const items = [
 export default function InfoCenterPage() {
   return (
     <>
-      <PageHeader title="信息中心" subtitle="Front Codex 视觉重构版 · Desktop" />
+      <PageHeader title="信息中心" subtitle="了解工具功能，开始规划你的新伊甸旅程" />
 
       <Panel>
         <div className="feature-grid">

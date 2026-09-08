@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 
 function installPlanetaryBaseMock(page, resolver = () => undefined) {
@@ -77,6 +78,7 @@ test('只选资源不选地点时直接把资源对象交给后端', async ({ pa
   })
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
 
@@ -117,6 +119,7 @@ test('只选地点不选资源时由后端返回该地点结果', async ({ page 
 
   await page.goto('/planetary')
   const regionPicker = page.locator('.picker-field').first()
+  await openFilter(regionPicker)
   await regionPicker.locator('.picker-option').first().click()
   await page.getByRole('button', { name: '搜索' }).click()
 
@@ -161,8 +164,11 @@ test('同时选到星系时只把最深一级 systemValue 发给后端', async (
   const constellationPicker = page.locator('.picker-field').nth(1)
   const systemPicker = page.locator('.picker-field').nth(2)
 
+  await openFilter(regionPicker)
   await regionPicker.locator('.picker-option').first().click()
+  await openFilter(constellationPicker)
   await constellationPicker.locator('.picker-option').first().click()
+  await openFilter(systemPicker)
   await systemPicker.locator('.picker-option').first().click()
   await page.getByRole('button', { name: '搜索' }).click()
 

@@ -126,3 +126,14 @@ await expect(page.locator('.calculator-card')).toBeVisible()
 - Initial worktree is clean at `00b4bfb`; original workspace untracked artifacts preserved.
 - `npm ci --no-audit --no-fund`: passed, 120 packages installed, lockfile unchanged.
 - Full E2E baseline: `npm run test:e2e -- --workers=2` passed all 77 tests in 1.1 minutes (2026-09-08). No business or test code was changed for this baseline.
+
+## Completion evidence — 2026-09-08
+
+User approved completing all remaining stages in one uninterrupted local iteration. Tasks 1–6 are implemented and verified; shared CSS families were migrated together to avoid partial-theme intermediate states. Navigation remains in the earlier local commit; business UI and verification are kept together in the final local change.
+
+- Full redesign QA: `design-qa.md`, final result passed, with actual route/modal screenshots and recorded intentional reference differences.
+- Final E2E: 98 passed in 54.3s, four workers; no retries/waived failures. Includes a deterministic regression for an existing early-rAF negative-zoom crash discovered during final testing and fixed by clamping animation progress.
+- Final production build succeeded in 19.85s. No API/formula/authorization/schema changes; no new runtime dependencies.
+- Independent full UI review and follow-up animation review found no remaining blocking issues.
+- Local-only fixture preview: `npm run preview:ui`, 127.0.0.1:4182. Production API is not used by that preview.
+- Branch/worktree retained. No push, merge, SSH, deployment, or change to the server's running business.

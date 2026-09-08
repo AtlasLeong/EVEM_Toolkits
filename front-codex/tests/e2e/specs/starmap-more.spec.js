@@ -63,6 +63,21 @@ test('星系导航设置起终点后显示直线距离', async ({ page }) => {
   await expect(page.locator('.tactical-map-hud')).toContainText('直线 1.00 光年')
 })
 
+test('定位动画的帧时间早于启动时间时不会出现负缩放或白屏', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => {
+    const original = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = callback => original(timestamp => callback(timestamp - 120))
+  })
+  await installStarMapMock(page)
+  await page.goto('/starmap')
+  await page.getByLabel('搜索并定位星系').fill('alpha')
+  await page.locator('.tactical-search-option').first().click()
+  await expect(page.locator('.tactical-map-hud')).toContainText('缩放 7.56x')
+  expect(errors).toEqual([])
+})
+
 test('星系导航重置视图后缩放不再停留在定位倍率', async ({ page }) => {
   await installStarMapMock(page)
   await page.goto('/starmap')

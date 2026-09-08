@@ -633,7 +633,7 @@ export default function FraudAdminPage() {
     <>
       <PageHeader
         title="诈骗名单管理"
-        subtitle="恢复管理员登录、来源群组、记录编辑、行为流水和举报审批。"
+        subtitle="维护社区名单，查看操作记录并处理举报。"
         action={
           <div className="pill-row">
             <Pill>{adminListQuery.data?.length || 0} 条名单</Pill>
@@ -675,7 +675,7 @@ export default function FraudAdminPage() {
         <>
           <Panel
             title="新增记录"
-            subtitle="来源群组已接回管理员接口，不再手填群组 ID。"
+            subtitle="填写账号信息并选择名单来源，便于后续核验。"
             action={
               <button
                 type="button"
@@ -768,7 +768,7 @@ export default function FraudAdminPage() {
 
           <Panel
             title="名单记录"
-            subtitle="支持编辑、删除和来源群组回填。"
+            subtitle="查看与维护账号记录及其来源。"
             action={<Pill>{adminListQuery.data?.length || 0} 条</Pill>}
           >
             {(adminListQuery.isPending || deleteMutation.isPending) && <LoadingBar />}

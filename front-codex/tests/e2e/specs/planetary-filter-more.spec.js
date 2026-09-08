@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 
 async function installPlanetaryFilterMock(page) {
@@ -62,8 +63,10 @@ test('资源搜索框会过滤资源卡片', async ({ page }) => {
   await installPlanetaryFilterMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.locator('.planetary-resource-search input').fill('重水')
 
+  await openFilter(page.locator('.resource-disclosure'))
   await expect(page.getByRole('button', { name: '重水' })).toBeVisible()
   await expect(page.getByRole('button', { name: '光泽合金' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '光彩合金' })).toHaveCount(0)
@@ -73,6 +76,7 @@ test('结果列表支持按等级筛选', async ({ page }) => {
   await installPlanetaryFilterMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
 

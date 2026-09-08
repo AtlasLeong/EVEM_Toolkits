@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 
 async function installPlanetaryMultiMock(page) {
@@ -71,12 +72,15 @@ test('行星资源取消上级筛选会清空下级选择', async ({ page }) => 
   const regionPicker = page.locator('.picker-field').nth(0)
   const constellationPicker = page.locator('.picker-field').nth(1)
 
+  await openFilter(regionPicker)
   await regionPicker.locator('.picker-option').first().click()
+  await openFilter(constellationPicker)
   await constellationPicker.locator('.picker-option').first().click()
 
   await expect(regionPicker.locator('.picker-tag')).toContainText('德里克')
   await expect(constellationPicker.locator('.picker-tag')).toContainText('静寂谷')
 
+  await openFilter(regionPicker)
   await regionPicker.locator('.picker-tag').click()
 
   await expect(regionPicker.locator('.picker-tag')).toHaveCount(0)
@@ -88,6 +92,7 @@ test('行星资源结果支持全选和取消全选', async ({ page }) => {
   await installPlanetaryMultiMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
 
@@ -97,13 +102,14 @@ test('行星资源结果支持全选和取消全选', async ({ page }) => {
 
   await selectAll.click()
   await expect(page.getByText('已选 2 项')).toHaveCount(0)
-  await expect(page.getByText('勾选结果加入计算器')).toBeVisible()
+  await expect(page.getByText('请先勾选资源')).toBeVisible()
 })
 
 test('计算器支持批量复制计算时长和单价', async ({ page }) => {
   await installPlanetaryMultiMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('thead .table-check-trigger').click()

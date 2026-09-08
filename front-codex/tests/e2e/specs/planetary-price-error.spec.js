@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
@@ -45,6 +46,7 @@ test('加载预设价格失败时显示错误提示', async ({ page }) => {
   })
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('tbody .table-check-trigger').first().click()

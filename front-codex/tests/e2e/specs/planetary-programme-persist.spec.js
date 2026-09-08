@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
@@ -100,7 +101,8 @@ test('计算器关闭再打开后仍保留当前方案并可更新', async ({ pa
 
   await page.goto('/planetary')
 
-  await page.getByRole('button', { name: '光泽合金' }).click()
+  await openFilter(page.locator('.resource-disclosure'))
+  await page.locator('.resource-disclosure').getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('tbody .table-check-trigger').first().click()
   await page.getByRole('button', { name: '加入计算器' }).click()
@@ -115,8 +117,10 @@ test('计算器关闭再打开后仍保留当前方案并可更新', async ({ pa
   await modal.getByRole('button', { name: '关闭' }).click()
   await expect(modal).toBeHidden()
 
-  await page.getByRole('button', { name: '光泽合金' }).click()
-  await page.getByRole('button', { name: '光彩合金' }).click()
+  await openFilter(page.locator('.resource-disclosure'))
+  await page.locator('.resource-disclosure').getByRole('button', { name: '光泽合金' }).click()
+  await openFilter(page.locator('.resource-disclosure'))
+  await page.locator('.resource-disclosure').getByRole('button', { name: '光彩合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('tbody .table-check-trigger').first().click()
   await page.getByRole('button', { name: '加入计算器' }).click()

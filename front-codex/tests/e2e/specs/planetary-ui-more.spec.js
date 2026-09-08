@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openFilter } from '../helpers/planetary-ui'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
@@ -78,19 +79,24 @@ test('清空筛选会重置资源与地点选择', async ({ page }) => {
   await installPlanetaryUiMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
 
   const regionPicker = page.locator('.picker-field').nth(0)
   const constellationPicker = page.locator('.picker-field').nth(1)
   const systemPicker = page.locator('.picker-field').nth(2)
 
+  await openFilter(regionPicker)
   await regionPicker.locator('.picker-option').first().click()
+  await openFilter(constellationPicker)
   await constellationPicker.locator('.picker-option').first().click()
+  await openFilter(systemPicker)
   await systemPicker.locator('.picker-option').first().click()
 
   await expect(regionPicker.locator('.picker-tag')).toHaveCount(1)
   await expect(constellationPicker.locator('.picker-tag')).toHaveCount(1)
   await expect(systemPicker.locator('.picker-tag')).toHaveCount(1)
+  await openFilter(page.locator('.resource-disclosure'))
   await expect(page.getByRole('button', { name: '光泽合金' })).toHaveClass(/active/)
 
   await page.getByRole('button', { name: '清空筛选' }).click()
@@ -98,6 +104,7 @@ test('清空筛选会重置资源与地点选择', async ({ page }) => {
   await expect(regionPicker.locator('.picker-tag')).toHaveCount(0)
   await expect(constellationPicker.locator('.picker-tag')).toHaveCount(0)
   await expect(systemPicker.locator('.picker-tag')).toHaveCount(0)
+  await openFilter(page.locator('.resource-disclosure'))
   await expect(page.getByRole('button', { name: '光泽合金' })).not.toHaveClass(/active/)
   await expect(constellationPicker.locator('.picker-input')).toBeDisabled()
   await expect(systemPicker.locator('.picker-input')).toBeDisabled()
@@ -108,7 +115,9 @@ test('加载预设价格会回填计算器单价列', async ({ page }) => {
   await installPlanetaryUiMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光彩合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('thead .table-check-trigger').click()
@@ -127,7 +136,9 @@ test('计算器支持批量复制阵列数量', async ({ page }) => {
   await installPlanetaryUiMock(page)
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光彩合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
   await page.locator('thead .table-check-trigger').click()

@@ -198,7 +198,7 @@ function PriceSettingCard() {
             <EmptyState title="暂无价格数据" />
           ) : (
             <div className="table-shell tall">
-              <table className="data-table compact">
+              <table className="data-table compact price-table">
                 <thead>
                   <tr>
                     <th>资源</th>

@@ -1,0 +1,62 @@
+import { test, expect } from '@playwright/test'
+import { installApiMock, json, TINY_ICON } from '../helpers/api'
+
+test.beforeEach(async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1024 })
+  await installApiMock(page, async ({ url }) => {
+    if (url.pathname === '/api/planetresources') return json([{ label: '船菜', options: [{ value: '光泽合金', label: '光泽合金', icon: TINY_ICON }] }])
+    if (url.pathname === '/api/regions') return json([{ r_id: 1, r_title: '伏尔戈', r_safetylvl: 0.59 }])
+    if (url.pathname === '/api/searchplanetresource') return json(Array.from({ length: 20 }, (_, i) => ({ id: i, resource_name: '光泽合金', region: '伏尔戈', region_security: 0.59, constellation: '米沃拉', constellation_security: 0.2, solar_system: '夫斯库仑', solar_system_security: 0.22, planet_id: String(i), resource_level: 4, resource_yield: 29.74 + i, icon: TINY_ICON })))
+    return json([])
+  })
+  await page.goto('/planetary')
+})
+
+test('紧凑筛选支持多选、Escape 返回焦点，结果保持首屏可见', async ({ page }) => {
+  const picker = page.locator('.picker-field').first()
+  await expect(picker).toHaveJSProperty('open', false)
+  await picker.locator('summary').click()
+  await picker.getByRole('button', { name: /伏尔戈/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveJSProperty('open', false)
+  await expect(picker.locator('summary')).toBeFocused()
+  await expect(picker.locator('summary')).toContainText('伏尔戈')
+  await picker.locator('summary').press('Enter')
+  await picker.locator('summary').press('Shift+Tab')
+  await expect(picker).toHaveJSProperty('open', false)
+  await expect(page.getByRole('heading', { name: '结果列表' })).toBeInViewport()
+})
+
+test('搜索失败时给出明确提示并保留筛选', async ({ page }) => {
+  await page.route('**/api/searchplanetresource', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Unavailable"}' }))
+  await page.locator('.resource-disclosure summary').click()
+  await page.locator('.resource-disclosure').getByRole('button', { name: /光泽合金/ }).click()
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page.getByText('查询失败，请稍后重试')).toBeVisible()
+  await expect(page.locator('.resource-disclosure summary')).toContainText('光泽合金')
+})
+
+test('批量操作显眼、选中计数正确、滚动后仍可加入且计算器统一深色', async ({ page }) => {
+  const add = page.getByRole('button', { name: /加入计算器/ })
+  await expect(add).toBeDisabled()
+  await expect(add).toHaveCSS('height', '48px')
+  await page.locator('.resource-disclosure summary').click()
+  await page.getByRole('button', { name: '光泽合金' }).click()
+  await page.getByRole('button', { name: '搜索', exact: true }).click()
+  await expect(page.locator('tbody tr')).toHaveCount(20)
+  await expect(page.locator('tbody tr').first()).toHaveCSS('height', '58px')
+  await page.locator('tbody .table-check-trigger').first().click()
+  await expect(add).toHaveText(/加入计算器 · 1 项/)
+  await expect(add).toHaveCSS('background-color', 'rgb(24, 191, 220)')
+  await expect(page.locator('tbody tr').first()).toHaveClass(/is-selected/)
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 1080 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+    await expect(add).toBeInViewport()
+  }
+  await page.locator('tbody tr').last().scrollIntoViewIfNeeded()
+  await expect(add).toBeInViewport()
+  await add.click()
+  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(19, 28, 36)')
+  await expect(page.locator('.table-inline-input').first()).toHaveCSS('background-color', 'rgb(11, 17, 23)')
+})

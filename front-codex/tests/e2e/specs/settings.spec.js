@@ -48,6 +48,7 @@ test('用户设置支持修改密码和保存预设价格', async ({ page }) => 
   await page.getByRole('button', { name: '预设价格' }).click()
   await expect(page.getByRole('heading', { name: '价格表' })).toBeVisible()
   await expect(page.getByText('光泽合金')).toBeVisible()
+  await expect(page.locator('.data-table')).toHaveCSS('min-width', '0px')
 
   const firstPriceInput = page.locator('.compact-input').first()
   await firstPriceInput.fill('1500')

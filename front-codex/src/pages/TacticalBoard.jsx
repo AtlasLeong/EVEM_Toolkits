@@ -473,12 +473,12 @@ export default function TacticalBoardPage() {
           <ul className="hint-list">
             <li>先在星图中定位系统，再点选星系查看详情，命中率会比手输更高。</li>
             <li>缩放到中近景时会显示星门网络，便于判断路径结构。</li>
-            <li>不同移动方式现在会用独立颜色显示，方便快速分辨常规跳跃、土路和诱导段。</li>
+            <li>不同移动方式使用独立颜色显示，方便分辨常规跳跃、土路和诱导段。</li>
           </ul>
           <div className="right-actions">
             <Pill>
               <Sparkles size={12} />
-              核心星图已恢复
+              支持中英文星系搜索
             </Pill>
           </div>
         </Panel>

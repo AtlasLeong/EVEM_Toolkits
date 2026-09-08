@@ -1,6 +1,7 @@
 ﻿import { test, expect } from '@playwright/test'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
+import { openFilter } from '../helpers/planetary-ui'
 
 test('行星资源可搜索、加入计算器并管理方案', async ({ page }) => {
   await seedAuthenticatedSession(page, { userName: 'atlas123' })
@@ -92,6 +93,7 @@ test('行星资源可搜索、加入计算器并管理方案', async ({ page }) 
   })
 
   await page.goto('/planetary')
+  await openFilter(page.locator('.resource-disclosure'))
   await page.getByRole('button', { name: '光泽合金' }).click()
   await page.getByRole('button', { name: '搜索' }).click()
 

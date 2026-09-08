@@ -62,6 +62,16 @@ test('license admin can list, create, extend and unbind activation codes', async
 
   await expect(page.getByRole('heading', { name: '激活码管理' })).toBeVisible()
   await expect(page.getByText('vip-code-001')).toBeVisible()
+  await expect(page.locator('.license-actions-cell')).toHaveCSS('position', 'sticky')
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 1080 })
+    const shell = await page.locator('.license-table-shell').boundingBox()
+    for (const button of await page.locator('.license-actions button').all()) {
+      const box = await button.boundingBox()
+      expect(box.x + box.width).toBeLessThanOrEqual(shell.x + shell.width)
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+  }
   await expect(page.getByRole('cell', { name: 'VIP金主组' })).toBeVisible()
 
   await page.getByLabel('有效天数').fill('30')

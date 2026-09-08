@@ -77,5 +77,6 @@ test('管理员审核举报缺少必填项时显示字段提示', async ({ page 
   await expect(page.getByText('审核备注为必填字段')).toBeVisible()
   await expect(page.getByText('请选择审核结果')).toBeVisible()
   await expect(page.locator('.admin-report-modal')).toBeVisible()
+  await expect(page.locator('.admin-report-modal .text-input.is-invalid').first()).toHaveCSS('border-top-color', 'rgb(255, 155, 159)')
   expect(reviewSubmitted).toBeFalsy()
 })
