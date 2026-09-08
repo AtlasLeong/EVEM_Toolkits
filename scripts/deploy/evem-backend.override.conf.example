@@ -2,5 +2,6 @@
 # Do not install until baseline links, permissions and rollback backup are verified.
 [Service]
 WorkingDirectory=/EVEMTK/deploy/current/backend
+Environment="PATH=/EVEMTK/deploy/current/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=
 ExecStart=/EVEMTK/deploy/current/backend/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 EVE_MDjango.wsgi:application
