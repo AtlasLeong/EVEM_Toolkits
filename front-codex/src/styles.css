@@ -609,6 +609,8 @@ a {
 }
 
 .planetary-filters { position: relative; z-index: 10; padding: 0; border: 0; background: transparent; margin-top: 16px; }
+.planetary-filters .picker-field { display: block; }
+.planetary-filters .filter-value { border-color: #918b80; }
 .planetary-filters .right-actions .ghost-btn { order: 2; background: transparent; border-color: transparent; padding-inline: 6px; color: var(--text-soft); }
 .planetary-filters .right-actions .primary-btn { min-width: 104px; }
 .advanced-filters { color: var(--text-soft); font-size: 14px; margin: 4px 0 0; }
@@ -671,7 +673,7 @@ a {
 .query-help .pill-row { margin-bottom: 10px; }
 .panel.planetary-results { padding: 0; border: 0; background: transparent; }
 .planetary-results > .panel-head { margin-bottom: 16px; }
-.planetary-results .table-shell.tall { max-height: min(620px, 62vh); border: 0; border-radius: 0; background: transparent; }
+.planetary-results .table-shell.tall { max-height: min(620px, 62vh); border: 0; border-radius: 0; background: transparent; scrollbar-gutter: stable; padding-right: 12px; }
 .planetary-table thead { position: sticky; top: 0; background: var(--bg); z-index: 2; }
 .data-table.planetary-table { min-width: 920px; font-size: 15px; }
 .data-table.planetary-table td { height: 58px; padding: 6px 10px; background: transparent; border-bottom-color: #e7e5df; }
