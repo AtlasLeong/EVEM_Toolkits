@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, LogOut, Settings, User } from 'lucide-react'
+import { Shield, Globe, Compass, LogOut, Settings, User, MessageSquare } from 'lucide-react'
 import { useContext, useEffect, useRef } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -8,9 +8,10 @@ const navItems = [
   { to: '/fraudlist', label: '防诈名单', icon: Shield },
   { to: '/planetary', label: '行星资源', icon: Globe },
   { to: '/starmap', label: '星系导航', icon: Compass },
+  { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))
@@ -55,7 +56,7 @@ export default function AppShell() {
       <div className="app-shell">
         <aside className="shell-sidebar" aria-label="工具导航">
           <Link className="brand" to="/" aria-label="EVEMToolkit 首页">
-            <img src="/Guristas_Logo_new.png" alt="" className="brand-icon" />
+            <img src="/guristas-avatar-white.png" alt="" className="brand-icon" />
             <span className="brand-name">EVEMToolkit</span>
           </Link>
           <div className="sidebar-section-label">工作空间</div>

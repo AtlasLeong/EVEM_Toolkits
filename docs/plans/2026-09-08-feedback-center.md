@@ -4,7 +4,7 @@
 
 **Goal:** Ship a private customer feedback center and the approved dark-console UI to production.
 
-**Architecture:** React feedback page in the existing shared shell; JWT-authenticated Django REST endpoints and two additive tables in the default database. Owners see their own tickets; existing `is_staff` users can manage all tickets. No new role grants, attachments, public feedback, third-party forwarding, or automatic database migrations.
+**Architecture:** React feedback page in the existing shared shell; JWT-authenticated Django REST endpoints and additive ticket/comment/attachment tables in the default database. Owners see their own tickets; existing `is_staff` users can manage all tickets. No new role grants, public feedback, third-party forwarding, or automatic database migrations.
 
 **Tech Stack:** Existing React/React Query/Lucide/CSS, Django/DRF/MySQL, isolated SQLite tests, Playwright, existing verified GitHub production release pipeline.
 
@@ -12,7 +12,9 @@
 
 User approved the proposed scope on 2026-09-08 ("k有的", interpreted as assent): sidebar entry; feature suggestions/problem reports with module/title/description and optional contact; own feedback history; staff replies and status updates; customer follow-up; privacy and submission limits; release together with calculator-entry and white-avatar refinements.
 
-Statuses: pending / processing / completed / declined. Types: feature / bug. Modules: planetary / starmap / fraudlist / account / other. Content is plain text. No attachments. Private details are not logged or placed in URLs. Existing `is_staff` is the authorization source.
+Statuses: pending / processing / completed / declined. Types: feature / bug. Modules: planetary / starmap / fraudlist / account / other. Content is plain text. Private details are not logged or placed in URLs. Existing `is_staff` is the authorization source.
+
+User subsequently requested image/file attachments. Accepted formats PNG/JPEG/WebP, PDF, UTF-8 TXT/LOG, 10 MiB/file, 20 files and 50 MiB/ticket; no executable/archive/SVG/HTML files. Create ticket first, then private multipart uploads in detail; failed files retry independently. Storage uses explicitly configured `FEEDBACK_UPLOAD_ROOT` outside all public/static paths; no configured root fails closed. Downloads authenticate owner/staff and use attachment/nosniff/no-store headers. Production storage configuration is a separate reviewed release prerequisite.
 
 ## API contract
 
@@ -21,6 +23,7 @@ Statuses: pending / processing / completed / declined. Types: feature / bug. Mod
 - `GET /api/feedback/<id>/`: ticket plus `comments: [{id,body,author_name,is_staff,created_at}]`.
 - `PATCH /api/feedback/<id>/`: staff only `{status}` -> updated detail.
 - `POST /api/feedback/<id>/comments/`: owner/staff `{request_id: UUID,body}` -> detail. No user-supplied author/status accepted.
+- `POST /api/feedback/<id>/attachments/`: owner/staff multipart `{request_id: UUID,file}` -> `{id,name,size,content_type,created_at}`; idempotent replay. Detail includes `attachments` array. Authenticated `GET /api/feedback/<id>/attachments/<attachment_id>/download/` streams file; no public URLs.
 - Limits: title 120, description 5000, contact 200, comment 3000 characters. Persistent per-account rate limits under database transaction/user row lock (20 tickets/day, 60 comments/hour); request IDs unique per author; reject reusing IDs with different content. Unknown owner ticket -> 404; unauthenticated -> 401; nonstaff all/status -> 403; malformed -> 400; rate exceeded -> 429 with Chinese explanation. Bounded comment history (100 max per ticket).
 
 ## Task 1: Backend and tests (independent implementer)

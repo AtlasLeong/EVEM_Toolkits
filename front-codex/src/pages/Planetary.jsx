@@ -437,7 +437,7 @@ export default function PlanetaryPage() {
         subtitle="按星域、星座、星系和资源组合搜索产出"
         action={
           <div className="head-actions">
-            <button type="button" className="ghost-btn planetary-toolbar-btn" onClick={() => setShowCalculator(true)}>
+            <button type="button" className="ghost-btn planetary-toolbar-btn planetary-open-btn" onClick={() => setShowCalculator(true)}>
               <Calculator size={18} />
               打开计算器
               <span className="calculator-open-count">{calculatorRows.length}</span>
@@ -740,10 +740,17 @@ export default function PlanetaryPage() {
               <strong>{selectedCalculatorKeys.length ? `已选 ${selectedCalculatorKeys.length} 项` : '请先勾选资源'}</strong>
               {selectedCalculatorKeys.length ? <button className="text-btn" onClick={() => setSelectedCalculatorKeys([])}>取消选择</button> : <span>可将多个星系的资源一起计算</span>}
             </div>
-            <button type="button" className="primary-btn planetary-add-btn" disabled={!selectedCalculatorKeys.length} onClick={addToCalculator}>
-              <Plus size={20} />
-              {selectedCalculatorKeys.length ? `加入计算器 · ${selectedCalculatorKeys.length} 项` : '加入计算器'}
-            </button>
+            <div className="planetary-bulk-actions">
+              <button type="button" className="ghost-btn planetary-open-btn" onClick={() => setShowCalculator(true)}>
+                <Calculator size={20} />
+                打开计算器
+                <span className="calculator-open-count">{calculatorRows.length}</span>
+              </button>
+              <button type="button" className="primary-btn planetary-add-btn" disabled={!selectedCalculatorKeys.length} onClick={addToCalculator}>
+                <Plus size={20} />
+                {selectedCalculatorKeys.length ? `加入计算器 · ${selectedCalculatorKeys.length} 项` : '加入计算器'}
+              </button>
+            </div>
           </div>
         </Panel>
       </div>

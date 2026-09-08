@@ -12,6 +12,7 @@ import SettingPage from './pages/Setting'
 import FraudAdminLoginPage from './pages/FraudAdminLogin'
 import FraudAdminPage from './pages/FraudAdmin'
 import LicenseAdminPage from './pages/LicenseAdmin'
+import FeedbackPage from './pages/Feedback'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -40,6 +41,7 @@ export default function App() {
             <Route path="/infocenter" element={<InfoCenterPage />} />
             <Route path="/fraudlist" element={<FraudListPage />} />
             <Route path="/planetary" element={<PlanetaryPage />} />
+            <Route path="/feedback" element={<FeedbackPage />} />
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
             <Route path="/starmap" element={<TacticalBoardPage />} />
             <Route

@@ -24,8 +24,28 @@ export const systems = locations.map((row, i) => ({ system_id: i + 1, zh_name: r
 const records = [{ id: 1, fraud_account: '演示账号-0472', account_type: '游戏ID', fraud_type: '交易纠纷', source_group_id: 11, source_group_name: '本地演示交易群', remark: '仅用于界面验证，不对应真实用户', icon: '/favicon.png' }]
 const reports = [{ id: 9, fraud_account: '演示账号-0831', account_type: 'QQ', contact_number: 'preview-only', report_status: 'pending', description: '本地演示举报，用于检查详情与表单布局。', create_time: '2026-09-08T04:30:00Z', evidence_dict: [] }]
 let programmes = []
+const feedbackTickets = [
+  { id: 1024, type: 'feature', module: 'planetary', title: '希望计算器方案可以导出和分享', description: '和军团成员讨论资源方案时，希望能把当前计算器里的配置导出为文件，方便大家使用同一套设置。', contact: '', status: 'processing', author_name: 'Local Preview', created_at: '2026-09-08T03:20:00Z', updated_at: '2026-09-08T04:10:00Z', reply_count: 1, attachments: [], comments: [{ id: 1, body: '已收到建议。我们正在评估方案导出格式，后续进展会在这里更新。', author_name: '管理员', is_staff: true, created_at: '2026-09-08T04:10:00Z' }] },
+  { id: 1023, type: 'bug', module: 'starmap', title: '部分星系名称显示不完整', description: '在较窄的桌面窗口中，长名称的星系标签会被截断。希望可以悬停查看完整名称。', contact: '', status: 'pending', author_name: 'Local Preview', created_at: '2026-09-08T02:00:00Z', updated_at: '2026-09-08T02:00:00Z', reply_count: 0, attachments: [], comments: [] },
+]
 export function resolvePreviewRequest(url, method, body = {}) {
   const path = url.pathname
+  if (path === '/api/feedback/' && method === 'GET') {
+    const results = feedbackTickets.filter(item => ['type', 'module', 'status'].every(key => !url.searchParams.get(key) || item[key] === url.searchParams.get(key)))
+    return { status: 200, data: { count: results.length, results, can_manage: true } }
+  }
+  if (path === '/api/feedback/' && method === 'POST') {
+    const item = { ...body, id: 1025 + feedbackTickets.length, status: 'pending', author_name: 'Local Preview', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), reply_count: 0, comments: [], attachments: [] }
+    feedbackTickets.unshift(item)
+    return { status: 201, data: item }
+  }
+  if (/^\/api\/feedback\/\d+\/(comments\/)?$/.test(path)) {
+    const item = feedbackTickets.find(ticket => ticket.id === Number(path.split('/')[3]))
+    if (!item) return { status: 404, data: { detail: '反馈不存在' } }
+    if (method === 'PATCH') item.status = body.status
+    if (method === 'POST') { item.comments.push({ id: item.comments.length + 1, body: body.body, author_name: 'Local Preview', is_staff: true, created_at: new Date().toISOString() }); item.reply_count++ }
+    return { status: 200, data: item }
+  }
   const get = {
     '/api/planetresources': resources,
     '/api/regions': [{ r_id: 1, r_title: '伏尔戈', r_safetylvl: 0.59 }],
