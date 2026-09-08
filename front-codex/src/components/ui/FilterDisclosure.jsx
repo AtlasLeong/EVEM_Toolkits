@@ -23,7 +23,12 @@ export default function FilterDisclosure({ label, value, valueContent, disabled 
       ref={ref}
       className={`filter-disclosure ${className} ${disabled ? 'is-disabled' : ''}`.trim()}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.open = false
+        // Blank space has no next focus target. Closing details during that blur
+        // can crash Chromium while it is moving focus into the scroll container.
+        // Outside pointer clicks are already handled separately above.
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+          event.currentTarget.open = false
+        }
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
