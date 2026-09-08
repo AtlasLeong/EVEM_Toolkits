@@ -14,6 +14,7 @@ def pending_migrations(alias):
     from django.db import connections, router
     from django.db.migrations.executor import MigrationExecutor
     executor = MigrationExecutor(connections[alias])
+    executor.loader.check_consistent_history(connections[alias])
     if executor.loader.detect_conflicts():
         raise RuntimeError('Conflicting migration leaves; resolve before deployment')
     plan = executor.migration_plan(executor.loader.graph.leaf_nodes())

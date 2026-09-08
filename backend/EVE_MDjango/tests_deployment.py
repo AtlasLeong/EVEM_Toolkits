@@ -7,6 +7,7 @@ import tempfile
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.db import connections
 from django.db.migrations.recorder import MigrationRecorder
+from django.db.migrations.exceptions import InconsistentMigrationHistory
 
 
 class DeploymentVersionTests(SimpleTestCase):
@@ -62,3 +63,8 @@ class RoutedMigrationGateTests(TestCase):
     def test_real_missing_default_migration_is_blocked(self):
         MigrationRecorder(connections['default']).record_unapplied('auth', '0012_alter_user_first_name_max_length')
         self.assertIn('auth.0012_alter_user_first_name_max_length', self.checker()('default'))
+
+    def test_inconsistent_applied_history_is_not_mistaken_for_empty_plan(self):
+        MigrationRecorder(connections['default']).record_unapplied('auth', '0001_initial')
+        with self.assertRaises(InconsistentMigrationHistory):
+            self.checker()('default')
