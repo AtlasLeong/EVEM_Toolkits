@@ -3276,8 +3276,8 @@ a {
 }
 
 .auth-tab.active {
-  background: var(--accent-surface);
-  color: var(--text);
+  background: var(--text);
+  color: #fff;
   box-shadow: none;
 }
 
