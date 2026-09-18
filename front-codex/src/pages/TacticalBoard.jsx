@@ -12,6 +12,8 @@ import TacticalStarMap from '../components/tactical/TacticalStarMap'
 import { getSecurityTextColor } from '../utils/securityColor'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 
+const STATIC_MAP_CACHE_TIME = 60 * 60 * 1000
+
 function getSystemDisplayName(system) {
   return system?.zh_name || system?.name || system?.en_name || system?.system_name || ''
 }
@@ -223,18 +225,26 @@ export default function TacticalBoardPage() {
   const systemsQuery = useQuery({
     queryKey: ['board-systems'],
     queryFn: getBoardSystems,
+    staleTime: STATIC_MAP_CACHE_TIME,
+    gcTime: STATIC_MAP_CACHE_TIME,
   })
   const regionsQuery = useQuery({
     queryKey: ['board-regions'],
     queryFn: getRegions,
+    staleTime: STATIC_MAP_CACHE_TIME,
+    gcTime: STATIC_MAP_CACHE_TIME,
   })
   const constellationsQuery = useQuery({
     queryKey: ['board-constellations'],
     queryFn: getConstellations,
+    staleTime: STATIC_MAP_CACHE_TIME,
+    gcTime: STATIC_MAP_CACHE_TIME,
   })
   const stargateQuery = useQuery({
     queryKey: ['board-stargate'],
     queryFn: getBoardStarGate,
+    staleTime: STATIC_MAP_CACHE_TIME,
+    gcTime: STATIC_MAP_CACHE_TIME,
   })
 
   const systemAliasMap = useMemo(() => {
