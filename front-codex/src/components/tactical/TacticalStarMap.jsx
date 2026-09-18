@@ -61,6 +61,7 @@ function createMapModel(systems, stargates, constellations, regions) {
       systems: [],
       systemMap: new Map(),
       stargates: [],
+      gateCount: 0,
       regions: [],
     }
   }
@@ -84,20 +85,33 @@ function createMapModel(systems, stargates, constellations, regions) {
     px: normalizeX(item.x),
     py: normalizeY(item.z),
     securityLabel: Number(item.security_status).toFixed(1),
+    color: getSecurityColor(item.security_status),
   }))
 
   const systemMap = new Map(normalizedSystems.map((item) => [item.system_id, item]))
+  const gateKeys = new Set()
+  let gateCount = 0
   const stargateLines = (stargates || [])
     .map((item) => {
       const start = systemMap.get(item.system_id)
       const end = systemMap.get(item.destination_system_id)
       if (!start || !end) return null
+      gateCount += 1
+      // API records are directional. Only the visual network is undirected;
+      // never change the original data used by route planning or the HUD count.
+      const key = [item.system_id, item.destination_system_id].sort((a, b) => a - b).join('-')
+      if (gateKeys.has(key)) return null
+      gateKeys.add(key)
       return {
-        key: `${item.system_id}-${item.destination_system_id}`,
+        key,
         x1: start.px,
         y1: start.py,
         x2: end.px,
         y2: end.py,
+        minX: Math.min(start.px, end.px),
+        maxX: Math.max(start.px, end.px),
+        minY: Math.min(start.py, end.py),
+        maxY: Math.max(start.py, end.py),
       }
     })
     .filter(Boolean)
@@ -128,6 +142,7 @@ function createMapModel(systems, stargates, constellations, regions) {
     systems: normalizedSystems,
     systemMap,
     stargates: stargateLines,
+    gateCount,
     regions: regionLabels,
   }
 }
@@ -237,15 +252,19 @@ export default function TacticalStarMap({
   const fitScaleRef = useRef(0.32)
   const dragRef = useRef(null)
   const animationFrameRef = useRef(null)
+  const inputFrameRef = useRef(null)
+  const interactionTimerRef = useRef(null)
   const labelFadeFrameRef = useRef(null)
   const regionLabelFadeFrameRef = useRef(null)
   const viewRef = useRef({ zoom: 0.32, panX: 0, panY: 0 })
-  const [size, setSize] = useState({ width: 0, height: 0 })
+  const [size, setSize] = useState({ width: 0, height: 0, ratio: 1 })
   const [view, setView] = useState({ zoom: 0.32, panX: 0, panY: 0 })
   const [selectedSystemId, setSelectedSystemId] = useState(null)
   const [locateQuery, setLocateQuery] = useState('')
   const [isLocateOpen, setIsLocateOpen] = useState(false)
   const [isViewAnimating, setIsViewAnimating] = useState(false)
+  const [isInteracting, setIsInteracting] = useState(false)
+  const isViewMoving = isViewAnimating || isInteracting
   const [systemLabelAlpha, setSystemLabelAlpha] = useState(0)
   const [regionLabelAlpha, setRegionLabelAlpha] = useState(0)
 
@@ -336,9 +355,33 @@ export default function TacticalStarMap({
       .filter(Boolean)
   }, [model.systemMap, pathRows])
 
-  useEffect(() => {
-    viewRef.current = view
-  }, [view])
+  // Keep the input camera current immediately, while React/DOM updates happen
+  // at most once per animation frame. An effect syncing old state back into
+  // this ref would overwrite wheel input that arrived before the next frame.
+  const updateView = (nextView) => {
+    viewRef.current = nextView
+    setView(nextView)
+  }
+
+  const queueInputView = (nextView) => {
+    viewRef.current = nextView
+    if (inputFrameRef.current != null) return
+    inputFrameRef.current = window.requestAnimationFrame(() => {
+      inputFrameRef.current = null
+      setView(viewRef.current)
+    })
+  }
+
+  const finishInteraction = () => {
+    window.clearTimeout(interactionTimerRef.current)
+    interactionTimerRef.current = null
+    if (inputFrameRef.current != null) {
+      window.cancelAnimationFrame(inputFrameRef.current)
+      inputFrameRef.current = null
+      setView(viewRef.current)
+    }
+    setIsInteracting(false)
+  }
 
   useEffect(() => {
     return () => {
@@ -367,6 +410,11 @@ export default function TacticalStarMap({
       if (animationFrameRef.current) {
         window.cancelAnimationFrame(animationFrameRef.current)
       }
+      if (inputFrameRef.current != null) {
+        window.cancelAnimationFrame(inputFrameRef.current)
+        inputFrameRef.current = null
+      }
+      window.clearTimeout(interactionTimerRef.current)
     }
   }, [])
 
@@ -380,13 +428,15 @@ export default function TacticalStarMap({
       const rect = currentNode.getBoundingClientRect()
       const nextWidth = Math.max(0, Math.floor(rect.width))
       const nextHeight = Math.max(0, Math.floor(rect.height))
+      const nextRatio = window.devicePixelRatio || 1
       setSize((current) => {
-        if (current.width === nextWidth && current.height === nextHeight) {
+        if (current.width === nextWidth && current.height === nextHeight && current.ratio === nextRatio) {
           return current
         }
         return {
           width: nextWidth,
           height: nextHeight,
+          ratio: nextRatio,
         }
       })
     }
@@ -394,9 +444,24 @@ export default function TacticalStarMap({
     updateSize()
     const observer = new ResizeObserver(() => updateSize())
     observer.observe(node)
+    // Moving between monitors can change DPR without changing CSS dimensions.
+    let resolutionQuery
+    const watchResolution = () => {
+      resolutionQuery?.removeEventListener('change', handleResolutionChange)
+      resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`)
+      resolutionQuery.addEventListener('change', handleResolutionChange)
+    }
+    const handleResolutionChange = () => {
+      updateSize()
+      watchResolution()
+    }
+    watchResolution()
+    window.addEventListener('resize', updateSize)
     return () => {
       dragRef.current = null
       observer.disconnect()
+      resolutionQuery?.removeEventListener('change', handleResolutionChange)
+      window.removeEventListener('resize', updateSize)
     }
   }, [])
 
@@ -409,18 +474,17 @@ export default function TacticalStarMap({
     )
     fitScaleRef.current = fitScale
 
-    setView((current) => {
-      if (current.panX !== 0 || current.panY !== 0 || current.zoom !== 0.32) return current
-      return {
-        zoom: fitScale,
-        panX: (size.width - WORLD_WIDTH * fitScale) / 2,
-        panY: (size.height - WORLD_HEIGHT * fitScale) / 2,
-      }
+    const current = viewRef.current
+    if (current.panX !== 0 || current.panY !== 0 || current.zoom !== 0.32) return
+    updateView({
+      zoom: fitScale,
+      panX: (size.width - WORLD_WIDTH * fitScale) / 2,
+      panY: (size.height - WORLD_HEIGHT * fitScale) / 2,
     })
   }, [size.width, size.height, model.systems.length])
 
+  const shouldRevealLabels = !isViewMoving && view.zoom > fitScaleRef.current * 6.8
   useEffect(() => {
-    const shouldRevealLabels = !isViewAnimating && view.zoom > fitScaleRef.current * 6.8
 
     if (labelFadeFrameRef.current) {
       window.cancelAnimationFrame(labelFadeFrameRef.current)
@@ -447,7 +511,7 @@ export default function TacticalStarMap({
     }
 
     labelFadeFrameRef.current = window.requestAnimationFrame(step)
-  }, [isViewAnimating, view.zoom])
+  }, [shouldRevealLabels])
 
   useEffect(() => {
     if (regionLabelFadeFrameRef.current) {
@@ -455,7 +519,7 @@ export default function TacticalStarMap({
       regionLabelFadeFrameRef.current = null
     }
 
-    if (isViewAnimating) {
+    if (isViewMoving) {
       setRegionLabelAlpha(0)
       return
     }
@@ -475,7 +539,7 @@ export default function TacticalStarMap({
     }
 
     regionLabelFadeFrameRef.current = window.requestAnimationFrame(step)
-  }, [isViewAnimating])
+  }, [isViewMoving])
 
   const stopViewAnimation = () => {
     if (!animationFrameRef.current) return
@@ -486,6 +550,8 @@ export default function TacticalStarMap({
 
   const animateToView = (targetView, duration = 520) => {
     stopViewAnimation()
+    finishInteraction()
+    dragRef.current = null
     setIsViewAnimating(true)
     const fromView = viewRef.current
     const startAt = performance.now()
@@ -495,7 +561,7 @@ export default function TacticalStarMap({
       const progress = clamp((timestamp - startAt) / duration, 0, 1)
       const eased = easeOutCubic(progress)
 
-      setView({
+      updateView({
         zoom: fromView.zoom + (targetView.zoom - fromView.zoom) * eased,
         panX: fromView.panX + (targetView.panX - fromView.panX) * eased,
         panY: fromView.panY + (targetView.panY - fromView.panY) * eased,
@@ -516,9 +582,12 @@ export default function TacticalStarMap({
     if (!canvasRef.current || !size.width || !size.height) return
 
     const canvas = canvasRef.current
-    const ratio = window.devicePixelRatio || 1
-    canvas.width = Math.floor(size.width * ratio)
-    canvas.height = Math.floor(size.height * ratio)
+    const ratio = size.ratio
+    const width = Math.floor(size.width * ratio)
+    const height = Math.floor(size.height * ratio)
+    // Assigning even the same size resets the backing store and all 2D state.
+    if (canvas.width !== width) canvas.width = width
+    if (canvas.height !== height) canvas.height = height
 
     const ctx = canvas.getContext('2d')
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
@@ -531,11 +600,21 @@ export default function TacticalStarMap({
     ctx.translate(view.panX, view.panY)
     ctx.scale(view.zoom, view.zoom)
 
+    // Include pixel-sized cores/halos and line width around the viewport edge.
+    const margin = 8 / view.zoom
+    const left = -view.panX / view.zoom - margin
+    const top = -view.panY / view.zoom - margin
+    const right = (size.width - view.panX) / view.zoom + margin
+    const bottom = (size.height - view.panY) / view.zoom + margin
+
     if (view.zoom > fitScaleRef.current * 1.75) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)'
       ctx.lineWidth = 1.35 / view.zoom
       ctx.beginPath()
       model.stargates.forEach((item) => {
+        // Conservative segment bounds also keep lines with both endpoints
+        // outside the viewport that still cross the visible map.
+        if (item.maxX < left || item.minX > right || item.maxY < top || item.minY > bottom) return
         ctx.moveTo(item.x1, item.y1)
         ctx.lineTo(item.x2, item.y2)
       })
@@ -581,10 +660,11 @@ export default function TacticalStarMap({
       zoomFactor < 2.8 ? 0 :
       zoomFactor < 6.5 ? 2.8 :
       3.4
-    const effectiveHaloRadius = isViewAnimating ? 0 : haloRadius
+    const effectiveHaloRadius = isViewMoving ? 0 : haloRadius
 
     model.systems.forEach((item) => {
-      const color = getSecurityColor(item.security_status)
+      if (item.px < left || item.px > right || item.py < top || item.py > bottom) return
+      const color = item.color
       if (effectiveHaloRadius > 0) {
         ctx.globalAlpha = zoomFactor < 4.6 ? 0.12 : 0.18
         ctx.fillStyle = color
@@ -622,7 +702,7 @@ export default function TacticalStarMap({
       ctx.restore()
     }
 
-    if (!isViewAnimating && systemLabelAlpha > 0.01 && view.zoom > fitScaleRef.current * 6.8) {
+    if (!isViewMoving && systemLabelAlpha > 0.01 && view.zoom > fitScaleRef.current * 6.8) {
       const left = (-view.panX) / view.zoom
       const top = (-view.panY) / view.zoom
       const right = left + size.width / view.zoom
@@ -654,7 +734,7 @@ export default function TacticalStarMap({
 
     ctx.save()
     ctx.textAlign = 'center'
-    if (!isViewAnimating && regionLabelAlpha > 0.01) {
+    if (!isViewMoving && regionLabelAlpha > 0.01) {
       ctx.globalAlpha = regionLabelAlpha
       const regionLabelLift = (1 - regionLabelAlpha) * 4
       model.regions.forEach((item) => {
@@ -669,7 +749,7 @@ export default function TacticalStarMap({
       })
     }
     ctx.restore()
-  }, [isViewAnimating, model, pathSegments, regionLabelAlpha, selectedSystem, size.height, size.width, startSystemRecord, endSystemRecord, systemLabelAlpha, view])
+  }, [isViewMoving, model, pathSegments, regionLabelAlpha, size.height, size.width, size.ratio, startSystemRecord, endSystemRecord, systemLabelAlpha, view])
 
   const centerOnSystem = (system) => {
     if (!system || !size.width || !size.height) return
@@ -717,8 +797,8 @@ export default function TacticalStarMap({
     dragRef.current = {
       x: event.clientX,
       y: event.clientY,
-      panX: view.panX,
-      panY: view.panY,
+      panX: viewRef.current.panX,
+      panY: viewRef.current.panY,
       moved: false,
     }
   }
@@ -728,6 +808,7 @@ export default function TacticalStarMap({
     if (!dragState) return
     if (event.buttons === 0) {
       dragRef.current = null
+      finishInteraction()
       return
     }
     const deltaX = event.clientX - dragState.x
@@ -735,17 +816,20 @@ export default function TacticalStarMap({
     if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
       dragState.moved = true
     }
-    setView((current) => ({
-      ...current,
+    if (!dragState.moved) return
+    setIsInteracting(true)
+    queueInputView({
+      ...viewRef.current,
       panX: dragState.panX + deltaX,
       panY: dragState.panY + deltaY,
-    }))
+    })
   }
 
   const handlePointerUp = (event) => {
     if (!dragRef.current) return
     const dragState = dragRef.current
     dragRef.current = null
+    finishInteraction()
 
     if (dragState.moved) return
     const rect = containerRef.current?.getBoundingClientRect()
@@ -774,6 +858,12 @@ export default function TacticalStarMap({
         event.preventDefault()
       }
       stopViewAnimation()
+      setIsInteracting(true)
+      window.clearTimeout(interactionTimerRef.current)
+      interactionTimerRef.current = window.setTimeout(() => {
+        interactionTimerRef.current = null
+        if (!dragRef.current?.moved) setIsInteracting(false)
+      }, 140)
       const rect = currentNode.getBoundingClientRect()
       const { zoom, panX, panY } = viewRef.current
       const pointerX = event.clientX - rect.left
@@ -783,7 +873,7 @@ export default function TacticalStarMap({
       const worldX = (pointerX - panX) / zoom
       const worldY = (pointerY - panY) / zoom
 
-      setView({
+      queueInputView({
         zoom: nextZoom,
         panX: pointerX - worldX * nextZoom,
         panY: pointerY - worldY * nextZoom,
@@ -879,6 +969,7 @@ export default function TacticalStarMap({
         onMouseUp={handlePointerUp}
         onMouseLeave={() => {
           dragRef.current = null
+          finishInteraction()
         }}
       >
         <canvas ref={canvasRef} className="tactical-map-canvas" />
@@ -920,7 +1011,7 @@ export default function TacticalStarMap({
         <div className="tactical-map-overlay">
           <div className="tactical-map-hud">
             <span>星系 {model.systems.length}</span>
-            <span>星门 {model.stargates.length}</span>
+            <span>星门 {model.gateCount}</span>
             <span>缩放 {view.zoom.toFixed(2)}x</span>
             {directDistance != null ? <span>直线 {directDistance.toFixed(2)} 光年</span> : null}
           </div>
