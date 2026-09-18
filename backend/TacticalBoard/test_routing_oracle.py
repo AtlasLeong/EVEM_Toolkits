@@ -283,7 +283,7 @@ class RoutingOracleTests(unittest.TestCase):
                     goal,
                     max_distance,
                     nodes,
-                    gates if allow_dirt else {},
+                    allow_dirt,
                     gates,
                 )
                 actual = _route_label_and_validate(
@@ -312,7 +312,7 @@ class RoutingOracleTests(unittest.TestCase):
                     goal,
                     max_distance,
                     tuple(reversed(nodes)),
-                    gates if allow_dirt else {},
+                    allow_dirt,
                     gates,
                 )
                 if path is None:

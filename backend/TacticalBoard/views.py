@@ -96,6 +96,8 @@ class AStarLocation(APIView):
     def post(request):
         start_system = request.data.get('start_system')
         end_system = request.data.get('end_system')
+        if not isinstance(start_system, str) or not isinstance(end_system, str):
+            return Response({"error": "起始或目标星系必须是文本"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             max_distance = float(request.data.get('max_distance'))
         except (TypeError, ValueError):
@@ -149,9 +151,8 @@ class AStarLocation(APIView):
 
 
 def isCrossNew8System(start_system, end_system, snapshot=None):
+    if not isinstance(start_system, str) or not isinstance(end_system, str):
+        return False
     if snapshot is None:
-        try:
-            snapshot = get_route_snapshot(True)
-        except SnapshotUnavailable:
-            return False
+        snapshot = get_route_snapshot(True)
     return snapshot.crosses_new8(start_system, end_system)

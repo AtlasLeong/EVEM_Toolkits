@@ -20,8 +20,10 @@ NEW8_REGIONS = frozenset(
     (10000027, 10000018, 10000013, 10000021, 10000053, 10000034, 10000040, 10000066)
 )
 _snapshot_lock = threading.Lock()
+_snapshot_refresh_locks = {}
 _snapshots = {}
 _failure_until = {}
+_snapshot_generation = 0
 
 
 class SnapshotUnavailable(RuntimeError):
@@ -74,6 +76,9 @@ def build_route_snapshot(in_high_security):
     """Load and validate one internally consistent graph snapshot."""
     try:
         all_rows = list(_base_system_queryset())
+        all_names = [row["zh_name"] for row in all_rows if row["zh_name"] is not None]
+        if len(set(all_names)) != len(all_names):
+            raise SnapshotUnavailable("duplicate route system names")
         selected_rows = (
             all_rows
             if in_high_security
@@ -82,6 +87,17 @@ def build_route_snapshot(in_high_security):
         galaxies = []
         for row in selected_rows:
             if any(row[field] is None for field in ("x", "y", "z", "security_status", "zh_name")):
+                raise SnapshotUnavailable(f"invalid route system data: {row.get('system_id')}")
+            try:
+                numeric_values = [
+                    float(row["x"]),
+                    float(row["y"]),
+                    float(row["z"]),
+                    float(row["security_status"]),
+                ]
+            except (TypeError, ValueError):
+                raise SnapshotUnavailable(f"invalid route system data: {row.get('system_id')}")
+            if not all(math.isfinite(value) for value in numeric_values):
                 raise SnapshotUnavailable(f"invalid route system data: {row.get('system_id')}")
             galaxy = Galaxy(
                 row["system_id"], row["zh_name"], row["x"], row["y"], row["z"], row["security_status"]
@@ -146,20 +162,40 @@ def get_route_snapshot(in_high_security, ttl=SNAPSHOT_TTL_SECONDS):
             return entry[0]
         if _failure_until.get(key, 0) > now:
             raise SnapshotUnavailable("route data is temporarily unavailable")
+        refresh_lock = _snapshot_refresh_locks.setdefault(key, threading.Lock())
+        generation = _snapshot_generation
+
+    # Serialize refreshes for one mode only.  The database work and KDTree
+    # construction happen outside the state lock, so a high-security refresh
+    # cannot block low-security requests (and hot-cache reads stay cheap).
+    with refresh_lock:
+        now = time.monotonic()
+        with _snapshot_lock:
+            entry = _snapshots.get(key)
+            if entry is not None and entry[1] > now:
+                return entry[0]
+            if _failure_until.get(key, 0) > now:
+                raise SnapshotUnavailable("route data is temporarily unavailable")
         try:
             snapshot = build_route_snapshot(key)
         except Exception as error:
             if not isinstance(error, SnapshotUnavailable):
                 logger.exception("route snapshot refresh failed")
                 error = SnapshotUnavailable("route data is temporarily unavailable")
-            _failure_until[key] = now + SNAPSHOT_FAILURE_BACKOFF_SECONDS
+            with _snapshot_lock:
+                if generation == _snapshot_generation:
+                    _failure_until[key] = time.monotonic() + SNAPSHOT_FAILURE_BACKOFF_SECONDS
             raise error
-        _snapshots[key] = (snapshot, now + float(ttl))
-        _failure_until.pop(key, None)
+        with _snapshot_lock:
+            if generation == _snapshot_generation:
+                _snapshots[key] = (snapshot, time.monotonic() + float(ttl))
+                _failure_until.pop(key, None)
         return snapshot
 
 
 def reset_route_snapshots():
+    global _snapshot_generation
     with _snapshot_lock:
+        _snapshot_generation += 1
         _snapshots.clear()
         _failure_until.clear()

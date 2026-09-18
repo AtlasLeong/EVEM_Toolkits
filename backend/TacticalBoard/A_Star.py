@@ -96,6 +96,9 @@ class RouteGraph:
             self._tree = cKDTree(coordinates, copy_data=True)
 
     def _nearby_ids(self, galaxy_id, max_distance, cache=None):
+        max_distance = float(max_distance)
+        if not math.isfinite(max_distance) or max_distance <= 0:
+            return ()
         cache_key = (galaxy_id, float(max_distance))
         cached = cache.get(cache_key) if cache is not None else None
         if cached is not None:
@@ -103,8 +106,13 @@ class RouteGraph:
         current = self.by_id[galaxy_id]
         if self._tree is not None:
             index = self._index_by_id[galaxy_id]
+            # cKDTree compares squared distances internally.  Query a tiny
+            # conservative superset, then apply the authoritative distance
+            # check below so points exactly on the radius are never lost to
+            # floating-point rounding at the tree boundary.
+            query_radius = math.nextafter(max_distance, math.inf)
             candidate_indexes = self._tree.query_ball_point(
-                self._tree.data[index], max_distance, eps=0, workers=1
+                self._tree.data[index], query_radius, eps=0, workers=1
             )
             candidates = (self.galaxies[index] for index in candidate_indexes)
         else:
@@ -153,7 +161,15 @@ class RouteGraph:
         galaxy_id = _system_id(galaxy)
         return tuple(self.by_id[system_id] for system_id in self._candidate_ids(galaxy_id, max_distance, allow_dirt, cache))
 
-    def find_route(self, start, goal, max_distance, allow_dirt=True):
+    def find_route(
+        self,
+        start,
+        goal,
+        max_distance,
+        allow_dirt=True,
+        dirt_only=False,
+        allowed_ids=None,
+    ):
         start = _node(start)
         goal = _node(goal)
         start_id = int(start.system_id)
@@ -166,6 +182,9 @@ class RouteGraph:
             return None
         if not math.isfinite(max_distance) or max_distance <= 0:
             return None
+        allowed_ids = None if allowed_ids is None else {int(system_id) for system_id in allowed_ids}
+        if allowed_ids is not None:
+            allowed_ids.update((start_id, goal_id))
         if start_id == goal_id:
             return [(self.by_id[start_id], None)]
 
@@ -184,11 +203,15 @@ class RouteGraph:
                 return self._reconstruct(came_from, state)
             current = self.by_id[current_id]
             for neighbour in self.neighbours(current, max_distance, allow_dirt, neighbour_cache):
+                neighbour_id = int(neighbour.system_id)
+                if allowed_ids is not None and neighbour_id not in allowed_ids:
+                    continue
                 edge = self._edge(current, neighbour, max_distance, allow_dirt, passed_high_low)
                 if edge is None:
                     continue
                 move_type, move_cost = edge
-                neighbour_id = int(neighbour.system_id)
+                if dirt_only and move_type != "土路":
+                    continue
                 next_state = (
                     neighbour_id,
                     passed_high_low or (current.type in SAFE_TYPES and neighbour.type == NEGATIVE_TYPE),
@@ -213,9 +236,54 @@ class RouteGraph:
 
 def get_neighbors(galaxy, all_galaxies, max_distance, stargate_connections,
                   has_passed_high_low=False, allow_dirt=True):
-    del has_passed_high_low
     graph = RouteGraph(all_galaxies, stargate_connections)
-    return list(graph.neighbours(galaxy, max_distance, allow_dirt=allow_dirt))
+    current = _node(galaxy)
+    nearby = [graph.by_id[system_id] for system_id in graph._nearby_ids(
+        _system_id(current), max_distance
+    )]
+    if not allow_dirt:
+        if current.type == NEGATIVE_TYPE:
+            return nearby
+        return (
+            [candidate for candidate in nearby if candidate.type in SAFE_TYPES]
+            + [candidate for candidate in nearby if candidate.type == NEGATIVE_TYPE]
+        )
+
+    connected_ids = graph.stargate_connections.get(_system_id(current), set())
+    gate_neighbors = [
+        candidate
+        for candidate in graph.galaxies
+        if int(candidate.system_id) in connected_ids
+    ]
+
+    def unique(candidates):
+        seen = set()
+        result = []
+        for candidate in candidates:
+            candidate_id = int(candidate.system_id)
+            if candidate_id not in seen:
+                seen.add(candidate_id)
+                result.append(candidate)
+        return result
+
+    if current.type == NEGATIVE_TYPE:
+        if not has_passed_high_low and is_gateway(current, graph.stargate_connections, graph.galaxies):
+            safe_gates = [candidate for candidate in gate_neighbors if candidate.type in SAFE_TYPES]
+            return unique(safe_gates + nearby + gate_neighbors)
+        return unique(nearby + gate_neighbors)
+
+    safe_gate_neighbors = [candidate for candidate in gate_neighbors if candidate.type in SAFE_TYPES]
+    safe_nearby = [
+        candidate
+        for candidate in nearby
+        if candidate.type in SAFE_TYPES and int(candidate.system_id) not in connected_ids
+    ]
+    unsafe_neighbors = [
+        candidate
+        for candidate in nearby + gate_neighbors
+        if candidate.type == NEGATIVE_TYPE
+    ]
+    return unique(safe_gate_neighbors + safe_nearby + unsafe_neighbors)
 
 
 def get_move_type_and_cost(current, neighbor, stargate_connections, max_distance,
@@ -231,7 +299,14 @@ def a_star(start, goal, max_distance, galaxies, dict_road, stargate_connections)
 
 
 def a_star_dirt_only(start, goal, max_distance, galaxies, stargate_connections):
-    return a_star(start, goal, max_distance, galaxies, True, stargate_connections)
+    graph = RouteGraph(galaxies, stargate_connections)
+    return graph.find_route(
+        start,
+        goal,
+        max_distance,
+        allow_dirt=True,
+        dirt_only=True,
+    )
 
 
 def a_star_with_induction(start, goal, max_distance, galaxies, dict_road, stargate_connections):

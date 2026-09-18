@@ -35,6 +35,12 @@ class RoutingApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         load.assert_not_called()
 
+    def test_non_text_endpoints_are_a_client_error_before_loading_map(self):
+        with patch("TacticalBoard.views.get_route_snapshot") as load:
+            response = self.post({"start_system": [], "end_system": "终点", "max_distance": 5})
+        self.assertEqual(response.status_code, 400)
+        load.assert_not_called()
+
     def test_route_response_uses_snapshot_graph(self):
         with patch("TacticalBoard.views.get_route_snapshot", return_value=self.snapshot):
             response = self.post(
@@ -54,4 +60,3 @@ class RoutingApiTests(SimpleTestCase):
                 {"start_system": "起点", "end_system": "终点", "max_distance": 5}
             )
         self.assertEqual(response.status_code, 503)
-

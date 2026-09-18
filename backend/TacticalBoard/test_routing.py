@@ -1,6 +1,7 @@
+import math
 import unittest
 
-from .A_Star import Galaxy, a_star
+from .A_Star import Galaxy, RouteGraph, a_star, a_star_dirt_only, get_neighbors
 
 
 LY = 9.461e15
@@ -73,6 +74,60 @@ class ExactRoutingTests(unittest.TestCase):
         path = a_star(start, goal, 1, [start, short, goal], True, gates)
 
         self.assertIsNone(path)
+
+    def test_dirt_only_helper_does_not_fall_back_to_induction(self):
+        start = galaxy(1, "S", 0)
+        gate_target = galaxy(2, "A", 20)
+        goal = galaxy(3, "G", 21)
+        gates = {1: {2}, 2: {1}}
+
+        path = a_star_dirt_only(start, goal, 2, [start, gate_target, goal], gates)
+
+        self.assertIsNone(path)
+
+    def test_legacy_neighbor_helper_preserves_negative_gateway_state(self):
+        negative = galaxy(1, "N", 0, security=-0.1)
+        safe_gate = galaxy(2, "S", 20)
+        nearby_negative = galaxy(3, "L", 1, security=-0.1)
+        galaxies = [negative, safe_gate, nearby_negative]
+        gates = {1: {2}, 2: {1}}
+
+        unpassed = get_neighbors(negative, galaxies, 2, gates, False, True)
+        passed = get_neighbors(negative, galaxies, 2, gates, True, True)
+
+        self.assertEqual([node.zh_name for node in unpassed], ["S", "L"])
+        self.assertEqual([node.zh_name for node in passed], ["L", "S"])
+
+    def test_indexed_radius_includes_exact_boundary(self):
+        start = galaxy(1, "S", 0)
+        goal = galaxy(2, "G", 1)
+        graph = RouteGraph([start, goal], {})
+
+        self.assertEqual(graph._nearby_ids(1, 1), (2,))
+        self.assertEqual(graph.find_route(start, goal, 1, allow_dirt=False)[-1][0], goal)
+
+    def test_indexed_radius_handles_squared_distance_rounding(self):
+        start = galaxy(1, "S", 26.697938290771432, y=61.27675078951282)
+        goal = galaxy(2, "G", -20.95050635202405, y=-83.8078523765718)
+        goal.z = -38.00046332910287
+        radius = math.sqrt(
+            (goal.x - start.x) ** 2
+            + (goal.y - start.y) ** 2
+            + (goal.z - start.z) ** 2
+        )
+        graph = RouteGraph([start, goal], {})
+
+        self.assertEqual(graph._nearby_ids(1, radius), (2,))
+
+    def test_allowed_ids_restricts_intermediate_nodes(self):
+        start = galaxy(1, "S", 0)
+        middle = galaxy(2, "M", 1)
+        goal = galaxy(3, "G", 2)
+        graph = RouteGraph([start, middle, goal], {})
+
+        route = graph.find_route(start, goal, 1, allow_dirt=False, allowed_ids={1, 3})
+
+        self.assertIsNone(route)
 
 
 if __name__ == "__main__":
