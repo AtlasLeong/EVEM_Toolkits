@@ -94,11 +94,10 @@ class RouteGraph:
                 [(galaxy.x, galaxy.y, galaxy.z) for galaxy in self.galaxies], dtype=float
             )
             self._tree = cKDTree(coordinates, copy_data=True)
-        self._neighbour_cache = {}
 
-    def _nearby_ids(self, galaxy_id, max_distance):
+    def _nearby_ids(self, galaxy_id, max_distance, cache=None):
         cache_key = (galaxy_id, float(max_distance))
-        cached = self._neighbour_cache.get(cache_key)
+        cached = cache.get(cache_key) if cache is not None else None
         if cached is not None:
             return cached
         current = self.by_id[galaxy_id]
@@ -118,14 +117,15 @@ class RouteGraph:
                 and 0 < distance(current, candidate) <= max_distance
             )
         )
-        self._neighbour_cache[cache_key] = nearby
+        if cache is not None:
+            cache[cache_key] = nearby
         return nearby
 
-    def _candidate_ids(self, galaxy_id, max_distance, allow_dirt):
-        candidate_ids = set(self._nearby_ids(galaxy_id, max_distance))
+    def _candidate_ids(self, galaxy_id, max_distance, allow_dirt, cache=None):
+        candidate_ids = set(self._nearby_ids(galaxy_id, max_distance, cache))
         if allow_dirt:
             candidate_ids.update(self.stargate_connections.get(galaxy_id, ()))
-        return tuple(sorted(candidate_ids))
+        return tuple(sorted(system_id for system_id in candidate_ids if system_id in self.by_id))
 
     def _edge(self, current, neighbour, max_distance, allow_dirt, passed_high_low):
         current = _node(current)
@@ -149,9 +149,9 @@ class RouteGraph:
             return "安全诱导", actual_distance
         return "不安全诱导", actual_distance * 1.5
 
-    def neighbours(self, galaxy, max_distance, allow_dirt=True):
+    def neighbours(self, galaxy, max_distance, allow_dirt=True, cache=None):
         galaxy_id = _system_id(galaxy)
-        return tuple(self.by_id[system_id] for system_id in self._candidate_ids(galaxy_id, max_distance, allow_dirt))
+        return tuple(self.by_id[system_id] for system_id in self._candidate_ids(galaxy_id, max_distance, allow_dirt, cache))
 
     def find_route(self, start, goal, max_distance, allow_dirt=True):
         start = _node(start)
@@ -160,12 +160,17 @@ class RouteGraph:
         goal_id = int(goal.system_id)
         if start_id not in self.by_id or goal_id not in self.by_id:
             return None
+        try:
+            max_distance = float(max_distance)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(max_distance) or max_distance <= 0:
+            return None
         if start_id == goal_id:
             return [(self.by_id[start_id], None)]
-        if not math.isfinite(float(max_distance)) or float(max_distance) <= 0:
-            return None
 
         counter = itertools.count()
+        neighbour_cache = {}
         start_state = (start_id, False)
         best = {start_state: (0.0, 0)}
         came_from = {}
@@ -178,7 +183,7 @@ class RouteGraph:
             if current_id == goal_id:
                 return self._reconstruct(came_from, state)
             current = self.by_id[current_id]
-            for neighbour in self.neighbours(current, max_distance, allow_dirt):
+            for neighbour in self.neighbours(current, max_distance, allow_dirt, neighbour_cache):
                 edge = self._edge(current, neighbour, max_distance, allow_dirt, passed_high_low)
                 if edge is None:
                     continue

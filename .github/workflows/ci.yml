@@ -31,7 +31,7 @@ jobs:
       - name: License, activation, feedback and deployment-version tests (isolated SQLite)
         working-directory: backend
         run: |
-          python manage.py test License ActivationCode Feedback EVE_MDjango.tests_deployment --settings=EVE_MDjango.ci_settings --noinput
+          python manage.py test TacticalBoard License ActivationCode Feedback EVE_MDjango.tests_deployment --settings=EVE_MDjango.ci_settings --noinput
           python manage.py makemigrations Feedback --check --dry-run --settings=EVE_MDjango.ci_settings
       - name: Install frontend dependencies
         working-directory: front-codex

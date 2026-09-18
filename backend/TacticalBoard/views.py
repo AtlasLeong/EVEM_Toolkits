@@ -1,4 +1,4 @@
-import datetime
+import math
 import time
 
 from django.shortcuts import render
@@ -13,11 +13,8 @@ from django.http import JsonResponse, HttpResponse
 import gzip
 import json
 from decimal import Decimal
-from .A_Star import distance, a_star, get_neighbors, Galaxy, get_move_type_and_cost
-from django.db.models.functions import Cast
-from django.db.models import CharField
-from django.db.models import F, FloatField
-from django.db.models.functions import Round
+from .A_Star import distance
+from .routing_data import SnapshotUnavailable, get_route_snapshot
 
 
 def coerce_bool(value):
@@ -99,46 +96,30 @@ class AStarLocation(APIView):
     def post(request):
         start_system = request.data.get('start_system')
         end_system = request.data.get('end_system')
-        max_distance = float(request.data.get('max_distance'))
+        try:
+            max_distance = float(request.data.get('max_distance'))
+        except (TypeError, ValueError):
+            return Response({"error": "最大跳跃距离必须是正数"}, status=status.HTTP_400_BAD_REQUEST)
+        if not math.isfinite(max_distance) or max_distance <= 0:
+            return Response({"error": "最大跳跃距离必须是正数"}, status=status.HTTP_400_BAD_REQUEST)
         dict_road = coerce_bool(request.data.get("dict_road", False))
         in_high_security = coerce_bool(request.data.get("inHighSecurity", False))
 
-        if isCrossNew8System(start_system,end_system):
+        try:
+            snapshot = get_route_snapshot(in_high_security)
+        except SnapshotUnavailable:
+            return Response({"error": "星图数据暂时不可用，请稍后重试"}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        if isCrossNew8System(start_system, end_system, snapshot=snapshot):
             return Response({"error": "无法跨越新八星域进行诱导"}, status=status.HTTP_404_NOT_FOUND)
-        # 获取星门数据
-        stargates = BoardStargates.objects.values('stargate_id', 'system_id', 'destination_system_id',
-                                                  'destination_stargate_id')
-        stargate_connections = {}
-        for gate in stargates:
-            if gate['system_id'] not in stargate_connections:
-                stargate_connections[gate['system_id']] = set()
-            stargate_connections[gate['system_id']].add(gate['destination_system_id'])
-            # 添加反向连接
-            if gate['destination_system_id'] not in stargate_connections:
-                stargate_connections[gate['destination_system_id']] = set()
-            stargate_connections[gate['destination_system_id']].add(gate['system_id'])
 
-        if in_high_security:
-            queryset = BoardSystems.objects.exclude(system_id__contains='3100').exclude(
-                system_id__contains='3200').exclude(system_id__contains='3400') \
-                .values('system_id', 'zh_name', 'x', 'y', 'z', 'security_status')
-        else:
-            queryset = (BoardSystems.objects.exclude(system_id__contains='3100').exclude(
-                system_id__contains='3200').exclude(system_id__contains='3400')
-                        .annotate(rounded_security=Round(F('security_status'), 1))
-                        .filter(rounded_security__lt=0.5)
-                        .values('system_id', 'zh_name', 'x', 'y', 'z', 'security_status'))
-
-        galaxies = [Galaxy(system['system_id'], system['zh_name'], system['x'], system['y'], system['z'],
-                           system['security_status']) for system in queryset]
-
-        start = next((g for g in galaxies if g.zh_name == start_system), None)
-        goal = next((g for g in galaxies if g.zh_name == end_system), None)
+        start = snapshot.systems_by_name.get(start_system)
+        goal = snapshot.systems_by_name.get(end_system)
 
         if start is None or goal is None:
-            return Response({"error": "起始或目标星系未找到"}, status=400)
+            return Response({"error": "起始或目标星系未找到"}, status=status.HTTP_400_BAD_REQUEST)
 
-        path = a_star(start, goal, max_distance, galaxies, dict_road, stargate_connections)
+        path = snapshot.graph.find_route(start, goal, max_distance, allow_dirt=dict_road)
 
         if path:
 
@@ -167,29 +148,10 @@ class AStarLocation(APIView):
             return Response({"error": "未找到路径"}, status=status.HTTP_404_NOT_FOUND)
 
 
-def isCrossNew8System(start_system, end_system):
-    new8Regions = [10000027, 10000018, 10000013, 10000021, 10000053, 10000034, 10000040, 10000066]
-    new8Constellations = set(BoardConstellations.objects.filter(region__in=new8Regions).values_list('constellation_id', flat=True))
-
-    start_constellation = BoardSystems.objects.filter(zh_name=start_system).values_list('constellation_id', flat=True).first()
-    end_constellation = BoardSystems.objects.filter(zh_name=end_system).values_list('constellation_id', flat=True).first()
-
-    if start_constellation is None or end_constellation is None:
-        return False  # 如果找不到星座，返回False
-
-    # 检查是否两个星座都在新8区域内，或者都不在
-    start_in_new8 = start_constellation in new8Constellations
-    end_in_new8 = end_constellation in new8Constellations
-
-    if start_in_new8 != end_in_new8:
-        return start_in_new8 != end_in_new8  # 如果一个在内一个在外，则返回True
-    elif not start_in_new8 and not end_in_new8:
-        return False
-
-    start_region = BoardConstellations.objects.filter(constellation_id=start_constellation).values_list('region_id', flat=True).first()
-    end_region = BoardConstellations.objects.filter(constellation_id=end_constellation).values_list('region_id',flat=True).first()
-
-    if start_region == end_region:
-        return False
-    else:
-        return True
+def isCrossNew8System(start_system, end_system, snapshot=None):
+    if snapshot is None:
+        try:
+            snapshot = get_route_snapshot(True)
+        except SnapshotUnavailable:
+            return False
+    return snapshot.crosses_new8(start_system, end_system)
