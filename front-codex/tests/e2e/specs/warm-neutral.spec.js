@@ -22,12 +22,12 @@ async function search(page) {
   await expect(page.locator('.planetary-table tbody tr')).toHaveCount(2)
 }
 
-test('客户页面使用暖白配色、黑色透明头像且不出现工作空间', async ({ page }) => {
+test('客户页面使用暖白配色、原色透明标识且不出现工作空间', async ({ page }) => {
   await page.goto('/planetary')
   await expect(page.getByText('工作空间', { exact: true })).toHaveCount(0)
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 246)')
   await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(240, 239, 235)')
-  await expect(page.locator('.brand-icon')).toHaveCSS('filter', 'brightness(0)')
+  await expect(page.locator('.brand-icon')).toHaveCSS('filter', 'none')
   await expect(page.locator('.brand-icon')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(page.locator('.brand-icon')).toHaveCSS('border-top-width', '0px')
 })
