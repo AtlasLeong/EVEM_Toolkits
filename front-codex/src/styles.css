@@ -591,14 +591,14 @@ a {
 }
 
 .brand-icon {
-  height: 40px;
+  height: 36px;
   width: 36px;
   flex-shrink: 0;
   display: block;
   object-fit: contain;
   padding: 0;
   background: transparent;
-  filter: brightness(0);
+  filter: none;
 }
 
 .feedback-privacy, .feedback-helper, .feedback-tabs-note { color: var(--text-soft); font-size: 13px; line-height: 1.7; }
@@ -4515,7 +4515,7 @@ a {
     letter-spacing: -0.02em;
   }
 
-  .mobile-brand-icon { width: 30px; height: 32px; object-fit: contain; filter: brightness(0); }
+  .mobile-brand-icon { width: 32px; height: 32px; object-fit: contain; filter: none; }
   .mobile-brand-name { font-size: 16px; }
 
   .mobile-menu-toggle {
