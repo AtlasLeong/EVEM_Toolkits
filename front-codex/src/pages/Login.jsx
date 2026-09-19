@@ -451,26 +451,30 @@ export default function LoginPage() {
         </div>
 
         <div className="auth-tabs" role="tablist" aria-label="认证模式">
-          <button type="button" className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => switchMode('login')}>
+          <button type="button" role="tab" aria-selected={mode === 'login'} aria-controls="auth-panel-login" className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => switchMode('login')}>
             登录
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === 'register'}
+            aria-controls="auth-panel-register"
             className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
             onClick={() => switchMode('register')}
           >
             注册
           </button>
-          <button type="button" className={`auth-tab ${mode === 'reset' ? 'active' : ''}`} onClick={() => switchMode('reset')}>
+          <button type="button" role="tab" aria-selected={mode === 'reset'} aria-controls="auth-panel-reset" className={`auth-tab ${mode === 'reset' ? 'active' : ''}`} onClick={() => switchMode('reset')}>
             找回密码
           </button>
         </div>
 
         {mode === 'login' ? (
-          <form className="auth-section" onSubmit={submitLogin} noValidate>
+          <form id="auth-panel-login" role="tabpanel" className="auth-section" onSubmit={submitLogin} noValidate>
             <div className="field-row">
               <label>邮箱</label>
               <input
+                aria-label="邮箱"
                 type="email"
                 className="text-input"
                 value={loginForm.login_email}
@@ -488,6 +492,7 @@ export default function LoginPage() {
             <div className="field-row">
               <label>密码</label>
               <input
+                aria-label="密码"
                 type="password"
                 className="text-input"
                 value={loginForm.login_password}
@@ -512,13 +517,14 @@ export default function LoginPage() {
         ) : null}
 
         {mode === 'register' ? (
-          <form className="auth-section" onSubmit={submitRegister} noValidate>
+          <form id="auth-panel-register" role="tabpanel" className="auth-section" onSubmit={submitRegister} noValidate>
             <div className="auth-grid">
               <div className="field-row">
                 <label>用户名</label>
                 <div className="auth-input-shell">
                   <UserRound size={15} />
                   <input
+                    aria-label="用户名"
                     type="text"
                     className="text-input auth-input"
                     value={registerForm.userName}
@@ -541,6 +547,7 @@ export default function LoginPage() {
                 <div className="auth-input-shell">
                   <Mail size={15} />
                   <input
+                    aria-label="邮箱"
                     type="email"
                     className="text-input auth-input"
                     value={registerForm.email}
@@ -562,6 +569,7 @@ export default function LoginPage() {
               <label>邮箱验证码</label>
               <div className="auth-code-row">
                 <input
+                  aria-label="邮箱验证码"
                   type="text"
                   className="text-input"
                   value={registerForm.verificationCode}
@@ -589,6 +597,7 @@ export default function LoginPage() {
               <div className="field-row">
                 <label>密码</label>
                 <input
+                  aria-label="密码"
                   type="password"
                   className="text-input"
                   value={registerForm.password}
@@ -606,6 +615,7 @@ export default function LoginPage() {
               <div className="field-row">
                 <label>确认密码</label>
                 <input
+                  aria-label="确认密码"
                   type="password"
                   className="text-input"
                   value={registerForm.confirmPassword}
@@ -631,11 +641,12 @@ export default function LoginPage() {
         ) : null}
 
         {mode === 'reset' ? (
-          <form className="auth-section" onSubmit={submitReset} noValidate>
+          <form id="auth-panel-reset" role="tabpanel" className="auth-section" onSubmit={submitReset} noValidate>
             <div className="field-row">
               <label>注册邮箱</label>
               <div className="auth-code-row">
                 <input
+                  aria-label="注册邮箱"
                   type="email"
                   className="text-input"
                   value={resetForm.forgetEmail}
@@ -662,6 +673,7 @@ export default function LoginPage() {
             <div className="field-row">
               <label>邮箱验证码</label>
               <input
+                aria-label="邮箱验证码"
                 type="text"
                 className="text-input"
                 value={resetForm.forgetEmailVerification}
@@ -680,6 +692,7 @@ export default function LoginPage() {
               <div className="field-row">
                 <label>新密码</label>
                 <input
+                  aria-label="新密码"
                   type="password"
                   className="text-input"
                   value={resetForm.forgetNewPassword}
@@ -697,6 +710,7 @@ export default function LoginPage() {
               <div className="field-row">
                 <label>确认新密码</label>
                 <input
+                  aria-label="确认新密码"
                   type="password"
                   className="text-input"
                   value={resetForm.forgetConfirmPassword}

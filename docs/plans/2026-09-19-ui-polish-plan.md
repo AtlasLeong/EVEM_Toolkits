@@ -67,7 +67,7 @@ Steps:
 
 1. Add failing mobile assertions for filter disclosure, calculator action visibility, starmap control stacking, canvas containment and route controls.
 2. Run it red.
-3. Add semantic classes only where existing markup needs a mobile layout hook; use CSS to stack filters, preserve action priority, and keep the canvas inside the viewport.
+3. Add semantic classes only where existing markup needs a mobile layout hook; use CSS to stack filters, preserve action priority, and hide the heavy canvas on phone widths while keeping route planning and results fully usable.
 4. Run existing planetary/starmap suites plus the focused responsive spec.
 5. Commit `style: adapt tool surfaces for mobile`.
 

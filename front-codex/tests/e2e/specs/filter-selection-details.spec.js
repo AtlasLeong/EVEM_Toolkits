@@ -21,7 +21,7 @@ test('复合输入框只保留外层焦点提示，独立输入框保留键盘�
     await page.goto(route)
     if (wrapper === '.picker-search') await page.locator('.picker-field summary').first().click()
     if (wrapper === '.planetary-resource-search') await page.locator('.resource-disclosure summary').click()
-    if (route === '/login') await page.locator('.auth-tabs').getByRole('button', { name: '注册', exact: true }).click()
+    if (route === '/login') await page.locator('.auth-tabs').getByRole('tab', { name: '注册', exact: true }).click()
     const shell = page.locator(wrapper).first()
     const field = shell.locator(input)
     await field.focus()
