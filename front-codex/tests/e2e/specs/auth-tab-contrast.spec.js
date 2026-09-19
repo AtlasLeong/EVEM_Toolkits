@@ -4,7 +4,7 @@ test('认证模式选中方块为黑底白字，其他区域保持原色', async
   await page.goto('/login')
   const tabs = page.locator('.auth-tabs')
   for (const name of ['登录', '注册', '找回密码']) {
-    await tabs.getByRole('button', { name, exact: true }).click()
+    await tabs.getByRole('tab', { name, exact: true }).click()
     const active = tabs.locator('.auth-tab.active')
     await expect(active).toHaveText(name)
     await expect(active).toHaveCSS('background-color', 'rgb(36, 36, 34)')

@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, LogOut, Settings, User, MessageSquare, ChevronsLeft, ChevronsRight, LogIn } from 'lucide-react'
+import { Shield, Globe, Compass, LogOut, Settings, User, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -36,10 +36,15 @@ export default function AppShell() {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('evem-sidebar-collapsed') === 'true' } catch { return false }
   })
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     try { localStorage.setItem('evem-sidebar-collapsed', String(collapsed)) } catch { /* Navigation remains usable when storage is unavailable. */ }
   }, [collapsed])
+
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [location.pathname])
 
   const prevPathRef = useRef(location.pathname)
   const prevIndexRef = useRef(routeIndex(location.pathname))
@@ -60,6 +65,46 @@ export default function AppShell() {
   return (
     <>
       <DesktopOnlyMask />
+      <header className="mobile-shell-header">
+        <Link className="mobile-brand" to="/" aria-label="EVEMToolkit 首页">
+          <img src="/guristas-avatar-white.png" alt="" className="mobile-brand-icon" />
+          <span className="mobile-brand-name">EVEMToolkit</span>
+        </Link>
+        <button
+          className="mobile-menu-toggle"
+          type="button"
+          aria-label={mobileNavOpen ? '关闭导航' : '打开导航'}
+          aria-expanded={mobileNavOpen}
+          aria-controls="mobile-navigation"
+          onClick={() => setMobileNavOpen(value => !value)}
+        >
+          {mobileNavOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+        </button>
+      </header>
+      <nav id="mobile-navigation" className={`mobile-nav${mobileNavOpen ? ' is-open' : ''}`} aria-label="移动主导航" aria-hidden={!mobileNavOpen}>
+        <div className="mobile-nav-links">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink key={item.to} to={item.to} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
+                <Icon size={17} aria-hidden="true" />
+                <span>{item.label}</span>
+              </NavLink>
+            )
+          })}
+        </div>
+        <div className="mobile-nav-actions">
+          {isAuthenticated ? (
+            <>
+              <span className="mobile-nav-user"><User size={15} aria-hidden="true" />{displayName}</span>
+              <button className="ghost-btn top-action-btn" type="button" onClick={() => navigate('/usersetting')}><Settings size={15} />设置</button>
+              <button className="ghost-btn top-action-btn top-action-logout" type="button" onClick={logout}><LogOut size={15} />退出</button>
+            </>
+          ) : (
+            <button className="primary-btn mobile-login-btn" type="button" onClick={() => navigate('/login')}><LogIn size={17} />登录 / 注册</button>
+          )}
+        </div>
+      </nav>
       <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`}>
         <aside className="shell-sidebar" aria-label="工具导航">
           <div className="sidebar-brand-row">

@@ -44,10 +44,11 @@ test('品牌链接支持键盘并保持当前导航和备案链接', async ({ pa
   await expect(page.getByRole('link', { name: '粤ICP备2024264329号' })).toHaveAttribute('href', 'https://beian.miit.gov.cn/')
 })
 
-test('窄屏保留桌面使用提示和备案页脚', async ({ page }) => {
+test('窄屏切换为移动导航并保留备案页脚', async ({ page }) => {
   await page.setViewportSize({ width: 1000, height: 800 })
   await page.goto('/planetary')
-  await expect(page.locator('.desktop-only-mask')).toBeVisible()
+  await expect(page.locator('.desktop-only-mask')).toBeHidden()
+  await expect(page.locator('.mobile-shell-header')).toBeVisible()
   await expect(page.locator('.shell-sidebar')).not.toBeVisible()
   await expect(page.getByRole('link', { name: '粤ICP备2024264329号' })).toBeVisible()
   await expect(page.locator('.site-footer')).toHaveCSS('margin-left', '0px')

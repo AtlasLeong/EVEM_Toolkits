@@ -344,7 +344,7 @@ export default function TacticalBoardPage() {
       />
 
       <div className="layout-main-stack">
-        <Panel title="交互星图" subtitle="支持搜索定位、拖拽缩放、点击星系设起终点和路径高亮">
+        <Panel className="tactical-map-panel" title="交互星图" subtitle="支持搜索定位、拖拽缩放、点击星系设起终点和路径高亮">
           {systemsQuery.isPending || stargateQuery.isPending || constellationsQuery.isPending || regionsQuery.isPending ? (
             <LoadingBar />
           ) : (
