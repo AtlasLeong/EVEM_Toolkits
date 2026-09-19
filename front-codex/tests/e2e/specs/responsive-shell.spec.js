@@ -16,7 +16,7 @@ for (const width of [390, 768]) {
     await expect(page.locator('.shell-sidebar')).toBeHidden()
     await expect(page.locator('.mobile-brand-name')).toHaveText('EVEM')
     const brandIcon = page.locator('.mobile-brand-icon')
-    await expect(brandIcon).toHaveAttribute('src', '/evem-compass-mark.png')
+    await expect(brandIcon).toHaveAttribute('src', '/evem-compass-solid.png')
     await expect(brandIcon).toHaveCSS('filter', 'none')
     await expect(brandIcon).toHaveCSS('width', '32px')
     await expect(brandIcon).toHaveCSS('height', '32px')

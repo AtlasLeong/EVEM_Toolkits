@@ -22,11 +22,11 @@ test('顶栏导航高亮正确且点击 Logo 返回防诈名单', async ({ page 
   await expect(page.locator('.nav-item.active')).toContainText('防诈名单')
 })
 
-test('侧栏使用透明罗盘与 EVEM 字标并保留冰蓝指针', async ({ page }) => {
+test('侧栏使用实心透明罗盘与 EVEM 字标并保留冰蓝指针', async ({ page }) => {
   await installApiMock(page, async () => json([]))
   await page.goto('/planetary')
   const icon = page.locator('.brand-icon')
-  await expect(icon).toHaveAttribute('src', '/evem-compass-mark.png')
+  await expect(icon).toHaveAttribute('src', '/evem-compass-solid.png')
   await expect(page.locator('.brand-name')).toHaveText('EVEM')
   await expect(page.getByText('星际工具', { exact: true })).toHaveCount(0)
   await expect(icon).toHaveCSS('filter', 'none')
@@ -55,7 +55,14 @@ test('侧栏使用透明罗盘与 EVEM 字标并保留冰蓝指针', async ({ pa
         if (data[i + 1] > data[i] + 30 && data[i + 2] > data[i] + 30) cyan++
       }
     }
-    return { transparent: transparent / (data.length / 4), opaque, dark, cyan, cornerAlpha: data[3], square: img.naturalWidth === img.naturalHeight }
+    // Check an area, not just one pixel, so the old hollow/slender center cannot pass.
+    const centerSize = Math.floor(canvas.width * 0.12)
+    const center = ctx.getImageData(Math.floor((canvas.width - centerSize) / 2), Math.floor((canvas.height - centerSize) / 2), centerSize, centerSize).data
+    let filledCenter = 0
+    for (let i = 0; i < center.length; i += 4) {
+      if (center[i + 3] > 240 && center[i] < 80 && center[i + 1] < 80 && center[i + 2] < 80) filledCenter++
+    }
+    return { transparent: transparent / (data.length / 4), opaque, dark, cyan, cornerAlpha: data[3], square: img.naturalWidth === img.naturalHeight, filledCenter: filledCenter / (center.length / 4) }
   })
   expect(pixels.cornerAlpha).toBe(0)
   expect(pixels.transparent).toBeGreaterThan(0.4)
@@ -64,6 +71,7 @@ test('侧栏使用透明罗盘与 EVEM 字标并保留冰蓝指针', async ({ pa
   expect(pixels.dark).toBeGreaterThan(100)
   expect(pixels.cyan).toBeGreaterThan(100)
   expect(pixels.square).toBe(true)
+  expect(pixels.filledCenter).toBeGreaterThan(0.9)
   await page.getByRole('button', { name: '收起导航' }).click()
   await expect(icon).toBeVisible()
   // Collapsed labels remain available to assistive technology via visually-hidden CSS.
