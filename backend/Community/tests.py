@@ -1,6 +1,7 @@
 import io
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -146,6 +147,69 @@ class CorporationTests(TestCase):
         for data in ({'owner_id': 2}, {'activities': ['bad']}, {'activities': ['pvp', 'pvp']}, {'recruitment_status': 'invalid'}, {'tagline': 'a' * 81}, {'logo_asset_id': True}):
             self.assertEqual(self.call('patch', path, {'expected_version': draft['version'], **data}).status_code, 400)
         self.assertEqual(self.call('post', path + 'submit/', {'expected_version': draft['version']}).status_code, 400)
+
+    def test_poster_metadata_defaults_allow_lists_and_public_serialization(self):
+        draft = self.draft()
+        for key, expected in {
+            'corp_types': [], 'region_tags': [], 'benefit_keys': [],
+            'benefits_note': '', 'poster_background': 'deep-space',
+        }.items():
+            self.assertEqual(draft[key], expected)
+        path = f"revisions/{draft['id']}/"
+        updated = self.call('patch', path, {
+            'expected_version': draft['version'],
+            'introduction': '军团介绍',
+            'public_contact': '公开联系',
+            'benefits': '老版本福利说明',
+            'corp_types': ['pirate', 'sovereignty'],
+            'region_tags': ['highsec', 'lowsec', 'nullsec'],
+            'benefit_keys': ['ship_reimbursement', 'fleet_training', 'industry_support'],
+            'benefits_note': '每周有新人舰队和补给。',
+            'poster_background': 'pirate-tide',
+        }).json()
+        self.assertEqual(updated['corp_types'], ['pirate', 'sovereignty'])
+        self.assertEqual(updated['region_tags'], ['highsec', 'lowsec', 'nullsec'])
+        self.assertEqual(updated['benefit_keys'], ['ship_reimbursement', 'fleet_training', 'industry_support'])
+        self.assertEqual(updated['poster_background'], 'pirate-tide')
+        revision = self.submit(updated)
+        self.publish(revision)
+        public = self.call('get', f"corporations/{revision['corporation_id']}/").json()['revision']
+        self.assertEqual(public['corp_types'], ['pirate', 'sovereignty'])
+        self.assertEqual(public['region_tags'], ['highsec', 'lowsec', 'nullsec'])
+        self.assertEqual(public['benefit_keys'], ['ship_reimbursement', 'fleet_training', 'industry_support'])
+        self.assertEqual(public['benefits_note'], '每周有新人舰队和补给。')
+        self.assertEqual(public['poster_background'], 'pirate-tide')
+        self.assertEqual(public['benefits'], '老版本福利说明')
+
+    def test_poster_metadata_rejects_unknown_duplicate_overflow_and_long_values(self):
+        draft = self.draft()
+        path = f"revisions/{draft['id']}/"
+        invalid = (
+            {'corp_types': ['pirate', 'pirate']},
+            {'corp_types': ['pirate', 'sovereignty', 'pirate']},
+            {'corp_types': ['pirate', 'unknown']},
+            {'region_tags': ['highsec', 'highsec']},
+            {'region_tags': ['highsec', 'lowsec', 'nullsec', 'highsec']},
+            {'region_tags': ['unsafe']},
+            {'benefit_keys': ['pve_fleet', 'pve_fleet']},
+            {'benefit_keys': list(views.BENEFIT_KEYS) + ['ship_reimbursement']},
+            {'benefit_keys': ['unknown']},
+            {'benefits_note': 'x' * (views.BENEFITS_NOTE_LIMIT + 1)},
+            {'poster_background': 'unknown-background'},
+        )
+        for data in invalid:
+            response = self.call('patch', path, {'expected_version': draft['version'], **data})
+            self.assertEqual(response.status_code, 400, (data, response.content))
+
+    def test_pre_feature_revision_falls_back_without_new_metadata(self):
+        legacy = SimpleNamespace(pk=1, content={'benefits': '历史福利文本'})
+        payload = views.revision_data(legacy, public=True)
+        self.assertEqual(payload['benefits'], '历史福利文本')
+        self.assertEqual(payload['corp_types'], [])
+        self.assertEqual(payload['region_tags'], [])
+        self.assertEqual(payload['benefit_keys'], [])
+        self.assertEqual(payload['benefits_note'], '')
+        self.assertEqual(payload['poster_background'], 'deep-space')
 
     def test_media_private_metadata_removed_public_only_after_review_and_hide(self):
         draft = self.ready()

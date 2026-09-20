@@ -30,7 +30,14 @@ TEXT_FIELDS = {'tagline': 80, 'introduction': 5000, 'alliance': 80, 'base_region
                'active_time': 120, 'requirements': 1500, 'benefits': 1500, 'public_contact': 200,
                'event_title': 80, 'event_time': 120, 'event_location': 120, 'event_description': 800}
 ACTIVITIES = ('pvp', 'pve', 'industry', 'exploration', 'mining', 'training')
-CONTENT_FIELDS = {*TEXT_FIELDS, 'activities', 'recruitment_status', 'logo_asset_id', 'cover_asset_id'}
+CORP_TYPES = ('pirate', 'sovereignty')
+REGION_TAGS = ('highsec', 'lowsec', 'nullsec')
+BENEFIT_KEYS = ('ship_reimbursement', 'fleet_training', 'industry_support', 'logistics_support',
+                'newbro_mentoring', 'skill_sharing', 'pve_fleet', 'pvp_fleet')
+POSTER_BACKGROUNDS = ('deep-space', 'ion-storm', 'tactical-grid', 'jump-rift', 'sovereignty-border', 'pirate-tide')
+BENEFITS_NOTE_LIMIT = 500
+CONTENT_FIELDS = {*TEXT_FIELDS, 'activities', 'corp_types', 'region_tags', 'benefit_keys', 'benefits_note',
+                  'poster_background', 'recruitment_status', 'logo_asset_id', 'cover_asset_id'}
 
 
 class Conflict(APIException):
@@ -86,7 +93,38 @@ def identity(corporation):
 
 
 def default_content():
-    return {**dict.fromkeys(TEXT_FIELDS, ''), 'activities': [], 'recruitment_status': 'open', 'logo_asset_id': None, 'cover_asset_id': None}
+    return {**dict.fromkeys(TEXT_FIELDS, ''), 'activities': [], 'corp_types': [], 'region_tags': [],
+            'benefit_keys': [], 'benefits_note': '', 'poster_background': 'deep-space',
+            'recruitment_status': 'open', 'logo_asset_id': None, 'cover_asset_id': None}
+
+
+def normalized_list(value, allowed, limit):
+    """Return only valid, unique values from stored JSON content.
+
+    Revision JSON is immutable historical data, so a public/private read must
+    remain safe even if a future allow-list is narrower than an older payload.
+    Input validation rejects duplicates and overflow; this read-side helper
+    keeps legacy records readable by dropping unsupported entries and capping
+    the resulting list deterministically.
+    """
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if item in allowed and item not in result:
+            result.append(item)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def validated_list(data, key, allowed, limit):
+    value = data[key]
+    if (not isinstance(value, list) or len(value) > limit or
+            any(not isinstance(item, str) or item not in allowed for item in value) or
+            len(set(value)) != len(value)):
+        raise ValidationError({key: f'最多选择 {limit} 项有效选项，且不能重复。'})
+    return value
 
 
 def image_url(corporation_id, asset_id, public=False):
@@ -100,7 +138,15 @@ def revision_data(revision, public=False, corporation=None):
     if revision is None:
         return None
     content = default_content()
-    content.update({key: value for key, value in revision.content.items() if key in CONTENT_FIELDS})
+    stored = revision.content if isinstance(revision.content, dict) else {}
+    content.update({key: value for key, value in stored.items() if key in TEXT_FIELDS or key in ('activities', 'recruitment_status', 'logo_asset_id', 'cover_asset_id')})
+    content['corp_types'] = normalized_list(stored.get('corp_types'), CORP_TYPES, len(CORP_TYPES))
+    content['region_tags'] = normalized_list(stored.get('region_tags'), REGION_TAGS, len(REGION_TAGS))
+    content['benefit_keys'] = normalized_list(stored.get('benefit_keys'), BENEFIT_KEYS, len(BENEFIT_KEYS))
+    note = stored.get('benefits_note', '')
+    content['benefits_note'] = note.strip()[:BENEFITS_NOTE_LIMIT] if isinstance(note, str) else ''
+    background = stored.get('poster_background')
+    content['poster_background'] = background if background in POSTER_BACKGROUNDS else 'deep-space'
     result = dict(id=revision.pk, **content)
     if not public:
         result.update({key: getattr(revision, key) for key in ('corporation_id', 'status', 'version', 'created_at', 'updated_at', 'submitted_at', 'reviewed_at', 'review_reason')})
@@ -343,10 +389,20 @@ def updated_content(data, corporation, old):
         if key in data:
             result[key] = text(data, key, limit, True)
     if 'activities' in data:
-        value = data['activities']
-        if not isinstance(value, list) or len(value) > 6 or any(not isinstance(item, str) or item not in ACTIVITIES for item in value) or len(set(value)) != len(value):
-            raise ValidationError({'activities': '活动最多选择六种，且不能重复。'})
-        result['activities'] = value
+        result['activities'] = validated_list(data, 'activities', ACTIVITIES, len(ACTIVITIES))
+    if 'corp_types' in data:
+        result['corp_types'] = validated_list(data, 'corp_types', CORP_TYPES, len(CORP_TYPES))
+    if 'region_tags' in data:
+        result['region_tags'] = validated_list(data, 'region_tags', REGION_TAGS, len(REGION_TAGS))
+    if 'benefit_keys' in data:
+        result['benefit_keys'] = validated_list(data, 'benefit_keys', BENEFIT_KEYS, len(BENEFIT_KEYS))
+    if 'benefits_note' in data:
+        result['benefits_note'] = text(data, 'benefits_note', BENEFITS_NOTE_LIMIT, True)
+    if 'poster_background' in data:
+        value = data['poster_background']
+        if not isinstance(value, str) or value not in POSTER_BACKGROUNDS:
+            raise ValidationError({'poster_background': '请选择有效海报背景。'})
+        result['poster_background'] = value
     if 'recruitment_status' in data:
         if data['recruitment_status'] not in ('open', 'closed'):
             raise ValidationError({'recruitment_status': '请选择有效招募状态。'})
