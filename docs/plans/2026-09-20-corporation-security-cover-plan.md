@@ -45,7 +45,9 @@ Files: `front-codex/tests/preview/community.mjs`, `tests/preview/sandbox.test.mj
 ## Progress
 
 - [x] Approved design and isolated worktree verified
-- [ ] Backend snapshot contract
-- [ ] UI/security/default-cover preview
-- [ ] Preview contract and regression
-- [ ] Independent reviews, verification and local handoff
+- [x] Backend snapshot contract
+- [x] UI/security/default-cover preview
+- [x] Preview contract and integration regression
+- [x] Independent reviews, verification and local-only handoff
+
+Evidence: `2026-09-20-corporation-security-cover-verification.md`.

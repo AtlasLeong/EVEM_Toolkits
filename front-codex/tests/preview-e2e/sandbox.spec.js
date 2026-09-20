@@ -66,6 +66,23 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
     .getByLabel("军团介绍", { exact: true })
     .fill("完整 UI 创建与编辑流程，只有审核后才能公开。");
   await page.getByLabel("所属联盟", { exact: true }).fill("本地联盟");
+  await page.getByRole("button", { name: "关联星图驻地", exact: true }).click();
+  for (const [label, name] of [
+    ["驻地星域", "德里克"],
+    ["驻地星座", "玛莫纳"],
+    ["驻地星系", "库哈拉赫"],
+  ]) {
+    await page.locator(`summary[aria-label^="${label}："]`).click();
+    await page.getByRole("radio", { name, exact: true }).check();
+  }
+  await expect(page.locator(".corp-location-label .corp-security")).toHaveText([
+    "0.50",
+    "0.16",
+    "0.18",
+  ]);
+  await expect(
+    page.getByText("当前使用默认封面，上传图片后可替换", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("checkbox", { name: "主权生产", exact: true }).check();
   await page.getByRole("checkbox", { name: "海盗作战", exact: true }).check();
   await page
@@ -78,6 +95,9 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
     buffer: png,
   });
   await expect(page.getByText("图片已上传，请保存草稿。")).toBeVisible();
+  await expect(
+    page.getByText("当前使用默认封面，上传图片后可替换", { exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "招募信息", exact: true }).click();
   await page
     .getByLabel("公开联系方式", { exact: true })
@@ -89,6 +109,11 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(page.getByText("草稿已保存", { exact: false })).toBeVisible();
   await page.reload();
+  await expect(page.locator(".corp-location-label .corp-security")).toHaveText([
+    "0.50",
+    "0.16",
+    "0.18",
+  ]);
   await expect(page.getByLabel("军团口号", { exact: true })).toHaveValue(
     "从本地沙盒启航",
   );
@@ -122,11 +147,21 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
     "主权战与反收割演练，周末组织生产协作。",
   );
   await expect(page.locator(".corp-review-fields")).toContainText("反收割演练");
+  await expect(page.locator(".corp-review-fields .corp-security")).toHaveText([
+    "0.50",
+    "0.16",
+    "0.18",
+  ]);
   await page.getByRole("button", { name: "批准并发布", exact: true }).click();
   await expect(page.getByText("审核已完成", { exact: true })).toBeVisible();
   await chooseRole(page, "游客浏览");
   await page.getByRole("link", { name: new RegExp(name) }).click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(page.locator(".corp-facts .corp-security")).toHaveText([
+    "0.50",
+    "0.16",
+    "0.18",
+  ]);
   await expect(
     page.getByText("主权战与反收割演练，周末组织生产协作。", { exact: true }),
   ).toBeVisible();

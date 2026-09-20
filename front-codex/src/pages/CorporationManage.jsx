@@ -47,6 +47,7 @@ import PosterDialog from "../components/community/PosterDialog";
 import CorporationLocation from "../components/community/CorporationLocation";
 import CorporationSelect from "../components/community/CorporationSelect";
 import CorporationShare from "../components/community/CorporationShare";
+import CorporationCover from "../components/community/CorporationCover";
 import { normalizePosterBackground } from "../utils/corporationPoster";
 import {
   activityKind,
@@ -996,6 +997,8 @@ function MediaField({
 }) {
   const action = useCommunityAction();
   const request = useRef(null);
+  const defaultCover =
+    field === "cover" && !form.cover_asset_id && !form.cover_url;
   const upload = async (file) => {
     if (!file) return;
     if (
@@ -1034,13 +1037,21 @@ function MediaField({
   return (
     <div className="corp-media-field">
       <span>{label}</span>
-      <div className={`corp-media-preview is-${field}`}>
-        <CorporationImage
-          url={form[`${field}_url`]}
-          isPrivate
-          className="corp-media-thumbnail"
-          fallback={<ImagePlus size={24} />}
-        />
+      <div
+        className={`corp-media-preview is-${field}`}
+        role={defaultCover ? "img" : undefined}
+        aria-label={defaultCover ? "军团默认封面" : undefined}
+      >
+        {defaultCover ? (
+          <CorporationCover corporation={{ id }} thumbnail />
+        ) : (
+          <CorporationImage
+            url={form[`${field}_url`]}
+            isPrivate
+            className="corp-media-thumbnail"
+            fallback={<ImagePlus size={24} />}
+          />
+        )}
       </div>
       <label className="ghost-btn corp-file-label">
         <ImagePlus size={15} />
@@ -1057,6 +1068,11 @@ function MediaField({
           }}
         />
       </label>
+      {defaultCover && (
+        <small className="corp-default-cover-hint">
+          当前使用默认封面，上传图片后可替换
+        </small>
+      )}
       {form[`${field}_asset_id`] && !disabled && (
         <button
           type="button"

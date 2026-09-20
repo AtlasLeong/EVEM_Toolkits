@@ -12,6 +12,27 @@ Public corporation object: `{id, name, short_name, published_at, revision: {id, 
 
 Content fields: `tagline` (80), `introduction` (5000), `alliance` (80), `base_region` (80), `activities` (current enums below, plus retained legacy `pvp` only), `activity_description` (optional string, 1500 Unicode code points), `custom_activity_tags` (up to 5 strings, rules below), `active_time` (120), `recruitment_status` (open/closed), `requirements` (1500), `benefits` (1500), `public_contact` (200), `logo_asset_id` / `cover_asset_id` (nullable integer), `event_title` (80), `event_time` / `event_location` (120), `event_description` (800). Fields optional in drafts; introduction and public_contact required on submission. Identity name/short_name is fixed by approved claim, not silently changed in a revision.
 
+### Structured base location and security snapshots
+
+`base_location` is nullable revision content. PATCH accepts only `{region_id, constellation_id?, solarsystem_id?}`: IDs are nonempty, unpadded strings up to 255 characters; region is required, constellation requires its region, and solarsystem requires its constellation. The server checks existence and all parent relationships against the trusted star-field catalogue. Client-supplied names, `security`, any per-level security property (even null), or other unknown location properties produce a field-specific 400 without changing content or version.
+
+The server stores and returns this immutable display snapshot in management, review and public revision payloads:
+
+```json
+{
+  "region_id": "r1", "region_name": "德里克", "region_security": 0.5,
+  "constellation_id": "c1", "constellation_name": "艾玛边境", "constellation_security": 0.3,
+  "solarsystem_id": "s1", "solarsystem_name": "西卡塔", "solarsystem_security": -0.22,
+  "security": -0.22
+}
+```
+
+Each level's security comes from that level's own catalogue row and is a finite JSON number or null; zero and negative values are valid. Missing, invalid or nonfinite catalogue values become null, never an invented zero. The retained legacy `security` field is the deepest selected level's value, including null, not the deepest non-null value. Unselected levels have null ID, name and per-level security. A linked `base_region` is derived from the snapshot's region name. Explicitly clearing `base_location` clears its derived region text, while a legacy text-only region remains unless explicitly replaced.
+
+Reads are query-free and never rewrite raw revision JSON or refresh historical names/security after catalogue changes. For older snapshots missing the new properties, only the deepest selected level may inherit legacy `security`, and only when that level's property is absent. Explicit null must not fall back; missing ancestor securities remain null. Invalid optional per-level values (including booleans, numeric strings and nonfinite values) normalize to null without discarding otherwise valid IDs/names. Existing malformed legacy `security` behavior is unchanged: the location normalizes to null and legacy `base_region` text remains available.
+
+Re-saving ID-only location input resolves fresh per-level values for that working revision. New drafts, edits, submissions and rejections never change the approved published snapshot or its raw JSON; publication still changes only through approval. No schema or data migration is required.
+
 ### Activity overview and legacy compatibility
 
 Current `activities` values and labels:

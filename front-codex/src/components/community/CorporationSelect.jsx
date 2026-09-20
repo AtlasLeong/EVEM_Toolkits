@@ -2,13 +2,16 @@ import { useId, useState } from "react";
 import { Check, Search } from "lucide-react";
 import FilterDisclosure from "../ui/FilterDisclosure";
 
-export const catalogSecurity = (value) =>
-  value === null ||
-  value === undefined ||
-  String(value).trim() === "" ||
-  !Number.isFinite(Number(value))
-    ? null
-    : Number(value);
+export const catalogSecurity = (value) => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (
+    typeof value !== "string" ||
+    !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim())
+  )
+    return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
 export const catalogLabel = (item, prefix) =>
   String(
     item?.[`${prefix}_title`] ||
@@ -23,6 +26,18 @@ export const catalogOptions = (data, prefix) =>
     security: catalogSecurity(item[`${prefix}_safetylvl`]),
   }));
 
+export function CorporationSecurity({ value }) {
+  if (!Number.isFinite(value)) return null;
+  return (
+    <small
+      className={`corp-security ${value >= 0.5 ? "is-high" : value > 0 ? "is-low" : "is-null"}`}
+      aria-label={`安全系数 ${value.toFixed(2)}`}
+    >
+      {value.toFixed(2)}
+    </small>
+  );
+}
+
 // Real radio inputs preserve native keyboard selection. Disclosure owns focus
 // dismissal, including its Chromium-safe handling of blank-space clicks.
 export default function CorporationSelect({
@@ -36,6 +51,7 @@ export default function CorporationSelect({
   error,
   onRetry,
   selectedLabel,
+  selectedSecurity,
   searchable = true,
   compact = false,
 }) {
@@ -45,6 +61,14 @@ export default function CorporationSelect({
     (option) => String(option.value) === String(value),
   );
   const caption = selected?.label || selectedLabel || placeholder;
+  const security =
+    selected && Object.hasOwn(selected, "security")
+      ? selected.security
+      : selectedSecurity;
+  const displayCaption = loading && !value ? "加载中…" : caption;
+  const valueText = Number.isFinite(security)
+    ? `${displayCaption} · 安全系数 ${security.toFixed(2)}`
+    : displayCaption;
   const visible = options.filter((option) =>
     String(option.label ?? option.value)
       .toLocaleLowerCase()
@@ -54,7 +78,13 @@ export default function CorporationSelect({
     <div className={`corp-select-field${compact ? " is-compact" : ""}`}>
       <FilterDisclosure
         label={label}
-        value={loading ? "加载中…" : caption}
+        value={valueText}
+        valueContent={
+          <span className="corp-select-caption">
+            <span>{displayCaption}</span>
+            <CorporationSecurity value={security} />
+          </span>
+        }
         disabled={disabled || loading || !!error}
         className="corp-select"
       >
@@ -97,13 +127,7 @@ export default function CorporationSelect({
                 }}
               />
               <span>{option.label}</span>
-              {Number.isFinite(option.security) && (
-                <small
-                  className={`corp-security ${option.security >= 0.5 ? "is-high" : option.security > 0 ? "is-low" : "is-null"}`}
-                >
-                  {option.security.toFixed(2)}
-                </small>
-              )}
+              <CorporationSecurity value={option.security} />
               {String(option.value) === String(value) && (
                 <Check size={15} aria-hidden="true" />
               )}

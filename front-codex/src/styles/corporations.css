@@ -134,6 +134,18 @@
 .corp-select .filter-toggle > svg {
   margin-left: -16px;
 }
+.corp-select-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.corp-select-caption > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .corp-select.is-disabled .filter-toggle {
   cursor: not-allowed;
   opacity: 0.6;
@@ -384,6 +396,17 @@
   flex-wrap: wrap;
   gap: 7px;
   line-height: 1.7;
+}
+.corp-location-part {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.corp-location-part > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .corp-review-poster-trigger {
   margin-top: 18px;
@@ -1265,11 +1288,16 @@
   font-size: 13px;
 }
 .corp-media-preview {
+  position: relative;
   background: #f0eee8;
   border: 1px dashed #c5c1b5;
   border-radius: 8px;
   height: 110px;
   overflow: hidden;
+}
+.corp-default-cover-hint {
+  color: var(--muted);
+  line-height: 1.6;
 }
 .corp-media-thumbnail {
   width: 100%;

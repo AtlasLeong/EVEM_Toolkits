@@ -6,6 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 LOCATION_IDS = ('region_id', 'constellation_id', 'solarsystem_id')
 LOCATION_NAMES = ('region_name', 'constellation_name', 'solarsystem_name')
+LOCATION_SECURITIES = ('region_security', 'constellation_security', 'solarsystem_security')
 
 
 def valid_id(value):
@@ -14,6 +15,16 @@ def valid_id(value):
 
 def location_error(message):
     raise ValidationError({'base_location': message})
+
+
+def normalized_security(value):
+    """Snapshot numbers are JSON numbers, never strings or booleans."""
+    if type(value) not in (int, float):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
 
 
 def normalized_location(value):
@@ -39,18 +50,21 @@ def normalized_location(value):
             return None
         names[name_key] = name
     security = value.get('security')
-    if security is not None:
-        if type(security) not in (int, float):
-            return None
-        try:
-            if not math.isfinite(security):
-                return None
-        except OverflowError:
-            return None
-    return {**ids, **names, 'security': security}
+    if security is not None and normalized_security(security) is None:
+        return None
+    deepest_id = next(key for key in reversed(LOCATION_IDS) if ids[key] is not None)
+    securities = {}
+    for id_key, security_key in zip(LOCATION_IDS, LOCATION_SECURITIES):
+        # Only an absent deepest-level key can inherit the legacy value. Null
+        # and malformed explicit values remain unknown; ancestors are not inferred.
+        level_security = value.get(security_key, security if id_key == deepest_id else None)
+        securities[security_key] = normalized_security(level_security) if ids[id_key] is not None else None
+    return {**ids, **names, 'security': security, **securities}
 
 
 def catalogue_security(value):
+    if isinstance(value, bool):
+        return None
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -90,23 +104,27 @@ def validated_location(value):
     region = Region.objects.filter(pk=ids['region_id']).values('r_id', 'r_title', 'r_titleen', 'r_safetylvl').first()
     if region is None:
         location_error('所选星域不存在，请重新选择。')
+    region_security = catalogue_security(region['r_safetylvl'])
     snapshot = {'region_id': region['r_id'], 'region_name': catalogue_name(region, 'r'),
                 'constellation_id': None, 'constellation_name': None,
                 'solarsystem_id': None, 'solarsystem_name': None,
-                'security': catalogue_security(region['r_safetylvl'])}
+                'region_security': region_security, 'constellation_security': None,
+                'solarsystem_security': None, 'security': region_security}
     if ids['constellation_id'] is not None:
         constellation = Constellation.objects.filter(pk=ids['constellation_id'], co_region_id=region['r_id']).values(
             'co_id', 'co_title', 'co_titleen', 'co_safetylvl').first()
         if constellation is None:
             location_error('所选星座不存在或不属于当前星域。')
+        constellation_security = catalogue_security(constellation['co_safetylvl'])
         snapshot.update(constellation_id=constellation['co_id'], constellation_name=catalogue_name(constellation, 'co'),
-                        security=catalogue_security(constellation['co_safetylvl']))
+                        constellation_security=constellation_security, security=constellation_security)
     if ids['solarsystem_id'] is not None:
         solarsystem = Solarsystem.objects.filter(pk=ids['solarsystem_id'], ss_region_id=region['r_id'],
                                                 ss_constellation_id=snapshot['constellation_id']).values(
             'ss_id', 'ss_title', 'ss_titleen', 'ss_safetylvl').first()
         if solarsystem is None:
             location_error('所选星系不存在或不属于当前星域和星座。')
+        solarsystem_security = catalogue_security(solarsystem['ss_safetylvl'])
         snapshot.update(solarsystem_id=solarsystem['ss_id'], solarsystem_name=catalogue_name(solarsystem, 'ss'),
-                        security=catalogue_security(solarsystem['ss_safetylvl']))
+                        solarsystem_security=solarsystem_security, security=solarsystem_security)
     return snapshot

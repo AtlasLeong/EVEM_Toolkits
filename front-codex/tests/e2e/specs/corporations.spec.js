@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { fileURLToPath } from "node:url";
 
 test("军团编辑表单具有可读高度并保存主要活动与自定义标签", async ({ page }) => {
   const { posts } = await communityFixture(page, { auth: true });
@@ -560,6 +561,20 @@ test("军团详情顶部封面在桌面与手机端保持紧凑", async ({ page 
 test("海报图片临时加载失败后重试会重新请求图片", async ({ page }) => {
   await communityFixture(page);
   let recovered = false;
+  let recoveredRequests = 0;
+  // This case checks protected-media retry, not Vite static-file latency.
+  // Serve the real bundled backdrop directly; artwork/export has its own suite.
+  await page.route("**/posters/spiral-galaxy.webp", (route) =>
+    route.fulfill({
+      contentType: "image/webp",
+      path: fileURLToPath(
+        new URL(
+          "../../../src/assets/corporations/posters/spiral-galaxy.webp",
+          import.meta.url,
+        ),
+      ),
+    }),
+  );
   await page.route("**/api/community/corporations/1/", (route) =>
     route.fulfill(
       json({
@@ -568,8 +583,9 @@ test("海报图片临时加载失败后重试会重新请求图片", async ({ pa
       }),
     ),
   );
-  await page.route("**/api/community/corporations/1/media/7/", (route) =>
-    route.fulfill(
+  await page.route("**/api/community/corporations/1/media/7/", (route) => {
+    if (recovered) recoveredRequests += 1;
+    return route.fulfill(
       recovered
         ? {
             status: 200,
@@ -577,8 +593,8 @@ test("海报图片临时加载失败后重试会重新请求图片", async ({ pa
             body: Buffer.from(TINY_ICON.split(",")[1], "base64"),
           }
         : json({ detail: "图片暂时不可用" }, 503),
-    ),
-  );
+    );
+  });
   await page.goto("/corporations/1");
   await page.getByRole("button", { name: /制作海报/ }).click();
   const studio = page.getByRole("region", { name: "海报工作台" });
@@ -586,6 +602,7 @@ test("海报图片临时加载失败后重试会重新请求图片", async ({ pa
   recovered = true;
   await studio.getByRole("button", { name: "重新加载" }).click();
   await expect(studio.getByRole("button", { name: "导出 PNG" })).toBeEnabled();
+  expect(recoveredRequests).toBeGreaterThan(0);
   await expect(studio.getByRole("alert")).toHaveCount(0);
 });
 

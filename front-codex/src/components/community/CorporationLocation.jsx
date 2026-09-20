@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import {
@@ -10,30 +10,53 @@ import CorporationSelect, {
   catalogOptions,
   catalogLabel,
   catalogSecurity,
+  CorporationSecurity,
 } from "./CorporationSelect";
+
+const LOCATION_LEVELS = ["region", "constellation", "solarsystem"];
+
+function locationSecurity(location, level) {
+  if (!location?.[`${level}_id`]) return null;
+  const key = `${level}_security`;
+  const deepest = location.solarsystem_id
+    ? "solarsystem"
+    : location.constellation_id
+      ? "constellation"
+      : "region";
+  // A legacy security belongs only to the deepest selected level. Explicit
+  // null in a new snapshot means unknown, never a fallback to another value.
+  const value = Object.hasOwn(location, key)
+    ? location[key]
+    : level === deepest
+      ? location.security
+      : null;
+  return Number.isFinite(value) ? value : null;
+}
 
 export function CorporationLocationLabel({
   location,
   legacy,
   empty = "未填写",
+  regionOnly = false,
 }) {
-  const names = location
-    ? [
-        location.region_name,
-        location.constellation_name,
-        location.solarsystem_name,
-      ].filter(Boolean)
-    : [];
+  const levels = (regionOnly ? ["region"] : LOCATION_LEVELS).filter(
+    (level) => location?.[`${level}_name`],
+  );
   return (
     <span className="corp-location-label">
-      {names.length ? names.join(" / ") : legacy || empty}
-      {Number.isFinite(location?.security) && (
-        <small
-          className={`corp-security ${location.security >= 0.5 ? "is-high" : location.security > 0 ? "is-low" : "is-null"}`}
-        >
-          {location.security.toFixed(2)}
-        </small>
-      )}
+      {levels.length
+        ? levels.map((level, index) => (
+            <Fragment key={level}>
+              {index > 0 && " / "}
+              <span className="corp-location-part">
+                <span>{location[`${level}_name`]}</span>
+                <CorporationSecurity
+                  value={locationSecurity(location, level)}
+                />
+              </span>
+            </Fragment>
+          ))
+        : legacy || empty}
     </span>
   );
 }
@@ -70,6 +93,27 @@ export default function CorporationLocation({
     { value: "", label: placeholder },
     ...catalogOptions(data, prefix),
   ];
+  const region = regions.data?.find(
+    (item) => String(item.r_id) === String(value?.region_id),
+  );
+  const constellation = constellations.data?.find(
+    (item) => String(item.co_id) === String(value?.constellation_id),
+  );
+  const system = systems.data?.find(
+    (item) => String(item.ss_id) === String(value?.solarsystem_id),
+  );
+  const currentLocation = value && {
+    ...value,
+    region_security: region
+      ? catalogSecurity(region.r_safetylvl)
+      : locationSecurity(value, "region"),
+    constellation_security: constellation
+      ? catalogSecurity(constellation.co_safetylvl)
+      : locationSecurity(value, "constellation"),
+    solarsystem_security: system
+      ? catalogSecurity(system.ss_safetylvl)
+      : locationSecurity(value, "solarsystem"),
+  };
   const selectRegion = (id) => {
     if (!id) return onChange(null);
     const item = regions.data?.find((item) => String(item.r_id) === String(id));
@@ -78,6 +122,9 @@ export default function CorporationLocation({
       constellation_id: null,
       solarsystem_id: null,
       region_name: catalogLabel(item, "r"),
+      region_security: catalogSecurity(item?.r_safetylvl),
+      constellation_security: null,
+      solarsystem_security: null,
       security: catalogSecurity(item?.r_safetylvl),
     });
   };
@@ -89,11 +136,13 @@ export default function CorporationLocation({
       (item) => String(item.r_id) === String(value.region_id),
     );
     onChange({
-      ...value,
+      ...currentLocation,
       constellation_id: id ? String(id) : null,
       solarsystem_id: null,
       constellation_name: id ? catalogLabel(item, "co") : undefined,
       solarsystem_name: undefined,
+      constellation_security: id ? catalogSecurity(item?.co_safetylvl) : null,
+      solarsystem_security: null,
       security: catalogSecurity(id ? item?.co_safetylvl : region?.r_safetylvl),
     });
   };
@@ -105,9 +154,10 @@ export default function CorporationLocation({
       (item) => String(item.co_id) === String(value.constellation_id),
     );
     onChange({
-      ...value,
+      ...currentLocation,
       solarsystem_id: id ? String(id) : null,
       solarsystem_name: id ? catalogLabel(item, "ss") : undefined,
+      solarsystem_security: id ? catalogSecurity(item?.ss_safetylvl) : null,
       security: catalogSecurity(
         id ? item?.ss_safetylvl : constellation?.co_safetylvl,
       ),
@@ -173,6 +223,7 @@ export default function CorporationLocation({
               label="驻地星域"
               value={value?.region_id || ""}
               selectedLabel={value?.region_name}
+              selectedSecurity={locationSecurity(value, "region")}
               options={choices(regions.data, "r", "选择星域")}
               onChange={selectRegion}
               disabled={disabled}
@@ -184,6 +235,7 @@ export default function CorporationLocation({
               label="驻地星座"
               value={value?.constellation_id || ""}
               selectedLabel={value?.constellation_name}
+              selectedSecurity={locationSecurity(value, "constellation")}
               options={choices(constellations.data, "co", "全部星座")}
               onChange={selectConstellation}
               disabled={disabled || !value?.region_id}
@@ -195,6 +247,7 @@ export default function CorporationLocation({
               label="驻地星系"
               value={value?.solarsystem_id || ""}
               selectedLabel={value?.solarsystem_name}
+              selectedSecurity={locationSecurity(value, "solarsystem")}
               options={choices(systems.data, "ss", "全部星系")}
               onChange={selectSystem}
               disabled={disabled || !value?.constellation_id}
@@ -205,7 +258,7 @@ export default function CorporationLocation({
           </div>
           {value && (
             <p className="corp-hint">
-              <CorporationLocationLabel location={value} />
+              <CorporationLocationLabel location={currentLocation} />
             </p>
           )}
         </>

@@ -205,9 +205,12 @@ function CorporationCard({ corporation: corp }) {
         <div className="corp-card-meta">
           <span>
             <MapPin size={14} />
-            {content.base_location?.region_name ||
-              content.base_region ||
-              "活动星域待补充"}
+            <CorporationLocationLabel
+              location={content.base_location}
+              legacy={content.base_region}
+              empty="活动星域待补充"
+              regionOnly
+            />
           </span>
           <span>
             <Clock3 size={14} />

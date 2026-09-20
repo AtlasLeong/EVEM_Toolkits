@@ -71,10 +71,14 @@ export const demoLocation = (ids) => {
         region_name: region.r_title,
         constellation_name: constellation?.co_title || "",
         solarsystem_name: system?.ss_title || "",
-        security:
-          system?.ss_safetylvl ??
-          constellation?.co_safetylvl ??
-          region.r_safetylvl,
+        region_security: region.r_safetylvl ?? null,
+        constellation_security: constellation?.co_safetylvl ?? null,
+        solarsystem_security: system?.ss_safetylvl ?? null,
+        security: system
+          ? (system.ss_safetylvl ?? null)
+          : constellation
+            ? (constellation.co_safetylvl ?? null)
+            : (region.r_safetylvl ?? null),
       }
     : null;
 };
@@ -154,7 +158,8 @@ const demoCorps = [
       ...first.revision,
       tagline: "航线之外，还有无限可能。",
       activities: ["exploration", "pve"],
-      activity_description: "在边境星域开展探索、异常清理与日常协作，分享航线与探索经验。",
+      activity_description:
+        "在边境星域开展探索、异常清理与日常协作，分享航线与探索经验。",
       custom_activity_tags: ["虫洞探索"],
       base_region: "静寂谷",
       base_location: demoLocation({
@@ -232,10 +237,20 @@ const emptyContent = () => ({
   cover_asset_id: null,
 });
 const contentKeys = Object.keys(emptyContent());
-const normalizedActivities = (values) => Array.isArray(values)
-  ? [...new Set(values.filter((value) => typeof value === "string" && Object.hasOwn(ACTIVITY_LABELS, value)))]
-  : [];
-const unicodeText = (value) => typeof value === "string" && !/\p{Cs}/u.test(value);
+const normalizedActivities = (values) =>
+  Array.isArray(values)
+    ? [
+        ...new Set(
+          values.filter(
+            (value) =>
+              typeof value === "string" &&
+              Object.hasOwn(ACTIVITY_LABELS, value),
+          ),
+        ),
+      ]
+    : [];
+const unicodeText = (value) =>
+  typeof value === "string" && !/\p{Cs}/u.test(value);
 
 // An isolated, process-local model. The HTTP preview and contract tests use this
 // exact handler; no request is ever proxied to a production server.
@@ -257,8 +272,16 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
       content: copy(
         Object.fromEntries(
           contentKeys
-            .filter((k) => k !== "activity_description" || Object.hasOwn(demo.revision, k))
-            .map((k) => [k, Object.hasOwn(demo.revision, k) ? demo.revision[k] : emptyContent()[k]]),
+            .filter(
+              (k) =>
+                k !== "activity_description" || Object.hasOwn(demo.revision, k),
+            )
+            .map((k) => [
+              k,
+              Object.hasOwn(demo.revision, k)
+                ? demo.revision[k]
+                : emptyContent()[k],
+            ]),
         ),
       ),
       status: "approved",
@@ -303,9 +326,14 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
     if (!rev) return null;
     const result = { id: rev.id, ...copy(rev.content) };
     result.activities = normalizedActivities(rev.content.activities);
-    result.custom_activity_tags = normalizeCustomActivityTags(rev.content.custom_activity_tags);
+    result.custom_activity_tags = normalizeCustomActivityTags(
+      rev.content.custom_activity_tags,
+    );
     result.activity_description = unicodeText(rev.content.activity_description)
-      ? [...rev.content.activity_description.trim()].slice(0, textLimits.activity_description).join("") : "";
+      ? [...rev.content.activity_description.trim()]
+          .slice(0, textLimits.activity_description)
+          .join("")
+      : "";
     result.activity_content_kind = activityKind(rev.content);
     if (!publicView)
       Object.assign(result, {
@@ -413,7 +441,11 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
       let m;
       if (method === "GET" && p === "corporations/") {
         const activity = url.searchParams.get("activity") || "";
-        required(!activity || Object.hasOwn(ACTIVITY_LABELS, activity), 400, "请选择有效活动。");
+        required(
+          !activity || Object.hasOwn(ACTIVITY_LABELS, activity),
+          400,
+          "请选择有效活动。",
+        );
         const found = [...corporations.values()]
           .filter((c) => c.is_listed && c.published)
           .filter((c) => {
@@ -423,7 +455,8 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
                 `${c.name} ${c.short_name}`
                   .toLowerCase()
                   .includes(url.searchParams.get("q").toLowerCase())) &&
-              (!activity || normalizedActivities(r.activities).includes(activity)) &&
+              (!activity ||
+                normalizedActivities(r.activities).includes(activity)) &&
               (!url.searchParams.get("region") ||
                 r.base_region.includes(url.searchParams.get("region")))
             );
@@ -646,12 +679,18 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
                   body[k].every((v) => allowed.includes(v)),
               );
               if (k === "activities" && body[k].includes("pvp"))
-                required(normalizedActivities(r.content.activities).includes("pvp"), 400, "旧版舰队作战标签仅可保留或移除，请选择新的活动方向。");
+                required(
+                  normalizedActivities(r.content.activities).includes("pvp"),
+                  400,
+                  "旧版舰队作战标签仅可保留或移除，请选择新的活动方向。",
+                );
               next[k] = [...body[k]];
             }
           if ("custom_activity_tags" in body) {
             try {
-              next.custom_activity_tags = validateCustomActivityTags(body.custom_activity_tags);
+              next.custom_activity_tags = validateCustomActivityTags(
+                body.custom_activity_tags,
+              );
             } catch (error) {
               fail(400, error.message);
             }
