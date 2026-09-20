@@ -136,6 +136,13 @@ def lock_actor(user):
     get_user_model().objects.using('default').select_for_update().get(pk=user.pk)
 
 
+def lock_users(user_ids):
+    """Acquire every user FK row in one deterministic order before other rows."""
+    ordered = sorted({int(user_id) for user_id in user_ids if user_id is not None})
+    if ordered:
+        list(get_user_model().objects.select_for_update().filter(pk__in=ordered).order_by('pk').values_list('pk', flat=True))
+
+
 def owned_corporation(user, pk, *, lock=False, staff_read=False):
     query = Corporation.objects.using('default')
     if not (staff_read and user.is_staff):
@@ -521,7 +528,10 @@ class Decision(StaffAPI):
         reason = text(request.data, 'reason', 1000, decision == 'approve')
         model = review_model(kind)
         corporation_id = get_object_or_404(model.objects.only('corporation_id'), pk=pk).corporation_id
+        preview_fields = ('corporation_id', 'applicant_id') if kind == 'claims' else ('corporation_id',)
+        preview = get_object_or_404(model.objects.only(*preview_fields), pk=pk)
         with transaction.atomic(using='default'):
+            lock_users([request.user.pk, getattr(preview, 'applicant_id', None)])
             corporation = Corporation.objects.select_for_update().get(pk=corporation_id)
             item = model.objects.select_for_update().get(pk=pk)
             if item.status != 'pending':
@@ -556,6 +566,7 @@ class Visibility(StaffAPI):
             raise ValidationError({'is_listed': '请输入布尔值。'})
         reason = text(request.data, 'reason', 1000)
         with transaction.atomic(using='default'):
+            lock_users([request.user.pk])
             corporation = get_object_or_404(Corporation.objects.select_for_update(), pk=pk)
             corporation.is_listed = request.data['is_listed']
             corporation.moderator = request.user

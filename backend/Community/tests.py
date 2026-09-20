@@ -11,6 +11,8 @@ from django.test import TestCase, override_settings
 from PIL import Image, PngImagePlugin
 from rest_framework.test import APIClient
 
+from . import views
+
 
 class CorporationTests(TestCase):
     def setUp(self):
@@ -27,6 +29,13 @@ class CorporationTests(TestCase):
 
     def call(self, method, path, data=None):
         return getattr(self.client, method)('/api/community/' + path, data, format='json')
+
+    def test_lock_users_uses_one_stable_sorted_row_order(self):
+        manager = get_user_model().objects
+        with patch.object(manager, 'select_for_update') as select_for_update:
+            views.lock_users([9, 2, 9, 4])
+        select_for_update.return_value.filter.assert_called_once_with(pk__in=[2, 4, 9])
+        select_for_update.return_value.filter.return_value.order_by.assert_called_once_with('pk')
 
     def claim(self, name='测试军团', **extra):
         data = dict(request_id=str(uuid4()), name=name, short_name='TEST', statement='本人军团管理者', contact='private-contact')
