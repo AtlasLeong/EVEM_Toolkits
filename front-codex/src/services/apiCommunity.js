@@ -9,6 +9,25 @@ export const ACTIVITIES = {
   mining: "采矿生产",
   training: "新人培养",
 };
+export const CORPORATION_TYPES = {
+  pirate: "海盗",
+  sovereignty: "主权",
+};
+export const REGION_TAGS = {
+  highsec: "高安",
+  lowsec: "低安",
+  nullsec: "00 地区",
+};
+export const BENEFITS = {
+  ship_reimbursement: "舰船补损",
+  fleet_training: "舰队培训",
+  industry_support: "工业/生产支持",
+  logistics_support: "物流支持",
+  newbro_mentoring: "新人导师",
+  skill_sharing: "技能/知识分享",
+  pve_fleet: "PVE 舰队",
+  pvp_fleet: "PVP 舰队",
+};
 export const REVISION_STATES = {
   draft: "草稿",
   pending: "审核中",

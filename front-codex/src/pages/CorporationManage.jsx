@@ -20,6 +20,9 @@ import {
 } from "../components/ui/Primitives";
 import {
   ACTIVITIES,
+  BENEFITS,
+  CORPORATION_TYPES,
+  REGION_TAGS,
   createCorporationClaim,
   createCorporationDraft,
   getCorporationManagement,
@@ -52,6 +55,7 @@ const textFields = {
   recruitment_status: "open",
   requirements: "",
   benefits: "",
+  benefits_note: "",
   public_contact: "",
   event_title: "",
   event_time: "",
@@ -64,6 +68,11 @@ export const contentFromRevision = (revision) => ({
     Object.keys(textFields).map((k) => [k, revision?.[k] ?? textFields[k]]),
   ),
   activities: revision?.activities || [],
+  corp_types: revision?.corp_types || [],
+  region_tags: revision?.region_tags || [],
+  benefit_keys: revision?.benefit_keys || [],
+  benefits_note: revision?.benefits_note || "",
+  poster_background: revision?.poster_background || "deep-space",
   logo_asset_id: revision?.logo_asset_id ?? null,
   cover_asset_id: revision?.cover_asset_id ?? null,
   logo_url: revision?.logo_url || null,
@@ -398,6 +407,41 @@ function DraftEditor({ corporation, revision, refresh }) {
       )}
     </label>
   );
+  const toggle = (field, id, max) =>
+    setForm((value) => {
+      const selected = value[field] || [];
+      if (selected.includes(id))
+        return { ...value, [field]: selected.filter((item) => item !== id) };
+      if (selected.length >= max) return value;
+      return { ...value, [field]: [...selected, id] };
+    });
+  const optionGroup = (field, label, options, max) => (
+    <fieldset
+      className="corp-option-group"
+      disabled={!editable || action.busy}
+      aria-label={label}
+    >
+      <legend>
+        {label} <small>最多 {max} 项</small>
+      </legend>
+      <div className="corp-option-grid">
+        {Object.entries(options).map(([id, option]) => {
+          const checked = (form[field] || []).includes(id);
+          return (
+            <label key={id} className={checked ? "is-selected" : ""}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={!checked && (form[field] || []).length >= max}
+                onChange={() => toggle(field, id, max)}
+              />
+              {option}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
   return (
     <div className="corp-editor-section">
       <div className="corp-editor-heading">
@@ -494,6 +538,8 @@ function DraftEditor({ corporation, revision, refresh }) {
                       {input("alliance", "所属联盟", 80)}
                       {input("base_region", "活动星域", 80)}
                     </div>
+                    {optionGroup("corp_types", "军团类型", CORPORATION_TYPES, 2)}
+                    {optionGroup("region_tags", "活动区域", REGION_TAGS, 3)}
                     <fieldset
                       className="corp-activities"
                       disabled={!editable || action.busy}
@@ -567,6 +613,14 @@ function DraftEditor({ corporation, revision, refresh }) {
                     </div>
                     {input("requirements", "招募要求", 1500, 4)}
                     {input("benefits", "军团支持", 1500, 4)}
+                    {optionGroup("benefit_keys", "福利列表", BENEFITS, 8)}
+                    {input(
+                      "benefits_note",
+                      "福利补充说明",
+                      500,
+                      3,
+                      "补充说明福利内容、补损规则或加入条件",
+                    )}
                     {input(
                       "public_contact",
                       "公开联系方式",
@@ -658,6 +712,9 @@ function DraftEditor({ corporation, revision, refresh }) {
             content={form}
             approved={current.status === "approved"}
             isPrivate
+            onBackgroundChange={(poster_background) =>
+              setForm((value) => ({ ...value, poster_background }))
+            }
           />
         </div>
       )}

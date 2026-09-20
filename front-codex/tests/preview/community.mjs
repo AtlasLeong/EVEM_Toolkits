@@ -6,6 +6,11 @@ const content = {
   alliance: "远航联盟",
   base_region: "德里克",
   activities: ["pvp", "industry", "training"],
+  corp_types: ["sovereignty"],
+  region_tags: ["highsec", "nullsec"],
+  benefit_keys: ["ship_reimbursement", "fleet_training", "industry_support"],
+  benefits_note: "新人有导师带队，定期发放舰队补给。",
+  poster_background: "sovereignty-border",
   active_time: "每晚 20:00–23:00",
   recruitment_status: "open",
   requirements:

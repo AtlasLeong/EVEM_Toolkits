@@ -20,6 +20,18 @@ test("军团大厅公开浏览与详情，访客无私有管理资料", async ({
   ).toHaveCount(0);
 });
 
+test("公开军团资料展示类型、区域、联盟与福利标签", async ({ page }) => {
+  await communityFixture(page);
+  await page.goto("/corporations/1");
+  for (const label of ["海盗", "低安", "00 地区", "舰船补损", "舰队培训"]) {
+    await expect(page.getByText(label, { exact: true })).toBeVisible();
+  }
+  await expect(
+    page.getByText("新人有导师带队，定期发放舰队补给。", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("远航联盟", { exact: true })).toBeVisible();
+});
+
 test("空态与错误态区分，错误可以重试", async ({ page }) => {
   await communityFixture(page, { fails: true });
   await page.goto("/corporations");
@@ -82,6 +94,31 @@ test("编辑草稿并提交审核，等待期间不能再编辑", async ({ page 
   ).toHaveCount(0);
   expect(posts.some((p) => p.body.tagline === "一起驶向更远的星海")).toBe(true);
   expect(posts.some((p) => p.path.endsWith("/submit/"))).toBe(true);
+});
+
+test("编辑草稿可保存类型、区域、福利和海报背景选择", async ({ page }) => {
+  const { posts } = await communityFixture(page, { auth: true });
+  await page.goto("/corporations/manage?id=1");
+  await page.getByRole("checkbox", { name: "主权" }).check();
+  await page.getByRole("checkbox", { name: "高安" }).check();
+  await page.getByRole("button", { name: "招募信息", exact: true }).click();
+  await page.getByRole("checkbox", { name: "工业/生产支持" }).check();
+  await page.locator('textarea[name="benefits_note"]').fill(
+    "提供导师、补损和工业设施支持",
+  );
+  await page.getByRole("button", { name: "主权边界", exact: true }).click();
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("草稿已保存");
+  const payload = posts.at(-1).body;
+  expect(payload.corp_types).toEqual(["pirate", "sovereignty"]);
+  expect(payload.region_tags).toEqual(["lowsec", "nullsec", "highsec"]);
+  expect(payload.benefit_keys).toEqual([
+    "ship_reimbursement",
+    "fleet_training",
+    "industry_support",
+  ]);
+  expect(payload.benefits_note).toBe("提供导师、补损和工业设施支持");
+  expect(payload.poster_background).toBe("sovereignty-border");
 });
 
 test("草稿海报始终标记未审核，三个模板可以导出真实 PNG", async ({ page }) => {

@@ -10,12 +10,16 @@ import {
 } from "../components/ui/Primitives";
 import {
   ACTIVITIES,
+  BENEFITS,
+  CORPORATION_TYPES,
+  REGION_TAGS,
   decideCorporationReview,
   getCommunityCapabilities,
   getCorporationReview,
   listCorporationReviews,
   setCorporationVisibility,
 } from "../services/apiCommunity";
+import { POSTER_BACKGROUNDS } from "../utils/corporationPoster";
 import {
   CommunityError,
   CommunityGuest,
@@ -252,6 +256,54 @@ function ReviewDetail({ kind, id, prefix, done }) {
                   {(data.activities || [])
                     .map((k) => ACTIVITIES[k])
                     .join(" / ") || "未填写"}
+                </dd>
+              </div>
+              <div>
+                <dt>军团类型</dt>
+                <dd>
+                  <div className="corp-tags">
+                    {(data.corp_types || []).map((value) => (
+                      <span key={value} className="corp-tag-type">
+                        {CORPORATION_TYPES[value] || value}
+                      </span>
+                    ))}
+                  </div>
+                  {!data.corp_types?.length && "未填写"}
+                </dd>
+              </div>
+              <div>
+                <dt>区域标签</dt>
+                <dd>
+                  <div className="corp-tags">
+                    {(data.region_tags || []).map((value) => (
+                      <span key={value} className="corp-tag-region">
+                        {REGION_TAGS[value] || value}
+                      </span>
+                    ))}
+                  </div>
+                  {!data.region_tags?.length && "未填写"}
+                </dd>
+              </div>
+              <div>
+                <dt>福利列表</dt>
+                <dd>
+                  <div className="corp-tags">
+                    {(data.benefit_keys || []).map((value) => (
+                      <span key={value}>{BENEFITS[value] || value}</span>
+                    ))}
+                  </div>
+                  {!data.benefit_keys?.length && "未填写"}
+                </dd>
+              </div>
+              <div>
+                <dt>福利补充</dt>
+                <dd>{data.benefits_note || "未填写"}</dd>
+              </div>
+              <div>
+                <dt>海报背景</dt>
+                <dd>
+                  {POSTER_BACKGROUNDS[data.poster_background] ||
+                    POSTER_BACKGROUNDS["deep-space"]}
                 </dd>
               </div>
             </dl>

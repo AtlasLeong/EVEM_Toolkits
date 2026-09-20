@@ -10,6 +10,9 @@ import {
 } from "../components/ui/Primitives";
 import {
   ACTIVITIES,
+  BENEFITS,
+  CORPORATION_TYPES,
+  REGION_TAGS,
   getCorporation,
   listCorporations,
 } from "../services/apiCommunity";
@@ -160,6 +163,7 @@ function CorporationCard({ corporation: corp }) {
         </h3>
         <p>{content.tagline || "欢迎了解我们的军团。"}</p>
         <ActivityTags values={content.activities} />
+        <MetadataTags content={content} compact />
         <div className="corp-card-meta">
           <span>
             <MapPin size={14} />
@@ -172,6 +176,51 @@ function CorporationCard({ corporation: corp }) {
         </div>
       </div>
     </Link>
+  );
+}
+
+function MetadataTags({ content, compact = false }) {
+  const values = [
+    ...(content.corp_types || []).map((value) => ({
+      key: `type-${value}`,
+      label: CORPORATION_TYPES[value] || value,
+      tone: "corp-tag-type",
+    })),
+    ...(content.region_tags || []).map((value) => ({
+      key: `region-${value}`,
+      label: REGION_TAGS[value] || value,
+      tone: "corp-tag-region",
+    })),
+  ];
+  const visible = compact ? values.slice(0, 2) : values;
+  const hidden = values.length - visible.length;
+  return (
+    <div className="corp-tags corp-metadata-tags" aria-label="军团标签">
+      {visible.map((item) => (
+        <span className={item.tone} key={item.key}>
+          {item.label}
+        </span>
+      ))}
+      {hidden > 0 && <span>+{hidden}</span>}
+    </div>
+  );
+}
+
+function BenefitTags({ content }) {
+  const values = content.benefit_keys || [];
+  return (
+    <div className="corp-benefits">
+      {values.map((value) => (
+        <span key={value}>{BENEFITS[value] || value}</span>
+      ))}
+      {content.benefits_note && (
+        <p className="corp-benefits-note">{content.benefits_note}</p>
+      )}
+      {content.benefits && <p className="corp-prose">{content.benefits}</p>}
+      {!values.length && !content.benefits_note && !content.benefits && (
+        <p className="corp-prose">请联系军团了解。</p>
+      )}
+    </div>
   );
 }
 
@@ -236,6 +285,7 @@ export function CorporationDetailPage() {
         </button>
       </div>
       <ActivityTags values={content.activities} />
+      <MetadataTags content={content} />
       <div className={`corp-detail-layout${showPoster ? " with-poster" : ""}`}>
         <div className="corp-detail-main">
           <Panel title="关于军团">
@@ -272,9 +322,7 @@ export function CorporationDetailPage() {
               </div>
               <div>
                 <h3>军团支持</h3>
-                <p className="corp-prose">
-                  {content.benefits || "请联系军团了解。"}
-                </p>
+                <BenefitTags content={content} />
               </div>
             </div>
             <div className="corp-contact">

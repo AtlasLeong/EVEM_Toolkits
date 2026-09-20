@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, Image as ImageIcon } from "lucide-react";
 import {
+  POSTER_BACKGROUNDS,
   POSTER_TEMPLATES,
   drawCorporationPoster,
+  normalizePosterBackground,
   posterFilename,
 } from "../../utils/corporationPoster";
 import { CommunityError, useCommunityImage } from "./CorporationUI";
@@ -30,8 +32,12 @@ export default function PosterStudio({
   content,
   approved = false,
   isPrivate = false,
+  onBackgroundChange,
 }) {
   const [template, setTemplate] = useState("recruitment");
+  const [background, setBackground] = useState(
+    normalizePosterBackground(content?.poster_background),
+  );
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(0);
@@ -47,7 +53,10 @@ export default function PosterStudio({
     isPrivate,
     retry,
   );
-  const serialized = JSON.stringify({ corporation, content });
+  useEffect(() => {
+    setBackground(normalizePosterBackground(content?.poster_background));
+  }, [content?.poster_background]);
+  const serialized = JSON.stringify({ corporation, content, background });
   useEffect(() => {
     let active = true;
     setBusy(true);
@@ -66,7 +75,7 @@ export default function PosterStudio({
         drawCorporationPoster(
           offscreen,
           corporation,
-          content,
+          { ...content, poster_background: background },
           template,
           approved,
           { logo: logoImage, cover: coverImage },
@@ -89,6 +98,7 @@ export default function PosterStudio({
   }, [
     serialized,
     template,
+    background,
     approved,
     logo.url,
     logo.error,
@@ -123,6 +133,11 @@ export default function PosterStudio({
       exportLock.current = false;
     }
   };
+  const chooseBackground = (next) => {
+    const normalized = normalizePosterBackground(next);
+    setBackground(normalized);
+    onBackgroundChange?.(normalized);
+  };
   return (
     <section className="corp-poster-studio" aria-label="海报工作台">
       <div className="corp-section-heading">
@@ -148,6 +163,32 @@ export default function PosterStudio({
             {label}
           </button>
         ))}
+      </div>
+      <div className="corp-background-picker">
+        <div className="corp-background-picker-label">
+          <span>海报背景</span>
+          <small>{POSTER_BACKGROUNDS[background]}</small>
+        </div>
+        <div
+          className="corp-background-options"
+          role="group"
+          aria-label="选择海报背景"
+        >
+          {Object.entries(POSTER_BACKGROUNDS).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-label={label}
+              aria-pressed={background === id}
+              className={`corp-background-option${background === id ? " active" : ""}`}
+              data-background={id}
+              onClick={() => chooseBackground(id)}
+            >
+              <span className="corp-background-swatch" aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
       </div>
       <div className={`corp-poster-frame${busy ? " is-busy" : ""}`}>
         <canvas
