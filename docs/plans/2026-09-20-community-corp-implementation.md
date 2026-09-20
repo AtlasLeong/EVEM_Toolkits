@@ -61,10 +61,33 @@ Files: `front-codex/src/pages/Corporations.jsx`, corporation components / `src/s
 
 ## Execution checklist
 
-- [ ] Task 1 importer + two reviews
-- [ ] Task 2 rehearsal + online static data import
-- [ ] Task 3 backend + two reviews
-- [ ] Task 4 UI/poster + two reviews
-- [ ] Task 5 final evidence / review / handoff
+- [x] Task 1 importer + two reviews
+- [x] Task 2 rehearsal + online static data import
+- [x] Task 3 backend + two reviews
+- [x] Task 4 UI/poster + two reviews
+- [x] Task 5 final evidence / review / handoff
+
+Implementation status: Tasks 1–4 are complete on `codex/community-corp`.
+The Community migration has been applied only to retained QA schemas on MySQL 8.0.37;
+the production Django database and release remain unchanged until an explicit release
+approval. The three remaining product areas (星海见闻、装配模拟、完整舰船/装备图鉴)
+remain backlog and are not included in this branch.
+
+Final verification evidence:
+
+- Backend isolated regression: 114/114; Community migration check has no drift.
+- SWEET importer unit suite: 18/18; isolated MySQL QA safety suite: 6/6.
+- Real MySQL 8.0.37 QA: `evem_community_qa_20260920lockfix` migrated with the
+  production `Authentication.EVEMUser`, and public smoke, media review visibility,
+  competing approvals, stale-version edits, and applicant/reviewer/moderator FK
+  interleavings all passed without database lock errors. The older candidate's
+  three 1213 deadlocks were retained as diagnostic evidence in
+  `evem_community_qa_20260920lockold`; neither QA schema is used by production.
+- Frontend full regression: 161/161 Playwright tests; poster unit tests 4/4; Vite
+  production build succeeds. The existing main-bundle size warning remains at
+  approximately 501 kB; corporation routes are code-split into separate chunks.
+- Desktop, mobile, detail, editor, and all three PNG poster templates were inspected
+  through a local-only preview fixture. No preview fixture data or generated images
+  are part of the release commit.
 
 Baseline: clean branch `codex/community-corp`, worktree `.worktrees/community-corp`; 85 existing backend tests pass under isolated `ci_settings`. Node dependencies are reused via an ignored junction, not added to git. Canonical raw snapshot remains under root `.local-data/` and is not copied into the repository.
