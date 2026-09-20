@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Claim, Corporation, DraftRequest, MediaAsset, Revision
+from .models import Claim, Corporation, DraftRequest, MediaAsset, MediaUploadAttempt, Revision
 
 
 class ReadOnlyCommunityAdmin(admin.ModelAdmin):
@@ -14,5 +14,5 @@ class ReadOnlyCommunityAdmin(admin.ModelAdmin):
         return False
 
 
-for model in (Corporation, Claim, Revision, DraftRequest, MediaAsset):
+for model in (Corporation, Claim, Revision, DraftRequest, MediaAsset, MediaUploadAttempt):
     admin.site.register(model, ReadOnlyCommunityAdmin)

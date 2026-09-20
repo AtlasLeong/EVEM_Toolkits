@@ -33,10 +33,18 @@ def private_storage():
     return FileSystemStorage(location=resolved, base_url=None, file_permissions_mode=0o600, directory_permissions_mode=0o700)
 
 
-def sanitized_image(upload):
+def upload_bytes(upload):
+    """Bounded, cheap read only. Never invokes a decoder before quota reservation."""
+    if not upload or not hasattr(upload, 'read'):
+        raise ValidationError({'file': '请选择需要上传的图片。'})
+    return upload.read(MAX_BYTES + 1)
+
+
+def sanitized_image(upload, raw=None):
     if not upload or not hasattr(upload, 'read') or upload.size > MAX_BYTES:
         raise ValidationError({'file': '请选择不超过 5 MiB 的 PNG、JPEG 或 WebP 图片。'})
-    raw = upload.read(MAX_BYTES + 1)
+    if raw is None:
+        raw = upload_bytes(upload)
     if not raw or len(raw) > MAX_BYTES:
         raise ValidationError({'file': '文件不能为空且不能超过 5 MiB。'})
     extension = str(upload.name).rsplit('.', 1)[-1].lower()

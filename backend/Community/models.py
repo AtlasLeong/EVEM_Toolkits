@@ -78,3 +78,18 @@ class MediaAsset(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['uploader', 'request_id'], name='community_media_request_unique')]
         indexes = [models.Index(fields=['uploader', 'created_at'], name='community_media_actor_time')]
+
+
+class MediaUploadAttempt(models.Model):
+    """Persistent pre-decode reservation; failed images also consume a quota slot."""
+    corporation = models.ForeignKey(Corporation, on_delete=models.PROTECT)
+    uploader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    request_id = models.UUIDField()
+    original_sha256 = models.CharField(max_length=64)
+    status = models.CharField(max_length=12, default='processing')
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['uploader', 'request_id'], name='community_upload_attempt_unique')]
+        indexes = [models.Index(fields=['uploader', 'created_at'], name='community_attempt_actor_time')]

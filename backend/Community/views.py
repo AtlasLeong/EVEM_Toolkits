@@ -22,8 +22,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .media import StorageUnavailable, private_storage, sanitized_image
-from .models import Claim, Corporation, DraftRequest, MediaAsset, Revision
+from .media import StorageUnavailable, private_storage, sanitized_image, upload_bytes
+from .models import Claim, Corporation, DraftRequest, MediaAsset, MediaUploadAttempt, Revision
 
 logger = logging.getLogger(__name__)
 TEXT_FIELDS = {'tagline': 80, 'introduction': 5000, 'alliance': 80, 'base_region': 80,
@@ -396,21 +396,45 @@ class MediaUpload(PrivateAPI):
         request_id = request_uuid(request.data)
         owned_corporation(request.user, pk)
         storage = private_storage()
-        metadata, data = sanitized_image(request.data['file'])
+        raw = upload_bytes(request.data['file'])
+        original_sha256 = hashlib.sha256(raw).hexdigest()
+        # Commit the reservation before CPU-heavy conversion. Failed images and
+        # crashed workers count too; another process cannot replay this UUID.
+        with transaction.atomic(using='default'):
+            lock_actor(request.user)
+            corporation = owned_corporation(request.user, pk, lock=True)
+            previous = MediaAsset.objects.filter(uploader=request.user, request_id=request_id).first()
+            if previous:
+                if previous.corporation_id != pk or previous.original_sha256 != original_sha256:
+                    raise Conflict()
+                return Response(media_data(previous))
+            attempted = MediaUploadAttempt.objects.filter(uploader=request.user, request_id=request_id).first()
+            if attempted:
+                if attempted.corporation_id != pk or attempted.original_sha256 != original_sha256:
+                    raise Conflict()
+                if attempted.status == 'failed':
+                    raise ValidationError({'file': '此图片提交已失败，请重新选择图片并使用新的提交标识。'})
+                raise Conflict('此图片提交正在处理，请稍后重试。')
+            upload_quota(request.user, corporation)
+            quota(MediaUploadAttempt.objects.filter(uploader=request.user, created_at__gte=recent()), getattr(settings, 'COMMUNITY_MEDIA_ATTEMPTS_PER_DAY', 60))
+            attempt = MediaUploadAttempt.objects.create(corporation=corporation, uploader=request.user, request_id=request_id, original_sha256=original_sha256)
         stored = None
         try:
+            metadata, data = sanitized_image(request.data['file'], raw=raw)
             with transaction.atomic(using='default'):
                 lock_actor(request.user)
                 corporation = owned_corporation(request.user, pk, lock=True)
-                previous = MediaAsset.objects.filter(uploader=request.user, request_id=request_id).first()
-                if previous:
-                    if previous.corporation_id != pk or previous.original_sha256 != metadata['original_sha256']:
-                        raise Conflict()
-                    return Response(media_data(previous))
-                quota(MediaAsset.objects.filter(uploader=request.user, created_at__gte=recent()), getattr(settings, 'COMMUNITY_MEDIA_PER_DAY', 30))
-                quota(MediaAsset.objects.filter(corporation=corporation), getattr(settings, 'COMMUNITY_MEDIA_PER_CORPORATION', 100))
+                attempt = MediaUploadAttempt.objects.select_for_update().get(pk=attempt.pk)
+                if attempt.status != 'processing':
+                    raise Conflict()
+                # Other completed requests may have consumed capacity while the
+                # decoder ran without holding any account/corporation row locks.
+                upload_quota(request.user, corporation)
                 stored = storage.save(uuid4().hex + '.webp', ContentFile(data))
                 asset = MediaAsset.objects.create(corporation=corporation, uploader=request.user, request_id=request_id, storage_name=stored, **metadata)
+                attempt.status = 'completed'
+                attempt.finished_at = timezone.now()
+                attempt.save(update_fields=['status', 'finished_at'])
             return Response(media_data(asset), status=201)
         except Exception as exc:
             if stored:
@@ -418,10 +442,25 @@ class MediaUpload(PrivateAPI):
                     storage.delete(stored)
                 except OSError:
                     logger.error('Community media cleanup failed; reconcile orphan %s', stored)
+            try:
+                with transaction.atomic(using='default'):
+                    lock_actor(request.user)
+                    Corporation.objects.select_for_update().get(pk=pk)
+                    failed = MediaUploadAttempt.objects.select_for_update().get(pk=attempt.pk)
+                    failed.status = 'failed'
+                    failed.finished_at = timezone.now()
+                    failed.save(update_fields=['status', 'finished_at'])
+            except Exception as marking_error:
+                logger.error('Community upload failure marker unavailable (%s)', type(marking_error).__name__)
             if isinstance(exc, APIException):
                 raise
             logger.error('Community media persistence failed (%s)', type(exc).__name__)
             raise StorageUnavailable() from exc
+
+
+def upload_quota(user, corporation):
+    quota(MediaAsset.objects.filter(uploader=user, created_at__gte=recent()), getattr(settings, 'COMMUNITY_MEDIA_PER_DAY', 30))
+    quota(MediaAsset.objects.filter(corporation=corporation), getattr(settings, 'COMMUNITY_MEDIA_PER_CORPORATION', 100))
 
 
 def serve_asset(asset):

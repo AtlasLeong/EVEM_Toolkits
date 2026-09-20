@@ -6,7 +6,7 @@ archive and the license database are not dependencies of this app.
 
 ## Release requirements
 
-1. Rehearse `Community.0001_initial` against the deployed MySQL version and real
+1. Rehearse all Community migrations (including the upload-attempt table) against the deployed MySQL version and real
    swappable user model before applying it to production. SQLite tests do not
    exercise MySQL row locks.
 2. Back up the default database before an explicitly authorized migration.
@@ -32,6 +32,12 @@ No restart, migration, production file write, or deployment is performed by test
   image-delete endpoint is included in the MVP; retaining immutable references
   prevents breaking older review records. Operators must plan retention/cleanup
   before increasing this cap.
+- Image processing attempts: 60 per rolling 24 hours per account
+  (`COMMUNITY_MEDIA_ATTEMPTS_PER_DAY`), persisted before decoding. Invalid images
+  and interrupted workers count too. Successful UUID retries return the existing
+  asset without decoding; failed UUID retries require a new token and processing
+  UUID retries return 409. Both successful-image and attempt quotas are checked
+  before conversion, then available image capacity is rechecked before storage.
 - Uploads: PNG/JPEG/WebP, 5 MiB input, 20 million input pixels, single frame only.
   Server rotates EXIF orientation, strips metadata and re-encodes as WebP with a
   2400-pixel maximum edge and a 5 MiB output cap. Uploaded image URLs are never
@@ -70,6 +76,9 @@ remove newly written files. A process/power crash between filesystem save and DB
 commit can leave an unreferenced file; operational reconciliation must identify
 orphans by comparing storage names with `Community_mediaasset` and never remove
 referenced files blindly.
+An interrupted decode can leave a `processing` upload attempt, which intentionally
+does not automatically retry expensive work; select the file again with a fresh
+request token. Retain attempt rows for at least the full rolling quota window.
 
 ## Test command
 

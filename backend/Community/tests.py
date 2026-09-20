@@ -14,9 +14,9 @@ from rest_framework.test import APIClient
 
 class CorporationTests(TestCase):
     def setUp(self):
-        self.owner = get_user_model().objects.create_user('owner')
-        self.other = get_user_model().objects.create_user('other')
-        self.staff = get_user_model().objects.create_user('reviewer', is_staff=True)
+        self.owner = get_user_model().objects.create_user('owner', email='owner@example.invalid')
+        self.other = get_user_model().objects.create_user('other', email='other@example.invalid')
+        self.staff = get_user_model().objects.create_user('reviewer', email='reviewer@example.invalid', is_staff=True)
         self.client = APIClient()
         self.client.force_authenticate(self.owner)
         self.tmp = tempfile.TemporaryDirectory()
@@ -348,3 +348,61 @@ class CorporationTests(TestCase):
         self.assertEqual(retry.json()['id'], first['id'])
         self.assertEqual(retry.json()['corporation']['name'], 'FOO')
         self.assertEqual(self.call('post', 'claims/', {**payload, 'name': 'different'}).status_code, 409)
+
+    @override_settings(COMMUNITY_MEDIA_PER_DAY=0)
+    def test_exhausted_upload_quota_does_not_decode_image(self):
+        from .media import sanitized_image
+        corporation = self.owned()
+        with patch('Community.views.sanitized_image', wraps=sanitized_image) as decode:
+            self.assertEqual(self.upload(corporation).status_code, 429)
+            self.assertEqual(decode.call_count, 0)
+
+    @override_settings(COMMUNITY_MEDIA_ATTEMPTS_PER_DAY=2)
+    def test_failed_images_consume_persistent_attempt_quota(self):
+        corporation = self.owned()
+        self.assertEqual(self.upload(corporation, b'fake1').status_code, 400)
+        self.assertEqual(self.upload(corporation, b'fake2').status_code, 400)
+        from .media import sanitized_image
+        with patch('Community.views.sanitized_image', wraps=sanitized_image) as decode:
+            self.assertEqual(self.upload(corporation, b'fake3').status_code, 429)
+            self.assertEqual(decode.call_count, 0)
+
+    def test_completed_and_failed_upload_retries_do_not_decode_again(self):
+        from .media import sanitized_image
+        corporation = self.owned()
+        successful_id, failed_id = str(uuid4()), str(uuid4())
+        self.assertEqual(self.upload(corporation, request_id=successful_id).status_code, 201)
+        self.assertEqual(self.upload(corporation, b'bad', request_id=failed_id).status_code, 400)
+        with patch('Community.views.sanitized_image', wraps=sanitized_image) as decode:
+            self.assertEqual(self.upload(corporation, request_id=successful_id).status_code, 200)
+            self.assertEqual(self.upload(corporation, b'bad', request_id=failed_id).status_code, 400)
+            self.assertEqual(decode.call_count, 0)
+
+    def test_processing_upload_uuid_rejects_reentrant_duplicate_before_decode(self):
+        from .media import sanitized_image
+        from .models import MediaUploadAttempt
+        corporation = self.owned()
+        request_id = str(uuid4())
+        def decoding(upload, raw=None):
+            retry = self.upload(corporation, request_id=request_id)
+            self.assertEqual(retry.status_code, 409)
+            self.assertEqual(MediaUploadAttempt.objects.get(request_id=request_id).status, 'processing')
+            return sanitized_image(upload, raw=raw)
+        with patch('Community.views.sanitized_image', side_effect=decoding) as decode:
+            self.assertEqual(self.upload(corporation, request_id=request_id).status_code, 201)
+            self.assertEqual(decode.call_count, 1)
+        self.assertEqual(MediaUploadAttempt.objects.get(request_id=request_id).status, 'completed')
+
+    @override_settings(COMMUNITY_MEDIA_PER_CORPORATION=1)
+    def test_upload_capacity_rechecked_after_decoding_and_failed_attempt_retained(self):
+        from .media import sanitized_image
+        from .models import MediaAsset, MediaUploadAttempt
+        corporation = self.owned()
+        request_id = str(uuid4())
+        def other_worker_completes(upload, raw=None):
+            MediaAsset.objects.create(corporation_id=corporation, uploader=self.owner, request_id=uuid4(), original_sha256='a' * 64, storage_name='other-worker.webp', sha256='b' * 64, size=100, content_type='image/webp', width=1, height=1)
+            return sanitized_image(upload, raw=raw)
+        with patch('Community.views.sanitized_image', side_effect=other_worker_completes):
+            self.assertEqual(self.upload(corporation, request_id=request_id).status_code, 429)
+        self.assertEqual(MediaUploadAttempt.objects.get(request_id=request_id).status, 'failed')
+        self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
