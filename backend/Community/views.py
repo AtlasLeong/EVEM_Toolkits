@@ -96,7 +96,7 @@ def image_url(corporation_id, asset_id, public=False):
             else f'/api/community/media/{asset_id}/private/')
 
 
-def revision_data(revision, public=False):
+def revision_data(revision, public=False, corporation=None):
     if revision is None:
         return None
     content = default_content()
@@ -104,7 +104,7 @@ def revision_data(revision, public=False):
     result = dict(id=revision.pk, **content)
     if not public:
         result.update({key: getattr(revision, key) for key in ('corporation_id', 'status', 'version', 'created_at', 'updated_at', 'submitted_at', 'reviewed_at', 'review_reason')})
-        result['corporation'] = identity(revision.corporation)
+        result['corporation'] = identity(corporation or revision.corporation)
         result['logo_url'] = image_url(revision.corporation_id, content['logo_asset_id'])
         result['cover_url'] = image_url(revision.corporation_id, content['cover_asset_id'])
     return result
@@ -124,7 +124,7 @@ def claim_data(claim):
 
 def manage_data(corporation, user):
     return dict(**identity(corporation), is_listed=corporation.is_listed,
-                published_revision=revision_data(corporation.published_revision), working_revision=revision_data(corporation.working_revision),
+                published_revision=revision_data(corporation.published_revision, corporation=corporation), working_revision=revision_data(corporation.working_revision, corporation=corporation),
                 can_edit=corporation.owner_id == user.pk, can_review=bool(user.is_staff))
 
 
