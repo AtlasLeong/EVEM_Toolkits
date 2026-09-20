@@ -96,6 +96,41 @@ test("demo owner can submit a creation application without automatic approval", 
   assert.equal(response.data.status, "pending");
 });
 
+test("approved application identity replaces a rejected predecessor without changing corporation ID", () => {
+  const call = client();
+  const payload = { name: "身份核验军团", short_name: "WRONG", statement: "核验", contact: "私密" };
+  const first = call("claims/", "POST", { ...payload, request_id: randomUUID() }).data;
+  assert.equal(first.proposed_short_name, "WRONG");
+  call(`reviews/claims/${first.id}/decision/`, "POST", { decision: "reject", reason: "信息错误" }, "reviewer");
+  const second = call("claims/", "POST", { ...payload, short_name: "RIGHT", request_id: randomUUID() }).data;
+  assert.equal(second.corporation.id, first.corporation.id);
+  assert.equal(second.proposed_short_name, "RIGHT");
+  const approved = call(`reviews/claims/${second.id}/decision/`, "POST", { decision: "approve", reason: "已核验" }, "reviewer");
+  assert.equal(approved.status, 200);
+  assert.equal(call(`corporations/${first.corporation.id}/manage/`).data.short_name, "RIGHT");
+});
+
+test("sandbox generic text rejects lone Unicode surrogates before saving", () => {
+  const call = client();
+  for (const tagline of ["\ud800", "bad\udfff"]) {
+    assert.equal(call("revisions/11/", "PATCH", { expected_version: 1, tagline }).status, 400);
+    assert.equal(call("corporations/1/manage/").data.working_revision.version, 1);
+  }
+  const invalid = call("claims/", "POST", {
+    request_id: randomUUID(), name: "\ud800", short_name: "BAD", statement: "核验", contact: "联系",
+  });
+  assert.equal(invalid.status, 400);
+});
+
+test("sandbox historical malformed text is rendered safely without modifying fixtures", () => {
+  const fixtures = legacyFixture({ tagline: "\ud800", introduction: "hello\udfff" });
+  const before = structuredClone(fixtures);
+  const call = client(fixtures);
+  assert.equal(call("corporations/1/").data.revision.tagline, "");
+  assert.equal(call("corporations/1/manage/").data.working_revision.introduction, "");
+  assert.deepEqual(fixtures, before);
+});
+
 test("owner and reviewer complete a versioned creation, withdrawal and publication lifecycle", () => {
   const call = (path, method = "GET", body = {}, role = "owner") =>
     resolveCommunityPreview(

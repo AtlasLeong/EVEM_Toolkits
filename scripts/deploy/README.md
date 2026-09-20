@@ -29,6 +29,35 @@ v1 不自动安装生产依赖，不自动执行数据库迁移。
 
 发布前用候选版本的 Python、settings 和数据库路由运行 `migration_check.py --database default/license`，读取迁移计划，忽略项目 app-level router 明确禁止在该库执行的迁移；真实未应用迁移会阻止切换。不执行 migrate、不 fake、不补记数据库记录。需要迁移时先审查、备份、验证兼容性并在维护流程中执行。代码回滚不还原数据库；迁移检查不是数据兼容性证明。若未来更改 router 为依赖 model/hints 的路由，须同步审查此检查器，不能假定 app-level 过滤仍适用。
 
+## 军团模块发布门禁（2026-09-21，本地实现，未上线）
+
+**以后上线前须由运维先升级 root 管理的 `/usr/local/lib/evem-deploy/release.py`，
+再发布新业务版本。**CI 不会更新发布器本身；仅推送业务代码不能保证新的存储检查生效。
+此次本地开发未连接生产、未升级发布器、未迁移数据库或重启服务。
+
+- CI 新增前端 Node 单元/本地预览契约测试、独立配置的交互沙盒端到端测试、
+  `scripts/community/tests` 安全测试。保留现有全量前端/后端/迁移/发布门禁和发布触发；
+  不忽略失败。显式 Bash 保留管道失败状态，失败日志、两套浏览器截图和 trace 一并上传。
+- 切换前用候选 backend 自己的配置执行只读 `manage.py community_preflight`。
+  `COMMUNITY_UPLOAD_ROOT` 必须为已存在的绝对私有持久目录，不能位于候选源码、
+  releases/current、公开上传、静态资源或 shared/assets 树。
+  发布器传入实际部署根下的禁用树；Django 静态目录（包括带前缀配置）也纳入检查。
+  本命令不创建目录、不改权限、不写试文件，不假定 deploy 用户就是服务用户。
+- 切换重启后，`/api/community/ready/` 在真实后端服务进程内检查目录读/写/遍历权限、
+  父目录遍历权限以及两次有界 Community 数据库存在性查询。成功只返回 `{"status":"ok"}`；
+  失败返回通用 503，不暴露路径、凭据、SQL 或异常细节；所有响应 `no-store`。
+  不扫描图片，不使用真实上传作探针。
+- 发布器依据已验摘要 manifest 中的 `backend/Community/health.py` 标记记录能力；
+  对含该模块的目标即使 state 没标记也强制新 readiness 检查。新接口的 404/503 是发布失败，
+  不能当作兼容旧版本而跳过；仍保留原首页/资源/API/进程/精确版本 SHA 检查。
+  自动恢复及手动回滚按实际目标能力检查，历史无此接口的旧版本使用原健康检查。
+  预检失败不切换，运行时健康失败走既有事务回滚；恢复失败保留 journal 供人工处理。
+
+只读权限检查不是一次成功写入的证明：它不能保证 SELinux、只读挂载、磁盘容量、
+配额或之后的权限变化不会阻止上传。未知 Nginx alias 和服务账号配置仍需运维核对。
+此轮 Windows 单元测试覆盖了只读检查和发布事务；Linux 专属 flock/symlink/HTTP 集成
+用例在 Windows 会明确跳过，须在 Linux CI 及另行授权的实际部署演练验证，不能据此声称已上线。
+
 ## 首次初始化检查清单（供重建环境参考）
 
 1. 本机完成 `gh auth login --hostname github.com --web`，核验仓库 `AtlasLeong/EVEM_Toolkits` 的管理权限和 Actions 可用性，不在聊天中粘贴令牌。

@@ -64,9 +64,25 @@ def fields(data, required=(), optional=()):
 
 def text(data, key, limit, blank=False):
     value = data.get(key, '')
-    if not isinstance(value, str) or len(value) > limit or (not blank and not value.strip()):
+    if not is_unicode_text(value) or len(value) > limit or (not blank and not value.strip()):
         raise ValidationError({key: f'请输入不超过 {limit} 字的有效文本。'})
     return value.strip()
+
+
+def readable_unicode(value):
+    """Make whitelisted output renderable without rewriting stored snapshots.
+
+    Older JSON can contain escaped lone surrogates, including inside location
+    snapshots. Drop the malformed string, not the entire record or result page;
+    other values (IDs, dates, numbers and nulls) retain their original types.
+    """
+    if isinstance(value, str):
+        return value if is_unicode_text(value) else ''
+    if isinstance(value, dict):
+        return {key: readable_unicode(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [readable_unicode(item) for item in value]
+    return value
 
 
 def positive_int(value, name):
@@ -98,7 +114,7 @@ def paged(request, query, serialize):
 
 
 def identity(corporation):
-    return dict(id=corporation.pk, name=corporation.name, short_name=corporation.short_name)
+    return readable_unicode(dict(id=corporation.pk, name=corporation.name, short_name=corporation.short_name))
 
 
 def default_content():
@@ -148,7 +164,8 @@ def revision_data(revision, public=False, corporation=None):
         return None
     content = default_content()
     stored = revision.content if isinstance(revision.content, dict) else {}
-    content.update({key: value for key, value in stored.items() if key in TEXT_FIELDS or key in ('activities', 'recruitment_status', 'logo_asset_id', 'cover_asset_id')})
+    content.update({key: value for key, value in stored.items() if key in TEXT_FIELDS and is_unicode_text(value)
+                    or key in ('activities', 'recruitment_status', 'logo_asset_id', 'cover_asset_id')})
     # Determine kind from raw JSON, before read defaults fill in the new field.
     content['activity_content_kind'] = 'overview' if 'activity_description' in stored else 'legacy_event'
     description = stored.get('activity_description', '')
@@ -172,7 +189,7 @@ def revision_data(revision, public=False, corporation=None):
         result['corporation'] = identity(corporation or revision.corporation)
         result['logo_url'] = image_url(revision.corporation_id, content['logo_asset_id'])
         result['cover_url'] = image_url(revision.corporation_id, content['cover_asset_id'])
-    return result
+    return readable_unicode(result)
 
 
 def public_data(corporation):
@@ -184,8 +201,9 @@ def public_data(corporation):
 
 
 def claim_data(claim):
-    return dict(corporation=identity(claim.corporation), **{key: getattr(claim, key) for key in (
-        'id', 'statement', 'contact', 'status', 'created_at', 'reviewed_at', 'review_reason')})
+    return readable_unicode(dict(corporation=identity(claim.corporation), **{key: getattr(claim, key) for key in (
+        'id', 'proposed_name', 'proposed_short_name', 'statement', 'contact', 'status',
+        'created_at', 'reviewed_at', 'review_reason')}))
 
 
 def manage_data(corporation, user):
@@ -365,7 +383,10 @@ class Claims(PrivateAPI):
                 corporation = Corporation.objects.select_for_update().get(pk=corporation.pk)
             if corporation.owner_id is not None or Claim.objects.filter(corporation=corporation, applicant=request.user, status='pending').exists():
                 raise Conflict()
-            claim = Claim.objects.create(corporation=corporation, applicant=request.user, request_id=request_id, payload_hash=payload_hash, statement=payload['statement'], contact=payload['contact'])
+            claim = Claim.objects.create(corporation=corporation, applicant=request.user,
+                proposed_name=corporation.name if existing else payload['name'],
+                proposed_short_name=corporation.short_name if existing else payload['short_name'],
+                request_id=request_id, payload_hash=payload_hash, statement=payload['statement'], contact=payload['contact'])
         return Response(claim_data(claim), status=201)
 
 
@@ -410,8 +431,6 @@ class Draft(PrivateAPI):
 
 def updated_content(data, corporation, old):
     result = copy.deepcopy(old)
-    if 'activity_description' in data and not is_unicode_text(data['activity_description']):
-        raise ValidationError({'activity_description': '请输入有效的 Unicode 文本。'})
     for key, limit in TEXT_FIELDS.items():
         if key in data:
             result[key] = text(data, key, limit, True)
@@ -638,8 +657,21 @@ class Decision(StaffAPI):
             if kind == 'claims' and decision == 'approve':
                 if corporation.owner_id is not None:
                     raise Conflict()
+                changed_identity = []
+                if item.proposed_name is not None:
+                    proposal = {'name': item.proposed_name, 'short_name': item.proposed_short_name}
+                    proposed_name = unicodedata.normalize('NFKC', text(proposal, 'name', 80)).strip()
+                    proposed_short_name = text(proposal, 'short_name', 20, True)
+                    # Proposals can adjust display spelling / short name, never
+                    # rename the locked corporation to a different identity.
+                    key = hashlib.sha256(('cn:' + proposed_name.casefold()).encode()).hexdigest()
+                    if not proposed_name or len(proposed_name) > 80 or key != corporation.name_key:
+                        raise Conflict()
+                    corporation.name = proposed_name
+                    corporation.short_name = proposed_short_name
+                    changed_identity = ['name', 'short_name']
                 corporation.owner_id = item.applicant_id
-                corporation.save(update_fields=['owner'])
+                corporation.save(update_fields=['owner', *changed_identity])
             if kind == 'revisions':
                 if corporation.working_revision_id != item.pk:
                     raise Conflict()

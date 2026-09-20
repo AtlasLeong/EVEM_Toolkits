@@ -30,6 +30,7 @@ import {
   Pagination,
   useCommunityAction,
   usePrivateCommunity,
+  useRefreshPublicCorporations,
 } from "../components/community/CorporationUI";
 import PosterDialog from "../components/community/PosterDialog";
 import { CorporationLocationLabel } from "../components/community/CorporationLocation";
@@ -194,11 +195,12 @@ function ReviewWorkspace() {
           </Panel>
         )}
       </div>
-      <VisibilityTools />
+      <VisibilityTools refresh={refresh} />
     </>
   );
 }
 function ReviewDetail({ kind, id, prefix, done }) {
+  const refreshPublic = useRefreshPublicCorporations();
   const [showPoster, setShowPoster] = useState(false);
   const query = useQuery({
     queryKey: [...prefix, "review", kind, id],
@@ -215,6 +217,7 @@ function ReviewDetail({ kind, id, prefix, done }) {
   const decide = (decision) =>
     action.run(async () => {
       await decideCorporationReview(kind, id, decision, reason.trim());
+      await refreshPublic(data.corporation?.id);
       await done();
     });
   const fields = {
@@ -234,7 +237,11 @@ function ReviewDetail({ kind, id, prefix, done }) {
   return (
     <div className="corp-review-detail">
       <Panel
-        title={data.corporation?.name || "审核详情"}
+        title={
+          (kind === "claims" ? data.proposed_name : null) ??
+          data.corporation?.name ??
+          "审核详情"
+        }
         subtitle={
           kind === "claims"
             ? "通过仅授予管理权，不会自动公开主页。"
@@ -243,6 +250,21 @@ function ReviewDetail({ kind, id, prefix, done }) {
       >
         {kind === "claims" ? (
           <>
+            <dl className="corp-review-fields">
+              <div>
+                <dt>申请军团名称</dt>
+                <dd>
+                  {data.proposed_name ?? data.corporation?.name ?? "未填写"}
+                </dd>
+              </div>
+              <div>
+                <dt>申请军团简称</dt>
+                <dd>
+                  {(data.proposed_short_name ?? data.corporation?.short_name) ||
+                    "未填写"}
+                </dd>
+              </div>
+            </dl>
             <h3>申请说明</h3>
             <p className="corp-prose">{data.statement}</p>
             <div className="corp-contact">
@@ -410,7 +432,8 @@ function ReviewDetail({ kind, id, prefix, done }) {
     </div>
   );
 }
-function VisibilityTools() {
+function VisibilityTools({ refresh }) {
+  const refreshPublic = useRefreshPublicCorporations();
   const [id, setId] = useState("");
   const [reason, setReason] = useState("");
   const action = useCommunityAction();
@@ -453,10 +476,11 @@ function VisibilityTools() {
               key={label}
               disabled={action.busy || !/^[1-9]\d*$/.test(id) || !reason.trim()}
               onClick={() =>
-                action.run(
-                  () => setCorporationVisibility(id, value, reason.trim()),
-                  "公开状态已更新",
-                )
+                action.run(async () => {
+                  await setCorporationVisibility(id, value, reason.trim());
+                  await refreshPublic(id);
+                  await refresh();
+                }, "公开状态已更新")
               }
             >
               {label}

@@ -1,7 +1,9 @@
 from django.urls import path
 from . import views
+from .health import readiness
 
 urlpatterns = [
+    path('ready/', readiness),
     path('corporations/', views.CorporationList.as_view()),
     path('corporations/<int:pk>/', views.CorporationDetail.as_view()),
     path('corporations/<int:pk>/manage/', views.Manage.as_view()),

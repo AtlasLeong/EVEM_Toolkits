@@ -325,6 +325,12 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
   const revData = (rev, publicView = false) => {
     if (!rev) return null;
     const result = { id: rev.id, ...copy(rev.content) };
+    for (const [key, limit] of Object.entries(textLimits)) {
+      if (key === "activity_description") continue;
+      result[key] = unicodeText(result[key])
+        ? [...result[key]].slice(0, limit).join("")
+        : "";
+    }
     result.activities = normalizedActivities(rev.content.activities);
     result.custom_activity_tags = normalizeCustomActivityTags(
       rev.content.custom_activity_tags,
@@ -365,6 +371,8 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
         "created_at",
         "reviewed_at",
         "review_reason",
+        "proposed_name",
+        "proposed_short_name",
       ].map((k) => [k, claim[k]]),
     ),
     corporation: identity(getCorp(claim.corporation_id)),
@@ -407,7 +415,7 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
     );
   const text = (value, limit, blank = true) => {
     required(
-      typeof value === "string" &&
+      unicodeText(value) &&
         [...value].length <= limit &&
         (blank || value.trim()),
     );
@@ -536,7 +544,7 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
           contact = text(body.contact, 200, false);
         const name = existing
             ? null
-            : text(body.name.normalize("NFKC"), 80, false),
+            : text(text(body.name, 80, false).normalize("NFKC"), 80, false),
           shortName = existing ? null : text(body.short_name, 20);
         return once(
           "claim",
@@ -584,6 +592,8 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
               id: nextClaim++,
               corporation_id: c.id,
               applicant: role,
+              proposed_name: existing ? c.name : name,
+              proposed_short_name: existing ? c.short_name : shortName,
               statement,
               contact,
               status: "pending",
@@ -841,6 +851,10 @@ export function createCommunitySandbox(initialCorps = demoCorps) {
           const c = getCorp(item.corporation_id);
           if (m[1] === "claims" && body.decision === "approve") {
             required(!c.owner, 409);
+            if (item.proposed_name != null) {
+              c.name = item.proposed_name;
+              c.short_name = item.proposed_short_name ?? c.short_name;
+            }
             c.owner = item.applicant;
           }
           if (m[1] === "revisions") {

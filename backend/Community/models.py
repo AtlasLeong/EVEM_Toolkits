@@ -20,6 +20,10 @@ class Corporation(models.Model):
 class Claim(models.Model):
     corporation = models.ForeignKey(Corporation, on_delete=models.PROTECT)
     applicant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    # Each application owns its identity proposal. Null means a legacy claim
+    # whose original proposal is unknown, not the first applicant's spelling.
+    proposed_name = models.CharField(max_length=80, null=True, blank=True)
+    proposed_short_name = models.CharField(max_length=20, null=True, blank=True)
     request_id = models.UUIDField()
     payload_hash = models.CharField(max_length=64)
     statement = models.CharField(max_length=1000)

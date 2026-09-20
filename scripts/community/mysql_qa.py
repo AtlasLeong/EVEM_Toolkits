@@ -400,7 +400,7 @@ def main(argv=None):
                 digest.update(source.read_bytes())
         print(json.dumps({'mode': 'plan_only_no_network', 'database': name, 'candidate_sha256': digest.hexdigest(),
                           'creates_new_schema': True, 'business_database_selected': False, 'drops_database': False,
-                          'checks': ['real_EVEMUser_migrations', 'Community_API_suite', 'upload_public_state', 'competing_approvals', 'stale_version_patch', 'applicant_reviewer_moderator_FK_lock_cycles']}))
+                          'checks': ['real_EVEMUser_migrations', 'Community_API_smoke', 'upload_public_state', 'competing_approvals', 'stale_version_patch', 'applicant_reviewer_moderator_FK_lock_cycles']}))
         return 0
     confirm_execution(name, args.confirm_new_database)
     return run_rehearsal(candidate, live, name)

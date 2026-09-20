@@ -22,7 +22,7 @@ authorization before using `--execute` on a server.
   both `NAME` and `TEST.NAME`. Every worker verifies aliases and `SELECT DATABASE()`.
 - Only auth/contenttypes/Authentication/Community forward migrations are allowed.
   Real `Authentication.EVEMUser` is used, including its unique email/collation.
-- The API suite runs on the already-created QA schema without Django runner
+- The targeted API smoke and concurrency flows run on the already-created QA schema without Django runner
   setup/teardown-database methods. No live deployment switch, service restart,
   business table query/write, or database cleanup is performed.
 
@@ -47,7 +47,10 @@ for inspection; a later cleanup requires a separate reviewed/authorized action.
 
 ## What it exercises
 
-1. Actual MySQL 8/InnoDB migrations plus the whole `Community.tests` API suite.
+1. Actual MySQL 8/InnoDB migrations plus a public API smoke check. This script does
+   **not** execute the whole `Community.tests` suite; that isolated SQLite suite
+   runs separately in CI. Previous explicitly authorized MySQL rehearsals remain
+   valid evidence for the targeted flows below, not whole-suite coverage.
 2. Upload → private before approval → public after approval → hidden after removal.
 3. Two concurrent ownership approvals: one 200, one 409, exactly one assigned owner.
 4. Two PATCH requests with the same version: one 200, one 409, version advances once.

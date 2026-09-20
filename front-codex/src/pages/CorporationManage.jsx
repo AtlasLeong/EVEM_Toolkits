@@ -1,5 +1,5 @@
 import { useContext, useEffect, useId, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Check,
@@ -48,6 +48,7 @@ import CorporationLocation from "../components/community/CorporationLocation";
 import CorporationSelect from "../components/community/CorporationSelect";
 import CorporationShare from "../components/community/CorporationShare";
 import CorporationCover from "../components/community/CorporationCover";
+import useUnsavedCorporation from "../components/community/useUnsavedCorporation";
 import { normalizePosterBackground } from "../utils/corporationPoster";
 import {
   activityKind,
@@ -348,28 +349,52 @@ function ClaimForm({ onSaved }) {
 }
 
 function ManagedCorporation({ id, prefix, refresh }) {
+  const client = useQueryClient();
+  const queryKey = [...prefix, "manage", id];
   const query = useQuery({
-    queryKey: [...prefix, "manage", id],
+    queryKey,
     queryFn: () => getCorporationManagement(id),
     retry: 1,
     gcTime: 0,
   });
   if (query.isPending) return <LoadingBar />;
-  if (query.isError)
+  if (query.isError && !query.data)
     return <CommunityError error={query.error} retry={() => query.refetch()} />;
   return (
-    <DraftEditor
-      key={query.data.working_revision?.id || "new"}
-      corporation={query.data}
-      revision={query.data.working_revision}
-      refresh={refresh}
-    />
+    <>
+      <CommunityError error={query.error} retry={() => query.refetch()} />
+      <DraftEditor
+        corporation={query.data}
+        revision={query.data.working_revision}
+        refresh={refresh}
+        reload={() => query.refetch()}
+        syncRevision={async (revision) => {
+          // A GET that began before the mutation must not later restore old data.
+          await client.cancelQueries({ queryKey, exact: true });
+          client.setQueryData(
+            queryKey,
+            (value) =>
+              value && {
+                ...value,
+                working_revision: revision,
+              },
+          );
+        }}
+      />
+    </>
   );
 }
 
-function DraftEditor({ corporation, revision, refresh }) {
+const revisionIdentity = (revision) =>
+  JSON.stringify([revision?.id, revision?.version, revision?.status]);
+
+function DraftEditor({ corporation, revision, refresh, reload, syncRevision }) {
   const [current, setCurrent] = useState(revision);
   const [form, setForm] = useState(() => contentFromRevision(revision));
+  const [baseline, setBaseline] = useState(() =>
+    JSON.stringify(contentFromRevision(revision)),
+  );
+  const [conflict, setConflict] = useState(false);
   const [tab, setTab] = useState("profile");
   const [uploading, setUploading] = useState(false);
   const [showPoster, setShowPoster] = useState(false);
@@ -379,13 +404,30 @@ function DraftEditor({ corporation, revision, refresh }) {
   const action = useCommunityAction();
   const keyFor = useIdempotencyKey();
   const editorBusy = action.busy || uploading;
-  useEffect(() => {
-    setCurrent(revision);
-    setForm(contentFromRevision(revision));
+  const dirty = JSON.stringify(form) !== baseline || customTagDraft.length > 0;
+  useUnsavedCorporation(dirty || uploading);
+  const adoptRevision = (value) => {
+    const content = contentFromRevision(value);
+    setCurrent(value);
+    setForm(content);
+    setBaseline(JSON.stringify(content));
     setCustomTagDraft("");
     setTagError("");
-  }, [revision?.id, revision?.version, revision?.status]);
+    setConflict(false);
+  };
+  useEffect(() => {
+    // Finish adopting a mutation response and its query-cache update together.
+    // A remote update received meanwhile is checked again when the action ends.
+    if (action.busy) return;
+    if (revisionIdentity(revision) === revisionIdentity(current)) return;
+    // The cache observer may briefly retain the GET predating our own save.
+    if (revision?.id === current?.id && revision?.version < current?.version)
+      return;
+    if (dirty || uploading) setConflict(true);
+    else adoptRevision(revision);
+  }, [revision, current, dirty, uploading, action.busy]);
   const editable = corporation.can_edit && current?.status === "draft";
+  const writeBlocked = conflict || !corporation.can_edit;
   const pending = current?.status === "pending";
   const change = (e) =>
     setForm((value) => ({ ...value, [e.target.name]: e.target.value }));
@@ -403,6 +445,8 @@ function DraftEditor({ corporation, revision, refresh }) {
       await refresh();
     });
   const save = async () => {
+    if (writeBlocked || !editable)
+      throw new Error("资料或权限已更新，请先加载服务器最新版本。");
     if (uploading) throw new Error("请等待图片上传完成后再保存");
     if ([...form.activity_description].length > 1500)
       throw new Error("主要活动介绍最多 1500 字，请精简后再保存。");
@@ -411,22 +455,29 @@ function DraftEditor({ corporation, revision, refresh }) {
       ...form.custom_activity_tags,
       ...(customTagDraft ? [customTagDraft] : []),
     ]);
-    const result = await saveCorporationDraft(current.id, {
-      expected_version: current.version,
-      ...payloadFromForm(form),
-      custom_activity_tags: customTags,
-    });
-    setCurrent(result);
-    setForm(contentFromRevision(result));
-    setCustomTagDraft("");
-    setTagError("");
+    let result;
+    try {
+      result = await saveCorporationDraft(current.id, {
+        expected_version: current.version,
+        ...payloadFromForm(form),
+        custom_activity_tags: customTags,
+      });
+    } catch (error) {
+      // A version conflict must not become an automatic retry with a newer CAS.
+      // Fetch the server state, while the dirty baseline protects local input.
+      await reload();
+      throw error;
+    }
+    await syncRevision(result);
+    adoptRevision(result);
     return result;
   };
   const submit = () =>
     action.run(async () => {
       const saved = await save();
       const result = await submitCorporationDraft(saved.id, saved.version);
-      setCurrent(result);
+      await syncRevision(result);
+      adoptRevision(result);
       await refresh();
     }, "已提交审核，公开内容将在通过后更新。");
   const input = (name, label, max, rows = 0, placeholder = "") => (
@@ -552,6 +603,30 @@ function DraftEditor({ corporation, revision, refresh }) {
       {pending && (
         <p className="corp-notice">审核中，公开页面仍展示上次通过的版本。</p>
       )}
+      {conflict && (
+        <div className="corp-error corp-draft-conflict" role="alert">
+          <span>
+            服务器资料已更新。本地修改已保留，保存与提交已暂停；请先复制需要保留的内容，再加载最新版本。
+          </span>
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={editorBusy}
+            onClick={async () => {
+              if (!window.confirm("确定放弃本地修改并加载服务器最新版本吗？"))
+                return;
+              const result = await reload();
+              if (result.isSuccess) {
+                adoptRevision(result.data.working_revision);
+                action.setError(null);
+              }
+            }}
+          >
+            放弃本地修改并加载最新版本
+          </button>
+        </div>
+      )}
+      {dirty && <p className="corp-hint">有未保存的修改</p>}
       {current?.review_reason && (
         <p className="corp-notice">审核意见：{current.review_reason}</p>
       )}
@@ -909,7 +984,7 @@ function DraftEditor({ corporation, revision, refresh }) {
                   <button
                     className="ghost-btn"
                     type="button"
-                    disabled={editorBusy}
+                    disabled={editorBusy || writeBlocked}
                     onClick={() => action.run(save, "草稿已保存")}
                   >
                     <Save size={16} />
@@ -918,7 +993,7 @@ function DraftEditor({ corporation, revision, refresh }) {
                   <button
                     className="primary-btn"
                     type="button"
-                    disabled={editorBusy}
+                    disabled={editorBusy || writeBlocked}
                     onClick={submit}
                   >
                     <Send size={16} />

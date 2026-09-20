@@ -131,6 +131,21 @@ export function usePrivateCommunity() {
     refresh: () => client.invalidateQueries({ queryKey: ["community", key] }),
   };
 }
+export function useRefreshPublicCorporations() {
+  const client = useQueryClient();
+  return async (id) => {
+    const affected = {
+      predicate: ({ queryKey }) =>
+        queryKey[0] === "corporations-public" &&
+        (queryKey[1] !== "detail" || String(queryKey[2]) === String(id)),
+    };
+    await client.cancelQueries(affected);
+    // No mounted public screen exists during staff actions. Removing inactive
+    // snapshots prevents even a one-frame stale disclosure after takedown.
+    client.removeQueries({ ...affected, type: "inactive" });
+    await client.invalidateQueries(affected);
+  };
+}
 export function useCommunityAction() {
   const lock = useRef(false);
   const [busy, setBusy] = useState(false);

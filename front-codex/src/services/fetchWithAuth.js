@@ -1,11 +1,46 @@
 import API_URL from "./backendSetting";
 
 const EXPIRY_SKEW_SECONDS = 30;
-let refreshPromise = null;
+let refreshFlight = null;
+let sessionMarker;
+let sessionGeneration = 0;
 
 function safeStorageGet(key) {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(key);
+}
+
+// Access tokens rotate within a session; the refresh token identifies its owner.
+// The fallback preserves access-only callers without treating all of them as guests.
+function captureSession() {
+  const refresh = safeStorageGet("refresh_token");
+  const access = refresh ? null : safeStorageGet("access_token");
+  const marker = refresh ? `refresh:${refresh}` : access ? `access:${access}` : null;
+  if (marker !== sessionMarker) {
+    sessionMarker = marker;
+    sessionGeneration++;
+    refreshFlight = null;
+  }
+  return { marker, generation: sessionGeneration };
+}
+
+export class AuthSessionChangedError extends Error {
+  constructor() {
+    super("登录状态已变化，请在当前账号下重新操作。");
+    this.name = "AuthSessionChangedError";
+  }
+}
+
+function assertSession(session) {
+  const current = captureSession();
+  if (current.marker !== session.marker || current.generation !== session.generation) {
+    throw new AuthSessionChangedError();
+  }
+}
+
+// Cross-tab logout/login must invalidate even a refresh that is already pending.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", () => captureSession());
 }
 
 function decodeJwtPayload(token) {
@@ -30,11 +65,14 @@ function isTokenExpired(token, skewSeconds = EXPIRY_SKEW_SECONDS) {
 
 export function notifyAuthChanged() {
   if (typeof window === "undefined") return;
+  captureSession();
   window.dispatchEvent(new Event("auth:changed"));
 }
 
 export function clearStoredAuth() {
   if (typeof window === "undefined") return;
+  sessionGeneration++;
+  refreshFlight = null;
   window.localStorage.removeItem("access_token");
   window.localStorage.removeItem("refresh_token");
   notifyAuthChanged();
@@ -61,7 +99,16 @@ export const refreshAccessToken = async (refreshToken) => {
   return data.access || null;
 };
 
-async function ensureFreshAccessToken(forceRefresh = false) {
+function expireSession(session) {
+  assertSession(session);
+  clearStoredAuth();
+  // This request may continue anonymously after its own expiry handling. Other
+  // requests from the expired session are still fenced out by their old snapshot.
+  Object.assign(session, captureSession());
+}
+
+async function ensureFreshAccessToken(session, forceRefresh = false) {
+  assertSession(session);
   const accessToken = safeStorageGet("access_token");
   if (!forceRefresh && accessToken && !isTokenExpired(accessToken)) {
     return accessToken;
@@ -69,19 +116,29 @@ async function ensureFreshAccessToken(forceRefresh = false) {
 
   const refreshToken = safeStorageGet("refresh_token");
   if (!refreshToken || isTokenExpired(refreshToken)) {
-    clearStoredAuth();
+    if (session.marker !== null) expireSession(session);
     return null;
   }
 
-  if (!refreshPromise) {
-    refreshPromise = refreshAccessToken(refreshToken).finally(() => {
-      refreshPromise = null;
+  if (!refreshFlight || refreshFlight.generation !== session.generation) {
+    const flight = { generation: session.generation, promise: null };
+    flight.promise = refreshAccessToken(refreshToken).finally(() => {
+      // An old completion must not release a newer account's single-flight lock.
+      if (refreshFlight === flight) refreshFlight = null;
     });
+    refreshFlight = flight;
   }
 
-  const nextAccessToken = await refreshPromise;
+  let nextAccessToken;
+  try {
+    nextAccessToken = await refreshFlight.promise;
+  } catch (error) {
+    assertSession(session);
+    throw error;
+  }
+  assertSession(session);
   if (!nextAccessToken) {
-    clearStoredAuth();
+    expireSession(session);
     return null;
   }
 
@@ -103,19 +160,23 @@ function buildHeaders(options, accessToken) {
 }
 
 const fetchWithAuth = async (url, options = {}) => {
-  let accessToken = await ensureFreshAccessToken(false);
+  const session = captureSession();
+  let accessToken = await ensureFreshAccessToken(session, false);
+  assertSession(session);
   const hadAuthHeader = Boolean(accessToken);
 
   let response = await fetch(url, {
     ...options,
     headers: buildHeaders(options, accessToken),
   });
+  assertSession(session);
 
   if (response.status !== 401 || !hadAuthHeader) {
     return response;
   }
 
-  accessToken = await ensureFreshAccessToken(true);
+  accessToken = await ensureFreshAccessToken(session, true);
+  assertSession(session);
   if (!accessToken) {
     return response;
   }
@@ -124,9 +185,10 @@ const fetchWithAuth = async (url, options = {}) => {
     ...options,
     headers: buildHeaders(options, accessToken),
   });
+  assertSession(session);
 
   if (response.status === 401) {
-    clearStoredAuth();
+    expireSession(session);
   }
 
   return response;

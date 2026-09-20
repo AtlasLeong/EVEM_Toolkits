@@ -1,4 +1,7 @@
 import importlib.util
+from contextlib import redirect_stdout
+from io import StringIO
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,8 +39,13 @@ class SafetyTests(unittest.TestCase):
                 (candidate / app).mkdir()
                 (candidate / app / 'models.py').write_text('', encoding='utf-8')
             with patch.object(qa, 'load_credentials', side_effect=AssertionError('must not read credentials')), patch.object(qa, 'run_rehearsal', side_effect=AssertionError('must not connect')):
-                result = qa.main(['--candidate-backend', str(candidate), '--live-backend', str(live), '--database', 'evem_community_qa_0123456789abcdef'])
+                output = StringIO()
+                with redirect_stdout(output):
+                    result = qa.main(['--candidate-backend', str(candidate), '--live-backend', str(live), '--database', 'evem_community_qa_0123456789abcdef'])
             self.assertEqual(result, 0)
+            checks = json.loads(output.getvalue())['checks']
+            self.assertIn('Community_API_smoke', checks)
+            self.assertNotIn('Community_API_suite', checks)
 
     def test_execute_requires_exact_confirmation(self):
         with self.assertRaises(qa.SafetyError):

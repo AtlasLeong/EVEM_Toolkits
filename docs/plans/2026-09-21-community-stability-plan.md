@@ -80,9 +80,12 @@ new isolated Community preflight/readiness modules and tests; `backend/Community
 
 ## Progress
 
-- [ ] Session fencing
-- [ ] Claim identity and Unicode
-- [ ] Draft protection and public cache
-- [ ] Automated release checks
-- [ ] Integration and independent reviews
-- [ ] Final verification and local commit
+- [x] Session fencing
+- [x] Claim identity and Unicode
+- [x] Draft protection and public cache
+- [x] Automated release checks
+- [x] Integration and independent reviews
+- [x] Final verification and local commit
+
+Final evidence is recorded in `2026-09-21-community-stability-verification.md`.
+The implementation and evidence are retained on the local feature branch only.
