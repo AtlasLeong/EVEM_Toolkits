@@ -283,6 +283,11 @@ class CorporationList(PublicAPI):
             if activity not in ACTIVITIES:
                 raise ValidationError({'activity': '请选择有效活动。'})
             query = query.filter(published_revision__activity_keys__contains=f'|{activity}|')
+        region = request.query_params.get('region', '').strip()
+        if len(region) > 80:
+            raise ValidationError({'region': '星域名称不能超过 80 字。'})
+        if region:
+            query = query.filter(published_revision__content__base_region__icontains=region)
         return Response(paged(request, query, public_data))
 
 

@@ -326,6 +326,41 @@ class CorporationTests(TestCase):
         mine = self.call('get', 'mine/').json()
         self.assertEqual(mine, {'claims': [], 'corporations': [], 'claims_count': 0, 'corporations_count': 0})
 
+    def test_public_region_filter_matches_partial_base_region_and_activity(self):
+        draft = self.ready()
+        updated = self.call('patch', f"revisions/{draft['id']}/", {
+            'expected_version': draft['version'],
+            'base_region': '德尔克',
+            'activities': ['pvp'],
+        }).json()
+        revision = self.submit(updated)
+        self.publish(revision)
+
+        self.assertEqual(self.call('get', 'corporations/?region=德尔').json()['count'], 1)
+        self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=pvp').json()['count'], 1)
+        self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=pve').json()['count'], 0)
+
+    def test_public_region_filter_empty_no_match_and_length_validation(self):
+        first = self.ready()
+        first = self.call('patch', f"revisions/{first['id']}/", {
+            'expected_version': first['version'],
+            'base_region': '德尔克',
+        }).json()
+        first = self.submit(first)
+        self.publish(first)
+
+        second = self.ready(self.draft(self.owned('另一个军团')))
+        second = self.call('patch', f"revisions/{second['id']}/", {
+            'expected_version': second['version'],
+            'base_region': '特纳特',
+        }).json()
+        second = self.submit(second)
+        self.publish(second)
+
+        self.assertEqual(self.call('get', 'corporations/?region=').json()['count'], 2)
+        self.assertEqual(self.call('get', 'corporations/?region=不存在').json()['count'], 0)
+        self.assertEqual(self.call('get', 'corporations/?region=' + ('星' * 81)).status_code, 400)
+
     def test_claim_reject_requires_reason_and_reviewer_is_persisted(self):
         claim, _ = self.claim()
         self.client.force_authenticate(self.staff)
