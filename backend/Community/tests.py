@@ -337,6 +337,9 @@ class CorporationTests(TestCase):
         self.publish(revision)
 
         self.assertEqual(self.call('get', 'corporations/?region=德尔').json()['count'], 1)
+        exact = self.call('get', 'corporations/?region=德尔克').json()
+        self.assertEqual(exact['count'], 1)
+        self.assertEqual(exact['results'][0]['revision']['base_region'], '德尔克')
         self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=pvp').json()['count'], 1)
         self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=pve').json()['count'], 0)
 
@@ -358,8 +361,46 @@ class CorporationTests(TestCase):
         self.publish(second)
 
         self.assertEqual(self.call('get', 'corporations/?region=').json()['count'], 2)
+        self.assertEqual(self.call('get', 'corporations/?region=德尔克').json()['count'], 1)
+        trimmed = self.call('get', 'corporations/?region=%20德尔克%20').json()
+        self.assertEqual(trimmed['count'], 1)
+        self.assertEqual(trimmed['results'][0]['revision']['base_region'], '德尔克')
+        combined = self.call('get', 'corporations/?q=测试&region=德尔').json()
+        self.assertEqual(combined['count'], 1)
+        self.assertEqual(combined['results'][0]['name'], '测试军团')
+        self.assertEqual(self.call('get', 'corporations/?q=另一个&region=德尔').json()['count'], 0)
         self.assertEqual(self.call('get', 'corporations/?region=不存在').json()['count'], 0)
+        page_two = self.call('get', 'corporations/?region=德尔&page=2').json()
+        self.assertEqual(page_two['count'], 1)
+        self.assertEqual(page_two['results'], [])
         self.assertEqual(self.call('get', 'corporations/?region=' + ('星' * 81)).status_code, 400)
+
+    @override_settings(COMMUNITY_CLAIMS_PER_DAY=25)
+    def test_public_region_filter_is_applied_before_pagination(self):
+        matching = self.ready()
+        matching = self.call('patch', f"revisions/{matching['id']}/", {
+            'expected_version': matching['version'],
+            'base_region': '德尔克',
+        }).json()
+        matching = self.submit(matching)
+        self.publish(matching)
+
+        for index in range(20):
+            draft = self.ready(self.draft(self.owned(f'其他军团{index}')))
+            draft = self.call('patch', f"revisions/{draft['id']}/", {
+                'expected_version': draft['version'],
+                'base_region': '特纳特',
+            }).json()
+            draft = self.submit(draft)
+            self.publish(draft)
+
+        filtered_page = self.call('get', 'corporations/?region=德尔克&page=1').json()
+        self.assertEqual(filtered_page['count'], 1)
+        self.assertEqual([item['name'] for item in filtered_page['results']], ['测试军团'])
+
+        unfiltered_page = self.call('get', 'corporations/?page=1').json()
+        self.assertEqual(unfiltered_page['count'], 21)
+        self.assertNotIn('测试军团', [item['name'] for item in unfiltered_page['results']])
 
     def test_claim_reject_requires_reason_and_reviewer_is_persisted(self):
         claim, _ = self.claim()
