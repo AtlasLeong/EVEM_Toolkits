@@ -61,6 +61,11 @@ const send = (path, body, method = "POST") =>
   request(path, { method, body: JSON.stringify(body) });
 export const listCorporations = (params) =>
   request(`corporations/?${new URLSearchParams(params)}`, {}, false);
+export const getCommunityRegions = async () => {
+  const response = await fetch(`${API_URL}/regions`);
+  if (!response.ok) throw new Error("星域目录暂时不可用");
+  return response.json();
+};
 export const getCorporation = (id) => request(`corporations/${id}/`, {}, false);
 export const getCommunityCapabilities = () => request("capabilities/");
 export const getMyCorporations = (page = 1) => request(`mine/?page=${page}`);

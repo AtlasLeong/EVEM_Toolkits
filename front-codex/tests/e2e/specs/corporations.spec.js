@@ -52,11 +52,33 @@ test("游客我的军团入口提示登录", async ({ page }) => {
 test("军团搜索框、下拉框与按钮在桌面等高对齐", async ({ page }) => {
   await communityFixture(page);
   await page.goto('/corporations');
-  const controls = [page.locator('.corp-search-input'), page.getByRole('combobox', { name: '活动方向' }), page.getByRole('button', { name: '查找军团' })];
+  const controls = [page.locator('.corp-search-input'), page.getByRole('combobox', { name: '活动星域' }), page.getByRole('combobox', { name: '活动方向' }), page.getByRole('button', { name: '查找军团' })];
   for (const control of controls) await expect(control).toBeVisible();
   const boxes = await Promise.all(controls.map(control => control.boundingBox()));
   expect(Math.max(...boxes.map(box => box.height)) - Math.min(...boxes.map(box => box.height))).toBeLessThanOrEqual(1);
   expect(Math.max(...boxes.map(box => box.y)) - Math.min(...boxes.map(box => box.y))).toBeLessThanOrEqual(1);
+});
+
+test("军团大厅可按活动星域筛选并与活动方向组合", async ({ page }) => {
+  const requests = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/community/corporations/")) {
+      requests.push(new URL(request.url()).searchParams);
+    }
+  });
+  await communityFixture(page);
+  await page.goto("/corporations");
+  const region = page.getByRole("combobox", { name: "活动星域" });
+  await expect(region).toBeEnabled();
+  await region.selectOption({ label: "德里克" });
+  await expect(page.getByRole("link", { name: /远航者军团/ })).toBeVisible();
+  await page.getByRole("combobox", { name: "活动方向" }).selectOption("pvp");
+  await expect(page.getByText("筛选结果", { exact: true })).toBeVisible();
+  const last = requests.at(-1);
+  expect(last.get("region")).toBe("德里克");
+  expect(last.get("activity")).toBe("pvp");
+  await region.selectOption("");
+  await expect(page.getByText("1 个已公开军团", { exact: true })).toBeVisible();
 });
 
 test("创建申请携带唯一请求号，说明与验证联系方式为私有", async ({ page }) => {
@@ -175,6 +197,18 @@ test("手机军团页面与编辑器没有横向溢出", async ({ page }) => {
       ),
     ).toBe(true);
   }
+});
+
+test("军团详情顶部封面在桌面与手机端保持紧凑", async ({ page }) => {
+  await communityFixture(page);
+  await page.goto("/corporations/1");
+  const desktopCover = page.locator(".corp-profile-cover");
+  await expect(desktopCover).toBeVisible();
+  expect((await desktopCover.boundingBox()).height).toBeLessThanOrEqual(162);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  expect((await desktopCover.boundingBox()).height).toBeLessThanOrEqual(130);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test("海报图片临时加载失败后重试会重新请求图片", async ({ page }) => {

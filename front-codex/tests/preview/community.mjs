@@ -90,7 +90,9 @@ export function resolveCommunityPreview(url, method, body) {
         (!url.searchParams.get("q") ||
           c.name.includes(url.searchParams.get("q"))) &&
         (!url.searchParams.get("activity") ||
-          c.revision.activities.includes(url.searchParams.get("activity"))),
+          c.revision.activities.includes(url.searchParams.get("activity"))) &&
+        (!url.searchParams.get("region") ||
+          c.revision.base_region.includes(url.searchParams.get("region"))),
     );
     data = { count: results.length, results };
   } else if (/^corporations\/[123]\/$/.test(p))

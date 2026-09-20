@@ -50,7 +50,11 @@ export function resolvePreviewRequest(url, method, body = {}) {
   }
   const get = {
     '/api/planetresources': resources,
-    '/api/regions': [{ r_id: 1, r_title: '伏尔戈', r_safetylvl: 0.59 }],
+    '/api/regions': [
+      { r_id: 'derelik', r_title: '德里克', r_safetylvl: 0.5 },
+      { r_id: 'volgo', r_title: '伏尔戈', r_safetylvl: 0.59 },
+      { r_id: 'silent', r_title: '静寂谷', r_safetylvl: -0.29 },
+    ],
     '/api/constellations': [{ co_id: 11, co_title: '米沃拉', co_safetylvl: 0.2 }],
     '/api/solarsystem': [{ ss_id: 21, ss_title: '夫斯库仑', ss_safetylvl: 0.22 }],
     '/api/planetresourceprice': resources.flatMap(group => group.options.map(item => ({ resource_name: item.value, resource_type: group.label, resource_price: 1280 }))),

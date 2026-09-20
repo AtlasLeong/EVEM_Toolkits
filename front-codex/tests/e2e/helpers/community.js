@@ -64,12 +64,21 @@ export async function communityFixture(
   let decisions = [];
   const posts = [];
   await installApiMock(page, async ({ url, method, body }) => {
+    if (url.pathname === "/api/regions" && method === "GET")
+      return json([
+        { r_id: "derelik", r_title: "德里克", r_safetylvl: 0.5 },
+        { r_id: "volgo", r_title: "伏尔戈", r_safetylvl: 0.59 },
+        { r_id: "silent", r_title: "静寂谷", r_safetylvl: -0.29 },
+      ]);
     const p = url.pathname.replace("/api/community/", "");
     if (!url.pathname.startsWith("/api/community/")) return json([]);
     if (p === "corporations/" && method === "GET")
       return fails
         ? json({ detail: "军团数据暂时不可用" }, 503)
-        : json({ count: empty ? 0 : 1, results: empty ? [] : [corporation] });
+        : json({
+            count: empty || (url.searchParams.get("region") && url.searchParams.get("region") !== "德里克") ? 0 : 1,
+            results: empty || (url.searchParams.get("region") && url.searchParams.get("region") !== "德里克") ? [] : [corporation],
+          });
     if (p === "corporations/1/" && method === "GET") return json(corporation);
     if (p === "capabilities/") return json({ can_review: staff });
     if (p === "mine/")

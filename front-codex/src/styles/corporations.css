@@ -62,7 +62,7 @@
 }
 .corp-search {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 210px auto;
+  grid-template-columns: minmax(0, 1fr) 210px 210px auto;
   gap: 12px;
   align-items: stretch;
 }
@@ -336,7 +336,7 @@
   align-self: flex-start;
 }
 .corp-profile-cover {
-  height: 220px;
+  height: 160px;
   border-radius: 12px;
   overflow: hidden;
   background: #273333;
@@ -365,7 +365,7 @@
   display: flex;
   align-items: center;
   gap: 22px;
-  margin-top: -52px;
+  margin-top: -46px;
   padding: 0 24px;
   position: relative;
 }
@@ -1208,10 +1208,13 @@
     gap: 24px;
   }
   .corp-search {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
   }
   .corp-search-input {
+    grid-column: 1/-1;
+  }
+  .corp-search > .primary-btn {
     grid-column: 1/-1;
   }
   .corp-grid,
@@ -1227,14 +1230,14 @@
     gap: 12px;
   }
   .corp-profile-cover {
-    height: 180px;
-    padding: 22px;
+    height: 128px;
+    padding: 18px;
   }
   .corp-profile-heading {
     padding: 0 6px;
     gap: 14px;
     flex-wrap: wrap;
-    margin-top: -50px;
+    margin-top: -42px;
   }
   .corp-profile-logo {
     width: 76px;

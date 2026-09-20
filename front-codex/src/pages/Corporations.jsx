@@ -13,6 +13,7 @@ import {
   BENEFITS,
   CORPORATION_TYPES,
   REGION_TAGS,
+  getCommunityRegions,
   getCorporation,
   listCorporations,
 } from "../services/apiCommunity";
@@ -31,10 +32,17 @@ export default function CorporationsPage() {
   const [input, setInput] = useState("");
   const [q, setQ] = useState("");
   const [activity, setActivity] = useState("");
+  const [region, setRegion] = useState("");
   const [page, setPage] = useState(1);
+  const regions = useQuery({
+    queryKey: ["community-regions"],
+    queryFn: getCommunityRegions,
+    staleTime: 60 * 60 * 1000,
+    retry: 1,
+  });
   const list = useQuery({
-    queryKey: ["corporations-public", q, activity, page],
-    queryFn: () => listCorporations({ q, activity, page }),
+    queryKey: ["corporations-public", q, activity, region, page],
+    queryFn: () => listCorporations({ q, activity, region, page }),
     retry: 1,
   });
   return (
@@ -75,6 +83,24 @@ export default function CorporationsPage() {
         </label>
         <select
           className="text-input"
+          aria-label="活动星域"
+          value={region}
+          disabled={regions.isPending || regions.isError}
+          title={regions.isError ? "星域目录暂时不可用" : undefined}
+          onChange={(e) => {
+            setRegion(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">全部活动星域</option>
+          {(regions.data || []).map((item) => (
+            <option key={item.r_id} value={item.r_title}>
+              {item.r_title}
+            </option>
+          ))}
+        </select>
+        <select
+          className="text-input"
           aria-label="活动方向"
           value={activity}
           onChange={(e) => {
@@ -100,7 +126,7 @@ export default function CorporationsPage() {
       ) : (
         <>
           <div className="corp-list-caption">
-            <span>{q || activity ? "筛选结果" : "探索军团"}</span>
+            <span>{q || activity || region ? "筛选结果" : "探索军团"}</span>
             <span>{list.data.count} 个已公开军团</span>
           </div>
           {list.data.results.length ? (
@@ -111,7 +137,7 @@ export default function CorporationsPage() {
             </div>
           ) : (
             <EmptyState
-              title={q || activity ? "没有找到匹配的军团" : "还没有公开的军团"}
+              title={q || activity || region ? "没有找到匹配的军团" : "还没有公开的军团"}
               desc="你可以调整筛选条件，或申请创建军团主页。审核通过后就会在这里展示。"
             />
           )}
