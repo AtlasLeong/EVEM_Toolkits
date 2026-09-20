@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     'ActivationCode',
     'License',
     'Feedback',
+    'Community',
 ]
 
 MIDDLEWARE = [
@@ -216,6 +217,7 @@ AUTH_USER_MODEL = 'Authentication.EVEMUser'
 
 # Private feedback attachments must be outside any Nginx/static/media public root.
 FEEDBACK_UPLOAD_ROOT = config('FEEDBACK_UPLOAD_ROOT', default=None)
+COMMUNITY_UPLOAD_ROOT = config('COMMUNITY_UPLOAD_ROOT', default=None)
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

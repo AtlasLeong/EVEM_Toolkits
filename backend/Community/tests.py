@@ -1,0 +1,305 @@
+import io
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+from uuid import uuid4
+
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
+from PIL import Image, PngImagePlugin
+from rest_framework.test import APIClient
+
+
+class CorporationTests(TestCase):
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user('owner')
+        self.other = get_user_model().objects.create_user('other')
+        self.staff = get_user_model().objects.create_user('reviewer', is_staff=True)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.setting = override_settings(COMMUNITY_UPLOAD_ROOT=self.tmp.name)
+        self.setting.enable()
+        self.addCleanup(self.setting.disable)
+
+    def call(self, method, path, data=None):
+        return getattr(self.client, method)('/api/community/' + path, data, format='json')
+
+    def claim(self, name='测试军团', **extra):
+        data = dict(request_id=str(uuid4()), name=name, short_name='TEST', statement='本人军团管理者', contact='private-contact')
+        data.update(extra)
+        response = self.call('post', 'claims/', data)
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json(), data
+
+    def owned(self, name='测试军团'):
+        claim, _ = self.claim(name)
+        self.client.force_authenticate(self.staff)
+        response = self.call('post', f"reviews/claims/{claim['id']}/decision/", {'decision': 'approve', 'reason': '已核验'})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.client.force_authenticate(self.owner)
+        return claim['corporation']['id']
+
+    def draft(self, corporation=None):
+        corporation = corporation or self.owned()
+        response = self.call('post', f'corporations/{corporation}/draft/', {'request_id': str(uuid4())})
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json()
+
+    def ready(self, draft=None):
+        draft = draft or self.draft()
+        response = self.call('patch', f"revisions/{draft['id']}/", {'expected_version': draft['version'], 'introduction': '军团介绍', 'public_contact': '公开联系', 'activities': ['pvp']})
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def submit(self, draft):
+        response = self.call('post', f"revisions/{draft['id']}/submit/", {'expected_version': draft['version']})
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def publish(self, revision):
+        self.client.force_authenticate(self.staff)
+        response = self.call('post', f"reviews/revisions/{revision['id']}/decision/", {'decision': 'approve', 'reason': ''})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.client.force_authenticate(self.owner)
+
+    def upload(self, corporation, data=None, name='a.png', request_id=None):
+        if data is None:
+            output = io.BytesIO()
+            info = PngImagePlugin.PngInfo()
+            info.add_text('secret', 'EXIF PRIVATE LOCATION')
+            Image.new('RGB', (40, 30), 'red').save(output, 'PNG', pnginfo=info)
+            data = output.getvalue()
+        return self.client.post(f'/api/community/corporations/{corporation}/media/', {'request_id': request_id or str(uuid4()), 'file': SimpleUploadedFile(name, data)}, format='multipart')
+
+    def test_claim_idempotency_normalization_and_private_visibility(self):
+        claim, payload = self.claim(name='ＦＯＯ')
+        self.assertEqual(self.call('post', 'claims/', payload).status_code, 200)
+        self.assertEqual(self.call('post', 'claims/', {**payload, 'contact': 'changed'}).status_code, 409)
+        self.assertEqual(self.call('post', 'claims/', {**payload, 'request_id': str(uuid4())}).status_code, 409)
+        self.assertEqual(self.call('get', 'corporations/').json(), {'count': 0, 'results': []})
+        self.client.force_authenticate(self.other)
+        contender, _ = self.claim(name='foo')
+        self.assertEqual(contender['corporation']['id'], claim['corporation']['id'])
+        self.assertEqual(self.call('get', f"claims/{claim['id']}/").status_code, 404)
+
+    def test_capabilities_live_staff_and_private_cache_on_errors(self):
+        response = self.call('get', 'capabilities/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'can_review': False})
+        self.assertEqual(self.call('get', 'reviews/').status_code, 403)
+        self.client = APIClient()
+        response = self.call('get', 'mine/')
+        self.assertEqual(response.status_code, 401)
+        self.assertIn('no-store', response['Cache-Control'])
+        self.assertIn('Authorization', response['Vary'])
+
+    def test_claim_review_assigns_owner_not_public_and_cannot_take_over(self):
+        corporation = self.owned()
+        self.assertEqual(self.call('get', f'corporations/{corporation}/').status_code, 404)
+        self.client.force_authenticate(self.other)
+        response = self.call('post', 'claims/', dict(request_id=str(uuid4()), corporation_id=corporation, statement='mine', contact='me'))
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.call('get', f'corporations/{corporation}/manage/').status_code, 404)
+
+    def test_version_and_pending_immutability(self):
+        draft = self.ready()
+        self.assertEqual(self.call('patch', f"revisions/{draft['id']}/", {'expected_version': 1, 'tagline': 'stale'}).status_code, 409)
+        pending = self.submit(draft)
+        self.assertEqual(self.call('patch', f"revisions/{draft['id']}/", {'expected_version': pending['version'], 'tagline': 'mutate'}).status_code, 409)
+        self.assertEqual(self.call('post', f"corporations/{draft['corporation_id']}/draft/", {'request_id': str(uuid4())}).status_code, 409)
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.call('patch', f"revisions/{draft['id']}/", {'expected_version': pending['version']}).status_code, 404)
+
+    def test_old_public_survives_edits_reject_and_duplicate_approval(self):
+        revision = self.submit(self.ready())
+        self.publish(revision)
+        corporation = revision['corporation_id']
+        public = self.call('get', f'corporations/{corporation}/').json()
+        self.assertEqual(set(public), {'id', 'name', 'short_name', 'published_at', 'revision', 'logo_url', 'cover_url'})
+        self.assertNotIn('review_reason', public['revision'])
+        self.assertNotIn('private-contact', str(public))
+        draft = self.draft(corporation)
+        pending = self.submit(self.ready(draft))
+        self.assertEqual(self.call('get', f'corporations/{corporation}/').json(), public)
+        self.client.force_authenticate(self.staff)
+        self.assertEqual(self.call('post', f"reviews/revisions/{pending['id']}/decision/", {'decision': 'reject', 'reason': '补充介绍'}).status_code, 200)
+        self.assertEqual(self.call('post', f"reviews/revisions/{revision['id']}/decision/", {'decision': 'approve', 'reason': ''}).status_code, 409)
+        self.assertEqual(self.call('get', f'corporations/{corporation}/').json(), public)
+
+    def test_whitelist_required_content_and_invalid_enums(self):
+        self.assertEqual(self.call('post', 'claims/', {'request_id': str(uuid4()), 'owner_id': self.owner.pk}).status_code, 400)
+        draft = self.draft()
+        path = f"revisions/{draft['id']}/"
+        for data in ({'owner_id': 2}, {'activities': ['bad']}, {'activities': ['pvp', 'pvp']}, {'recruitment_status': 'invalid'}, {'tagline': 'a' * 81}, {'logo_asset_id': True}):
+            self.assertEqual(self.call('patch', path, {'expected_version': draft['version'], **data}).status_code, 400)
+        self.assertEqual(self.call('post', path + 'submit/', {'expected_version': draft['version']}).status_code, 400)
+
+    def test_media_private_metadata_removed_public_only_after_review_and_hide(self):
+        draft = self.ready()
+        corporation = draft['corporation_id']
+        uploaded = self.upload(corporation)
+        self.assertEqual(uploaded.status_code, 201, uploaded.content)
+        asset = uploaded.json()
+        response = self.client.get(asset['private_url'])
+        raw = b''.join(response.streaming_content)
+        response.close()
+        self.assertNotIn(b'EXIF PRIVATE LOCATION', raw)
+        self.assertIn('no-store', response['Cache-Control'])
+        public_url = f'/api/community/corporations/{corporation}/media/{asset["id"]}/'
+        self.assertEqual(self.client.get(public_url).status_code, 404)
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.client.get(asset['private_url']).status_code, 404)
+        self.client.force_authenticate(self.owner)
+        draft = self.call('patch', f"revisions/{draft['id']}/", {'expected_version': draft['version'], 'logo_asset_id': asset['id']}).json()
+        self.publish(self.submit(draft))
+        response = self.client.get(public_url)
+        self.assertEqual(response.status_code, 200)
+        response.close()
+        self.client.force_authenticate(self.staff)
+        self.assertEqual(self.call('post', f'corporations/{corporation}/visibility/', {'is_listed': False, 'reason': '违规'}).status_code, 200)
+        self.assertEqual(self.client.get(public_url).status_code, 404)
+
+    def test_upload_rejects_fakes_animations_oversize_and_fails_closed(self):
+        corporation = self.owned()
+        for name, data in [('x.svg', b'<svg/>'), ('x.png', b'fake'), ('x.jpg', b'a' * (5 * 1024 * 1024 + 1))]:
+            self.assertEqual(self.upload(corporation, data, name).status_code, 400)
+        output = io.BytesIO()
+        Image.new('RGB', (2, 2), 'red').save(output, 'PNG', save_all=True, append_images=[Image.new('RGB', (2, 2), 'blue')])
+        self.assertEqual(self.upload(corporation, output.getvalue()).status_code, 400)
+        with override_settings(COMMUNITY_UPLOAD_ROOT=None):
+            self.assertEqual(self.upload(corporation).status_code, 503)
+
+    def test_media_idempotency_foreign_binding_and_db_failure_compensation(self):
+        corporation = self.owned()
+        request_id = str(uuid4())
+        first = self.upload(corporation, request_id=request_id)
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(self.upload(corporation, request_id=request_id).json()['id'], first.json()['id'])
+        other_corporation = self.owned('另一军团')
+        draft = self.draft(other_corporation)
+        response = self.call('patch', f"revisions/{draft['id']}/", {'expected_version': draft['version'], 'logo_asset_id': first.json()['id']})
+        self.assertEqual(response.status_code, 400)
+        before = list(Path(self.tmp.name).rglob('*'))
+        with self.assertLogs('Community.views', level='ERROR'), patch('Community.views.MediaAsset.objects.create', side_effect=RuntimeError('DB unavailable')):
+            self.assertEqual(self.upload(corporation).status_code, 503)
+        self.assertEqual(list(Path(self.tmp.name).rglob('*')), before)
+
+    def test_staff_review_queue_claim_contenders_and_owner_only_edit(self):
+        first, _ = self.claim()
+        self.client.force_authenticate(self.other)
+        second, _ = self.claim()
+        self.client.force_authenticate(self.staff)
+        self.assertEqual(self.call('get', 'reviews/?kind=claims').json()['count'], 2)
+        self.assertEqual(self.call('post', f"reviews/claims/{first['id']}/decision/", {'decision': 'approve', 'reason': ''}).status_code, 200)
+        self.assertEqual(self.call('post', f"reviews/claims/{second['id']}/decision/", {'decision': 'approve', 'reason': ''}).status_code, 409)
+        corporation = first['corporation']['id']
+        self.assertEqual(self.call('post', f'corporations/{corporation}/draft/', {'request_id': str(uuid4())}).status_code, 404)
+
+    def test_withdraw_and_draft_request_id_replay(self):
+        draft = self.ready()
+        pending = self.submit(draft)
+        response = self.call('post', f"revisions/{draft['id']}/withdraw/", {'expected_version': pending['version']})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'withdrawn')
+        path = f"corporations/{draft['corporation_id']}/draft/"
+        request_id = str(uuid4())
+        first = self.call('post', path, {'request_id': request_id})
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(self.call('post', path, {'request_id': request_id}).json()['id'], first.json()['id'])
+
+    @override_settings(COMMUNITY_CLAIMS_PER_DAY=1, COMMUNITY_MEDIA_PER_DAY=1)
+    def test_persistent_quotas_and_pagination_validation(self):
+        corporation = self.owned()
+        self.assertEqual(self.call('post', 'claims/', dict(request_id=str(uuid4()), name='Next', short_name='', statement='owner', contact='x')).status_code, 429)
+        self.assertEqual(self.upload(corporation).status_code, 201)
+        self.assertEqual(self.upload(corporation).status_code, 429)
+        self.assertEqual(self.call('get', 'corporations/?page=0').status_code, 400)
+        self.assertEqual(self.call('get', 'corporations/?activity=invalid').status_code, 400)
+
+    def test_staff_review_detail_excludes_unsubmitted_drafts(self):
+        draft = self.ready()
+        self.client.force_authenticate(self.staff)
+        self.assertEqual(self.call('get', f"reviews/revisions/{draft['id']}/").status_code, 404)
+
+    def test_private_errors_success_and_live_capabilities_have_no_store(self):
+        for path in ('capabilities/', 'mine/', 'claims/9999/', 'reviews/', 'corporations/9999/manage/'):
+            response = self.call('get', path)
+            self.assertIn('no-store', response['Cache-Control'])
+            self.assertIn('Authorization', response['Vary'])
+        self.owner.is_staff = True
+        self.owner.save(update_fields=['is_staff'])
+        self.client.force_authenticate(get_user_model().objects.get(pk=self.owner.pk))
+        self.assertTrue(self.call('get', 'capabilities/').json()['can_review'])
+
+    def test_public_search_activity_and_mine_are_bounded_and_no_private_leaks(self):
+        pending = self.submit(self.ready())
+        self.client.force_authenticate(self.staff)
+        review = self.call('get', f"reviews/revisions/{pending['id']}/").json()
+        self.assertEqual(review['corporation']['name'], '测试军团')
+        self.assertEqual(self.call('get', 'reviews/?kind=revisions').json()['count'], 1)
+        self.client.force_authenticate(self.owner)
+        self.publish(pending)
+        self.client = APIClient()
+        data = self.call('get', 'corporations/?q=测试&activity=pvp').json()
+        self.assertEqual(data['count'], 1)
+        self.assertEqual(self.call('get', 'corporations/?activity=pve').json()['count'], 0)
+        self.assertEqual(self.call('get', 'corporations/?page=2').json()['results'], [])
+        self.assertNotIn('private-contact', str(data))
+        self.client.force_authenticate(self.other)
+        mine = self.call('get', 'mine/').json()
+        self.assertEqual(mine, {'claims': [], 'corporations': [], 'claims_count': 0, 'corporations_count': 0})
+
+    def test_claim_reject_requires_reason_and_reviewer_is_persisted(self):
+        claim, _ = self.claim()
+        self.client.force_authenticate(self.staff)
+        path = f"reviews/claims/{claim['id']}/decision/"
+        self.assertEqual(self.call('post', path, {'decision': 'reject', 'reason': ''}).status_code, 400)
+        self.assertEqual(self.call('post', path, {'decision': 'reject', 'reason': '需核验身份'}).status_code, 200)
+        from .models import Claim
+        saved = Claim.objects.get(pk=claim['id'])
+        self.assertEqual(saved.reviewer_id, self.staff.pk)
+        self.assertIsNotNone(saved.reviewed_at)
+        self.assertEqual(saved.status, 'rejected')
+
+    def test_upload_exif_orientation_and_size_are_sanitized(self):
+        corporation = self.owned()
+        output = io.BytesIO()
+        photo = Image.new('RGB', (50, 30))
+        exif = Image.Exif()
+        exif[274] = 6
+        exif[270] = 'private location'
+        photo.save(output, 'JPEG', exif=exif)
+        response = self.upload(corporation, output.getvalue(), 'photo.jpg')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual((response.json()['width'], response.json()['height']), (30, 50))
+        streamed = self.client.get(response.json()['private_url'])
+        raw = b''.join(streamed.streaming_content)
+        streamed.close()
+        with Image.open(io.BytesIO(raw)) as result:
+            self.assertEqual(dict(result.getexif()), {})
+            self.assertEqual(result.format, 'WEBP')
+        output = io.BytesIO()
+        Image.new('RGB', (5000, 4001)).save(output, 'PNG')
+        self.assertEqual(self.upload(corporation, output.getvalue()).status_code, 400)
+
+    def test_storage_cannot_point_to_public_static_or_relative_folder(self):
+        corporation = self.owned()
+        for root in ('relative-private', str(Path(self.tmp.name) / 'static' / 'images')):
+            with override_settings(COMMUNITY_UPLOAD_ROOT=root):
+                self.assertEqual(self.upload(corporation).status_code, 503)
+
+    def test_draft_uuid_cannot_replay_into_another_corporation(self):
+        corporation = self.owned()
+        other = self.owned('另一家')
+        request_id = str(uuid4())
+        self.assertEqual(self.call('post', f'corporations/{corporation}/draft/', {'request_id': request_id}).status_code, 201)
+        self.assertEqual(self.call('post', f'corporations/{other}/draft/', {'request_id': request_id}).status_code, 409)
+
+    def test_file_storage_failure_is_a_service_error(self):
+        corporation = self.owned()
+        with self.assertLogs('Community.views', level='ERROR'), patch('django.core.files.storage.FileSystemStorage.save', side_effect=OSError('disk full')):
+            self.assertEqual(self.upload(corporation).status_code, 503)
+        self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
