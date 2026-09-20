@@ -22,6 +22,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from .activity import (ACTIVITY_DESCRIPTION_LIMIT, CURRENT_ACTIVITIES, READABLE_ACTIVITIES,
+                       is_unicode_text, normalized_custom_tags, validated_custom_tags)
 from .media import StorageUnavailable, private_storage, sanitized_image, upload_bytes
 from .models import Claim, Corporation, DraftRequest, MediaAsset, MediaUploadAttempt, Revision
 from .location import normalized_location, validated_location
@@ -29,8 +31,9 @@ from .location import normalized_location, validated_location
 logger = logging.getLogger(__name__)
 TEXT_FIELDS = {'tagline': 80, 'introduction': 5000, 'alliance': 80, 'base_region': 80,
                'active_time': 120, 'requirements': 1500, 'benefits': 1500, 'public_contact': 200,
-               'event_title': 80, 'event_time': 120, 'event_location': 120, 'event_description': 800}
-ACTIVITIES = ('pvp', 'pve', 'industry', 'exploration', 'mining', 'training')
+               'event_title': 80, 'event_time': 120, 'event_location': 120, 'event_description': 800,
+               'activity_description': ACTIVITY_DESCRIPTION_LIMIT}
+ACTIVITIES = CURRENT_ACTIVITIES
 CORP_TYPES = ('pirate', 'sovereignty')
 REGION_TAGS = ('highsec', 'lowsec', 'nullsec')
 BENEFIT_KEYS = ('ship_reimbursement', 'fleet_training', 'industry_support', 'logistics_support',
@@ -42,7 +45,7 @@ LEGACY_POSTER_BACKGROUNDS = {
     'jump-rift': 'black-hole', 'sovereignty-border': 'ringed-planet', 'pirate-tide': 'wreckfield',
 }
 BENEFITS_NOTE_LIMIT = 500
-CONTENT_FIELDS = {*TEXT_FIELDS, 'activities', 'corp_types', 'region_tags', 'benefit_keys', 'benefits_note',
+CONTENT_FIELDS = {*TEXT_FIELDS, 'activities', 'custom_activity_tags', 'corp_types', 'region_tags', 'benefit_keys', 'benefits_note',
                   'poster_background', 'base_location', 'recruitment_status', 'logo_asset_id', 'cover_asset_id'}
 
 
@@ -99,7 +102,7 @@ def identity(corporation):
 
 
 def default_content():
-    return {**dict.fromkeys(TEXT_FIELDS, ''), 'activities': [], 'corp_types': [], 'region_tags': [],
+    return {**dict.fromkeys(TEXT_FIELDS, ''), 'activities': [], 'custom_activity_tags': [], 'corp_types': [], 'region_tags': [],
             'benefit_keys': [], 'benefits_note': '', 'poster_background': 'expedition-fleet', 'base_location': None,
             'recruitment_status': 'open', 'logo_asset_id': None, 'cover_asset_id': None}
 
@@ -146,6 +149,12 @@ def revision_data(revision, public=False, corporation=None):
     content = default_content()
     stored = revision.content if isinstance(revision.content, dict) else {}
     content.update({key: value for key, value in stored.items() if key in TEXT_FIELDS or key in ('activities', 'recruitment_status', 'logo_asset_id', 'cover_asset_id')})
+    # Determine kind from raw JSON, before read defaults fill in the new field.
+    content['activity_content_kind'] = 'overview' if 'activity_description' in stored else 'legacy_event'
+    description = stored.get('activity_description', '')
+    content['activity_description'] = description.strip()[:ACTIVITY_DESCRIPTION_LIMIT] if is_unicode_text(description) else ''
+    content['custom_activity_tags'] = normalized_custom_tags(stored.get('custom_activity_tags'))
+    content['activities'] = normalized_list(stored.get('activities'), READABLE_ACTIVITIES, len(READABLE_ACTIVITIES))
     content['corp_types'] = normalized_list(stored.get('corp_types'), CORP_TYPES, len(CORP_TYPES))
     content['region_tags'] = normalized_list(stored.get('region_tags'), REGION_TAGS, len(REGION_TAGS))
     content['benefit_keys'] = normalized_list(stored.get('benefit_keys'), BENEFIT_KEYS, len(BENEFIT_KEYS))
@@ -168,9 +177,10 @@ def revision_data(revision, public=False, corporation=None):
 
 def public_data(corporation):
     revision = corporation.published_revision
-    return dict(**identity(corporation), published_at=revision.reviewed_at, revision=revision_data(revision, True),
-                logo_url=image_url(corporation.pk, revision.content.get('logo_asset_id'), True),
-                cover_url=image_url(corporation.pk, revision.content.get('cover_asset_id'), True))
+    content = revision_data(revision, True)
+    return dict(**identity(corporation), published_at=revision.reviewed_at, revision=content,
+                logo_url=image_url(corporation.pk, content['logo_asset_id'], True),
+                cover_url=image_url(corporation.pk, content['cover_asset_id'], True))
 
 
 def claim_data(claim):
@@ -290,7 +300,7 @@ class CorporationList(PublicAPI):
             query = query.filter(Q(name__icontains=search) | Q(short_name__icontains=search))
         activity = request.query_params.get('activity', '')
         if activity:
-            if activity not in ACTIVITIES:
+            if activity not in READABLE_ACTIVITIES:
                 raise ValidationError({'activity': '请选择有效活动。'})
             query = query.filter(published_revision__activity_keys__contains=f'|{activity}|')
         region = request.query_params.get('region', '').strip()
@@ -400,6 +410,8 @@ class Draft(PrivateAPI):
 
 def updated_content(data, corporation, old):
     result = copy.deepcopy(old)
+    if 'activity_description' in data and not is_unicode_text(data['activity_description']):
+        raise ValidationError({'activity_description': '请输入有效的 Unicode 文本。'})
     for key, limit in TEXT_FIELDS.items():
         if key in data:
             result[key] = text(data, key, limit, True)
@@ -415,7 +427,11 @@ def updated_content(data, corporation, old):
         # filter field drift away from the linked location's approved snapshot.
         result['base_region'] = old_location['region_name']
     if 'activities' in data:
-        result['activities'] = validated_list(data, 'activities', ACTIVITIES, len(ACTIVITIES))
+        # old is the locked working revision, not a client or public snapshot.
+        allowed = READABLE_ACTIVITIES if isinstance(old.get('activities'), list) and 'pvp' in old['activities'] else ACTIVITIES
+        result['activities'] = validated_list(data, 'activities', allowed, len(allowed))
+    if 'custom_activity_tags' in data:
+        result['custom_activity_tags'] = validated_custom_tags(data['custom_activity_tags'])
     if 'corp_types' in data:
         result['corp_types'] = validated_list(data, 'corp_types', CORP_TYPES, len(CORP_TYPES))
     if 'region_tags' in data:
@@ -574,6 +590,7 @@ class PublicMedia(PublicAPI):
     def get(self, request, pk, asset_id):
         corporation = get_object_or_404(listed(), pk=pk)
         content = corporation.published_revision.content
+        content = content if isinstance(content, dict) else {}
         if asset_id not in (content.get('logo_asset_id'), content.get('cover_asset_id')):
             raise NotFound()
         return serve_asset(get_object_or_404(MediaAsset.objects, pk=asset_id, corporation=corporation))

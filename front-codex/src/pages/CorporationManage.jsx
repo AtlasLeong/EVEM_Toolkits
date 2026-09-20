@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -48,6 +48,14 @@ import CorporationLocation from "../components/community/CorporationLocation";
 import CorporationSelect from "../components/community/CorporationSelect";
 import CorporationShare from "../components/community/CorporationShare";
 import { normalizePosterBackground } from "../utils/corporationPoster";
+import {
+  activityKind,
+  LEGACY_EVENT_FIELDS,
+  normalizeCustomActivityTags,
+  validateCustomActivityTags,
+  CUSTOM_TAG_LIMIT,
+  CUSTOM_TAG_LENGTH,
+} from "../utils/corporationActivity.js";
 import "../styles/corporations.css";
 
 const textFields = {
@@ -61,6 +69,7 @@ const textFields = {
   benefits: "",
   benefits_note: "",
   public_contact: "",
+  activity_description: "",
   event_title: "",
   event_time: "",
   event_location: "",
@@ -72,6 +81,10 @@ export const contentFromRevision = (revision) => ({
     Object.keys(textFields).map((k) => [k, revision?.[k] ?? textFields[k]]),
   ),
   activities: revision?.activities || [],
+  custom_activity_tags: normalizeCustomActivityTags(
+    revision?.custom_activity_tags,
+  ),
+  activity_content_kind: activityKind(revision),
   corp_types: revision?.corp_types || [],
   region_tags: revision?.region_tags || [],
   benefit_keys: revision?.benefit_keys || [],
@@ -86,7 +99,9 @@ export const contentFromRevision = (revision) => ({
 const payloadFromForm = (form) => ({
   ...Object.fromEntries(
     Object.entries(form).filter(
-      ([key]) => key !== "logo_url" && key !== "cover_url",
+      ([key]) =>
+        !["logo_url", "cover_url", "activity_content_kind"].includes(key) &&
+        !Object.hasOwn(LEGACY_EVENT_FIELDS, key),
     ),
   ),
   base_location: form.base_location
@@ -357,12 +372,17 @@ function DraftEditor({ corporation, revision, refresh }) {
   const [tab, setTab] = useState("profile");
   const [uploading, setUploading] = useState(false);
   const [showPoster, setShowPoster] = useState(false);
+  const [customTagDraft, setCustomTagDraft] = useState("");
+  const [tagError, setTagError] = useState("");
+  const customTagId = useId();
   const action = useCommunityAction();
   const keyFor = useIdempotencyKey();
   const editorBusy = action.busy || uploading;
   useEffect(() => {
     setCurrent(revision);
     setForm(contentFromRevision(revision));
+    setCustomTagDraft("");
+    setTagError("");
   }, [revision?.id, revision?.version, revision?.status]);
   const editable = corporation.can_edit && current?.status === "draft";
   const pending = current?.status === "pending";
@@ -383,12 +403,22 @@ function DraftEditor({ corporation, revision, refresh }) {
     });
   const save = async () => {
     if (uploading) throw new Error("请等待图片上传完成后再保存");
+    if ([...form.activity_description].length > 1500)
+      throw new Error("主要活动介绍最多 1500 字，请精简后再保存。");
+    // Include text still in the tag input, so saving cannot silently discard it.
+    const customTags = validateCustomActivityTags([
+      ...form.custom_activity_tags,
+      ...(customTagDraft ? [customTagDraft] : []),
+    ]);
     const result = await saveCorporationDraft(current.id, {
       expected_version: current.version,
       ...payloadFromForm(form),
+      custom_activity_tags: customTags,
     });
     setCurrent(result);
     setForm(contentFromRevision(result));
+    setCustomTagDraft("");
+    setTagError("");
     return result;
   };
   const submit = () =>
@@ -403,13 +433,25 @@ function DraftEditor({ corporation, revision, refresh }) {
       {label}
       {rows ? (
         <textarea
-          className="text-input"
+          className={`text-input corp-textarea${rows >= 6 ? " is-large" : rows <= 3 ? " is-compact" : ""}`}
+          aria-label={label}
           name={name}
           value={form[name]}
           onChange={change}
-          maxLength={max}
+          maxLength={name === "activity_description" ? undefined : max}
+          aria-invalid={
+            name === "activity_description" &&
+            [...form.activity_description].length > max
+              ? true
+              : undefined
+          }
+          aria-describedby={
+            name === "activity_description"
+              ? `${customTagId}-activity-hint`
+              : undefined
+          }
           rows={rows}
-          disabled={!editable || action.busy}
+          disabled={!editable || editorBusy}
           placeholder={placeholder}
         />
       ) : (
@@ -419,12 +461,25 @@ function DraftEditor({ corporation, revision, refresh }) {
           value={form[name]}
           onChange={change}
           maxLength={max}
-          disabled={!editable || action.busy}
+          disabled={!editable || editorBusy}
           placeholder={placeholder}
         />
       )}
     </label>
   );
+  const addCustomTag = () => {
+    try {
+      const custom_activity_tags = validateCustomActivityTags([
+        ...form.custom_activity_tags,
+        customTagDraft,
+      ]);
+      setForm((value) => ({ ...value, custom_activity_tags }));
+      setCustomTagDraft("");
+      setTagError("");
+    } catch (error) {
+      setTagError(error.message);
+    }
+  };
   const toggle = (field, id, max) =>
     setForm((value) => {
       const selected = value[field] || [];
@@ -532,7 +587,7 @@ function DraftEditor({ corporation, revision, refresh }) {
                 {[
                   ["profile", "基本资料"],
                   ["recruitment", "招募信息"],
-                  ["event", "活动信息"],
+                  ["event", "主要活动"],
                 ].map(([id, label]) => (
                   <button
                     type="button"
@@ -596,7 +651,7 @@ function DraftEditor({ corporation, revision, refresh }) {
                     {optionGroup("region_tags", "活动区域", REGION_TAGS, 3)}
                     <fieldset
                       className="corp-activities"
-                      disabled={!editable || action.busy}
+                      disabled={!editable || editorBusy}
                     >
                       <legend>活动方向</legend>
                       {Object.entries(ACTIVITIES).map(([id, label]) => (
@@ -619,6 +674,122 @@ function DraftEditor({ corporation, revision, refresh }) {
                         </label>
                       ))}
                     </fieldset>
+                    {form.activities.includes("pvp") && (
+                      <div className="corp-legacy-tag">
+                        <span>舰队作战（旧标签）</span>
+                        <button
+                          type="button"
+                          className="corp-tag-remove"
+                          aria-label="移除旧标签：舰队作战"
+                          disabled={!editable || editorBusy}
+                          onClick={() =>
+                            setForm((value) => ({
+                              ...value,
+                              activities: value.activities.filter(
+                                (item) => item !== "pvp",
+                              ),
+                            }))
+                          }
+                        >
+                          <X size={15} />
+                        </button>
+                        <p>
+                          旧标签仍会保留。你可以选择更准确的活动方向，再移除它。
+                        </p>
+                      </div>
+                    )}
+                    <div className="corp-custom-tags-editor">
+                      <label htmlFor={customTagId}>自定义活动标签</label>
+                      <p className="corp-field-hint" id={`${customTagId}-hint`}>
+                        补充具体玩法，例如反收割、小队游猎。最多{" "}
+                        {CUSTOM_TAG_LIMIT} 个，每个 {CUSTOM_TAG_LENGTH} 字。
+                      </p>
+                      <div className="corp-custom-tag-input">
+                        <input
+                          id={customTagId}
+                          className="text-input"
+                          value={customTagDraft}
+                          placeholder="输入一个标签，按 Enter 添加"
+                          aria-describedby={`${customTagId}-hint${tagError ? ` ${customTagId}-error` : ""}`}
+                          aria-invalid={Boolean(tagError)}
+                          disabled={
+                            !editable ||
+                            editorBusy ||
+                            form.custom_activity_tags.length >= CUSTOM_TAG_LIMIT
+                          }
+                          onChange={(event) => {
+                            setCustomTagDraft(event.target.value);
+                            setTagError("");
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key === "Enter" &&
+                              !event.nativeEvent.isComposing &&
+                              event.keyCode !== 229
+                            ) {
+                              event.preventDefault();
+                              addCustomTag();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          onClick={addCustomTag}
+                          disabled={
+                            !editable ||
+                            editorBusy ||
+                            form.custom_activity_tags.length >=
+                              CUSTOM_TAG_LIMIT ||
+                            !customTagDraft.trim()
+                          }
+                        >
+                          <Plus size={16} />
+                          添加标签
+                        </button>
+                      </div>
+                      {tagError && (
+                        <p
+                          className="corp-tag-error"
+                          id={`${customTagId}-error`}
+                          role="alert"
+                        >
+                          {tagError}
+                        </p>
+                      )}
+                      <div
+                        className="corp-custom-tag-list"
+                        aria-label="已添加的自定义标签"
+                      >
+                        {form.custom_activity_tags.map((tag) => (
+                          <span key={tag}>
+                            {tag}
+                            <button
+                              type="button"
+                              className="corp-tag-remove"
+                              aria-label={`移除标签：${tag}`}
+                              disabled={!editable || editorBusy}
+                              onClick={() => {
+                                setForm((value) => ({
+                                  ...value,
+                                  custom_activity_tags:
+                                    value.custom_activity_tags.filter(
+                                      (item) => item !== tag,
+                                    ),
+                                }));
+                                setTagError("");
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </span>
+                        ))}
+                        <span className="corp-tag-count">
+                          {form.custom_activity_tags.length} /{" "}
+                          {CUSTOM_TAG_LIMIT}
+                        </span>
+                      </div>
+                    </div>
                     <div className="corp-two-fields">
                       <MediaField
                         id={corporation.id}
@@ -687,15 +858,46 @@ function DraftEditor({ corporation, revision, refresh }) {
                 {tab === "event" && (
                   <>
                     <div className="corp-editor-intro">
-                      <h3>下一次集结，提前相约</h3>
-                      <p>选填活动资料，快速生成一张活动宣传海报。</p>
+                      <h3>你们的日常，值得被看见</h3>
+                      <p>
+                        介绍军团长期开展的活动，帮助飞行员找到适合自己的玩法。内容也会用于主要活动海报。
+                      </p>
                     </div>
-                    {input("event_title", "活动标题", 80)}
-                    <div className="corp-two-fields">
-                      {input("event_time", "活动时间", 120)}
-                      {input("event_location", "集结地点", 120)}
-                    </div>
-                    {input("event_description", "活动说明", 800, 6)}
+                    {input(
+                      "activity_description",
+                      "主要活动介绍",
+                      1500,
+                      6,
+                      "例如：参与联盟主权战，组织驻地反收割；平日开展小队游猎、矿业生产与工业协作。也可以介绍参与方式、新人能参与的内容。",
+                    )}
+                    <p
+                      className={`corp-field-hint${[...form.activity_description].length > 1500 ? " is-error" : ""}`}
+                      id={`${customTagId}-activity-hint`}
+                    >
+                      描述常态玩法即可，无需填写某一次活动的日期或集结点。
+                      {[...form.activity_description].length} / 1500 字
+                    </p>
+                    {Object.keys(LEGACY_EVENT_FIELDS).some(
+                      (key) => form[key],
+                    ) && (
+                      <details className="corp-legacy-activity">
+                        <summary>查看旧版活动资料</summary>
+                        <p className="corp-field-hint">
+                          旧资料保留供参考，不会自动填入主要活动。保存新版后，公开内容将在审核通过后更新。
+                        </p>
+                        <dl className="corp-review-fields">
+                          {Object.entries(LEGACY_EVENT_FIELDS).map(
+                            ([key, label]) =>
+                              form[key] && (
+                                <div key={key}>
+                                  <dt>{label}</dt>
+                                  <dd>{form[key]}</dd>
+                                </div>
+                              ),
+                          )}
+                        </dl>
+                      </details>
+                    )}
                   </>
                 )}
               </div>
@@ -765,7 +967,9 @@ function DraftEditor({ corporation, revision, refresh }) {
               name: corporation.name,
               short_name: corporation.short_name,
             }}
-            content={form}
+            content={
+              editable ? { ...form, activity_content_kind: "overview" } : form
+            }
             approved={current.status === "approved"}
             isPrivate
             onBackgroundChange={

@@ -1,4 +1,12 @@
 // Local visual fixtures, never imported by the application or deployed as data.
+import {
+  ACTIVITY_OPTIONS,
+  ACTIVITY_LABELS,
+  activityKind,
+  normalizeCustomActivityTags,
+  validateCustomActivityTags,
+} from "../../src/utils/corporationActivity.js";
+
 export const communityLocationCatalog = {
   regions: [
     { r_id: "derelik", r_title: "德里克", r_safetylvl: 0.5 },
@@ -81,7 +89,10 @@ const content = {
     constellation_id: "12",
     solarsystem_id: "22",
   }),
-  activities: ["pvp", "industry", "training"],
+  activities: ["sovereignty_production", "industry", "training"],
+  activity_description:
+    "军团以主权战、反收割和日常生产为主要活动，定期组织护航、舰队训练与新人教学。欢迎根据自己的兴趣参与。",
+  custom_activity_tags: ["反收割", "护航"],
   corp_types: ["sovereignty"],
   region_tags: ["highsec", "nullsec"],
   benefit_keys: ["ship_reimbursement", "fleet_training", "industry_support"],
@@ -112,6 +123,10 @@ const first = {
   cover_url: null,
   revision: { id: 10, ...content },
 };
+// Preserve a genuinely old JSON snapshot, not a new overview with blank text.
+const legacyContent = { ...content, activities: ["pvp", "industry", "mining"] };
+delete legacyContent.activity_description;
+delete legacyContent.custom_activity_tags;
 const demoCorps = [
   first,
   {
@@ -120,9 +135,8 @@ const demoCorps = [
     name: "曙光工业联合体",
     short_name: "DAWN",
     revision: {
-      ...first.revision,
+      ...legacyContent,
       tagline: "让每一份资源，成为下一次远航的底气。",
-      activities: ["industry", "mining"],
       base_region: "伏尔戈",
       base_location: demoLocation({
         region_id: "volgo",
@@ -140,6 +154,8 @@ const demoCorps = [
       ...first.revision,
       tagline: "航线之外，还有无限可能。",
       activities: ["exploration", "pve"],
+      activity_description: "在边境星域开展探索、异常清理与日常协作，分享航线与探索经验。",
+      custom_activity_tags: ["虫洞探索"],
       base_region: "静寂谷",
       base_location: demoLocation({
         region_id: "silent",
@@ -174,13 +190,14 @@ const textLimits = {
   benefits: 1500,
   benefits_note: 500,
   public_contact: 200,
+  activity_description: 1500,
   event_title: 80,
   event_time: 120,
   event_location: 120,
   event_description: 800,
 };
 const lists = {
-  activities: ["pvp", "pve", "industry", "exploration", "mining", "training"],
+  activities: [...Object.keys(ACTIVITY_OPTIONS), "pvp"],
   corp_types: ["pirate", "sovereignty"],
   region_tags: ["highsec", "lowsec", "nullsec"],
   benefit_keys: [
@@ -207,6 +224,7 @@ const backgrounds = [
 const emptyContent = () => ({
   ...Object.fromEntries(Object.keys(textLimits).map((k) => [k, ""])),
   ...Object.fromEntries(Object.keys(lists).map((k) => [k, []])),
+  custom_activity_tags: [],
   poster_background: "expedition-fleet",
   recruitment_status: "open",
   base_location: null,
@@ -214,10 +232,14 @@ const emptyContent = () => ({
   cover_asset_id: null,
 });
 const contentKeys = Object.keys(emptyContent());
+const normalizedActivities = (values) => Array.isArray(values)
+  ? [...new Set(values.filter((value) => typeof value === "string" && Object.hasOwn(ACTIVITY_LABELS, value)))]
+  : [];
+const unicodeText = (value) => typeof value === "string" && !/\p{Cs}/u.test(value);
 
 // An isolated, process-local model. The HTTP preview and contract tests use this
 // exact handler; no request is ever proxied to a production server.
-export function createCommunitySandbox() {
+export function createCommunitySandbox(initialCorps = demoCorps) {
   const corporations = new Map();
   const revisions = new Map();
   const claims = new Map();
@@ -227,14 +249,16 @@ export function createCommunitySandbox() {
     nextClaim = 54,
     nextRevision = 40,
     nextAsset = 1;
-  for (const demo of demoCorps) {
+  for (const demo of initialCorps) {
     const revisionId = demo.id * 10;
     revisions.set(revisionId, {
       id: revisionId,
       corporation_id: demo.id,
       content: copy(
         Object.fromEntries(
-          contentKeys.map((k) => [k, demo.revision[k] ?? emptyContent()[k]]),
+          contentKeys
+            .filter((k) => k !== "activity_description" || Object.hasOwn(demo.revision, k))
+            .map((k) => [k, Object.hasOwn(demo.revision, k) ? demo.revision[k] : emptyContent()[k]]),
         ),
       ),
       status: "approved",
@@ -278,6 +302,11 @@ export function createCommunitySandbox() {
   const revData = (rev, publicView = false) => {
     if (!rev) return null;
     const result = { id: rev.id, ...copy(rev.content) };
+    result.activities = normalizedActivities(rev.content.activities);
+    result.custom_activity_tags = normalizeCustomActivityTags(rev.content.custom_activity_tags);
+    result.activity_description = unicodeText(rev.content.activity_description)
+      ? [...rev.content.activity_description.trim()].slice(0, textLimits.activity_description).join("") : "";
+    result.activity_content_kind = activityKind(rev.content);
     if (!publicView)
       Object.assign(result, {
         corporation_id: rev.corporation_id,
@@ -351,7 +380,7 @@ export function createCommunitySandbox() {
   const text = (value, limit, blank = true) => {
     required(
       typeof value === "string" &&
-        value.trim().length <= limit &&
+        [...value].length <= limit &&
         (blank || value.trim()),
     );
     return value.trim();
@@ -383,6 +412,8 @@ export function createCommunitySandbox() {
       const match = (regex) => p.match(regex);
       let m;
       if (method === "GET" && p === "corporations/") {
+        const activity = url.searchParams.get("activity") || "";
+        required(!activity || Object.hasOwn(ACTIVITY_LABELS, activity), 400, "请选择有效活动。");
         const found = [...corporations.values()]
           .filter((c) => c.is_listed && c.published)
           .filter((c) => {
@@ -392,8 +423,7 @@ export function createCommunitySandbox() {
                 `${c.name} ${c.short_name}`
                   .toLowerCase()
                   .includes(url.searchParams.get("q").toLowerCase())) &&
-              (!url.searchParams.get("activity") ||
-                r.activities.includes(url.searchParams.get("activity"))) &&
+              (!activity || normalizedActivities(r.activities).includes(activity)) &&
               (!url.searchParams.get("region") ||
                 r.base_region.includes(url.searchParams.get("region")))
             );
@@ -603,7 +633,10 @@ export function createCommunitySandbox() {
         if (method === "PATCH") {
           const next = copy(r.content);
           for (const [k, limit] of Object.entries(textLimits))
-            if (k in body) next[k] = text(body[k], limit);
+            if (k in body) {
+              if (k === "activity_description") required(unicodeText(body[k]));
+              next[k] = text(body[k], limit);
+            }
           for (const [k, allowed] of Object.entries(lists))
             if (k in body) {
               required(
@@ -612,8 +645,17 @@ export function createCommunitySandbox() {
                   new Set(body[k]).size === body[k].length &&
                   body[k].every((v) => allowed.includes(v)),
               );
+              if (k === "activities" && body[k].includes("pvp"))
+                required(normalizedActivities(r.content.activities).includes("pvp"), 400, "旧版舰队作战标签仅可保留或移除，请选择新的活动方向。");
               next[k] = [...body[k]];
             }
+          if ("custom_activity_tags" in body) {
+            try {
+              next.custom_activity_tags = validateCustomActivityTags(body.custom_activity_tags);
+            } catch (error) {
+              fail(400, error.message);
+            }
+          }
           for (const k of ["logo_asset_id", "cover_asset_id"])
             if (k in body) {
               required(

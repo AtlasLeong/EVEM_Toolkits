@@ -403,3 +403,57 @@ test("HTTP session rejects invalid roles and unsafe Host headers", async (t) => 
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.equal(response.status, 200);
 });
+
+test("HTTP activity edits remain private and immutable pending approval, then publish with safe filters", async (t) => {
+  const { call, login } = await sandbox(t);
+  const owner = await login("owner");
+  const reviewer = await login("reviewer");
+  const publicRevision = () => call("/api/community/corporations/1/").then((r) => r.json()).then((r) => r.revision);
+  const before = await publicRevision();
+  const response = await call("/api/community/revisions/11/", {
+    method: "PATCH", token: owner.access,
+    body: { expected_version: 1, activity_description: "私有主权战与反收割安排", custom_activity_tags: ["私有护航"], activities: ["pirate_combat"] },
+  });
+  assert.equal(response.status, 200);
+  const saved = await response.json();
+  assert.equal(saved.activity_content_kind, "overview");
+  assert.deepEqual(await publicRevision(), before);
+  assert.equal((await call("/api/community/corporations/1/manage/")).status, 401);
+  assert.equal((await call("/api/community/reviews/revisions/11/", { token: reviewer.access })).status, 404);
+  assert.equal((await call("/api/community/revisions/11/submit/", {
+    token: owner.access, body: { expected_version: saved.version },
+  })).status, 200);
+  assert.equal((await call("/api/community/revisions/11/", {
+    method: "PATCH", token: owner.access,
+    body: { expected_version: saved.version + 1, custom_activity_tags: ["不应改变"] },
+  })).status, 409);
+  assert.equal((await call("/api/community/reviews/revisions/11/", { token: owner.access })).status, 403);
+  const review = await call("/api/community/reviews/revisions/11/", { token: reviewer.access }).then((r) => r.json());
+  assert.equal(review.activity_description, "私有主权战与反收割安排");
+  assert.deepEqual(review.custom_activity_tags, ["私有护航"]);
+  assert.deepEqual(await publicRevision(), before);
+  assert.equal((await call("/api/community/reviews/revisions/11/decision/", {
+    token: reviewer.access, body: { decision: "approve", reason: "" },
+  })).status, 200);
+  const published = await publicRevision();
+  assert.equal(published.activity_description, review.activity_description);
+  assert.deepEqual(published.custom_activity_tags, review.custom_activity_tags);
+  assert.equal(published.review_reason, undefined);
+  const filtered = await call("/api/community/corporations/?activity=pirate_combat").then((r) => r.json());
+  assert.ok(filtered.results.some((corp) => corp.id === 1));
+  assert.equal((await call("/api/community/corporations/?activity=私有护航")).status, 400);
+  const replacement = await call("/api/community/corporations/1/draft/", {
+    token: owner.access, body: { request_id: randomUUID() },
+  }).then((r) => r.json());
+  const rejected = await call(`/api/community/revisions/${replacement.id}/`, {
+    method: "PATCH", token: owner.access,
+    body: { expected_version: replacement.version, activity_description: "待驳回内容", custom_activity_tags: ["待驳回标签"] },
+  }).then((r) => r.json());
+  assert.equal((await call(`/api/community/revisions/${replacement.id}/submit/`, {
+    token: owner.access, body: { expected_version: rejected.version },
+  })).status, 200);
+  assert.equal((await call(`/api/community/reviews/revisions/${replacement.id}/decision/`, {
+    token: reviewer.access, body: { decision: "reject", reason: "请完善活动说明" },
+  })).status, 200);
+  assert.deepEqual(await publicRevision(), published);
+});

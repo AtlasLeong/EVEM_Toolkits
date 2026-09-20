@@ -33,6 +33,7 @@ import CorporationSelect, {
 import CorporationShare from "../components/community/CorporationShare";
 import CorporationCover from "../components/community/CorporationCover";
 import { CorporationLocationLabel } from "../components/community/CorporationLocation";
+import { activityKind } from "../utils/corporationActivity.js";
 import "../styles/corporations.css";
 
 export default function CorporationsPage() {
@@ -195,7 +196,11 @@ function CorporationCard({ corporation: corp }) {
           <ArrowUpRight size={18} />
         </h3>
         <p>{content.tagline || "欢迎了解我们的军团。"}</p>
-        <ActivityTags values={content.activities} />
+        <ActivityTags
+          values={content.activities}
+          custom={content.custom_activity_tags}
+          limit={4}
+        />
         <MetadataTags content={content} compact />
         <div className="corp-card-meta">
           <span>
@@ -317,7 +322,10 @@ export function CorporationDetailPage() {
           </div>
         </div>
         <div className="corp-profile-tag-rail">
-          <ActivityTags values={content.activities} />
+          <ActivityTags
+            values={content.activities}
+            custom={content.custom_activity_tags}
+          />
           <MetadataTags content={content} />
         </div>
       </section>
@@ -370,10 +378,16 @@ export function CorporationDetailPage() {
               <strong>{content.public_contact}</strong>
             </div>
           </Panel>
-          {content.event_title && (
+          {activityKind(content) === "overview" &&
+            content.activity_description && (
+              <Panel title="主要活动">
+                <p className="corp-prose">{content.activity_description}</p>
+              </Panel>
+            )}
+          {activityKind(content) === "legacy_event" && content.event_title && (
             <Panel
               title={content.event_title}
-              subtitle={`${content.event_time} · ${content.event_location}`}
+              subtitle={`旧版活动资料 · ${[content.event_time, content.event_location].filter(Boolean).join(" · ")}`}
             >
               <p className="corp-prose">{content.event_description}</p>
             </Panel>

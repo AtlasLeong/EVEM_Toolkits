@@ -5,11 +5,11 @@ import { ArrowLeft, ArrowUpRight, Users } from "lucide-react";
 import { AuthContext } from "../../context/AuthContext";
 import { Panel } from "../ui/Primitives";
 import {
-  ACTIVITIES,
   REVISION_STATES,
   fetchCommunityImage,
   getCommunityCapabilities,
 } from "../../services/apiCommunity";
+import { activityLabels } from "../../utils/corporationActivity.js";
 
 export function CommunityError({ error, retry }) {
   if (!error) return null;
@@ -75,12 +75,20 @@ export function RevisionStatus({ value }) {
     </span>
   );
 }
-export function ActivityTags({ values = [] }) {
+export function ActivityTags({ values = [], custom = [], limit = Infinity }) {
+  const labels = activityLabels(values, custom);
+  const visible = labels.slice(0, limit);
+  if (!labels.length) return null;
   return (
-    <div className="corp-tags">
-      {values.map((value) => (
-        <span key={value}>{ACTIVITIES[value] || value}</span>
+    <div className="corp-tags" aria-label="活动方向标签">
+      {visible.map((value) => (
+        <span key={value}>{value}</span>
       ))}
+      {labels.length > visible.length && (
+        <span aria-label={`另有 ${labels.length - visible.length} 个活动标签`}>
+          +{labels.length - visible.length}
+        </span>
+      )}
     </div>
   );
 }

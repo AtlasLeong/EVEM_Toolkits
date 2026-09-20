@@ -10,7 +10,31 @@ Base `/api/community/`. JSON keys use snake_case. All private responses (includi
 
 Public corporation object: `{id, name, short_name, published_at, revision: {id, ...content}, logo_url, cover_url}`. Never owner/applicant IDs, claim private contact, review reason, storage_name or draft metadata.
 
-Content fields: `tagline` (80), `introduction` (5000), `alliance` (80), `base_region` (80), `activities` (max 6 enum values: pvp, pve, industry, exploration, mining, training), `active_time` (120), `recruitment_status` (open/closed), `requirements` (1500), `benefits` (1500), `public_contact` (200), `logo_asset_id` / `cover_asset_id` (nullable integer), `event_title` (80), `event_time` / `event_location` (120), `event_description` (800). Fields optional in drafts; introduction and public_contact required on submission. Identity name/short_name is fixed by approved claim, not silently changed in a revision.
+Content fields: `tagline` (80), `introduction` (5000), `alliance` (80), `base_region` (80), `activities` (current enums below, plus retained legacy `pvp` only), `activity_description` (optional string, 1500 Unicode code points), `custom_activity_tags` (up to 5 strings, rules below), `active_time` (120), `recruitment_status` (open/closed), `requirements` (1500), `benefits` (1500), `public_contact` (200), `logo_asset_id` / `cover_asset_id` (nullable integer), `event_title` (80), `event_time` / `event_location` (120), `event_description` (800). Fields optional in drafts; introduction and public_contact required on submission. Identity name/short_name is fixed by approved claim, not silently changed in a revision.
+
+### Activity overview and legacy compatibility
+
+Current `activities` values and labels:
+
+- `sovereignty_production`: 主权生产
+- `pirate_combat`: 海盗作战
+- `pve`: 异常与任务
+- `industry`: 工业制造
+- `exploration`: 星海探索
+- `mining`: 采矿生产
+- `training`: 新人培养
+
+All seven may be selected once each. Legacy `pvp` (舰队作战) is readable but is not a new selection: PATCH may retain it only if the locked working revision already contains `pvp` in its stored activities array. Once removed, it cannot be added back to that draft. No automatic mapping to the two new categories occurs. `?activity=pvp` remains valid; each current filter matches only its own stored key. Custom tags are not enum values and never enter `activity_keys` or filtering. Even all seven current keys plus legacy `pvp` fit the existing 100-character index field.
+
+`custom_activity_tags` defaults to `[]`. Writes require an array with at most 5 string items; after trimming each display string must contain 1–12 Unicode code points. Empty/invalid items, duplicate comparison keys, and names matching any current Chinese label or either old label 舰队作战 / 舰队作战（旧标签） are rejected with a field-specific 400. Comparison uses Unicode NFKC then casefold (so the half-width-parenthesis spelling 舰队作战(旧标签) is also reserved), while stored/display text retains its original spelling after trim. Control characters (`Cc`), invisible format characters (`Cf`), and line/paragraph separators (`Zl`/`Zp`) are rejected even at the edges before trimming. Invalid writes are never silently truncated; rejected PATCH leaves content and version unchanged. Historical custom tags matching these reserved labels are omitted on read without mutating the stored snapshot.
+
+Both new text fields also reject unpaired Unicode surrogates before persistence, so JSON escape sequences cannot commit content that later fails UTF-8 rendering. Historical custom tags with these invalid characters are omitted on reads; malformed activity-description strings read as empty text without changing the raw snapshot or its overview kind.
+
+New revision defaults include `activity_description: ''`. All public, management and review revision payloads include read-only `activity_content_kind: 'overview' | 'legacy_event'`, computed from whether the raw stored JSON contains the `activity_description` key, before defaults are applied. Missing key means `legacy_event`; an existing key, including explicitly empty text, means `overview`. Clients must never use a truthy-value fallback from empty overview text to `event_description`, and must not include the computed kind in PATCH.
+
+Historical `event_title`, `event_time`, `event_location`, and `event_description` remain supported and are preserved verbatim unless explicitly edited. Creating a draft from an old snapshot copies its raw JSON without adopting the new field automatically. A new form save can adopt overview by explicitly writing `activity_description`. Read normalization returns safe bounded activities/tags, converts malformed description to empty text, and does not modify historical JSON or migrate records. No schema/data migration is required.
+
+Both new fields use the existing expected-version, immutable-pending, staff-review and published-pointer workflow. Draft and pending activity text/tags are private. An older approved public snapshot (including legacy event content) stays unchanged until a new revision is approved; rejection never advances that pointer.
 
 ## Application and management
 

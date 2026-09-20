@@ -61,7 +61,7 @@ class CorporationTests(TestCase):
 
     def ready(self, draft=None):
         draft = draft or self.draft()
-        response = self.call('patch', f"revisions/{draft['id']}/", {'expected_version': draft['version'], 'introduction': '军团介绍', 'public_contact': '公开联系', 'activities': ['pvp']})
+        response = self.call('patch', f"revisions/{draft['id']}/", {'expected_version': draft['version'], 'introduction': '军团介绍', 'public_contact': '公开联系', 'activities': ['sovereignty_production']})
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
@@ -341,7 +341,7 @@ class CorporationTests(TestCase):
         self.client.force_authenticate(self.owner)
         self.publish(pending)
         self.client = APIClient()
-        data = self.call('get', 'corporations/?q=测试&activity=pvp').json()
+        data = self.call('get', 'corporations/?q=测试&activity=sovereignty_production').json()
         self.assertEqual(data['count'], 1)
         self.assertEqual(self.call('get', 'corporations/?activity=pve').json()['count'], 0)
         self.assertEqual(self.call('get', 'corporations/?page=2').json()['results'], [])
@@ -355,7 +355,7 @@ class CorporationTests(TestCase):
         updated = self.call('patch', f"revisions/{draft['id']}/", {
             'expected_version': draft['version'],
             'base_region': '德尔克',
-            'activities': ['pvp'],
+            'activities': ['sovereignty_production'],
         }).json()
         revision = self.submit(updated)
         self.publish(revision)
@@ -364,7 +364,7 @@ class CorporationTests(TestCase):
         exact = self.call('get', 'corporations/?region=德尔克').json()
         self.assertEqual(exact['count'], 1)
         self.assertEqual(exact['results'][0]['revision']['base_region'], '德尔克')
-        self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=pvp').json()['count'], 1)
+        self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=sovereignty_production').json()['count'], 1)
         self.assertEqual(self.call('get', 'corporations/?region=德尔&activity=pve').json()['count'], 0)
 
     def test_public_region_filter_empty_no_match_and_length_validation(self):

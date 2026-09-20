@@ -66,6 +66,12 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
     .getByLabel("军团介绍", { exact: true })
     .fill("完整 UI 创建与编辑流程，只有审核后才能公开。");
   await page.getByLabel("所属联盟", { exact: true }).fill("本地联盟");
+  await page.getByRole("checkbox", { name: "主权生产", exact: true }).check();
+  await page.getByRole("checkbox", { name: "海盗作战", exact: true }).check();
+  await page
+    .getByRole("textbox", { name: "自定义活动标签", exact: true })
+    .fill("反收割演练");
+  await page.getByRole("button", { name: "添加标签", exact: true }).click();
   await page.getByLabel("上传军团封面", { exact: true }).setInputFiles({
     name: "sandbox-cover.png",
     mimeType: "image/png",
@@ -76,12 +82,19 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
   await page
     .getByLabel("公开联系方式", { exact: true })
     .fill("游戏内联系：沙盒管理员");
+  await page.getByRole("button", { name: "主要活动", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "主要活动介绍", exact: true })
+    .fill("主权战与反收割演练，周末组织生产协作。");
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(page.getByText("草稿已保存", { exact: false })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel("军团口号", { exact: true })).toHaveValue(
     "从本地沙盒启航",
   );
+  await expect(
+    page.getByRole("button", { name: "移除标签：反收割演练", exact: true }),
+  ).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: "output/corp-sandbox-manage-desktop.png",
@@ -105,11 +118,21 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.locator(".corp-review-fields")).toContainText(
+    "主权战与反收割演练，周末组织生产协作。",
+  );
+  await expect(page.locator(".corp-review-fields")).toContainText("反收割演练");
   await page.getByRole("button", { name: "批准并发布", exact: true }).click();
   await expect(page.getByText("审核已完成", { exact: true })).toBeVisible();
   await chooseRole(page, "游客浏览");
   await page.getByRole("link", { name: new RegExp(name) }).click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(
+    page.getByText("主权战与反收割演练，周末组织生产协作。", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("活动方向标签", { exact: true })).toContainText(
+    "反收割演练",
+  );
   await expect(page.getByText("私密沙盒联系")).toHaveCount(0);
   await expect(page.locator(".corp-cover-upload.is-ready")).toBeVisible();
   await expect(
@@ -130,9 +153,14 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
   await page.goto("/corporations/manage");
   await page.getByRole("button", { name: new RegExp(name) }).click();
   await page.getByRole("button", { name: "创建新版草稿", exact: true }).click();
-  const introduction = page.getByRole("textbox", { name: "军团介绍", exact: true });
+  const introduction = page.getByRole("textbox", {
+    name: "军团介绍",
+    exact: true,
+  });
   await expect(introduction).toBeEnabled();
-  await expect(introduction).toHaveValue("完整 UI 创建与编辑流程，只有审核后才能公开。");
+  await expect(introduction).toHaveValue(
+    "完整 UI 创建与编辑流程，只有审核后才能公开。",
+  );
   expect(external).toEqual([]);
 });
 

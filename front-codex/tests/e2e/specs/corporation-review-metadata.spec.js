@@ -22,6 +22,9 @@ const reviewRevision = {
     security: 0.18,
   },
   activities: ["pvp"],
+  activity_description: "主权战与反收割，每周组织小队游猎。",
+  custom_activity_tags: ["反收割", "小队游猎"],
+  activity_content_kind: "overview",
   corp_types: ["pirate", "sovereignty"],
   region_tags: ["highsec", "lowsec", "nullsec"],
   benefit_keys: [
@@ -113,6 +116,11 @@ test("审核详情在画布外展示完整军团元数据", async ({ page }) => 
   await expect(fields.getByText("海报背景", { exact: true })).toBeVisible();
   await expect(fields.getByText("战舰残骸", { exact: true })).toBeVisible();
   await expect(fields).toContainText("德里克 / 玛莫纳 / 库哈拉赫");
+  await expect(fields).toContainText("主权战与反收割，每周组织小队游猎。");
+  await expect(fields).toContainText("自定义活动标签");
+  await expect(fields).toContainText("反收割 / 小队游猎");
+  await expect(fields).toContainText("舰队作战（旧标签）");
+  await expect(fields).toContainText("旧版活动标题");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "预览海报", exact: true }).click();
   await expect(page.getByRole("dialog", { name: /海报/ })).toBeVisible();

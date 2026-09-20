@@ -1,4 +1,66 @@
 import { test, expect } from "@playwright/test";
+
+test("军团编辑表单具有可读高度并保存主要活动与自定义标签", async ({ page }) => {
+  const { posts } = await communityFixture(page, { auth: true });
+  await page.goto("/corporations/manage?id=1");
+  const intro = page.getByRole("textbox", { name: "军团介绍", exact: true });
+  await expect(intro).toBeVisible();
+  expect((await intro.boundingBox()).height).toBeGreaterThanOrEqual(180);
+  await expect(
+    page.getByRole("checkbox", { name: "主权生产", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("checkbox", { name: "海盗作战", exact: true }).check();
+  const tagInput = page.getByRole("textbox", {
+    name: "自定义活动标签",
+    exact: true,
+  });
+  await tagInput.fill("反收割");
+  await tagInput.press("Enter");
+  await expect(
+    page.getByRole("button", { name: "移除标签：反收割", exact: true }),
+  ).toBeVisible();
+  expect(posts).toHaveLength(0);
+  await tagInput.fill("反收割");
+  await page.getByRole("button", { name: "添加标签", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("重复");
+  await tagInput.fill("小队游猎");
+  await page.getByRole("button", { name: "添加标签", exact: true }).click();
+  await page
+    .getByRole("button", { name: "移除标签：小队游猎", exact: true })
+    .click();
+  await page.getByRole("button", { name: "招募信息", exact: true }).click();
+  const support = page.getByRole("textbox", { name: "军团支持", exact: true });
+  expect((await support.boundingBox()).height).toBeGreaterThanOrEqual(140);
+  await support.fill("新人指导 · 舰船补损\n共享工业设施 · 定期舰队活动");
+  await page.getByRole("button", { name: "主要活动", exact: true }).click();
+  const overview = page.getByRole("textbox", {
+    name: "主要活动介绍",
+    exact: true,
+  });
+  expect((await overview.boundingBox()).height).toBeGreaterThanOrEqual(180);
+  await overview.fill("主权战与反收割，日常开展生产协作。");
+  await expect(
+    page.getByRole("textbox", { name: "活动时间", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("草稿已保存");
+  expect(posts.at(-1).body.activity_description).toBe(
+    "主权战与反收割，日常开展生产协作。",
+  );
+  expect(posts.at(-1).body.custom_activity_tags).toEqual(["反收割"]);
+  expect(posts.at(-1).body.activities).toEqual(
+    expect.arrayContaining(["pvp", "pirate_combat"]),
+  );
+  expect(posts.at(-1).body).not.toHaveProperty("activity_content_kind");
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "移除标签：反收割", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "主要活动", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "主要活动介绍", exact: true }),
+  ).toHaveValue("主权战与反收割，日常开展生产协作。");
+});
 import { communityFixture, corporation } from "../helpers/community";
 import { json, TINY_ICON } from "../helpers/api";
 
@@ -348,11 +410,11 @@ test("军团大厅可按活动星域筛选并与活动方向组合", async ({ pa
   await expect(region).toHaveAttribute("aria-disabled", "false");
   await selectChoice(page, "活动星域", "德里克");
   await expect(page.getByRole("link", { name: /远航者军团/ })).toBeVisible();
-  await selectChoice(page, "活动方向", "舰队作战");
+  await selectChoice(page, "活动方向", "海盗作战");
   await expect(page.getByText("筛选结果", { exact: true })).toBeVisible();
   const last = requests.at(-1);
   expect(last.get("region")).toBe("德里克");
-  expect(last.get("activity")).toBe("pvp");
+  expect(last.get("activity")).toBe("pirate_combat");
   await selectChoice(page, "活动星域", "全部活动星域");
   await expect(page.getByText("1 个已公开军团", { exact: true })).toBeVisible();
 });
@@ -397,7 +459,7 @@ test("编辑草稿并提交审核，等待期间不能再编辑", async ({ page 
 test("编辑草稿可保存类型、区域、福利和海报背景选择", async ({ page }) => {
   const { posts } = await communityFixture(page, { auth: true });
   await page.goto("/corporations/manage?id=1");
-  await page.getByRole("checkbox", { name: "主权" }).check();
+  await page.getByRole("checkbox", { name: "主权", exact: true }).check();
   await page.getByRole("checkbox", { name: "高安" }).check();
   await page.getByRole("button", { name: "招募信息", exact: true }).click();
   await page.getByRole("checkbox", { name: "工业/生产支持" }).check();
@@ -426,8 +488,9 @@ test("草稿海报始终标记未审核，三个模板可以导出真实 PNG", a
   await page.goto("/corporations/manage?id=1");
   await page.getByRole("button", { name: "制作海报", exact: true }).click();
   await expect(page.getByText("未审核 · 仅作预览")).toBeVisible();
-  for (const label of ["招募海报", "军团介绍", "活动宣传"]) {
-    await page.getByRole("button", { name: label, exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "制作军团海报" });
+  for (const label of ["招募海报", "军团介绍", "主要活动"]) {
+    await dialog.getByRole("button", { name: label, exact: true }).click();
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "导出 PNG", exact: true }).click();
     const download = await downloadPromise;

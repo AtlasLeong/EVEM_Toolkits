@@ -15,7 +15,7 @@
 Files: `backend/Community/views.py`, optional focused `backend/Community/activity.py`, `backend/Community/tests.py`; contract documentation `docs/plans/2026-09-20-corporation-api-contract.md`.
 
 1. Add failing tests: PATCH accepts `{activity_description:'主权战与反收割', custom_activity_tags:['反收割'], activities:['sovereignty_production','pirate_combat']}`; limits, normalization duplicates, disabled pvp addition, safe legacy read, explicit empty overview and publication isolation.
-2. Run `python manage.py test Community --settings=EVEM_toolkits.settings_test` using the repository's actual test settings/interpreter (discover before running); observe expected missing-field rejection.
+2. Run `python manage.py test Community --settings=EVE_MDjango.ci_settings --noinput` using the repository's isolated in-memory SQLite settings; observe expected missing-field rejection.
 3. Implement JSON fields and computed kind; strict validation plus safe read normalization. Keep pvp only when already in the locked revision. No change to moderation/publication rules or production data.
 4. Run the full Community suite and migration drift check; independently review specification and code quality before committing.
 
@@ -31,7 +31,7 @@ Files: `front-codex/src/utils/corporationActivity.js` (new), `src/services/apiCo
 
 ## Task 3: Preview integration and regression
 
-Files: `front-codex/tests/preview/community.mjs`, `tests/preview/community.test.mjs`, relevant HTTP test and `tests/e2e/helpers/community.js`, existing corporation browser specs, `tests/preview-e2e` if needed.
+Files: `front-codex/tests/preview/community.mjs`, `tests/preview/sandbox.test.mjs`, relevant HTTP test and `tests/e2e/helpers/community.js`, existing corporation browser specs, `tests/preview-e2e` if needed.
 
 1. Add failing sandbox contract tests for the same new/legacy cases.
 2. Update preview defaults, validation, serialization, seed data and filtering to match the real API. Reuse pure JS tag helpers when appropriate; no backend bypass in production.
@@ -48,7 +48,9 @@ Files: `front-codex/tests/preview/community.mjs`, `tests/preview/community.test.
 ## Progress
 
 - [x] Approved design and existing isolated worktree verified; initial 16 cover/poster unit tests pass.
-- [ ] Backend contract, tests, review
-- [ ] Frontend form/tag/overview surfaces, tests
-- [ ] Sandbox integration and browser regression
-- [ ] Independent reviews, final verification and local handoff
+- [x] Backend contract, tests, review
+- [x] Frontend form/tag/overview surfaces, tests
+- [x] Sandbox integration and browser regression
+- [x] Independent reviews and final verification; local-only handoff
+
+Verification evidence: `2026-09-20-corporation-activities-verification.md`.

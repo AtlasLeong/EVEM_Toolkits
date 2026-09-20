@@ -9,7 +9,6 @@ import {
   Panel,
 } from "../components/ui/Primitives";
 import {
-  ACTIVITIES,
   BENEFITS,
   CORPORATION_TYPES,
   REGION_TAGS,
@@ -34,6 +33,12 @@ import {
 } from "../components/community/CorporationUI";
 import PosterDialog from "../components/community/PosterDialog";
 import { CorporationLocationLabel } from "../components/community/CorporationLocation";
+import {
+  activityKind,
+  activityLabels,
+  normalizeCustomActivityTags,
+  LEGACY_EVENT_FIELDS,
+} from "../utils/corporationActivity.js";
 import "../styles/corporations.css";
 
 export default function CorporationReviewPage() {
@@ -221,10 +226,10 @@ function ReviewDetail({ kind, id, prefix, done }) {
     requirements: "招募要求",
     benefits: "军团支持",
     public_contact: "公开联系方式",
-    event_title: "活动标题",
-    event_time: "活动时间",
-    event_location: "集结地点",
-    event_description: "活动说明",
+    activity_description: "主要活动介绍",
+    ...Object.fromEntries(
+      Object.entries(LEGACY_EVENT_FIELDS).filter(([key]) => data[key]),
+    ),
   };
   return (
     <div className="corp-review-detail">
@@ -264,11 +269,25 @@ function ReviewDetail({ kind, id, prefix, done }) {
                 </div>
               ))}
               <div>
+                <dt>活动资料版本</dt>
+                <dd>
+                  {activityKind(data) === "overview"
+                    ? "主要活动介绍（旧版活动不再用于公开活动区）"
+                    : "旧版活动资料"}
+                </dd>
+              </div>
+              <div>
                 <dt>活动方向</dt>
                 <dd>
-                  {(data.activities || [])
-                    .map((k) => ACTIVITIES[k])
-                    .join(" / ") || "未填写"}
+                  {activityLabels(data.activities).join(" / ") || "未填写"}
+                </dd>
+              </div>
+              <div>
+                <dt>自定义活动标签</dt>
+                <dd>
+                  {normalizeCustomActivityTags(data.custom_activity_tags).join(
+                    " / ",
+                  ) || "未填写"}
                 </dd>
               </div>
               <div>

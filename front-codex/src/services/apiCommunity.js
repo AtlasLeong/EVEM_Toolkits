@@ -1,14 +1,7 @@
 import API_URL from "./backendSetting";
 import fetchWithAuth from "./fetchWithAuth";
 
-export const ACTIVITIES = {
-  pvp: "舰队作战",
-  pve: "异常与任务",
-  industry: "工业制造",
-  exploration: "星海探索",
-  mining: "采矿生产",
-  training: "新人培养",
-};
+export { ACTIVITY_OPTIONS as ACTIVITIES } from "../utils/corporationActivity.js";
 export const CORPORATION_TYPES = {
   pirate: "海盗",
   sovereignty: "主权",
