@@ -2,6 +2,269 @@ import { test, expect } from "@playwright/test";
 import { communityFixture, corporation } from "../helpers/community";
 import { json, TINY_ICON } from "../helpers/api";
 
+const selectChoice = async (page, label, choice) => {
+  await page.locator(`summary[aria-label^="${label}："]`).click();
+  await page.getByRole("radio", { name: choice, exact: true }).check();
+};
+
+test("分享军团复制干净链接，失败时提供可选择的地址", async ({ page }) => {
+  await communityFixture(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async () => {
+          throw new Error("denied");
+        },
+      },
+      configurable: true,
+    });
+  });
+  await page.goto("/corporations/1?previewRole=user#private");
+  await page.getByRole("button", { name: "分享军团", exact: true }).click();
+  await expect(page.getByLabel("军团分享链接", { exact: true })).toHaveValue(
+    "http://127.0.0.1:4173/corporations/1",
+  );
+  await expect(page.getByText(/自动复制未成功/)).toBeVisible();
+});
+
+test("海报以独立弹窗打开，不挤压详情且关闭后恢复焦点", async ({ page }) => {
+  await communityFixture(page);
+  await page.goto("/corporations/1");
+  const main = page.locator(".corp-detail-layout");
+  await expect(main).toBeVisible();
+  const before = await main.boundingBox();
+  const trigger = page.getByRole("button", { name: "制作海报", exact: true });
+  await trigger.click();
+  await expect(page.getByRole("dialog", { name: /海报/ })).toBeVisible();
+  expect(
+    Math.abs((await main.boundingBox()).width - before.width),
+  ).toBeLessThan(2);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test("军团目录选择器支持搜索、空白点击和键盘关闭，导航留白紧凑", async ({
+  page,
+}) => {
+  await communityFixture(page);
+  await page.goto("/corporations");
+  const nav = await page.locator(".corp-nav").boundingBox();
+  const intro = await page.locator(".corp-directory-intro").boundingBox();
+  expect(intro.y - nav.y - nav.height).toBeLessThanOrEqual(20);
+  const trigger = page.locator('summary[aria-label^="活动星域："]');
+  await trigger.click();
+  await page
+    .getByRole("textbox", { name: "搜索活动星域", exact: true })
+    .fill("德里");
+  await expect(
+    page.getByRole("radio", { name: "德里克", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("radio", { name: "伏尔戈", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("radiogroup", { name: "活动星域", exact: true })
+    .click({ position: { x: 3, y: 3 } });
+  await expect(
+    page.getByRole("heading", { name: "军团大厅", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+});
+
+test("驻地关联星域星座星系，只提交标识并在切换上级后清理下级", async ({
+  page,
+}) => {
+  const { posts } = await communityFixture(page, { auth: true });
+  await page.route("**/api/constellations?*", (route) =>
+    route.fulfill(json([{ co_id: 11, co_title: "卡纳德", co_safetylvl: 0.2 }])),
+  );
+  await page.route("**/api/solarsystem?*", (route) =>
+    route.fulfill(json([{ ss_id: 21, ss_title: "纳卡", ss_safetylvl: 0.1 }])),
+  );
+  await page.goto("/corporations/manage?id=1");
+  await expect(page.getByText(/已有驻地文字：德里克/)).toBeVisible();
+  await page.getByRole("button", { name: "关联星图驻地", exact: true }).click();
+  await selectChoice(page, "驻地星域", "德里克");
+  await selectChoice(page, "驻地星座", "卡纳德");
+  await selectChoice(page, "驻地星系", "纳卡");
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("草稿已保存");
+  expect(posts.at(-1).body.base_location).toEqual({
+    region_id: "derelik",
+    constellation_id: "11",
+    solarsystem_id: "21",
+  });
+  await selectChoice(page, "驻地星域", "伏尔戈");
+  await expect(page.locator('summary[aria-label^="驻地星座："]')).toContainText(
+    "全部星座",
+  );
+  await expect(
+    page.locator('summary[aria-label^="驻地星系："]'),
+  ).toHaveAttribute("aria-disabled", "true");
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect
+    .poll(() => posts.at(-1).body.base_location)
+    .toEqual({
+      region_id: "volgo",
+      constellation_id: null,
+      solarsystem_id: null,
+    });
+  await page.getByRole("button", { name: "清除关联驻地", exact: true }).click();
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect.poll(() => posts.at(-1).body.base_location).toBeNull();
+});
+
+test("目录缺失中文名和安等时不崩溃、不伪造零安，旧驻地文字仍可编辑", async ({
+  page,
+}) => {
+  const { posts } = await communityFixture(page, { auth: true });
+  await page.route("**/api/regions", (route) =>
+    route.fulfill(
+      json([
+        {
+          r_id: "fallback",
+          r_title: null,
+          r_titleen: "Unknown Frontier",
+          r_safetylvl: null,
+        },
+      ]),
+    ),
+  );
+  await page.goto("/corporations");
+  await page.locator('summary[aria-label^="活动星域："]').click();
+  await expect(
+    page.getByRole("radio", { name: "Unknown Frontier", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".corp-select-options .corp-security")).toHaveCount(
+    0,
+  );
+  await page.goto("/corporations/manage?id=1");
+  await page
+    .getByLabel("原驻地说明", { exact: true })
+    .fill("德里克边境，具体星系请联系招募官");
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect
+    .poll(() => posts.at(-1)?.body.base_region)
+    .toBe("德里克边境，具体星系请联系招募官");
+});
+
+test("军团目录星域加载失败可重试，搜索无结果有明确提示", async ({ page }) => {
+  await communityFixture(page);
+  let recovered = false;
+  await page.route("**/api/regions", (route) =>
+    route.fulfill(
+      recovered
+        ? json([{ r_id: "derelik", r_title: "德里克", r_safetylvl: 0.5 }])
+        : json({ detail: "unavailable" }, 503),
+    ),
+  );
+  await page.goto("/corporations");
+  const trigger = page.locator('summary[aria-label^="活动星域："]');
+  await expect(trigger).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByRole("alert")).toContainText("星域目录暂时不可用");
+  recovered = true;
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  await expect(trigger).toHaveAttribute("aria-disabled", "false");
+  await trigger.click();
+  await page
+    .getByRole("textbox", { name: "搜索活动星域", exact: true })
+    .fill("不存在的星域");
+  await expect(
+    page.getByText("没有匹配选项，试试其他名称。", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "搜索活动星域", exact: true })
+    .fill("");
+  await page.getByRole("radio", { name: "德里克", exact: true }).check();
+  await expect(trigger).toBeFocused();
+});
+
+test("审核中的驻地字段不可编辑，未上架军团不提供公开分享", async ({ page }) => {
+  await communityFixture(page, { auth: true, pending: true });
+  await page.route("**/api/community/corporations/1/manage/", (route) =>
+    route.fulfill(
+      json({
+        ...corporation,
+        can_edit: true,
+        is_listed: false,
+        published_revision: corporation.revision,
+        working_revision: {
+          ...corporation.revision,
+          id: 11,
+          status: "pending",
+          base_location: {
+            region_id: "derelik",
+            constellation_id: null,
+            solarsystem_id: null,
+            region_name: "德里克",
+            security: 0.5,
+          },
+        },
+      }),
+    ),
+  );
+  await page.goto("/corporations/manage?id=1");
+  await expect(
+    page.locator('summary[aria-label^="驻地星域："]'),
+  ).toHaveAttribute("aria-disabled", "true");
+  await expect(
+    page.getByRole("button", { name: "清除关联驻地", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "分享军团", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "查看公开主页", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("公开详情展示星域星座星系及安等，复制链接不包含预览参数", async ({
+  page,
+}) => {
+  await communityFixture(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: async (text) => {
+          window.copiedCorporationLink = text;
+        },
+      },
+      configurable: true,
+    });
+  });
+  await page.route("**/api/community/corporations/1/", (route) =>
+    route.fulfill(
+      json({
+        ...corporation,
+        revision: {
+          ...corporation.revision,
+          base_location: {
+            region_id: "derelik",
+            constellation_id: "11",
+            solarsystem_id: "21",
+            region_name: "德里克",
+            constellation_name: "卡纳德",
+            solarsystem_name: "纳卡",
+            security: 0.1,
+          },
+        },
+      }),
+    ),
+  );
+  await page.goto("/corporations/1?previewRole=user");
+  await expect(page.locator(".corp-facts")).toContainText(
+    "德里克 / 卡纳德 / 纳卡",
+  );
+  await expect(page.locator(".corp-facts .corp-security")).toHaveText("0.10");
+  await page.getByRole("button", { name: "分享军团", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.copiedCorporationLink))
+    .toBe("http://127.0.0.1:4173/corporations/1");
+  await expect(page.getByRole("status")).toContainText("本地链接仅本机可访问");
+});
+
 test("军团大厅公开浏览与详情，访客无私有管理资料", async ({ page }) => {
   await communityFixture(page);
   await page.goto("/corporations");
@@ -51,12 +314,25 @@ test("游客我的军团入口提示登录", async ({ page }) => {
 
 test("军团搜索框、下拉框与按钮在桌面等高对齐", async ({ page }) => {
   await communityFixture(page);
-  await page.goto('/corporations');
-  const controls = [page.locator('.corp-search-input'), page.getByRole('combobox', { name: '活动星域' }), page.getByRole('combobox', { name: '活动方向' }), page.getByRole('button', { name: '查找军团' })];
+  await page.goto("/corporations");
+  const controls = [
+    page.locator(".corp-search-input"),
+    page.locator('summary[aria-label^="活动星域："]'),
+    page.locator('summary[aria-label^="活动方向："]'),
+    page.getByRole("button", { name: "查找军团" }),
+  ];
   for (const control of controls) await expect(control).toBeVisible();
-  const boxes = await Promise.all(controls.map(control => control.boundingBox()));
-  expect(Math.max(...boxes.map(box => box.height)) - Math.min(...boxes.map(box => box.height))).toBeLessThanOrEqual(1);
-  expect(Math.max(...boxes.map(box => box.y)) - Math.min(...boxes.map(box => box.y))).toBeLessThanOrEqual(1);
+  const boxes = await Promise.all(
+    controls.map((control) => control.boundingBox()),
+  );
+  expect(
+    Math.max(...boxes.map((box) => box.height)) -
+      Math.min(...boxes.map((box) => box.height)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.max(...boxes.map((box) => box.y)) -
+      Math.min(...boxes.map((box) => box.y)),
+  ).toBeLessThanOrEqual(1);
 });
 
 test("军团大厅可按活动星域筛选并与活动方向组合", async ({ page }) => {
@@ -68,16 +344,16 @@ test("军团大厅可按活动星域筛选并与活动方向组合", async ({ pa
   });
   await communityFixture(page);
   await page.goto("/corporations");
-  const region = page.getByRole("combobox", { name: "活动星域" });
-  await expect(region).toBeEnabled();
-  await region.selectOption({ label: "德里克" });
+  const region = page.locator('summary[aria-label^="活动星域："]');
+  await expect(region).toHaveAttribute("aria-disabled", "false");
+  await selectChoice(page, "活动星域", "德里克");
   await expect(page.getByRole("link", { name: /远航者军团/ })).toBeVisible();
-  await page.getByRole("combobox", { name: "活动方向" }).selectOption("pvp");
+  await selectChoice(page, "活动方向", "舰队作战");
   await expect(page.getByText("筛选结果", { exact: true })).toBeVisible();
   const last = requests.at(-1);
   expect(last.get("region")).toBe("德里克");
   expect(last.get("activity")).toBe("pvp");
-  await region.selectOption("");
+  await selectChoice(page, "活动星域", "全部活动星域");
   await expect(page.getByText("1 个已公开军团", { exact: true })).toBeVisible();
 });
 
@@ -125,10 +401,12 @@ test("编辑草稿可保存类型、区域、福利和海报背景选择", async
   await page.getByRole("checkbox", { name: "高安" }).check();
   await page.getByRole("button", { name: "招募信息", exact: true }).click();
   await page.getByRole("checkbox", { name: "工业/生产支持" }).check();
-  await page.locator('textarea[name="benefits_note"]').fill(
-    "提供导师、补损和工业设施支持",
-  );
-  await page.getByRole("button", { name: "主权边界", exact: true }).click();
+  await page
+    .locator('textarea[name="benefits_note"]')
+    .fill("提供导师、补损和工业设施支持");
+  await page.getByRole("button", { name: "制作海报", exact: true }).click();
+  await page.getByRole("button", { name: "星环巨行星", exact: true }).click();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "保存草稿", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("草稿已保存");
   const payload = posts.at(-1).body;
@@ -140,12 +418,13 @@ test("编辑草稿可保存类型、区域、福利和海报背景选择", async
     "industry_support",
   ]);
   expect(payload.benefits_note).toBe("提供导师、补损和工业设施支持");
-  expect(payload.poster_background).toBe("sovereignty-border");
+  expect(payload.poster_background).toBe("ringed-planet");
 });
 
 test("草稿海报始终标记未审核，三个模板可以导出真实 PNG", async ({ page }) => {
   await communityFixture(page, { auth: true });
   await page.goto("/corporations/manage?id=1");
+  await page.getByRole("button", { name: "制作海报", exact: true }).click();
   await expect(page.getByText("未审核 · 仅作预览")).toBeVisible();
   for (const label of ["招募海报", "军团介绍", "活动宣传"]) {
     await page.getByRole("button", { name: label, exact: true }).click();
@@ -208,7 +487,11 @@ test("军团详情顶部封面在桌面与手机端保持紧凑", async ({ page 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   expect((await desktopCover.boundingBox()).height).toBeLessThanOrEqual(130);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });
 
 test("海报图片临时加载失败后重试会重新请求图片", async ({ page }) => {
@@ -265,13 +548,11 @@ test("上传图片期间禁止保存提交和切换表单，完成后关联上�
     }),
   );
   await page.goto("/corporations/manage?id=1");
-  await page
-    .getByLabel("上传军团徽标")
-    .setInputFiles({
-      name: "logo.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(TINY_ICON.split(",")[1], "base64"),
-    });
+  await page.getByLabel("上传军团徽标").setInputFiles({
+    name: "logo.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(TINY_ICON.split(",")[1], "base64"),
+  });
   try {
     await expect(page.getByText("上传中…", { exact: true })).toBeVisible();
     await expect(

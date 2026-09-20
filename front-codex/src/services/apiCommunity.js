@@ -66,6 +66,20 @@ export const getCommunityRegions = async () => {
   if (!response.ok) throw new Error("星域目录暂时不可用");
   return response.json();
 };
+export const getCommunityConstellations = async (regionID) => {
+  const response = await fetch(
+    `${API_URL}/constellations?${new URLSearchParams({ regionID })}`,
+  );
+  if (!response.ok) throw new Error("星座目录暂时不可用");
+  return response.json();
+};
+export const getCommunitySolarSystems = async (constellationID) => {
+  const response = await fetch(
+    `${API_URL}/solarsystem?${new URLSearchParams({ constellationID })}`,
+  );
+  if (!response.ok) throw new Error("星系目录暂时不可用");
+  return response.json();
+};
 export const getCorporation = (id) => request(`corporations/${id}/`, {}, false);
 export const getCommunityCapabilities = () => request("capabilities/");
 export const getMyCorporations = (page = 1) => request(`mine/?page=${page}`);

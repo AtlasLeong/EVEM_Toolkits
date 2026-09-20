@@ -19,7 +19,10 @@ import {
   listCorporationReviews,
   setCorporationVisibility,
 } from "../services/apiCommunity";
-import { POSTER_BACKGROUNDS } from "../utils/corporationPoster";
+import {
+  POSTER_BACKGROUNDS,
+  normalizePosterBackground,
+} from "../utils/corporationPoster";
 import {
   CommunityError,
   CommunityGuest,
@@ -29,7 +32,8 @@ import {
   useCommunityAction,
   usePrivateCommunity,
 } from "../components/community/CorporationUI";
-import PosterStudio from "../components/community/PosterStudio";
+import PosterDialog from "../components/community/PosterDialog";
+import { CorporationLocationLabel } from "../components/community/CorporationLocation";
 import "../styles/corporations.css";
 
 export default function CorporationReviewPage() {
@@ -190,6 +194,7 @@ function ReviewWorkspace() {
   );
 }
 function ReviewDetail({ kind, id, prefix, done }) {
+  const [showPoster, setShowPoster] = useState(false);
   const query = useQuery({
     queryKey: [...prefix, "review", kind, id],
     queryFn: () => getCorporationReview(kind, id),
@@ -211,7 +216,6 @@ function ReviewDetail({ kind, id, prefix, done }) {
     tagline: "军团口号",
     introduction: "军团介绍",
     alliance: "所属联盟",
-    base_region: "活动星域",
     active_time: "活跃时间",
     recruitment_status: "招募状态",
     requirements: "招募要求",
@@ -244,6 +248,15 @@ function ReviewDetail({ kind, id, prefix, done }) {
         ) : (
           <>
             <dl className="corp-review-fields">
+              <div>
+                <dt>军团驻地</dt>
+                <dd>
+                  <CorporationLocationLabel
+                    location={data.base_location}
+                    legacy={data.base_region}
+                  />
+                </dd>
+              </div>
               {Object.entries(fields).map(([field, label]) => (
                 <div key={field}>
                   <dt>{label}</dt>
@@ -302,8 +315,11 @@ function ReviewDetail({ kind, id, prefix, done }) {
               <div>
                 <dt>海报背景</dt>
                 <dd>
-                  {POSTER_BACKGROUNDS[data.poster_background] ||
-                    POSTER_BACKGROUNDS["deep-space"]}
+                  {
+                    POSTER_BACKGROUNDS[
+                      normalizePosterBackground(data.poster_background)
+                    ]
+                  }
                 </dd>
               </div>
             </dl>
@@ -321,6 +337,13 @@ function ReviewDetail({ kind, id, prefix, done }) {
                 fallback="无封面"
               />
             </div>
+            <button
+              type="button"
+              className="ghost-btn corp-review-poster-trigger"
+              onClick={() => setShowPoster(true)}
+            >
+              预览海报
+            </button>
           </>
         )}
         <div className="corp-form corp-review-decision">
@@ -357,7 +380,13 @@ function ReviewDetail({ kind, id, prefix, done }) {
         </div>
       </Panel>
       {kind === "revisions" && (
-        <PosterStudio corporation={data.corporation} content={data} isPrivate />
+        <PosterDialog
+          open={showPoster}
+          onClose={() => setShowPoster(false)}
+          corporation={data.corporation}
+          content={data}
+          isPrivate
+        />
       )}
     </div>
   );

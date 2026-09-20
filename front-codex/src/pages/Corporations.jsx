@@ -25,7 +25,13 @@ import {
   CorporationImage,
   Pagination,
 } from "../components/community/CorporationUI";
-import PosterStudio from "../components/community/PosterStudio";
+import PosterDialog from "../components/community/PosterDialog";
+import CorporationSelect, {
+  catalogLabel,
+  catalogSecurity,
+} from "../components/community/CorporationSelect";
+import CorporationShare from "../components/community/CorporationShare";
+import { CorporationLocationLabel } from "../components/community/CorporationLocation";
 import "../styles/corporations.css";
 
 export default function CorporationsPage() {
@@ -46,7 +52,7 @@ export default function CorporationsPage() {
     retry: 1,
   });
   return (
-    <div className="corp-page">
+    <div className="corp-page corp-directory-page">
       <PageHeader
         title="军团大厅"
         subtitle="在新伊甸，找到与你同行的人。"
@@ -81,40 +87,42 @@ export default function CorporationsPage() {
             placeholder="搜索军团名称或简称"
           />
         </label>
-        <select
-          className="text-input"
-          aria-label="活动星域"
+        <CorporationSelect
+          label="活动星域"
           value={region}
-          disabled={regions.isPending || regions.isError}
-          title={regions.isError ? "星域目录暂时不可用" : undefined}
-          onChange={(e) => {
-            setRegion(e.target.value);
+          compact
+          loading={regions.isPending}
+          error={regions.error}
+          onRetry={() => regions.refetch()}
+          options={[
+            { value: "", label: "全部活动星域" },
+            ...(regions.data || []).map((item) => ({
+              value: catalogLabel(item, "r"),
+              label: catalogLabel(item, "r"),
+              security: catalogSecurity(item.r_safetylvl),
+            })),
+          ]}
+          onChange={(value) => {
+            setRegion(value);
             setPage(1);
           }}
-        >
-          <option value="">全部活动星域</option>
-          {(regions.data || []).map((item) => (
-            <option key={item.r_id} value={item.r_title}>
-              {item.r_title}
-            </option>
-          ))}
-        </select>
-        <select
-          className="text-input"
-          aria-label="活动方向"
+        />
+        <CorporationSelect
+          label="活动方向"
           value={activity}
-          onChange={(e) => {
-            setActivity(e.target.value);
+          compact
+          options={[
+            { value: "", label: "全部活动方向" },
+            ...Object.entries(ACTIVITIES).map(([value, label]) => ({
+              value,
+              label,
+            })),
+          ]}
+          onChange={(value) => {
+            setActivity(value);
             setPage(1);
           }}
-        >
-          <option value="">全部活动方向</option>
-          {Object.entries(ACTIVITIES).map(([v, label]) => (
-            <option key={v} value={v}>
-              {label}
-            </option>
-          ))}
-        </select>
+        />
         <button type="submit" className="primary-btn">
           查找军团
         </button>
@@ -137,7 +145,11 @@ export default function CorporationsPage() {
             </div>
           ) : (
             <EmptyState
-              title={q || activity || region ? "没有找到匹配的军团" : "还没有公开的军团"}
+              title={
+                q || activity || region
+                  ? "没有找到匹配的军团"
+                  : "还没有公开的军团"
+              }
               desc="你可以调整筛选条件，或申请创建军团主页。审核通过后就会在这里展示。"
             />
           )}
@@ -193,7 +205,9 @@ function CorporationCard({ corporation: corp }) {
         <div className="corp-card-meta">
           <span>
             <MapPin size={14} />
-            {content.base_region || "活动星域待补充"}
+            {content.base_location?.region_name ||
+              content.base_region ||
+              "活动星域待补充"}
           </span>
           <span>
             <Clock3 size={14} />
@@ -276,7 +290,7 @@ export function CorporationDetailPage() {
   const corp = query.data;
   const content = corp.revision;
   return (
-    <div className="corp-page">
+    <div className="corp-page corp-profile-page">
       <BackToCorporations />
       <div className="corp-profile-cover">
         {corp.cover_url && (
@@ -291,28 +305,35 @@ export function CorporationDetailPage() {
         </span>
         <span className="corp-profile-orbit" aria-hidden="true" />
       </div>
-      <div className="corp-profile-heading">
-        <CorporationImage
-          url={corp.logo_url}
-          className="corp-profile-logo"
-          fallback={corp.short_name?.slice(0, 2) || corp.name.slice(0, 1)}
-        />
-        <div>
-          <h1>{corp.name}</h1>
-          <p>{content.tagline}</p>
+      <section className="corp-profile-summary">
+        <div className="corp-profile-heading">
+          <CorporationImage
+            url={corp.logo_url}
+            className="corp-profile-logo"
+            fallback={corp.short_name?.slice(0, 2) || corp.name.slice(0, 1)}
+          />
+          <div className="corp-profile-identity">
+            <h1>{corp.name}</h1>
+            <p>{content.tagline}</p>
+          </div>
+          <div className="corp-profile-actions">
+            <CorporationShare id={corp.id} />
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => setShowPoster(true)}
+            >
+              制作海报
+              <ArrowUpRight size={17} />
+            </button>
+          </div>
         </div>
-        <button
-          type="button"
-          className="primary-btn"
-          onClick={() => setShowPoster((v) => !v)}
-        >
-          {showPoster ? "收起海报" : "制作海报"}
-          <ArrowUpRight size={17} />
-        </button>
-      </div>
-      <ActivityTags values={content.activities} />
-      <MetadataTags content={content} />
-      <div className={`corp-detail-layout${showPoster ? " with-poster" : ""}`}>
+        <div className="corp-profile-tag-rail">
+          <ActivityTags values={content.activities} />
+          <MetadataTags content={content} />
+        </div>
+      </section>
+      <div className="corp-detail-layout">
         <div className="corp-detail-main">
           <Panel title="关于军团">
             <p className="corp-prose">{content.introduction}</p>
@@ -322,8 +343,13 @@ export function CorporationDetailPage() {
                 <dd>{content.alliance || "未填写"}</dd>
               </div>
               <div>
-                <dt>活动星域</dt>
-                <dd>{content.base_region || "未填写"}</dd>
+                <dt>军团驻地</dt>
+                <dd>
+                  <CorporationLocationLabel
+                    location={content.base_location}
+                    legacy={content.base_region}
+                  />
+                </dd>
               </div>
               <div>
                 <dt>活跃时间</dt>
@@ -368,18 +394,18 @@ export function CorporationDetailPage() {
             资料由军团提供并经站点审核；招募、活动及交易信息请自行核实。
           </p>
         </div>
-        {showPoster && (
-          <PosterStudio
-            corporation={corp}
-            content={{
-              ...content,
-              logo_url: corp.logo_url,
-              cover_url: corp.cover_url,
-            }}
-            approved
-          />
-        )}
       </div>
+      <PosterDialog
+        open={showPoster}
+        onClose={() => setShowPoster(false)}
+        corporation={corp}
+        content={{
+          ...content,
+          logo_url: corp.logo_url,
+          cover_url: corp.cover_url,
+        }}
+        approved
+      />
     </div>
   );
 }

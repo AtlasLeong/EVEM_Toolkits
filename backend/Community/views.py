@@ -24,6 +24,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .media import StorageUnavailable, private_storage, sanitized_image, upload_bytes
 from .models import Claim, Corporation, DraftRequest, MediaAsset, MediaUploadAttempt, Revision
+from .location import normalized_location, validated_location
 
 logger = logging.getLogger(__name__)
 TEXT_FIELDS = {'tagline': 80, 'introduction': 5000, 'alliance': 80, 'base_region': 80,
@@ -34,10 +35,15 @@ CORP_TYPES = ('pirate', 'sovereignty')
 REGION_TAGS = ('highsec', 'lowsec', 'nullsec')
 BENEFIT_KEYS = ('ship_reimbursement', 'fleet_training', 'industry_support', 'logistics_support',
                 'newbro_mentoring', 'skill_sharing', 'pve_fleet', 'pvp_fleet')
-POSTER_BACKGROUNDS = ('deep-space', 'ion-storm', 'tactical-grid', 'jump-rift', 'sovereignty-border', 'pirate-tide')
+POSTER_BACKGROUNDS = ('expedition-fleet', 'ringed-planet', 'spiral-galaxy', 'orbital-shipyard',
+                      'black-hole', 'stellar-nursery', 'frozen-frontier', 'wreckfield')
+LEGACY_POSTER_BACKGROUNDS = {
+    'deep-space': 'spiral-galaxy', 'ion-storm': 'stellar-nursery', 'tactical-grid': 'orbital-shipyard',
+    'jump-rift': 'black-hole', 'sovereignty-border': 'ringed-planet', 'pirate-tide': 'wreckfield',
+}
 BENEFITS_NOTE_LIMIT = 500
 CONTENT_FIELDS = {*TEXT_FIELDS, 'activities', 'corp_types', 'region_tags', 'benefit_keys', 'benefits_note',
-                  'poster_background', 'recruitment_status', 'logo_asset_id', 'cover_asset_id'}
+                  'poster_background', 'base_location', 'recruitment_status', 'logo_asset_id', 'cover_asset_id'}
 
 
 class Conflict(APIException):
@@ -94,7 +100,7 @@ def identity(corporation):
 
 def default_content():
     return {**dict.fromkeys(TEXT_FIELDS, ''), 'activities': [], 'corp_types': [], 'region_tags': [],
-            'benefit_keys': [], 'benefits_note': '', 'poster_background': 'deep-space',
+            'benefit_keys': [], 'benefits_note': '', 'poster_background': 'expedition-fleet', 'base_location': None,
             'recruitment_status': 'open', 'logo_asset_id': None, 'cover_asset_id': None}
 
 
@@ -146,7 +152,11 @@ def revision_data(revision, public=False, corporation=None):
     note = stored.get('benefits_note', '')
     content['benefits_note'] = note.strip()[:BENEFITS_NOTE_LIMIT] if isinstance(note, str) else ''
     background = stored.get('poster_background')
-    content['poster_background'] = background if background in POSTER_BACKGROUNDS else 'deep-space'
+    if isinstance(background, str):
+        content['poster_background'] = background if background in POSTER_BACKGROUNDS else LEGACY_POSTER_BACKGROUNDS.get(background, 'expedition-fleet')
+    content['base_location'] = normalized_location(stored.get('base_location'))
+    if content['base_location'] is not None:
+        content['base_region'] = content['base_location']['region_name']
     result = dict(id=revision.pk, **content)
     if not public:
         result.update({key: getattr(revision, key) for key in ('corporation_id', 'status', 'version', 'created_at', 'updated_at', 'submitted_at', 'reviewed_at', 'review_reason')})
@@ -393,6 +403,17 @@ def updated_content(data, corporation, old):
     for key, limit in TEXT_FIELDS.items():
         if key in data:
             result[key] = text(data, key, limit, True)
+    old_location = normalized_location(old.get('base_location'))
+    if 'base_location' in data:
+        result['base_location'] = validated_location(data['base_location'])
+        if result['base_location'] is not None:
+            result['base_region'] = result['base_location']['region_name']
+        elif old_location is not None:
+            result['base_region'] = ''
+    elif old_location is not None:
+        # Older clients may still send base_region; never let this derived
+        # filter field drift away from the linked location's approved snapshot.
+        result['base_region'] = old_location['region_name']
     if 'activities' in data:
         result['activities'] = validated_list(data, 'activities', ACTIVITIES, len(ACTIVITIES))
     if 'corp_types' in data:

@@ -12,6 +12,15 @@ const reviewRevision = {
   introduction: "我们是一群热爱新伊甸的飞行员。",
   alliance: "远航联盟",
   base_region: "德里克",
+  base_location: {
+    region_id: "derelik",
+    constellation_id: "12",
+    solarsystem_id: "22",
+    region_name: "德里克",
+    constellation_name: "玛莫纳",
+    solarsystem_name: "库哈拉赫",
+    security: 0.18,
+  },
   activities: ["pvp"],
   corp_types: ["pirate", "sovereignty"],
   region_tags: ["highsec", "lowsec", "nullsec"],
@@ -102,6 +111,9 @@ test("审核详情在画布外展示完整军团元数据", async ({ page }) => 
   const fields = detail.locator(".corp-review-fields");
   await expect(fields).toBeVisible();
   await expect(fields.getByText("海报背景", { exact: true })).toBeVisible();
-  await expect(fields.getByText("海盗暗潮", { exact: true })).toBeVisible();
-  await expect(fields.getByText("海盗暗潮", { exact: true })).toBeVisible();
+  await expect(fields.getByText("战舰残骸", { exact: true })).toBeVisible();
+  await expect(fields).toContainText("德里克 / 玛莫纳 / 库哈拉赫");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "预览海报", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: /海报/ })).toBeVisible();
 });

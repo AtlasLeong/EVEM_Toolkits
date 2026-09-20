@@ -1,5 +1,5 @@
 // Local visual-QA fixtures only. No production data or network calls.
-import { resolveCommunityPreview } from './community.mjs'
+import { resolveCommunityPreview, communityLocationCatalog } from './community.mjs'
 const icon = '/preview-assets/Glossy-Alloys.png'
 export const resources = [{ label: '船菜', options: [
   { label: '光泽合金', value: '光泽合金', icon },
@@ -32,6 +32,8 @@ const feedbackTickets = [
 export function resolvePreviewRequest(url, method, body = {}) {
   const path = url.pathname
   if (path.startsWith('/api/community/')) return resolveCommunityPreview(url, method, body)
+  if (method === 'GET' && path === '/api/constellations' && url.searchParams.has('regionID')) return { status: 200, data: communityLocationCatalog.constellations.filter(item => item.region_id === url.searchParams.get('regionID')) }
+  if (method === 'GET' && path === '/api/solarsystem' && url.searchParams.has('constellationID')) return { status: 200, data: communityLocationCatalog.systems.filter(item => item.constellation_id === url.searchParams.get('constellationID')) }
   if (path === '/api/feedback/' && method === 'GET') {
     const results = feedbackTickets.filter(item => ['type', 'module', 'status'].every(key => !url.searchParams.get(key) || item[key] === url.searchParams.get(key)))
     return { status: 200, data: { count: results.length, results, can_manage: true } }

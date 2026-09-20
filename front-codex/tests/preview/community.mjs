@@ -1,16 +1,92 @@
 // Local visual fixtures, never imported by the application or deployed as data.
+export const communityLocationCatalog = {
+  regions: [
+    { r_id: "derelik", r_title: "德里克", r_safetylvl: 0.5 },
+    { r_id: "volgo", r_title: "伏尔戈", r_safetylvl: 0.59 },
+    { r_id: "silent", r_title: "静寂谷", r_safetylvl: -0.29 },
+  ],
+  constellations: [
+    {
+      region_id: "derelik",
+      co_id: "12",
+      co_title: "玛莫纳",
+      co_safetylvl: 0.16,
+    },
+    { region_id: "volgo", co_id: "11", co_title: "米沃拉", co_safetylvl: 0.2 },
+    {
+      region_id: "silent",
+      co_id: "13",
+      co_title: "F-V9QW",
+      co_safetylvl: -0.77,
+    },
+  ],
+  systems: [
+    {
+      constellation_id: "12",
+      ss_id: "22",
+      ss_title: "库哈拉赫",
+      ss_safetylvl: 0.18,
+    },
+    {
+      constellation_id: "11",
+      ss_id: "21",
+      ss_title: "夫斯库仑",
+      ss_safetylvl: 0.22,
+    },
+    {
+      constellation_id: "13",
+      ss_id: "23",
+      ss_title: "Y-ZXIO",
+      ss_safetylvl: -1.1,
+    },
+  ],
+};
+const demoLocation = (ids) => {
+  if (!ids) return null;
+  const region = communityLocationCatalog.regions.find(
+    (item) => item.r_id === ids.region_id,
+  );
+  const constellation = communityLocationCatalog.constellations.find(
+    (item) =>
+      item.co_id === ids.constellation_id && item.region_id === ids.region_id,
+  );
+  const system = communityLocationCatalog.systems.find(
+    (item) =>
+      item.ss_id === ids.solarsystem_id &&
+      item.constellation_id === constellation?.co_id,
+  );
+  return region
+    ? {
+        region_id: region.r_id,
+        constellation_id: constellation?.co_id ?? null,
+        solarsystem_id: system?.ss_id ?? null,
+        region_name: region.r_title,
+        constellation_name: constellation?.co_title || "",
+        solarsystem_name: system?.ss_title || "",
+        security:
+          system?.ss_safetylvl ??
+          constellation?.co_safetylvl ??
+          region.r_safetylvl,
+      }
+    : null;
+};
 const content = {
   tagline: "一起出发，把远方变成主场。",
   introduction:
     "我们是一群热爱新伊甸的飞行员。这里有探索未知的好奇，也有并肩作战的默契。\n从第一次出站，到下一次远征，我们相信每一位成员都能找到自己的航向。",
   alliance: "远航联盟",
   base_region: "德里克",
+  base_location: demoLocation({
+    region_id: "derelik",
+    constellation_id: "12",
+    solarsystem_id: "22",
+  }),
   activities: ["pvp", "industry", "training"],
   corp_types: ["sovereignty"],
   region_tags: ["highsec", "nullsec"],
   benefit_keys: ["ship_reimbursement", "fleet_training", "industry_support"],
   benefits_note: "新人有导师带队，定期发放舰队补给。",
-  poster_background: "sovereignty-border",
+  poster_background: "expedition-fleet",
   active_time: "每晚 20:00–23:00",
   recruitment_status: "open",
   requirements:
@@ -48,6 +124,11 @@ const demoCorps = [
       tagline: "让每一份资源，成为下一次远航的底气。",
       activities: ["industry", "mining"],
       base_region: "伏尔戈",
+      base_location: demoLocation({
+        region_id: "volgo",
+        constellation_id: "11",
+        solarsystem_id: "21",
+      }),
     },
   },
   {
@@ -60,6 +141,11 @@ const demoCorps = [
       tagline: "航线之外，还有无限可能。",
       activities: ["exploration", "pve"],
       base_region: "静寂谷",
+      base_location: demoLocation({
+        region_id: "silent",
+        constellation_id: "13",
+        solarsystem_id: "23",
+      }),
     },
   },
 ];
@@ -115,7 +201,16 @@ export function resolveCommunityPreview(url, method, body) {
       can_review: true,
     };
   else if (p === "revisions/11/" && method === "PATCH") {
-    draft = { ...draft, ...body, version: draft.version + 1 };
+    const linked = demoLocation(body.base_location);
+    draft = {
+      ...draft,
+      ...body,
+      base_location: linked,
+      base_region:
+        linked?.region_name ||
+        (draft.base_location && !linked ? "" : body.base_region),
+      version: draft.version + 1,
+    };
     data = draft;
   } else if (p === "reviews/") data = { count: 1, results: [application] };
   else if (p === "reviews/claims/54/") data = application;

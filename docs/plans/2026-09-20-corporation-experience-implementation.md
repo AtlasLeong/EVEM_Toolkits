@@ -22,7 +22,7 @@ Files: backend/Community/views.py; backend/Community/tests.py; optionally backen
 
 ### Task 2: Page layout, selection, sharing and location UI
 
-Files: front-codex/src/pages/Corporations.jsx; CorporationManage.jsx; CorporationReview.jsx; components/community/CorporationSelect.jsx; CorporationLocation.jsx; services/apiCommunity.js; styles/corporations.css; tests/e2e/corporations.spec.js; tests/preview/community.mjs and fixtures.mjs.
+Files: front-codex/src/pages/Corporations.jsx; CorporationManage.jsx; CorporationReview.jsx; components/community/CorporationSelect.jsx; CorporationLocation.jsx; CorporationShare.jsx; services/apiCommunity.js; styles/corporations.css; tests/e2e/specs/corporations.spec.js; tests/preview/community.mjs and fixtures.mjs.
 
 1. Add browser tests for styled search/select, pagination reset, clear/reset, linked location change/save, compact layout, clean share URL and clipboard fallback. Run new tests and observe failures.
 2. Implement disclosures using real radios, keeping FilterDisclosure null-relatedTarget guard intact. Fetch region/constellation/system catalogs with dependent React Query keys; never reuse previous-parent data.
@@ -32,7 +32,7 @@ Files: front-codex/src/pages/Corporations.jsx; CorporationManage.jsx; Corporatio
 
 ### Task 3: Eight original background assets
 
-Files: front-codex/src/assets/corporations/posters/*; artwork-provenance.md.
+Files: front-codex/src/assets/corporations/posters/*; front-codex/src/assets/corporations/posters/provenance.md.
 
 1. Generate one portrait, no-text image per approved direction using built-in imagegen. Inspect each output.
 2. Save originals in project output and optimized WebP assets plus thumbnails in the source directory. Use tooling only for lossless copying or mechanical asset optimization, not invented substitutes.
@@ -40,7 +40,7 @@ Files: front-codex/src/assets/corporations/posters/*; artwork-provenance.md.
 
 ### Task 4: Modal studio and poster rendering
 
-Files: front-codex/src/components/community/PosterStudio.jsx; PosterDialog.jsx; src/utils/corporationPoster.js; src/utils/corporationPosterAssets.js; styles/corporationPoster.css; tests/unit/corporationPoster.test.mjs; tests/e2e/corporation-poster.spec.js.
+Files: front-codex/src/components/community/PosterStudio.jsx; PosterDialog.jsx; src/utils/corporationPoster.js; src/utils/corporationPosterAssets.js; styles/corporationPoster.css; tests/unit/corporationPoster.test.mjs; tests/e2e/specs/corporation-poster.spec.js.
 
 1. Add failing unit/browser tests for aliases/new registry, modal focus/close/no reflow, asset readiness and export.
 2. Implement native showModal dialog with scroll lock/focus restore and responsive controls/preview layout. Keep public/private media retrieval semantics.

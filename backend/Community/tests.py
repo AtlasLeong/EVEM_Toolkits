@@ -152,7 +152,7 @@ class CorporationTests(TestCase):
         draft = self.draft()
         for key, expected in {
             'corp_types': [], 'region_tags': [], 'benefit_keys': [],
-            'benefits_note': '', 'poster_background': 'deep-space',
+            'benefits_note': '', 'poster_background': 'expedition-fleet',
         }.items():
             self.assertEqual(draft[key], expected)
         path = f"revisions/{draft['id']}/"
@@ -165,12 +165,12 @@ class CorporationTests(TestCase):
             'region_tags': ['highsec', 'lowsec', 'nullsec'],
             'benefit_keys': ['ship_reimbursement', 'fleet_training', 'industry_support'],
             'benefits_note': '每周有新人舰队和补给。',
-            'poster_background': 'pirate-tide',
+            'poster_background': 'wreckfield',
         }).json()
         self.assertEqual(updated['corp_types'], ['pirate', 'sovereignty'])
         self.assertEqual(updated['region_tags'], ['highsec', 'lowsec', 'nullsec'])
         self.assertEqual(updated['benefit_keys'], ['ship_reimbursement', 'fleet_training', 'industry_support'])
-        self.assertEqual(updated['poster_background'], 'pirate-tide')
+        self.assertEqual(updated['poster_background'], 'wreckfield')
         revision = self.submit(updated)
         self.publish(revision)
         public = self.call('get', f"corporations/{revision['corporation_id']}/").json()['revision']
@@ -178,7 +178,7 @@ class CorporationTests(TestCase):
         self.assertEqual(public['region_tags'], ['highsec', 'lowsec', 'nullsec'])
         self.assertEqual(public['benefit_keys'], ['ship_reimbursement', 'fleet_training', 'industry_support'])
         self.assertEqual(public['benefits_note'], '每周有新人舰队和补给。')
-        self.assertEqual(public['poster_background'], 'pirate-tide')
+        self.assertEqual(public['poster_background'], 'wreckfield')
         self.assertEqual(public['benefits'], '老版本福利说明')
 
     def test_poster_metadata_rejects_unknown_duplicate_overflow_and_long_values(self):
@@ -209,7 +209,31 @@ class CorporationTests(TestCase):
         self.assertEqual(payload['region_tags'], [])
         self.assertEqual(payload['benefit_keys'], [])
         self.assertEqual(payload['benefits_note'], '')
-        self.assertEqual(payload['poster_background'], 'deep-space')
+        self.assertEqual(payload['poster_background'], 'expedition-fleet')
+
+    def test_all_new_poster_backgrounds_accept_writes_and_legacy_ids_do_not(self):
+        draft = self.draft()
+        path = f"revisions/{draft['id']}/"
+        for key in ('expedition-fleet', 'ringed-planet', 'spiral-galaxy', 'orbital-shipyard',
+                    'black-hole', 'stellar-nursery', 'frozen-frontier', 'wreckfield'):
+            response = self.call('patch', path, {'expected_version': draft['version'], 'poster_background': key})
+            self.assertEqual(response.status_code, 200, response.content)
+            draft = response.json()
+            self.assertEqual(draft['poster_background'], key)
+        for key in ('deep-space', 'ion-storm', 'tactical-grid', 'jump-rift', 'sovereignty-border', 'pirate-tide'):
+            response = self.call('patch', path, {'expected_version': draft['version'], 'poster_background': key})
+            self.assertEqual(response.status_code, 400, response.content)
+
+    def test_legacy_and_malformed_poster_background_reads_do_not_mutate_revision(self):
+        aliases = {'deep-space': 'spiral-galaxy', 'ion-storm': 'stellar-nursery',
+                   'tactical-grid': 'orbital-shipyard', 'jump-rift': 'black-hole',
+                   'sovereignty-border': 'ringed-planet', 'pirate-tide': 'wreckfield'}
+        for value, expected in [*aliases.items(), (None, 'expedition-fleet'),
+                                ([], 'expedition-fleet'), ({}, 'expedition-fleet'),
+                                ('unknown', 'expedition-fleet')]:
+            legacy = SimpleNamespace(pk=1, content={'poster_background': value})
+            self.assertEqual(views.revision_data(legacy, public=True)['poster_background'], expected)
+            self.assertEqual(legacy.content, {'poster_background': value})
 
     def test_media_private_metadata_removed_public_only_after_review_and_hide(self):
         draft = self.ready()

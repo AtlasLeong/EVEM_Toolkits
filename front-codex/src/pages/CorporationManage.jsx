@@ -43,7 +43,11 @@ import {
   useIdempotencyKey,
   usePrivateCommunity,
 } from "../components/community/CorporationUI";
-import PosterStudio from "../components/community/PosterStudio";
+import PosterDialog from "../components/community/PosterDialog";
+import CorporationLocation from "../components/community/CorporationLocation";
+import CorporationSelect from "../components/community/CorporationSelect";
+import CorporationShare from "../components/community/CorporationShare";
+import { normalizePosterBackground } from "../utils/corporationPoster";
 import "../styles/corporations.css";
 
 const textFields = {
@@ -72,18 +76,31 @@ export const contentFromRevision = (revision) => ({
   region_tags: revision?.region_tags || [],
   benefit_keys: revision?.benefit_keys || [],
   benefits_note: revision?.benefits_note || "",
-  poster_background: revision?.poster_background || "deep-space",
+  poster_background: normalizePosterBackground(revision?.poster_background),
+  base_location: revision?.base_location || null,
   logo_asset_id: revision?.logo_asset_id ?? null,
   cover_asset_id: revision?.cover_asset_id ?? null,
   logo_url: revision?.logo_url || null,
   cover_url: revision?.cover_url || null,
 });
-const payloadFromForm = (form) =>
-  Object.fromEntries(
+const payloadFromForm = (form) => ({
+  ...Object.fromEntries(
     Object.entries(form).filter(
       ([key]) => key !== "logo_url" && key !== "cover_url",
     ),
-  );
+  ),
+  base_location: form.base_location
+    ? {
+        region_id: String(form.base_location.region_id),
+        constellation_id: form.base_location.constellation_id
+          ? String(form.base_location.constellation_id)
+          : null,
+        solarsystem_id: form.base_location.solarsystem_id
+          ? String(form.base_location.solarsystem_id)
+          : null,
+      }
+    : null,
+});
 
 export default function CorporationManagePage() {
   const { isAuthenticated, userInfo } = useContext(AuthContext);
@@ -339,6 +356,7 @@ function DraftEditor({ corporation, revision, refresh }) {
   const [form, setForm] = useState(() => contentFromRevision(revision));
   const [tab, setTab] = useState("profile");
   const [uploading, setUploading] = useState(false);
+  const [showPoster, setShowPoster] = useState(false);
   const action = useCommunityAction();
   const keyFor = useIdempotencyKey();
   const editorBusy = action.busy || uploading;
@@ -451,10 +469,27 @@ function DraftEditor({ corporation, revision, refresh }) {
         </div>
         <div className="corp-inline-actions">
           {current && <RevisionStatus value={current.status} />}
-          {corporation.published_revision && (
-            <Link to={`/corporations/${corporation.id}`} className="ghost-btn">
-              查看公开主页
-            </Link>
+          {corporation.published_revision && corporation.is_listed && (
+            <>
+              <Link
+                to={`/corporations/${corporation.id}`}
+                className="ghost-btn"
+              >
+                查看公开主页
+              </Link>
+              <CorporationShare id={corporation.id} />
+            </>
+          )}
+          {current && (
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => setShowPoster(true)}
+              disabled={editorBusy}
+            >
+              <ImagePlus size={16} />
+              制作海报
+            </button>
           )}
         </div>
       </div>
@@ -534,11 +569,30 @@ function DraftEditor({ corporation, revision, refresh }) {
                       6,
                       "介绍军团的故事、风格与日常活动（提交审核时必填）",
                     )}
-                    <div className="corp-two-fields">
-                      {input("alliance", "所属联盟", 80)}
-                      {input("base_region", "活动星域", 80)}
-                    </div>
-                    {optionGroup("corp_types", "军团类型", CORPORATION_TYPES, 2)}
+                    {input("alliance", "所属联盟", 80)}
+                    <CorporationLocation
+                      value={form.base_location}
+                      legacy={form.base_region}
+                      disabled={!editable || editorBusy}
+                      onLegacyChange={(base_region) =>
+                        setForm((value) => ({ ...value, base_region }))
+                      }
+                      onChange={(base_location) =>
+                        setForm((value) => ({
+                          ...value,
+                          base_location,
+                          base_region:
+                            base_location?.region_name ||
+                            (value.base_location ? "" : value.base_region),
+                        }))
+                      }
+                    />
+                    {optionGroup(
+                      "corp_types",
+                      "军团类型",
+                      CORPORATION_TYPES,
+                      2,
+                    )}
                     {optionGroup("region_tags", "活动区域", REGION_TAGS, 3)}
                     <fieldset
                       className="corp-activities"
@@ -596,19 +650,19 @@ function DraftEditor({ corporation, revision, refresh }) {
                       </p>
                     </div>
                     <div className="corp-two-fields">
-                      <label>
-                        招募状态
-                        <select
-                          className="text-input"
-                          name="recruitment_status"
-                          value={form.recruitment_status}
-                          onChange={change}
-                          disabled={!editable || action.busy}
-                        >
-                          <option value="open">正在招募</option>
-                          <option value="closed">暂缓招募</option>
-                        </select>
-                      </label>
+                      <CorporationSelect
+                        label="招募状态"
+                        value={form.recruitment_status}
+                        onChange={(recruitment_status) =>
+                          setForm((value) => ({ ...value, recruitment_status }))
+                        }
+                        disabled={!editable || editorBusy}
+                        options={[
+                          { value: "open", label: "正在招募" },
+                          { value: "closed", label: "暂缓招募" },
+                        ]}
+                        searchable={false}
+                      />
                       {input("active_time", "活跃时间", 120)}
                     </div>
                     {input("requirements", "招募要求", 1500, 4)}
@@ -703,7 +757,9 @@ function DraftEditor({ corporation, revision, refresh }) {
               </p>
             </div>
           </div>
-          <PosterStudio
+          <PosterDialog
+            open={showPoster}
+            onClose={() => setShowPoster(false)}
             corporation={{
               id: corporation.id,
               name: corporation.name,
@@ -712,8 +768,11 @@ function DraftEditor({ corporation, revision, refresh }) {
             content={form}
             approved={current.status === "approved"}
             isPrivate
-            onBackgroundChange={(poster_background) =>
-              setForm((value) => ({ ...value, poster_background }))
+            onBackgroundChange={
+              editable && !editorBusy
+                ? (poster_background) =>
+                    setForm((value) => ({ ...value, poster_background }))
+                : undefined
             }
           />
         </div>
