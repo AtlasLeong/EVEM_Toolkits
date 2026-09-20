@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useContext, useEffect } from 'react'
+import { lazy, Suspense, useContext, useEffect } from 'react'
 import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
@@ -13,6 +13,12 @@ import FraudAdminLoginPage from './pages/FraudAdminLogin'
 import FraudAdminPage from './pages/FraudAdmin'
 import LicenseAdminPage from './pages/LicenseAdmin'
 import FeedbackPage from './pages/Feedback'
+
+const CorporationsPage = lazy(() => import('./pages/Corporations'))
+const CorporationDetailPage = lazy(() => import('./pages/Corporations').then(module => ({ default: module.CorporationDetailPage })))
+const CorporationManagePage = lazy(() => import('./pages/CorporationManage'))
+const CorporationReviewPage = lazy(() => import('./pages/CorporationReview'))
+const corporationRoute = page => <Suspense fallback={<div className="loading-bar" aria-label="加载军团页面"><span /></div>}>{page}</Suspense>
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -42,6 +48,10 @@ export default function App() {
             <Route path="/fraudlist" element={<FraudListPage />} />
             <Route path="/planetary" element={<PlanetaryPage />} />
             <Route path="/feedback" element={<FeedbackPage />} />
+            <Route path="/corporations" element={corporationRoute(<CorporationsPage />)} />
+            <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />
+            <Route path="/corporations/review" element={corporationRoute(<CorporationReviewPage />)} />
+            <Route path="/corporations/:id" element={corporationRoute(<CorporationDetailPage />)} />
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
             <Route path="/starmap" element={<TacticalBoardPage />} />
             <Route

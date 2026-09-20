@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, LogOut, Settings, User, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X } from 'lucide-react'
+import { Shield, Globe, Compass, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -8,10 +8,11 @@ const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
   { to: '/starmap', label: '星系导航', icon: Compass },
   { to: '/fraudlist', label: '防诈名单', icon: Shield },
+  { to: '/corporations', label: '军团大厅', icon: Users },
   { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/corporations', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))
