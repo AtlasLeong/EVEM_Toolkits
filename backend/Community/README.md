@@ -37,6 +37,12 @@ No restart, migration, production file write, or deployment is performed by test
   2400-pixel maximum edge and a 5 MiB output cap. Uploaded image URLs are never
   accepted from arbitrary remote origins.
 - Creation returns 201, idempotent retry or existing draft returns 200.
+- Claim UUID fingerprints use the same NFKC/casefold identity as name uniqueness;
+  display capitalization remains unchanged after an equivalent retry.
+- All URL IDs are positive signed 64-bit values. Invalid ranges return 400 before
+  querying the database. Unhandled API errors return sanitized JSON (database or
+  storage failures 503, other faults 500) with the same no-store headers; logs
+  record the view/exception type, never the exception message or SQL.
 - Revisions are flat JSON fields with `id`, `corporation_id`, `corporation`
   identity, `status`, `version`, timestamps, `review_reason`, `logo_url` and
   `cover_url`. Public serialization is a separate allowlist without review/draft

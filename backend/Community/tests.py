@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import OperationalError
 from django.test import TestCase, override_settings
 from PIL import Image, PngImagePlugin
 from rest_framework.test import APIClient
@@ -303,3 +304,47 @@ class CorporationTests(TestCase):
         with self.assertLogs('Community.views', level='ERROR'), patch('django.core.files.storage.FileSystemStorage.save', side_effect=OSError('disk full')):
             self.assertEqual(self.upload(corporation).status_code, 503)
         self.assertEqual(list(Path(self.tmp.name).iterdir()), [])
+
+    def test_unhandled_private_failures_are_sanitized_and_never_cached(self):
+        self.client.raise_request_exception = False
+        for error in (OperationalError('SELECT private_contact FROM secret_table'), RuntimeError('private-contact')):
+            with self.subTest(error=type(error).__name__):
+                with self.assertLogs('Community.views', level='ERROR') as captured, patch('Community.views.Claim.objects.filter', side_effect=error):
+                    response = self.call('get', 'mine/')
+                self.assertIn(response.status_code, (500, 503))
+                self.assertIn('no-store', response.get('Cache-Control', ''))
+                self.assertIn('Authorization', response.get('Vary', ''))
+                self.assertEqual(response['Content-Type'], 'application/json')
+                self.assertNotIn('private-contact', response.content.decode())
+                self.assertNotIn('SELECT', response.content.decode())
+                self.assertIn(type(error).__name__, captured.output[0])
+                self.assertNotIn(str(error), captured.output[0])
+
+    def test_all_path_identifiers_are_validated_before_database_queries(self):
+        self.client.raise_request_exception = False
+        self.client.force_authenticate(self.staff)
+        paths = (
+            ('get', 'corporations/{bad}/'), ('get', 'corporations/{bad}/manage/'),
+            ('post', 'corporations/{bad}/draft/'), ('post', 'corporations/{bad}/media/'),
+            ('get', 'corporations/1/media/{bad}/'), ('get', 'corporations/{bad}/media/1/'),
+            ('post', 'corporations/{bad}/visibility/'), ('get', 'claims/{bad}/'),
+            ('patch', 'revisions/{bad}/'), ('post', 'revisions/{bad}/submit/'),
+            ('post', 'revisions/{bad}/withdraw/'), ('get', 'media/{bad}/private/'),
+            ('get', 'reviews/claims/{bad}/'), ('get', 'reviews/revisions/{bad}/'),
+            ('post', 'reviews/claims/{bad}/decision/'), ('post', 'reviews/revisions/{bad}/decision/'),
+        )
+        for bad in (0, 9223372036854775808):
+            for method, path in paths:
+                with self.subTest(path=path, bad=bad):
+                    response = self.call(method, path.format(bad=bad), {} if method != 'get' else None)
+                    self.assertEqual(response.status_code, 400)
+                    self.assertIn('no-store', response['Cache-Control'])
+                    self.assertIn('Authorization', response['Vary'])
+
+    def test_claim_uuid_uses_canonical_name_not_display_case(self):
+        first, payload = self.claim(name='ＦＯＯ')
+        retry = self.call('post', 'claims/', {**payload, 'name': 'foo'})
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.json()['id'], first['id'])
+        self.assertEqual(retry.json()['corporation']['name'], 'FOO')
+        self.assertEqual(self.call('post', 'claims/', {**payload, 'name': 'different'}).status_code, 409)

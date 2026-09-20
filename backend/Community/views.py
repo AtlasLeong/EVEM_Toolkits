@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
@@ -176,6 +176,24 @@ class PrivateAPI(APIView):
     # Community uses persistent DB quotas under actor locks, not email throttles.
     throttle_classes = []
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        for key in ('pk', 'asset_id'):
+            if key in kwargs:
+                positive_int(kwargs[key], key)
+
+    def handle_exception(self, exc):
+        try:
+            return super().handle_exception(exc)
+        except Exception as unhandled:
+            # Do not leak SQL, uploaded data, exception messages or tracebacks.
+            # Returning through DRF also guarantees finalize_response cache headers.
+            logger.error('Community request failed in %s (%s)', type(self).__name__, type(unhandled).__name__)
+            status = 503 if isinstance(unhandled, (DatabaseError, OSError)) else 500
+            response = Response({'detail': '服务暂时不可用，请稍后重试。'}, status=status)
+            response.exception = True
+            return response
+
     def finalize_response(self, request, response, *args, **kwargs):
         response = super().finalize_response(request, response, *args, **kwargs)
         response['Cache-Control'] = 'private, no-store'
@@ -247,7 +265,12 @@ class Claims(PrivateAPI):
             if not name or len(name) > 80:
                 raise ValidationError({'name': '军团名称无效。'})
             payload.update(name=name, short_name=text(request.data, 'short_name', 20, True))
-        payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        fingerprint = dict(payload)
+        if not existing:
+            # Display spelling is preserved, while retries use the same normalized
+            # identity as the unique corporation name key.
+            fingerprint['name'] = name.casefold()
+        payload_hash = hashlib.sha256(json.dumps(fingerprint, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
         with transaction.atomic(using='default'):
             lock_actor(request.user)
             previous = Claim.objects.filter(applicant=request.user, request_id=request_id).first()
