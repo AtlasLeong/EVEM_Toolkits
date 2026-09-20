@@ -7,6 +7,10 @@ backend/logs/
 backend/static/uploads/
 backend/db.sqlite3
 
+# Python tool and nested app bytecode
+__pycache__/
+*.py[cod]
+
 # Frontend (Node/Vue)
 frontend/node_modules
 frontend/dist
