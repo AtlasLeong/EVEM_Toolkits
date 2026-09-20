@@ -527,9 +527,9 @@ class Decision(StaffAPI):
             raise ValidationError({'decision': '请选择通过或驳回。'})
         reason = text(request.data, 'reason', 1000, decision == 'approve')
         model = review_model(kind)
-        corporation_id = get_object_or_404(model.objects.only('corporation_id'), pk=pk).corporation_id
         preview_fields = ('corporation_id', 'applicant_id') if kind == 'claims' else ('corporation_id',)
         preview = get_object_or_404(model.objects.only(*preview_fields), pk=pk)
+        corporation_id = preview.corporation_id
         with transaction.atomic(using='default'):
             lock_users([request.user.pk, getattr(preview, 'applicant_id', None)])
             corporation = Corporation.objects.select_for_update().get(pk=corporation_id)
