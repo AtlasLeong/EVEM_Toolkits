@@ -31,6 +31,7 @@ import CorporationSelect, {
   catalogSecurity,
 } from "../components/community/CorporationSelect";
 import CorporationShare from "../components/community/CorporationShare";
+import CorporationCover from "../components/community/CorporationCover";
 import { CorporationLocationLabel } from "../components/community/CorporationLocation";
 import "../styles/corporations.css";
 
@@ -172,13 +173,7 @@ function CorporationCard({ corporation: corp }) {
   return (
     <Link className="corp-card" to={`/corporations/${corp.id}`}>
       <div className="corp-card-cover">
-        {corp.cover_url && (
-          <CorporationImage
-            url={corp.cover_url}
-            className="corp-cover-image"
-            fallback=""
-          />
-        )}
+        <CorporationCover corporation={corp} thumbnail />
         <span className="corp-card-kicker">
           {corp.short_name || "CORPORATION"}
         </span>
@@ -293,17 +288,10 @@ export function CorporationDetailPage() {
     <div className="corp-page corp-profile-page">
       <BackToCorporations />
       <div className="corp-profile-cover">
-        {corp.cover_url && (
-          <CorporationImage
-            url={corp.cover_url}
-            className="corp-cover-image"
-            fallback=""
-          />
-        )}
+        <CorporationCover corporation={corp} />
         <span className="corp-eyebrow">
           CORPORATION / {corp.short_name || "NEW EDEN"}
         </span>
-        <span className="corp-profile-orbit" aria-hidden="true" />
       </div>
       <section className="corp-profile-summary">
         <div className="corp-profile-heading">

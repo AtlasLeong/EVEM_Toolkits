@@ -451,21 +451,25 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  background: #e6e4da;
-  background-image: repeating-linear-gradient(
-    135deg,
-    transparent,
-    transparent 34px,
-    #d6d4c744 35px,
-    #d6d4c744 36px
-  );
+  background: #24333f;
 }
-.corp-cover-image {
+.corp-cover-surface {
   position: absolute;
   inset: 0;
+  overflow: hidden;
+  background: linear-gradient(110deg, #151e27, #283b48);
+}
+.corp-cover-picture {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+.corp-cover-default.is-hidden,
+.corp-cover-upload:not(.is-ready) {
+  visibility: hidden;
 }
 .corp-card-kicker {
   position: relative;
@@ -653,17 +657,12 @@
   position: relative;
   z-index: 1;
 }
-.corp-profile-orbit {
+.corp-profile-cover::after {
+  content: "";
   position: absolute;
-  border: 1px solid #65757155;
-  border-radius: 50%;
-  width: 500px;
-  height: 500px;
-  right: -30px;
-  top: -220px;
-  box-shadow:
-    0 0 0 65px #52675d22,
-    0 0 0 130px #52675d18;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, #08101880, transparent 65%);
 }
 .corp-profile-heading {
   display: flex;

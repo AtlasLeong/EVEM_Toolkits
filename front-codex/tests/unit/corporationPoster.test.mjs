@@ -56,6 +56,23 @@ test("eight original backgrounds replace every legacy option", () => {
 
 const artwork = { width: 1080, height: 1440 };
 
+test("approved posters omit platform branding while retaining corporation content", () => {
+  for (const template of Object.keys(POSTER_TEMPLATES)) {
+    const rendered = [];
+    const ctx = new Proxy({
+      measureText: (value) => ({ width: measure(value) }),
+      fillText: (value) => rendered.push(value),
+    }, { get: (target, key) => target[key] ?? (() => {}) });
+    drawCorporationPoster({ getContext: () => ctx }, { name: "远航军团", short_name: "VOY" }, {
+      public_contact: "游戏内联系招募官", event_title: "周末远征", introduction: "共同探索星海",
+    }, template, true, { background: artwork });
+    assert.ok(!rendered.some(value => /EVEM|军团资料已审核|活动信息请向军团确认/.test(value)), "platform branding must not be printed on the poster");
+    assert.ok(rendered.includes("远航军团"));
+    assert.ok(rendered.includes("VOY · " + POSTER_TEMPLATES[template]));
+    assert.ok(rendered.includes("游戏内联系招募官"));
+  }
+});
+
 test("every background draws the supplied artwork without repeated grid or orbital ornaments", () => {
   const drawn = [];
   const createContext = () =>

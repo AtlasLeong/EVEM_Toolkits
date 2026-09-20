@@ -1,12 +1,42 @@
-# 隔离的 UI 演示
+# 本地军团功能沙盒
 
-在 front-codex 执行 `npm run preview:ui`，打开 http://127.0.0.1:4182/planetary?previewRole=user 。
+在 `front-codex` 启动：
 
-- 本进程只监听本机，使用内存假数据，不访问生产 API。
-- `previewRole=user` / `admin` 设置演示身份；`guest` 清除演示身份。仅影响 4182 端口的 localStorage。
-- 可直接访问 `/fraudlist`、`starmap`、`usersetting`、`fraudadmin`、`licenseadmin`、`infocenter`，登录页用 `previewRole=guest`。
-- 资源图来自仓库 backend/static/planet-nobg。演示记录不对应真实用户。
-- 演示 API 只覆盖视觉检查需要的操作；未配置操作返回明确 404，不转发生产。完整业务契约由 tests/e2e 的隔离测试验证。
-- 这些脚本不导入生产入口，不进入 dist。不要将演示服务部署成生产服务。
+```powershell
+$env:PREVIEW_PORT = '4190'
+npm run preview:ui
+```
 
-停止后可重新执行命令；没有向服务器写入数据。
+打开 `http://127.0.0.1:4190/corporations` 或正常的 `/login` 页面。顶部“本地沙盒”工具条可收起，提供三种身份，不需要注册、密码或线上账号：
+
+1. **演示军团管理员**：可编辑已提供的远航者军团，也可以申请创建新军团。
+2. **演示审核员**：先批准归属申请；创建者填写资料并提交后，再批准资料发布。
+3. **游客浏览**：只显示已审核且上架的军团及其当前公开图片。
+
+完整试用顺序：管理员申请创建 → 审核员批准申请 → 管理员选择军团、创建草稿、填写介绍与公开联系方式、上传图片、保存并提交 → 审核员切换到“资料审核”并发布 → 游客打开军团主页或导出海报。审核中可撤回，再创建新版草稿；发布后可继续创建下一版草稿。保存不会自动发布，未关联到已通过版本的图片也不会公开。
+
+## 隔离与数据边界
+
+- 只监听 `127.0.0.1`；前端 API 被强制设为相对 `/api`，所有 API 由同一个本地中间件处理，未知请求返回错误，**不转发生产服务器**。
+- 本地角色令牌由当前进程随机密钥签发；普通角色不能审核，游客不能读取私有草稿/图片；外部 Origin 写请求和非本机 Host 被拒绝。
+- 角色切换仅更改 `access_token`、`refresh_token` 两个登录字段并重载页面，保留其他本地偏好，不使用 `localStorage.clear()`。
+- 军团、申请、修订和图片保存在该服务进程内存中；页面刷新保留，停止/重启进程后重置。上传图片不落盘，不读写用户其他文件。
+- PNG / JPEG / WebP 上传先验证身份与军团归属，再使用仅开发环境依赖 Sharp 真正解码，检查扩展名 / MIME / 实际格式一致、单帧、5 MiB 和 2000 万像素上限；应用 EXIF 方向，不放大缩至 2400 × 2400 内，重新编码为质量 90 的 WebP 并去掉元数据。与生产上传约束保持一致，但不能替代生产 Pillow 编解码、限额和数据库事务测试。
+- 驻地目录和初始军团是明确标识的演示样本。真实邮件登录、注册、找回密码、数据库持久化以及其他工具的完整服务端业务不在此沙盒范围内。
+- 兼容旧 `?previewRole=user|admin|guest` 链接，但正常使用不需要记这个参数。
+
+## 验证
+
+真实 HTTP / 内存状态合同测试（动态空闲本机端口，结束时关闭）：
+
+```powershell
+node --test tests/preview/http.test.mjs tests/preview/sandbox.test.mjs
+```
+
+真实浏览器 UI 闭环（独立启动 4191，不拦截 API、不预填登录存储）：
+
+```powershell
+npx playwright test --config tests/preview-e2e/playwright.config.js
+```
+
+独立 UI 测试配置不会进入常规 `tests/e2e` 套件，不共享普通开发服务器 4173 或人工试用服务器 4190。

@@ -130,7 +130,6 @@ export function drawCorporationPoster(canvas, { name, short_name: shortName }, c
   const accent = warm ? "#e8c6a2" : "#b8dadd";
   const muted = "#d1d7dd";
 
-  text(ctx, "EVEM / " + (event ? "FLEET EVENT" : intro ? "CORPORATION" : "RECRUITMENT"), 80, 62, { size: 20, color: muted, lines: 1, width: 750 });
   text(ctx, (shortName || "CORP") + " · " + POSTER_TEMPLATES[selected], 80, 109, { size: 25, color: accent, lines: 1, width: 750 });
   if (images.logo) cover(ctx, images.logo, 904, 58, 96, 96);
   text(ctx, event ? content.event_title || "下一程，一起出发" : name, 76, 202, { size: event ? 68 : 78, weight: 700, width: 924, lines: 2, lineHeight: 1.22 });
@@ -165,7 +164,5 @@ export function drawCorporationPoster(canvas, { name, short_name: shortName }, c
     ctx.fillStyle = "#934c3c";
     ctx.fillRect(0, 1390, 1080, 50);
     text(ctx, "未审核 · 内容由军团编辑提供，仅作预览", 80, 1401, { size: 22, lines: 1 });
-  } else {
-    text(ctx, "EVEM TOOLKITS / 军团资料已审核，活动信息请向军团确认", 80, 1400, { size: 18, color: muted, lines: 1 });
   }
 }
