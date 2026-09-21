@@ -344,6 +344,7 @@
   background: radial-gradient(ellipse at 25% 20%, #263536, #182324 80%);
   color: #c8d3cc;
   min-width: 0;
+  overscroll-behavior: contain;
 }
 .tac-map > svg {
   display: block;
@@ -352,6 +353,7 @@
   height: calc(100vh - 520px);
   max-height: 760px;
   touch-action: none;
+  overscroll-behavior: contain;
   user-select: none;
   cursor: grab;
 }
@@ -436,21 +438,6 @@
 .tac-friendly-dot {
   margin-left: 10px;
   background: #78aea1;
-}
-.tac-map-caption {
-  position: absolute;
-  bottom: 15px;
-  left: 17px;
-  right: 17px;
-  font-size: 10px;
-  color: #8eaaa0;
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  pointer-events: none;
-}
-.tac-map-caption > span:first-child {
-  max-width: 80%;
 }
 .tac-map-empty {
   position: absolute;
@@ -563,26 +550,6 @@
 }
 .tac-boundary-list .tac-text-btn {
   color: #d0e1c5;
-}
-.tac-map-bottom {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid #35433e;
-  background: #23302e;
-  color: #a9bcab;
-  min-height: 45px;
-  padding: 8px 12px;
-  font-size: 11px;
-}
-.tac-map-bottom > span {
-  flex: 1;
-}
-.tac-map-bottom .tac-text-btn {
-  color: #c2d9c4;
-}
-.tac-map-bottom .tac-icon-btn:hover {
-  background: #3a4c42;
 }
 .tac-side-panel {
   min-width: 0;
@@ -1434,8 +1401,6 @@
   .tac-immersive .tac-map-toolbar > div { flex-direction: column; }
   .tac-immersive .tac-map-toolbar button { width: 34px; height: 34px; background: #243034e8; border-color: #54635f; }
   .tac-immersive .tac-map-toolbar > span { color: #aabcb4; }
-  .tac-immersive .tac-map-caption { bottom: 18px; left: 18px; right: 18px; color: #82958c; font-size: 10px; }
-  .tac-immersive .tac-map-bottom { position: absolute; z-index: 3; bottom: 43px; left: 18px; max-width: calc(100% - 374px); min-height: 32px; border: 1px solid #5b6b5e55; border-radius: 6px; background: #202b2ce8; padding: 7px 11px; color: #c1cdc4; font-size: 11px; box-sizing: border-box; }
   .tac-immersive .tac-boundary-list { position: absolute; bottom: 88px; left: 65px; z-index: 4; max-width: 380px; border: 1px solid #52665b; border-radius: 8px; background: #24312fee; box-shadow: 0 6px 24px #0003; }
   .tac-immersive .tac-side-panel { position: absolute; z-index: 5; top: 180px; right: 18px; bottom: auto; width: 304px; height: auto; min-height: 0; max-height: calc(100% - 223px); background: #f6f6efef; border: 1px solid #daddd0d9; border-radius: 9px; backdrop-filter: blur(16px); box-shadow: 0 10px 32px #0003; }
   .tac-immersive .tac-panel-tabs { padding: 0 13px; gap: 16px; flex-shrink: 0; }
@@ -1464,7 +1429,6 @@
   .tac-immersive .tac-side-panel { width: 270px; }
   .tac-immersive .tac-summary { max-width: calc(100% - 320px); }
   .tac-immersive .tac-board-actions .tac-btn { font-size: 11px; padding: 8px 10px; }
-  .tac-immersive .tac-map-bottom { max-width: calc(100% - 328px); }
 }
 @media (max-width: 767px) {
   .tac-command-bar { flex-wrap: wrap; gap: 10px; }

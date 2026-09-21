@@ -207,6 +207,9 @@ test("dense real map opens as constellation overview and drills into a local sys
   await fixture(page, { role: "commander", overview: true });
   await page.goto("/tactical");
   await expect(page.getByRole("group", { name: "星座总览", exact: true })).toBeVisible();
+  await expect(page.locator(".tac-map-mode-overview .tac-map-gate")).toHaveCount(0);
+  await expect(page.locator(".tac-map-caption")).toHaveCount(0);
+  await expect(page.locator(".tac-map-bottom")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "进入星座 德里克核心", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "进入星座 德里克核心", exact: true }).click();
   await expect(page.getByRole("group", { name: "局部作战星图", exact: true })).toBeVisible();
@@ -279,6 +282,20 @@ test("immersive map projects to its viewport and displays real security without 
   expect(width / height).toBeCloseTo(box.width / box.height, 1);
   await page.getByRole("button", { name: "收起情报侧栏" }).click();
   expect(await map.getAttribute("viewBox")).toBe(viewport);
+});
+
+test("map wheel zoom does not scroll the surrounding page", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  const map = page.getByRole("group", { name: "局部作战星图", exact: true });
+  await expect(map).toBeVisible();
+  await expect.poll(() => map.evaluate((element) => getComputedStyle(element).overscrollBehavior)).toBe("contain");
+  await page.evaluate(() => window.scrollTo(0, 220));
+  const before = await page.evaluate(() => window.scrollY);
+  await map.hover({ position: { x: 600, y: 450 } });
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before);
 });
 
 test("organization URL selects only active membership and selector keeps a shareable URL", async ({ page }) => {
@@ -525,12 +542,12 @@ test("force drag requests adjacent stable-id move without optimistic position ch
 }) => {
   const { commands } = await fixture(page, { role: "commander" });
   await page.goto("/tactical");
-  await expect(page.getByText('拖动空白平移 · 按钮缩放 · 拖动部队到相邻星系', {exact:true})).toBeVisible();
   const marker = page.getByRole("button", {
     name: "敌方 敌方前锋 32 人，德里克一",
   });
   const destination = page.getByRole("button", { name: "选择星系 德里克二" });
   await expect(marker).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "实时同步" })).toBeVisible();
   const start = await marker.boundingBox();
   const target = await destination.boundingBox();
   await page.mouse.move(start.x + 20, start.y + 10);

@@ -27,7 +27,6 @@ export default function CollaborationMap({
   const [activeConstellationId, setActiveConstellationId] = useState(null);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [drag, setDrag] = useState(null);
-  const [hint, setHint] = useState("");
   const ref = useRef(null);
   const gesture = useRef(null);
   const hasOverview = constellations.length > 0 && systems.some((system) => system.constellation_id != null);
@@ -90,6 +89,12 @@ export default function CollaborationMap({
   };
   const fitView = () => setView({ x: 0, y: 0, scale: 1 });
   const zoom = (multiplier, anchor = { x: viewport.width / 2, y: viewport.height / 2 }) => setView((current) => { const next = zoomAroundPoint({ zoom: current.scale, panX: current.x, panY: current.y }, anchor, multiplier, { min: 0.5, max: 4 }); return { x: next.panX, y: next.panY, scale: next.zoom }; });
+  const handleWheel = (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target?.closest("svg")) return;
+    event.preventDefault();
+    zoom(event.deltaY < 0 ? 1.16 : 1 / 1.16, point(event));
+  };
   const openConstellation = (node) => { setActiveConstellationId(node.id); setMode("constellation"); fitView(); };
   const returnOverview = () => { setActiveConstellationId(null); setMode("overview"); fitView(); };
 
@@ -138,16 +143,19 @@ export default function CollaborationMap({
       target = nearestSystemAt(activeSystemNodes, mapPoint, 70 / view.scale);
     }
     if (current?.force && current.started && target) {
-      if (adjacent.has(Number(target.system_id))) {
-        setHint("移动请求已提交，等待服务器确认");
+      // Pointer-up can arrive before React commits the last `setDrag` update.
+      // Derive the adjacency from the active force here instead of relying on
+      // the render state, otherwise a valid drop can be ignored intermittently.
+      const dropAdjacent = adjacentSystems(stargates, current.force.system_id);
+      if (dropAdjacent.has(Number(target.system_id))) {
         onMoveForce?.(current.force, Number(target.system_id));
-      } else setHint("只能拖到相邻星门连接的星系；远程纠正请使用“移动部队”。");
+      }
     }
     setDrag(null);
   };
   const svgLabel = mode === "spatial" && !hasOverview ? "局部作战星图" : modeLabel[mode];
 
-  return <div className={`tac-map tac-map-mode-${mode} ${className}`}>
+  return <div className={`tac-map tac-map-mode-${mode} ${className}`} onWheelCapture={handleWheel}>
     <div className="tac-map-toolbar">
       <div className="tac-map-mode-switch" role="toolbar" aria-label="地图视图">
         {mode === "constellation" && <button type="button" aria-label="返回星座总览" onClick={returnOverview}><ArrowLeft size={14} /> 返回星座总览</button>}
@@ -158,11 +166,11 @@ export default function CollaborationMap({
       <span className="tac-map-legend"><i className="tac-enemy-dot" /> 敌方{forces.some((force) => force.side === "friendly") && <><i className="tac-friendly-dot" /> 己方</>}</span>
       <div><button type="button" aria-label="缩小地图" onClick={() => zoom(1 / 1.25)}><Minus size={16} /></button><button type="button" aria-label="放大地图" onClick={() => zoom(1.25)}><Plus size={16} /></button><button type="button" aria-label="适应作战范围" onClick={fitView}><Crosshair size={16} /></button></div>
     </div>
-    <svg ref={ref} viewBox={`0 0 ${viewport.width} ${viewport.height}`} role="group" aria-label={svgLabel} tabIndex={0} onPointerDown={(event) => begin(event)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = null; setDrag(null); }} onWheel={(event) => { event.preventDefault(); zoom(event.deltaY < 0 ? 1.16 : 1 / 1.16, point(event)); }} onKeyDown={(event) => { if (event.key === "Escape") { gesture.current = null; setDrag(null); } if (event.target === ref.current && ["+", "-"].includes(event.key)) { event.preventDefault(); zoom(event.key === "+" ? 1.25 : 1 / 1.25); } }}>
+    <svg ref={ref} viewBox={`0 0 ${viewport.width} ${viewport.height}`} role="group" aria-label={svgLabel} tabIndex={0} onPointerDown={(event) => begin(event)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = null; setDrag(null); }} onKeyDown={(event) => { if (event.key === "Escape") { gesture.current = null; setDrag(null); } if (event.target === ref.current && ["+", "-"].includes(event.key)) { event.preventDefault(); zoom(event.key === "+" ? 1.25 : 1 / 1.25); } }}>
       <defs><pattern id="tac-map-grid" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".7" fill="#758388" opacity=".2" /></pattern></defs>
       <rect width={viewport.width} height={viewport.height} fill="url(#tac-map-grid)" />
       <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-        {(mode === "overview" ? overview.edges : stargates).map((gate, index) => { const a = byId.get(Number(mode === "overview" ? gate.source_id : gate.system_id)); const b = byId.get(Number(mode === "overview" ? gate.destination_id : gate.destination_system_id)); return a && b ? <line key={`${gate.id || index}`} x1={a.px} y1={a.py} x2={b.px} y2={b.py} stroke={mode === "overview" ? "#68827f" : "#455359"} strokeWidth={mode === "overview" ? 2 : 1.2} opacity={mode === "overview" ? .8 : 1} /> : null; })}
+        {(mode === "overview" ? [] : stargates).map((gate, index) => { const a = byId.get(Number(gate.system_id)); const b = byId.get(Number(gate.destination_system_id)); return a && b ? <line key={`${gate.id || index}`} className="tac-map-gate" x1={a.px} y1={a.py} x2={b.px} y2={b.py} stroke="#455359" strokeWidth="1.2" /> : null; })}
         {mode === "overview" ? overview.nodes.map((node) => { const projected = byId.get(Number(node.id)); if (!projected) return null; const summary = overviewForces[String(node.id)] || { forces: 0, knownPeople: 0, enemyForces: 0, friendlyForces: 0 }; return <g key={node.id} role="button" tabIndex={0} aria-label={`进入星座 ${node.label}`} className="tac-map-constellation" onPointerDown={(event) => event.stopPropagation()} onClick={() => openConstellation(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openConstellation(node); } }}><title>{`${node.label} · ${node.system_count} 个星系`}</title><rect x={projected.px - 74} y={projected.py - 28} width="148" height="56" rx="12" fill="#243738" stroke="#6e9189" strokeWidth={1.5 / view.scale} /><circle cx={projected.px - 55} cy={projected.py - 7} r={5 / view.scale} fill={summary.enemyForces ? "#d28b72" : "#7aa69c"} /><text x={projected.px - 42} y={projected.py - 6} fill="#e8eee6" fontSize={13 / view.scale} fontWeight="600">{node.label}</text><text x={projected.px - 42} y={projected.py + 13} fill="#9db4aa" fontSize={10 / view.scale}>{node.system_count} 个星系 · {summary.forces ? `${summary.forces} 支敌情` : "暂无敌情"}</text></g>; }) : activeSystemNodes.map((node, index) => { const id = Number(node.system_id); const selected = Number(selectedSystemId) === id; const isAdjacent = adjacent.has(id); const shouldLabel = mode !== "constellation" && (index % labelStep === 0 || forceSystems.has(id) || selected || isAdjacent); return <g key={node.system_id} role="button" tabIndex={0} aria-label={`选择星系 ${node.zh_name || node.name}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => onSelectSystem?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectSystem?.(node); } }} className="tac-map-system"><title>{`${node.zh_name || node.name} · 安全系数 ${node.security_status == null ? "未知" : Number(node.security_status).toFixed(2)}`}</title><circle cx={node.px} cy={node.py} r={(isAdjacent ? 13 : selected ? 9 : 5) / view.scale} fill={isAdjacent ? "#80b2a9" : selected ? "#ede6cb" : "#b3bec0"} fillOpacity={isAdjacent ? .5 : 1} /><circle cx={node.px} cy={node.py} r={19 / view.scale} fill="transparent" />{shouldLabel && <g pointerEvents="none"><text x={node.px} y={node.py + 24 / view.scale} textAnchor="middle" fill="#c4ced0" fontSize={12 / view.scale}>{node.zh_name || node.name}</text><text x={node.px} y={node.py + 40 / view.scale} textAnchor="middle" fill={securityColor(node.security_status)} fontSize={11 / view.scale}>{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</text></g>}</g>; })}
         {mode !== "overview" && positionedGroups.map((group) => <line key={`leader-${group.system_id}`} x1={group.leader.from.x} y1={group.leader.from.y} x2={group.leader.to.x} y2={group.leader.to.y} stroke="#8daba5" strokeWidth={1 / Math.max(view.scale, .5)} opacity=".8" pointerEvents="none" />)}
       </g>
@@ -173,6 +181,5 @@ export default function CollaborationMap({
       {drag && <g pointerEvents="none"><circle cx={view.x + drag.x * view.scale} cy={view.y + drag.y * view.scale} r="15" fill="#d6b987" opacity=".8" />{drag.target && <circle cx={view.x + drag.target.px * view.scale} cy={view.y + drag.target.py * view.scale} r="20" fill="none" stroke={adjacent.has(Number(drag.target.system_id)) ? "#92c7a9" : "#de8f79"} strokeWidth="3" />}</g>}
     </svg>
     {!nodes.length && <div className="tac-map-empty"><Crosshair size={30} /><strong>先确定这次作战的范围</strong><span>选择相关星域后加载局部星图，避免下载整个宇宙。</span></div>}
-    <div className="tac-map-caption"><span>{hint || (mode === "overview" ? "点击星座进入局部战术图 · 连线代表真实星门通道" : canMove ? (!hasOverview ? "拖动空白平移 · 按钮缩放 · 拖动部队到相邻星系" : "拖动空白平移 · 滚轮或按钮缩放 · 拖动部队到相邻星系") : "点击星系选择上报地点 · 拖动空白平移")}</span><span>{mode === "overview" ? `${nodes.length} 个星座` : `${nodes.length} 星系`}{portals.length ? ` · ${portals.length} 处边界出口` : ""}</span></div>
   </div>;
 }

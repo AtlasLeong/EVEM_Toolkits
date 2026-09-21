@@ -707,24 +707,6 @@ function BoardContent({ organizationId, snapshot, execute, status, organizationC
               <span className="tac-map-provenance">{mapData?.data_source?.label || "星图"}{mapData?.data_source && !mapData.data_source.is_real ? " · 非完整真实星图" : ""}</span>
             </div>
             {collapsed && <button className="tac-panel-reopen tac-btn" type="button" aria-label="展开情报侧栏" onClick={() => setCollapsed(false)}><ChevronLeft size={16} />部署与情报 <span>{snapshot.forces.length}</span></button>}
-            <div className="tac-map-bottom">
-              <span>
-                {selectedSystem
-                  ? `上报地点：${selectedSystem.name}`
-                  : "在星图上选择一个星系，快速填写目击情报。"}
-              </span>
-              {selectedSystem && (
-                <button
-                  type="button"
-                  className="tac-text-btn"
-                  disabled={status !== "live"}
-                  onClick={() => setDialog({ kind: "report" })}
-                >
-                  在此上报
-                  <ArrowUpRight size={15} />
-                </button>
-              )}
-            </div>
             {selectedSystem &&
               (mapData?.boundary_exits || []).some(
                 (exit) => Number(exit.system_id) === Number(selectedSystem.id),
