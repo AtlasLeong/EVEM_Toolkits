@@ -776,6 +776,19 @@ test("selected force exposes boundary destinations and keeps gate move semantics
     });
 });
 
+test("collapsed intelligence panel keeps clear space below the scope controls", async ({
+  page,
+}) => {
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  await page.getByRole("button", { name: "收起情报侧栏" }).click();
+  const scope = await page.locator(".tac-scope-label").boundingBox();
+  const reopen = await page.locator(".tac-panel-reopen").boundingBox();
+  expect(scope).not.toBeNull();
+  expect(reopen).not.toBeNull();
+  expect(reopen.y).toBeGreaterThanOrEqual(scope.y + scope.height + 10);
+});
+
 test("many forces in one system aggregate instead of stacking off canvas", async ({
   page,
 }) => {

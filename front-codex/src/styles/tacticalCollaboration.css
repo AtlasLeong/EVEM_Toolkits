@@ -1401,6 +1401,7 @@
   .tac-immersive .tac-map-toolbar > div { flex-direction: column; }
   .tac-immersive .tac-map-toolbar button { width: 34px; height: 34px; background: #243034e8; border-color: #54635f; }
   .tac-immersive .tac-map-toolbar > span { color: #aabcb4; }
+  .tac-immersive .tac-panel-reopen { top: 180px; }
   .tac-immersive .tac-boundary-list { position: absolute; bottom: 88px; left: 65px; z-index: 4; max-width: 380px; border: 1px solid #52665b; border-radius: 8px; background: #24312fee; box-shadow: 0 6px 24px #0003; }
   .tac-immersive .tac-side-panel { position: absolute; z-index: 5; top: 180px; right: 18px; bottom: auto; width: 304px; height: auto; min-height: 0; max-height: calc(100% - 223px); background: #f6f6efef; border: 1px solid #daddd0d9; border-radius: 9px; backdrop-filter: blur(16px); box-shadow: 0 10px 32px #0003; }
   .tac-immersive .tac-panel-tabs { padding: 0 13px; gap: 16px; flex-shrink: 0; }
