@@ -128,8 +128,8 @@ async function fixture(
     if (url.pathname.endsWith("/map/"))
       return json({
         systems: [
-          { system_id: 101, zh_name: "德里克一", x: 0, z: 0 },
-          { system_id: 102, zh_name: "德里克二", x: 100, z: 30 },
+          { system_id: 101, zh_name: "德里克一", x: 0, z: 0, security_status: 0.5 },
+          { system_id: 102, zh_name: "德里克二", x: 100, z: 30, security_status: -0.24 },
         ],
         stargates: [{ system_id: 101, destination_system_id: 102 }],
         regions: [],
@@ -206,6 +206,47 @@ test("guest sees login call to action without private requests", async ({
   await expect(
     page.getByRole("link", { name: "登录后进入战术板" }),
   ).toBeVisible();
+});
+
+test("immersive desktop map fills main area and floating drawer never changes its bounds", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  const map = page.getByRole("group", { name: "局部作战星图", exact: true });
+  await expect(map).toBeVisible();
+  const before = await map.boundingBox();
+  const main = await page.locator(".shell-main").boundingBox();
+  expect(before.width).toBeGreaterThan(main.width * .94);
+  expect(before.height).toBeGreaterThan(1050 * .8);
+  expect(before.y).toBeLessThan(80);
+  const panel = await page.getByRole("complementary", { name: "部署与情报" }).boundingBox();
+  const overview = await page.getByRole("region", { name: "战术概览" }).boundingBox();
+  expect(panel.x).toBeGreaterThan(before.x);
+  expect(panel.y).toBeGreaterThan(before.y);
+  expect(panel.x + panel.width).toBeLessThan(before.x + before.width);
+  expect(overview.y).toBeGreaterThan(before.y);
+  expect(overview.height).toBeLessThan(70);
+  await page.getByRole("button", { name: "收起情报侧栏" }).click();
+  await expect(page.getByRole("complementary", { name: "部署与情报" })).toHaveCount(0);
+  expect(await map.boundingBox()).toEqual(before);
+  await page.getByRole("button", { name: "展开情报侧栏" }).click();
+  await expect(page.getByRole("complementary", { name: "部署与情报" })).toBeVisible();
+  expect(await map.boundingBox()).toEqual(before);
+  await page.screenshot({ path: "output/playwright/tactical-immersive-desktop.png" });
+});
+
+test("immersive map projects to its viewport and displays real security without inventing it", async ({ page }) => {
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  const map = page.getByRole("group", { name: "局部作战星图", exact: true });
+  await expect(map.getByText("0.50", { exact: true })).toBeVisible();
+  await expect(map.getByText("-0.24", { exact: true })).toBeVisible();
+  const box = await map.boundingBox();
+  const viewport = await map.getAttribute("viewBox");
+  const [, , width, height] = viewport.split(" ").map(Number);
+  expect(width / height).toBeCloseTo(box.width / box.height, 1);
+  await page.getByRole("button", { name: "收起情报侧栏" }).click();
+  expect(await map.getAttribute("viewBox")).toBe(viewport);
 });
 
 test('organization creation retry preserves request identity after lost response', async ({ page }) => {
