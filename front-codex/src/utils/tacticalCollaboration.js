@@ -113,7 +113,11 @@ export function groupMapForces(forces, selectedForceId) {
     };
   });
 }
-export function projectSystems(systems) {
+export function projectSystems(systems, {
+  width = 1000,
+  height = 570,
+  padding = { left: 90, right: 90, top: 80, bottom: 80 },
+} = {}) {
   const valid = systems.filter(
     (system) =>
       system.x !== null &&
@@ -132,10 +136,17 @@ export function projectSystems(systems) {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const scale = Math.min(820 / (maxX - minX || 1), 410 / (maxY - minY || 1));
+  const { left = 90, right = 90, top = 80, bottom = 80 } = padding;
+  const availableWidth = Math.max(0, width - left - right);
+  const availableHeight = Math.max(0, height - top - bottom);
+  // A single uniform scale preserves game-space distance and north-up orientation.
+  // The caller supplies stable safe bounds, never transient panel visibility.
+  const scale = Math.min(availableWidth / (maxX - minX || 1), availableHeight / (maxY - minY || 1));
+  const centerX = left + availableWidth / 2;
+  const centerY = top + availableHeight / 2;
   return valid.map((system) => ({
     ...system,
-    px: 500 + (Number(system.x) - (minX + maxX) / 2) * scale,
-    py: 285 - (Number(system.z) - (minY + maxY) / 2) * scale,
+    px: centerX + (Number(system.x) - (minX + maxX) / 2) * scale,
+    py: centerY - (Number(system.z) - (minY + maxY) / 2) * scale,
   }));
 }

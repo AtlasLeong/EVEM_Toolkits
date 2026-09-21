@@ -22,7 +22,14 @@ export default function CollaborationMap({
   onMoveForce,
   className = "",
 }) {
-  const nodes = useMemo(() => projectSystems(systems), [systems]);
+  const [viewport, setViewport] = useState({ width: 1000, height: 800 });
+  const safePadding = useMemo(() => ({
+    left: 76,
+    right: viewport.width >= 1000 ? 354 : 304,
+    top: Math.min(260, viewport.height * .32),
+    bottom: 110,
+  }), [viewport.width, viewport.height]);
+  const nodes = useMemo(() => projectSystems(systems, { ...viewport, padding: safePadding }), [systems, viewport, safePadding]);
   const byId = useMemo(
     () => new Map(nodes.map((node) => [Number(node.system_id), node])),
     [nodes],
@@ -32,10 +39,14 @@ export default function CollaborationMap({
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [drag, setDrag] = useState(null);
   const [hint, setHint] = useState("");
-  const [unitScale, setUnitScale] = useState(1);
+  const unitScale = 1;
   useEffect(() => {
     const node = ref.current;
-    const measure = () => setUnitScale(1 / (node.getScreenCTM()?.a || 1));
+    const measure = () => {
+      const { width, height } = node.getBoundingClientRect();
+      if (width > 0 && height > 0) setViewport((previous) =>
+        Math.abs(previous.width - width) < 1 && Math.abs(previous.height - height) < 1 ? previous : { width, height });
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
@@ -114,8 +125,8 @@ export default function CollaborationMap({
       const scale = Math.min(4, Math.max(0.5, current.scale * multiplier));
       return {
         scale,
-        x: 500 - ((500 - current.x) * scale) / current.scale,
-        y: 285 - ((285 - current.y) * scale) / current.scale,
+        x: viewport.width / 2 - ((viewport.width / 2 - current.x) * scale) / current.scale,
+        y: viewport.height / 2 - ((viewport.height / 2 - current.y) * scale) / current.scale,
       };
     });
   const forceGroups = useMemo(
@@ -130,8 +141,8 @@ export default function CollaborationMap({
     [forceGroups],
   );
   const positionedGroups = useMemo(
-    () => layoutForceMarkers(forceGroups, nodes, unitScale),
-    [forceGroups, nodes, unitScale],
+    () => layoutForceMarkers(forceGroups, nodes, unitScale, viewport),
+    [forceGroups, nodes, viewport],
   );
   const markers = positionedGroups.flatMap((group) =>
     group.visible.map((force, index) => ({
@@ -182,7 +193,7 @@ export default function CollaborationMap({
       </div>
       <svg
         ref={ref}
-        viewBox="0 0 1000 570"
+        viewBox={`0 0 ${viewport.width} ${viewport.height}`}
         role="group"
         aria-label="局部作战星图"
         tabIndex={0}
@@ -214,7 +225,7 @@ export default function CollaborationMap({
             <circle cx="1" cy="1" r=".7" fill="#758388" opacity=".2" />
           </pattern>
         </defs>
-        <rect width="1000" height="570" fill="url(#tac-map-grid)" />
+        <rect width={viewport.width} height={viewport.height} fill="url(#tac-map-grid)" />
         <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
           {stargates.map((gate, index) => {
             const a = byId.get(Number(gate.system_id));
@@ -247,6 +258,7 @@ export default function CollaborationMap({
               }}
               className="tac-map-system"
             >
+              <title>{`${node.zh_name || node.name} · 安全系数 ${node.security_status == null ? "未知" : Number(node.security_status).toFixed(2)}`}</title>
               <circle
                 cx={node.px}
                 cy={node.py}
@@ -271,6 +283,7 @@ export default function CollaborationMap({
                 forceSystems.has(Number(node.system_id)) ||
                 Number(selectedSystemId) === Number(node.system_id) ||
                 adjacent.has(Number(node.system_id))) && (
+                <g pointerEvents="none">
                 <text
                   x={node.px}
                   y={node.py + 24}
@@ -280,6 +293,10 @@ export default function CollaborationMap({
                 >
                   {node.zh_name || node.name}
                 </text>
+                <text x={node.px} y={node.py + 40} textAnchor="middle" fill={node.security_status == null ? "#a6adb1" : node.security_status >= .5 ? "#97c6b0" : node.security_status > 0 ? "#d7b68c" : "#d69d96"} fontSize={11}>
+                  {node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}
+                </text>
+                </g>
               )}
             </g>
           ))}

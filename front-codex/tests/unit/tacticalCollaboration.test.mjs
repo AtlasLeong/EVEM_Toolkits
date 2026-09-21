@@ -11,6 +11,8 @@ import {
   groupMapForces,
 } from "../../src/utils/tacticalCollaboration.js";
 
+const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} must be close to ${expected}`);
+
 test("unknown counts stay null, explicit zero is valid, fractions and negatives reject", () => {
   assert.equal(parseCount(""), null);
   assert.equal(parseCount("0"), 0);
@@ -102,4 +104,52 @@ test("local graph projection is finite, fits viewport, and adjacency works in ei
     ]),
     [],
   );
+});
+
+test("wide viewport projection uses its available width without distorting x/z geometry", () => {
+  const [left, right, upper] = projectSystems([
+    { system_id: 1, x: -200, z: -50 },
+    { system_id: 2, x: 200, z: -50 },
+    { system_id: 3, x: -200, z: 50 },
+  ], { width: 1600, height: 600 });
+  near(left.px, 90);
+  near(right.px, 1510);
+  near(left.py, upper.py + (right.px - left.px) / 4);
+  near((left.py + upper.py) / 2, 300);
+});
+
+test("tall viewport projection uses its height while preserving north-up and proportions", () => {
+  const [lower, upper, right] = projectSystems([
+    { system_id: 1, x: -50, z: -200 },
+    { system_id: 2, x: -50, z: 200 },
+    { system_id: 3, x: 50, z: -200 },
+  ], { width: 600, height: 1200 });
+  near(lower.py, 1120);
+  near(upper.py, 80);
+  near(right.px - lower.px, (lower.py - upper.py) / 4);
+  near((lower.px + right.px) / 2, 300);
+});
+
+test("asymmetric safe padding centers systems in the unobscured area", () => {
+  const systems = [{ system_id: 1, x: -1000, z: 0 }, { system_id: 2, x: 1000, z: 0 }];
+  const points = projectSystems(systems, {
+    width: 1400, height: 900,
+    padding: { left: 80, right: 420, top: 120, bottom: 60 },
+  });
+  assert.deepEqual(points.map(({ px, py }) => [px, py]), [[80, 480], [980, 480]]);
+  assert.equal(systems[0].px, undefined, "projection must not mutate game coordinates");
+});
+
+test("projection keeps its legacy default geometry and rejects incomplete coordinates", () => {
+  const systems = [{ system_id: 1, x: 0, z: 0 }, { system_id: 2, x: 100, z: 100 }];
+  projectSystems(systems).forEach(({ px, py }, index) => {
+    near(px, [295, 705][index]);
+    near(py, [490, 80][index]);
+  });
+  assert.deepEqual(projectSystems([
+    { system_id: 3, x: null, z: 1 },
+    { system_id: 4, x: 1, z: undefined },
+    { system_id: 5, x: " ", z: 1 },
+    { system_id: 6, x: 1, z: Infinity },
+  ], { width: 1600, height: 900 }), []);
 });

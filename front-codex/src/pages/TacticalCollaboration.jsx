@@ -206,6 +206,7 @@ function AuthenticatedBoard() {
         if (!current) return;
         setOrganizations(data.organizations || []);
         setSelected(
+          data.organizations?.find((item) => item.status === "active" && String(item.id) === params.get("organization"))?.id ||
           data.organizations?.find((item) => item.status === "active")?.id ||
             null,
         );
@@ -220,6 +221,19 @@ function AuthenticatedBoard() {
       current = false;
     };
   }, []);
+  useEffect(() => {
+    if (loading) return;
+    const requested = params.get("organization");
+    const authorized = organizations.find((item) => item.status === "active" && String(item.id) === requested);
+    setSelected(authorized?.id || organizations.find((item) => item.status === "active")?.id || null);
+  }, [params, organizations, loading]);
+  const selectOrganization = (id) => {
+    if (!organizations.some((item) => item.status === "active" && String(item.id) === String(id))) return;
+    setSelected(id);
+    const next = new URLSearchParams(params);
+    next.set("organization", String(id));
+    setParams(next, { replace: true });
+  };
   const organization = organizations.find(
     (item) => String(item.id) === String(selected),
   );
@@ -227,6 +241,9 @@ function AuthenticatedBoard() {
     if (kind === "create") {
       setOrganizations((current) => [...current, result]);
       setSelected(result.id);
+      const next = new URLSearchParams(params);
+      next.set("organization", String(result.id));
+      setParams(next, { replace: true });
       setNotice("组织已创建，你是该组织的统帅。");
     } else {
       setNotice("申请已提交，等待统帅或指挥审批。");
@@ -248,7 +265,7 @@ function AuthenticatedBoard() {
   };
   return (
     <>
-      <header className="tac-page-head">
+      {!organization && <header className="tac-page-head">
         <div>
           <p className="tac-eyebrow">FLEET INTELLIGENCE</p>
           <h1>战术板</h1>
@@ -268,7 +285,7 @@ function AuthenticatedBoard() {
             创建 / 加入组织
           </button>
         </div>
-      </header>
+      </header>}
       {error && (
         <p role="alert" className="tac-error">
           {error}
@@ -284,23 +301,21 @@ function AuthenticatedBoard() {
           正在读取组织…
         </div>
       ) : organization ? (
-        <>
-          <div className="tac-organization-bar">
+          <ConnectedBoard key={organization.id} organization={organization}
+            onOpenOrganization={() => setForm(true)}
+            organizationControls={<div className="tac-organization-bar">
             <div className="tac-org-identity">
               <Shield size={19} />
               <TacticalSelect
                 label="选择组织"
                 value={selected}
-                onChange={setSelected}
+                onChange={selectOrganization}
                 options={organizations
                   .filter((item) => item.status === "active")
                   .map((item) => ({ value: item.id, label: item.name }))}
               />
             </div>
-            <span className="tac-muted">组织私有 · 无需切换房间</span>
-          </div>
-          <ConnectedBoard key={organization.id} organization={organization} />
-        </>
+          </div>} />
       ) : (
         <section className="tac-welcome">
           <div className="tac-welcome-icon">
@@ -343,7 +358,7 @@ function AuthenticatedBoard() {
   );
 }
 
-function ConnectedBoard({ organization }) {
+function ConnectedBoard({ organization, organizationControls, onOpenOrganization }) {
   const session = useTacticalSession(organization.id);
   const { snapshot, status, error, refresh, execute, invalidateAccess } =
     session;
@@ -361,8 +376,7 @@ function ConnectedBoard({ organization }) {
     full: "在线名额已满",
     revoked: "访问已撤销",
   };
-  return (
-    <>
+  const connectionControls = (
       <div className="tac-connection-row">
         <div className={`tac-connection is-${status}`} role="status">
           <span className="tac-presence-dot" />
@@ -396,14 +410,17 @@ function ConnectedBoard({ organization }) {
           )}
         </div>
       </div>
-      {error && (
+  );
+  const connectionError = error && (
         <p className="tac-error" role="alert">
           {error}
           {status === "offline"
             ? " 已有数据可能过时；恢复连接后请手动提交未发送内容。"
             : ""}
         </p>
-      )}
+      );
+  return (
+    <>
       {snapshot && !accessDenied ? (
         <BoardContent
           key={`${snapshot.permission_version}:${snapshot.role}`}
@@ -411,8 +428,17 @@ function ConnectedBoard({ organization }) {
           snapshot={snapshot}
           execute={execute}
           status={status}
+          organizationControls={organizationControls}
+          connectionControls={connectionControls}
+          connectionError={connectionError}
+          onOpenOrganization={onOpenOrganization}
+          onOpenMembers={() => setMembers(true)}
         />
       ) : (
+        <>
+        {organizationControls}
+        {connectionControls}
+        {connectionError}
         <section className="tac-welcome">
           <Radio size={28} />
           <h2>
@@ -430,6 +456,7 @@ function ConnectedBoard({ organization }) {
                 : "连接成功后会读取你有权查看的最新情报。"}
           </p>
         </section>
+        </>
       )}
       {members && status !== "revoked" && !accessDenied && (
         <TacticalMembers
@@ -448,7 +475,7 @@ function ConnectedBoard({ organization }) {
   );
 }
 
-function BoardContent({ organizationId, snapshot, execute, status }) {
+function BoardContent({ organizationId, snapshot, execute, status, organizationControls, connectionControls, connectionError, onOpenOrganization, onOpenMembers }) {
   const mobile = useMobile();
   const can = permissions(snapshot.role);
   const [mapData, setMapData] = useState(null);
@@ -463,6 +490,7 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [moving, setMoving] = useState(false);
+  const [systemQuery, setSystemQuery] = useState("");
   const scopeVersion = snapshot.scope?.version;
   useEffect(() => {
     let active = true;
@@ -536,7 +564,18 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
   };
   const currentServerTime = Date.parse(snapshot.server_time) || Date.now();
   return (
-    <>
+    <section className={mobile ? "tac-board-mobile" : "tac-immersive"} aria-label="组织战术板">
+      <div className="tac-command-bar">
+        <div className="tac-command-identity">
+          <div className="tac-command-title"><Crosshair size={20} /><h1>战术板</h1></div>
+          {organizationControls}
+          {connectionControls}
+        </div>
+        <div className="tac-command-links">
+          <Link className="tac-btn is-small" to="/starmap">星系导航 <ArrowUpRight size={14} /></Link>
+          <button type="button" className="tac-icon-btn" aria-label="创建 / 加入组织" title="创建 / 加入组织" onClick={onOpenOrganization}><Plus size={18} /></button>
+        </div>
+      </div>
       <section className="tac-summary" aria-label="战术概览">
         <div>
           <span>敌方部署</span>
@@ -609,6 +648,8 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
           </button>
         </div>
       </div>
+      <div className="tac-board-messages" aria-live="polite">
+      {connectionError}
       {notice && (
         <p role="status" className="tac-notice">
           {notice}
@@ -624,6 +665,7 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
           局部星图加载失败：{mapError}
         </p>
       )}
+      </div>
       <div
         className={`tac-board-layout${collapsed && !mobile ? " is-panel-collapsed" : ""}`}
       >
@@ -647,6 +689,15 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
               canMove={can.manageForces && status === "live" && !moving}
               onMoveForce={move}
             />
+            <div className="tac-map-controls" aria-label="星图工具">
+              <label className="tac-search"><Search size={16} /><input aria-label="搜索当前星图" placeholder="查找当前星图的星系" value={systemQuery} onChange={(event) => setSystemQuery(event.target.value)} /></label>
+              {systemQuery.trim() && <div className="tac-map-search-results">
+                {(mapData?.systems || []).filter((node) => `${node.zh_name || ""} ${node.name || ""}`.toLowerCase().includes(systemQuery.trim().toLowerCase())).slice(0, 8).map((node) => <button key={node.system_id} type="button" onClick={() => { chooseSystem(node); setSystemQuery(""); }}><span>{node.zh_name || node.name}</span><small>{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</small></button>)}
+              </div>}
+              {can.manageForces && <div className="tac-side-filter" aria-label="部署阵营筛选">{[["all", "全部阵营"], ["enemy", "仅敌方"], ["friendly", "仅己方"]].map(([value, label]) => <button type="button" key={value} aria-pressed={sideFilter === value} onClick={() => setSideFilter(value)}>{label}</button>)}</div>}
+              <span className="tac-map-provenance">{mapData?.data_source?.label || "星图"}{mapData?.data_source && !mapData.data_source.is_real ? " · 非完整真实星图" : ""}</span>
+            </div>
+            {collapsed && <button className="tac-panel-reopen tac-btn" type="button" aria-label="展开情报侧栏" onClick={() => setCollapsed(false)}><ChevronLeft size={16} />部署与情报 <span>{snapshot.forces.length}</span></button>}
             <div className="tac-map-bottom">
               <span>
                 {selectedSystem
@@ -664,18 +715,6 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
                   <ArrowUpRight size={15} />
                 </button>
               )}
-              <button
-                className="tac-icon-btn"
-                type="button"
-                aria-label={collapsed ? "展开情报侧栏" : "收起情报侧栏"}
-                onClick={() => setCollapsed((value) => !value)}
-              >
-                {collapsed ? (
-                  <ChevronLeft size={18} />
-                ) : (
-                  <ChevronRight size={18} />
-                )}
-              </button>
             </div>
             {selectedSystem &&
               (mapData?.boundary_exits || []).some(
@@ -717,7 +756,7 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
         )}
         {(!collapsed || mobile) && (
           <aside className="tac-side-panel" aria-label="部署与情报">
-            {can.manageForces && (
+            {mobile && can.manageForces && (
               <div className="tac-side-filter" aria-label="部署阵营筛选">
                 {[
                   ["all", "全部阵营"],
@@ -752,6 +791,8 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
               >
                 情报<span>{snapshot.reports.length}</span>
               </button>
+              {can.manageMembers && <button type="button" aria-label="成员" onClick={onOpenMembers}>成员<span>{snapshot.online_count}</span></button>}
+              {!mobile && <button type="button" className="tac-icon-btn tac-panel-collapse" aria-label="收起情报侧栏" onClick={() => setCollapsed(true)}><ChevronRight size={17} /></button>}
             </div>
             <label className="tac-search">
               <Search size={16} />
@@ -1002,6 +1043,6 @@ function BoardContent({ organizationId, snapshot, execute, status }) {
           onSuccess={setNotice}
         />
       )}
-    </>
+    </section>
   );
 }

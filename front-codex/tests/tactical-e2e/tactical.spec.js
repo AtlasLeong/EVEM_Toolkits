@@ -232,6 +232,7 @@ test("immersive desktop map fills main area and floating drawer never changes it
   await page.getByRole("button", { name: "展开情报侧栏" }).click();
   await expect(page.getByRole("complementary", { name: "部署与情报" })).toBeVisible();
   expect(await map.boundingBox()).toEqual(before);
+  await expect(page.getByRole("button", { name: "快速上报", exact: true })).toBeEnabled();
   await page.screenshot({ path: "output/playwright/tactical-immersive-desktop.png" });
 });
 
@@ -247,6 +248,25 @@ test("immersive map projects to its viewport and displays real security without 
   expect(width / height).toBeCloseTo(box.width / box.height, 1);
   await page.getByRole("button", { name: "收起情报侧栏" }).click();
   expect(await map.getAttribute("viewBox")).toBe(viewport);
+});
+
+test("organization URL selects only active membership and selector keeps a shareable URL", async ({ page }) => {
+  const state = await fixture(page, { role: "commander" });
+  await page.route("**/api/tactical/organizations/", (route) => route.fulfill(json({ organizations: [
+    { id: 1, name: "北境联合", role: "commander", status: "active" },
+    { id: 2, name: "真实演习", role: "commander", status: "active" },
+    { id: 3, name: "待审批组织", role: "scout", status: "pending" },
+  ] })));
+  await page.goto("/tactical?organization=2");
+  await expect(page.locator('summary[aria-label="选择组织"]')).toContainText("真实演习");
+  await expect.poll(() => state.requests.some((url) => url.includes("/organizations/2/snapshot/"))).toBe(true);
+  await page.locator('summary[aria-label="选择组织"]').click();
+  await page.getByRole("button", { name: "北境联合", exact: true }).click();
+  await expect(page).toHaveURL(/organization=1/);
+  await page.goto("/tactical?organization=3");
+  await expect(page.locator('summary[aria-label="选择组织"]')).toContainText("北境联合");
+  await expect(page.getByRole("group", { name: "局部作战星图" })).toBeVisible();
+  expect(state.requests.filter((url) => /organizations\/3\/(map|snapshot|presence)/.test(url))).toEqual([]);
 });
 
 test('organization creation retry preserves request identity after lost response', async ({ page }) => {
@@ -267,7 +287,7 @@ test("scout sees enemy forces and own reports, no friendly or membership control
 }) => {
   await fixture(page);
   await page.goto("/tactical");
-  await expect(page.getByText("敌方前锋").first()).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "部署与情报" }).getByText("敌方前锋", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "人员管理", exact: true }),
   ).toHaveCount(0);
@@ -303,6 +323,23 @@ test("mobile uses intelligence list without downloading map", async ({
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
+  await expect(page.getByRole("button", { name: "快速上报", exact: true })).toBeEnabled();
+  const reportButton = await page.getByRole("button", { name: "快速上报", exact: true }).boundingBox();
+  expect(reportButton.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: "output/playwright/tactical-immersive-mobile.png", fullPage: true });
+});
+
+test("tablet floating controls remain inside the viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  await expect(page.getByRole("button", { name: "快速上报", exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  for (const name of ["快速上报", "人员管理", "创建 / 加入组织"]) {
+    const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(820);
+  }
 });
 test("confirmed report edit preserves text after version conflict", async ({
   page,

@@ -7,7 +7,12 @@ const overlapArea = (a, b) =>
 // Eight nearby placements avoid neighboring groups without unbounded repulsion
 // that would visually detach a deployment from its system. Zoom/list handles
 // inherently over-dense maps; coordinates themselves are never moved.
-export function layoutForceMarkers(groups, nodes, unitScale = 1) {
+export function layoutForceMarkers(groups, nodes, unitScale = 1, {
+  width: viewportWidth = 1000,
+  height: viewportHeight = 570,
+  padding = { left: 12, right: 12, top: 65, bottom: 30 },
+} = {}) {
+  const { left: paddingLeft = 12, right: paddingRight = 12, top: paddingTop = 65, bottom: paddingBottom = 30 } = padding;
   const byId = new Map(nodes.map((node) => [Number(node.system_id), node]));
   const placed = [];
   for (const group of groups) {
@@ -35,7 +40,12 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1) {
       width: 40 * unitScale, height: 36 * unitScale,
     }));
     const candidates = positions.map(([x, y], index) => {
-      const rect = { x: clamp(x, 12, 988 - width), y: clamp(y, 65, 540 - height), width, height };
+      const rect = {
+        x: clamp(x, paddingLeft, viewportWidth - paddingRight - width),
+        y: clamp(y, paddingTop, viewportHeight - paddingBottom - height),
+        width,
+        height,
+      };
       const blocked = [...obstacles, ...placed].reduce((sum, obstacle) => sum + overlapArea(rect, {
         x: obstacle.x - 3 * unitScale, y: obstacle.y - 3 * unitScale,
         width: obstacle.width + 6 * unitScale, height: obstacle.height + 6 * unitScale,

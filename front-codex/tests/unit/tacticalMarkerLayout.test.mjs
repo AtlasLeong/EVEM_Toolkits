@@ -36,3 +36,29 @@ test("edge badges remain within the map and missing stars produce no phantom mar
   assert.equal(badges.length, 2);
   assert.ok(badges.every((badge) => badge.x >= 12 && badge.x + badge.width <= 988 && badge.y >= 65 && badge.y + badge.height <= 540));
 });
+
+test("wide viewport edge badges stay near their star instead of the old fixed right edge", () => {
+  const [badge] = layoutForceMarkers([group(1)], [{ system_id: 1, px: 1570, py: 100 }], 1,
+    { width: 1600, height: 700 });
+  assert.ok(badge.x > 1400);
+  assert.ok(badge.x + badge.width <= 1588);
+  assert.ok(Math.hypot(badge.leader.from.x - 1570, badge.leader.from.y - 100) <= 12);
+});
+
+test("tall viewport bottom badges are clamped to its actual boundaries", () => {
+  const [badge] = layoutForceMarkers([group(1, 2)], [{ system_id: 1, px: 570, py: 1150 }], 1,
+    { width: 600, height: 1200 });
+  assert.ok(badge.y > 1000);
+  assert.ok(badge.x >= 12 && badge.x + badge.width <= 588);
+  assert.ok(badge.y >= 65 && badge.y + badge.height <= 1170);
+});
+
+test("marker padding keeps edge stacks outside fixed toolbar and drawer safe areas", () => {
+  const viewport = { width: 1400, height: 900, padding: { left: 50, right: 300, top: 120, bottom: 80 } };
+  const badges = layoutForceMarkers([group(1, 2), group(2, 2)], [
+    { system_id: 1, px: 50, py: 120 },
+    { system_id: 2, px: 1100, py: 820 },
+  ], 1, viewport);
+  assert.equal(badges.length, 2);
+  assert.ok(badges.every((badge) => badge.x >= 50 && badge.x + badge.width <= 1100 && badge.y >= 120 && badge.y + badge.height <= 820));
+});
