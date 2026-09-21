@@ -34,12 +34,19 @@ jobs:
       - name: Community QA tool safety tests (no database or credentials)
         run: python -m unittest discover -s scripts/community/tests -v 2>&1 | tee ci-evidence/community-safety-tests.log
       - name: Install isolated backend test dependencies
-        run: python -m pip install -r scripts/deploy/requirements-ci.txt
+        run: python -m pip install -r scripts/deploy/requirements-ci.txt -r backend/requirements-tactical.txt
+      - name: Tactical fixture safety tests (no remote access)
+        run: python -m unittest discover -s scripts/tactical/tests -v 2>&1 | tee ci-evidence/tactical-safety-tests.log
       - name: License, activation, feedback, community and deployment-version tests (isolated SQLite)
         working-directory: backend
         run: |
           python manage.py test TacticalBoard License ActivationCode Feedback Community EVE_MDjango.tests_deployment --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/backend-tests.log
           python manage.py makemigrations Feedback Community --check --dry-run --settings=EVE_MDjango.ci_settings 2>&1 | tee ../ci-evidence/migration-check.log
+      - name: Tactical authorization, presence and transport tests (isolated SQLite)
+        working-directory: backend
+        run: |
+          python manage.py test TacticalCollaboration tests_tactical_transport tests_tactical_local --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/tactical-backend-tests.log
+          python manage.py makemigrations TacticalCollaboration --check --dry-run --settings=EVE_MDjango.ci_settings 2>&1 | tee ../ci-evidence/tactical-migration-check.log
       - name: Install frontend dependencies
         working-directory: front-codex
         run: npm ci --no-audit --no-fund
@@ -58,6 +65,9 @@ jobs:
       - name: Interactive local preview workflow (independent configuration)
         working-directory: front-codex
         run: npx playwright test --config tests/preview-e2e/playwright.config.js 2>&1 | tee ../ci-evidence/preview-e2e.log
+      - name: Tactical frontend workflow (mock API, not backend security proof)
+        working-directory: front-codex
+        run: npx playwright test --config tests/tactical-e2e/playwright.config.js 2>&1 | tee ../ci-evidence/tactical-e2e.log
       - name: Keep failure evidence
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -66,6 +76,7 @@ jobs:
           path: |
             front-codex/playwright-report
             front-codex/test-results
+            front-codex/test-results-tactical
             front-codex/output/preview-sandbox-tests
             ci-evidence
           retention-days: 7

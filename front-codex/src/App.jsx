@@ -15,6 +15,7 @@ import LicenseAdminPage from './pages/LicenseAdmin'
 import FeedbackPage from './pages/Feedback'
 
 const CorporationsPage = lazy(() => import('./pages/Corporations'))
+const TacticalCollaborationPage = lazy(() => import('./pages/TacticalCollaboration'))
 const CorporationDetailPage = lazy(() => import('./pages/Corporations').then(module => ({ default: module.CorporationDetailPage })))
 const CorporationManagePage = lazy(() => import('./pages/CorporationManage'))
 const CorporationReviewPage = lazy(() => import('./pages/CorporationReview'))
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/corporations/:id" element={corporationRoute(<CorporationDetailPage />)} />
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
             <Route path="/starmap" element={<TacticalBoardPage />} />
+            <Route path="/tactical" element={<Suspense fallback={<div className="loading-bar" aria-label="加载战术板"><span /></div>}><TacticalCollaborationPage /></Suspense>} />
             <Route
               path="/usersetting"
               element={

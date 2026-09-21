@@ -12,7 +12,9 @@
 
 ## Status and execution boundary
 
-Planning only. All paths below are relative to the feature worktree root. Current design archive is in `.worktrees/community-corp`; implementation should use an isolated `codex/` worktree based on the reviewed feature state, preserving current untracked QA artifacts. No push, production migration, SSH or deployment is authorized by this document.
+Implemented locally in `.worktrees/tactical-collaboration`, branch `codex/tactical-collaboration`, based on reviewed corporation feature state `8761dd7`. All paths below are relative to that worktree. No push, production migration, SSH or deployment is authorized by this document. Original task steps below remain the design acceptance reference; actual filenames and measured results are recorded in the runtime/verification documents.
+
+Implementation refinements: role-filtered full-snapshot recovery replaces incremental event replay in V1; Channels/Uvicorn are opt-in, existing WSGI unchanged. Commands/presence use durable database transactions, no Redis. A dedicated scoped SVG map preserves the original public Canvas star map. Founder-only restoration is the safe default pending the optional user policy reply. Real MySQL concurrency and production readiness remain open gates, not completed claims.
 
 Read `2026-09-21-collaborative-tactical-board-design.md` first. The user has settled visibility: all enemy deployments for scouts, friendly deployments only for the founder/commanders, no separate rooms. Commanders may approve members and remove scouts, but never remove commanders/the founder or assign roles. Reinstatement after management removal remains a separate policy to resolve before enabling re-approval; do not silently let join approval bypass a founder's removal.
 
@@ -167,8 +169,11 @@ def test_commander_may_approve_but_not_assign_roles(self):
 - [x] Confirmed product permissions archived.
 - [x] Existing code integration points inspected.
 - [x] Single organization board, all enemy deployments visible to scouts, friendly visibility restricted, commander scout-removal confirmed.
-- [ ] Runtime gate and explicit management-removal reinstatement rule.
-- [ ] Tasks 1–7 implementation and focused verification.
-- [ ] Task 8 independent review and local delivery.
+- [x] Runtime choice and bounded local connection proof; founder-only restoration default documented.
+- [x] Tasks 1–5 core domain/UI implementation, additive migrations and focused regression tests.
+- [x] Task 6 snapshot recovery/permission invalidation and live HTTP/WS smoke checks (not historical replay).
+- [x] Task 7 durable 100-account limit and guarded load tool implemented.
+- [ ] Real MySQL multi-worker concurrency, maximum-record/slow-client/reconnect-wave capacity validation.
+- [x] Task 8 local-only cross-review, final serial regression and isolated 100-account/600-second exercise; evidence and local handoff recorded. This does not close the separate real-MySQL/production gates above.
 
-Execution choices: subagent-driven development within the current task, or a separately requested implementation session using executing-plans. Neither has started.
+Executed with bounded backend/frontend implementation agents, independent cross-reviews and main-agent transport/integration/visual verification. User data in other worktrees and production is unchanged. Invite revocation UI and long-term report retention remain explicitly deferred, not silently counted as complete.

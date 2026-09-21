@@ -1,0 +1,174 @@
+"""Transport contract tests; domain authorization is tested in the real app suite."""
+import asyncio
+import importlib.util
+import json
+import time
+from unittest.mock import AsyncMock, patch
+
+from asgiref.testing import ApplicationCommunicator
+from django.test import SimpleTestCase, override_settings
+
+
+class TacticalTransportTests(SimpleTestCase):
+    def test_transport_exists(self):
+        self.assertIsNotNone(importlib.util.find_spec('TacticalCollaboration.realtime'))
+
+    async def connect(self, origin='http://127.0.0.1:4194', query=b''):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        client = ApplicationCommunicator(TacticalConsumer.as_asgi(), {
+            'type': 'websocket', 'path': '/ws/tactical/1/',
+            'url_route': {'kwargs': {'organization_id': '1'}},
+            'headers': [(b'origin', origin.encode())], 'query_string': query,
+            'subprotocols': [],
+        })
+        await client.send_input({'type': 'websocket.connect'})
+        return client
+
+    async def finish(self, client):
+        await client.send_input({'type': 'websocket.disconnect', 'code': 1000})
+        await client.wait(timeout=2)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
+    async def test_rejects_foreign_origin_and_url_credentials(self):
+        for origin, query in [('https://attacker.invalid', b''), ('http://127.0.0.1:4194', b'token=secret')]:
+            client = await self.connect(origin, query)
+            self.assertEqual((await client.receive_output())['type'], 'websocket.close')
+            await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
+    async def test_authentication_precedes_admission_and_state(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
+             patch.object(TacticalConsumer, 'admit', new=AsyncMock()) as admit, \
+             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(return_value={'role': 'scout', 'forces': [], 'server_time': 'now'})), \
+             patch.object(TacticalConsumer, 'leave', new=AsyncMock()):
+            client = await self.connect()
+            self.assertEqual((await client.receive_output())['type'], 'websocket.accept')
+            self.assertFalse(admit.called)
+            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
+                'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
+            })})
+            frame = json.loads((await client.receive_output())['text'])
+            self.assertEqual(frame['type'], 'snapshot')
+            self.assertEqual(frame['data']['role'], 'scout')
+            admit.assert_awaited_once()
+            await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
+    async def test_invalid_token_never_reads_snapshot(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(side_effect=ValueError('secret diagnostic'))), \
+             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock()) as snapshot:
+            client = await self.connect()
+            await client.receive_output()
+            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
+                'type': 'authenticate', 'token': 'forged', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
+            })})
+            frame = await client.receive_output()
+            self.assertNotIn('secret diagnostic', str(frame))
+            self.assertEqual(frame['type'], 'websocket.close')
+            snapshot.assert_not_called()
+            await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_POLL_SECONDS=0.02)
+    async def test_permission_revocation_closes_live_channel(self):
+        from rest_framework.exceptions import PermissionDenied
+        from TacticalCollaboration.realtime import TacticalConsumer
+        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
+             patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
+             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(side_effect=[{'forces': []}, PermissionDenied()])), \
+             patch.object(TacticalConsumer, 'leave', new=AsyncMock()):
+            client = await self.connect()
+            await client.receive_output()
+            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
+                'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
+            })})
+            await client.receive_output()
+            closed = await client.receive_output(timeout=2)
+            self.assertEqual(closed['type'], 'websocket.close')
+            self.assertEqual(closed['code'], 4403)
+            await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_AUTH_SECONDS=0.02)
+    async def test_unauthenticated_connection_times_out(self):
+        client = await self.connect()
+        await client.receive_output()
+        self.assertEqual((await client.receive_output(timeout=1))['code'], 4401)
+        await self.finish(client)
+
+    def test_fingerprint_ignores_only_clock_not_permissions_or_forces(self):
+        from TacticalCollaboration.realtime import snapshot_fingerprint
+        value = {'server_time': 'a', 'role': 'scout', 'forces': [{'id': 1, 'people': 4}]}
+        self.assertEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'server_time': 'b'}))
+        self.assertNotEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'forces': []}))
+
+    async def test_shutdown_is_idempotent(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.close = AsyncMock()
+        await consumer.shutdown(4403)
+        await consumer.shutdown(1011)
+        consumer.close.assert_awaited_once_with(code=4403)
+
+    async def test_peer_closed_before_disconnect_event_is_safe(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.close = AsyncMock(side_effect=RuntimeError("Unexpected ASGI message 'websocket.close', after sending 'websocket.close' or response already completed."))
+        await consumer.shutdown(4403)
+        self.assertTrue(consumer.closing)
+
+    async def test_peer_disappearing_during_send_stops_without_second_close(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.last_fingerprint = None
+        consumer.expires_at = time.time() + 60
+        consumer.get_snapshot = AsyncMock(return_value={'forces': []})
+        consumer.send_json = AsyncMock(side_effect=OSError('connection disconnected'))
+        consumer.close = AsyncMock()
+        await consumer.publish_state()
+        self.assertTrue(consumer.closing)
+        consumer.close.assert_not_awaited()
+
+    async def test_slow_database_read_cannot_publish_after_expiry_or_disconnect(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        for expiry in [True, False]:
+            consumer = TacticalConsumer()
+            consumer.closing = False
+            consumer.last_fingerprint = None
+            consumer.expires_at = time.time() + 60
+            async def finish_read():
+                if expiry: consumer.expires_at = time.time() - 1
+                else: consumer.closing = True
+                return {'forces': []}
+            consumer.get_snapshot = finish_read
+            consumer.send_json = AsyncMock()
+            consumer.close = AsyncMock()
+            await consumer.publish_state()
+            consumer.send_json.assert_not_awaited()
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
+    async def test_deeply_nested_json_is_closed_not_unhandled(self):
+        client = await self.connect()
+        await client.receive_output()
+        await client.send_input({'type': 'websocket.receive', 'text': '[' * 1500 + '0' + ']' * 1500})
+        self.assertEqual((await client.receive_output())['code'], 4400)
+        await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
+    async def test_old_socket_disconnect_does_not_delete_reconnected_tab_lease(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
+             patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
+             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(return_value={'forces': []})), \
+             patch.object(TacticalConsumer, 'leave', new=AsyncMock()) as leave:
+            client = await self.connect()
+            await client.receive_output()
+            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
+                'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
+            })})
+            await client.receive_output()
+            await self.finish(client)
+            leave.assert_not_awaited()

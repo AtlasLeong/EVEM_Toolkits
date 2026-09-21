@@ -8,7 +8,7 @@ USE_TZ = True
 ALLOWED_HOSTS = ['testserver', 'localhost']
 INSTALLED_APPS = [
     'django.contrib.auth', 'django.contrib.contenttypes', 'rest_framework',
-    'ActivationCode', 'License', 'Feedback', 'TacticalBoard', 'Community',
+    'ActivationCode', 'License', 'Feedback', 'TacticalBoard', 'Community', 'TacticalCollaboration',
 ]
 DATABASES = {alias: {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}
              for alias in ('default', 'license')}

@@ -19,7 +19,9 @@ function decodeJWTPayload(token) {
 }
 
 export function getUserInfo() {
-  const userToken = localStorage.getItem('refresh_token')
+  // Access-only sessions are supported by fetchWithAuth too. Their account
+  // identity must change so private pages unmount immediately on account switch.
+  const userToken = localStorage.getItem('refresh_token') || localStorage.getItem('access_token')
   if (!userToken) return null
 
   const decodedToken = decodeJWTPayload(userToken)

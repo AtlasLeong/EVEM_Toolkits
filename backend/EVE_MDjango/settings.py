@@ -48,6 +48,11 @@ def config(key, default=_MISSING):
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
 
+# Opt-in ASGI collaboration only. Empty allowlist denies all WebSocket origins.
+# Existing WSGI deployment does not import Channels or change its runtime.
+TACTICAL_ALLOWED_ORIGINS = [origin.strip() for origin in config('TACTICAL_ALLOWED_ORIGINS', default='').split(',') if origin.strip()]
+TACTICAL_GRAPH_DATA_VERSION = config('TACTICAL_GRAPH_DATA_VERSION', default='1')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 
 def parse_debug_flag(value, default=True):
@@ -93,6 +98,7 @@ INSTALLED_APPS = [
     'License',
     'Feedback',
     'Community',
+    'TacticalCollaboration',
 ]
 
 MIDDLEWARE = [
