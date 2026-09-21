@@ -45,7 +45,7 @@ jobs:
       - name: Tactical authorization, presence and transport tests (isolated SQLite)
         working-directory: backend
         run: |
-          python manage.py test TacticalCollaboration tests_tactical_transport tests_tactical_local --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/tactical-backend-tests.log
+          python manage.py test TacticalCollaboration tests_tactical_transport tests_tactical_local tests_tactical_universe --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/tactical-backend-tests.log
           python manage.py makemigrations TacticalCollaboration --check --dry-run --settings=EVE_MDjango.ci_settings 2>&1 | tee ../ci-evidence/tactical-migration-check.log
       - name: Install frontend dependencies
         working-directory: front-codex

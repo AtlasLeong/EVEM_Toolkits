@@ -430,6 +430,78 @@ class ReportForceTests(BoardCase):
 
 
 class ScopeTests(BoardCase):
+    def test_optional_nonfinite_fields_are_null_and_cache_remains_json_safe(self):
+        self.org.region_ids = [1]
+        self.org.save(update_fields=['region_ids'])
+        for model, field, key in ((BoardSystems, 'y', 'systems'), (BoardSystems, 'security_status', 'systems'),
+                                  (BoardConstellations, 'x', 'constellations')):
+            with self.subTest(field=field):
+                cache.clear()
+                original = getattr(model.objects.get(pk=1), field)
+                model.objects.filter(pk=1).update(**{field: float('inf')})
+                for _ in range(2):
+                    response = self.client.get(self.url('map'))
+                    self.assertEqual(response.status_code, 200)
+                    graph = response.json()
+                    self.assertIsNone(graph[key][0][field])
+                    self.assertEqual(graph['warnings'], [{'code': 'nonfinite_fields', 'count': 1}])
+                model.objects.filter(pk=1).update(**{field: original})
+
+    def test_nonfinite_coordinates_do_not_render_and_all_filtered_scope_is_empty(self):
+        self.org.region_ids = [1]
+        self.org.save(update_fields=['region_ids'])
+        for value in (float('inf'), -float('inf'), None):
+            with self.subTest(coordinate=value):
+                cache.clear()
+                BoardSystems.objects.filter(pk=1).update(x=value)
+                graph = self.client.get(self.url('map')).data
+                self.assertEqual(graph['systems'], [])
+                self.assertEqual(graph['stargates'], [])
+                self.assertEqual(graph['data_source']['kind'], 'empty')
+                self.assertEqual(graph['warnings'], [{'code': 'missing_coordinates', 'count': 1}])
+
+    def test_invalid_internal_coordinate_does_not_remove_other_valid_boundary(self):
+        self.org.region_ids = [1, 2]
+        self.org.save(update_fields=['region_ids'])
+        BoardSystems.objects.filter(pk=2).update(z=None)
+        BoardStargates.objects.create(stargate_id=15, system_id=1, destination_system_id=3, name='exit')
+        graph = self.client.get(self.url('map')).data
+        self.assertEqual([s['system_id'] for s in graph['systems']], [1])
+        self.assertEqual(graph['boundary_exits'], [{'system_id': 1, 'destination_system_id': 3, 'destination_name': '星系3'}])
+
+    def test_static_map_declares_source_and_keeps_names_security_and_hierarchy(self):
+        self.org.region_ids = [1]
+        self.org.save(update_fields=['region_ids'])
+        graph = self.client.get(self.url('map')).data
+        self.assertIn('data_source', graph)
+        self.assertEqual(graph['data_source']['kind'], 'static-board')
+        self.assertTrue(graph['data_source']['is_real'])
+        system = graph['systems'][0]
+        self.assertEqual((system['name'], system['zh_name'], system['security_status']), ('S1', '星系1', .5))
+        self.assertEqual((system['region_id'], system['constellation_id']), (1, 1))
+        self.assertEqual(graph['warnings'], [])
+
+    def test_empty_map_does_not_claim_real_data_is_loaded(self):
+        graph = self.client.get(self.url('map')).data
+        self.assertIn('data_source', graph)
+        self.assertEqual(graph['data_source']['kind'], 'empty')
+        self.assertFalse(graph['data_source']['is_real'])
+
+    def test_local_fixture_and_mixed_maps_never_claim_to_be_real(self):
+        BoardSystems.objects.create(system_id=99001001, constellation_id=1, name='演习', x=1, z=1)
+        self.org.region_ids = [1]
+        self.org.save(update_fields=['region_ids'])
+        with self.settings(TACTICAL_LOCAL_DEMO=True):
+            graph = self.client.get(self.url('map')).data
+            self.assertIn('data_source', graph)
+            self.assertEqual(graph['data_source']['kind'], 'mixed')
+            self.assertFalse(graph['data_source']['is_real'])
+            BoardStargates.objects.filter(system_id=1).delete()
+            BoardSystems.objects.filter(pk=1).delete()
+            cache.clear()
+            graph = self.client.get(self.url('map')).data
+            self.assertEqual(graph['data_source']['kind'], 'synthetic-demo')
+
     def test_static_scope_cache_reuses_graph_but_still_checks_membership(self):
         self.admit()
         self.cmd('scope.update', expected_version=1, region_ids=[1], border_hops=1)
@@ -447,8 +519,9 @@ class ScopeTests(BoardCase):
         BoardSystems.objects.filter(pk=2).update(x=None, z=None)
         self.cmd('scope.update', expected_version=1, region_ids=[1], border_hops=1)
         graph = self.client.get(self.url('map')).data
-        self.assertEqual(len(graph['stargates']), 1)
-        self.assertIsNone(next(s for s in graph['systems'] if s['system_id'] == 2)['x'])
+        self.assertEqual(graph['stargates'], [])
+        self.assertEqual([s['system_id'] for s in graph['systems']], [1])
+        self.assertEqual(graph['warnings'], [{'code': 'missing_coordinates', 'count': 1}])
 
     def test_empty_scope_returns_no_global_graph(self):
         response = self.client.get(self.url('map'))

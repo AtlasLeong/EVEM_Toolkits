@@ -153,7 +153,10 @@ export default function CollaborationMap({
       height: group.rowHeight,
     })),
   );
-  const labelStep = Math.max(1, Math.ceil(nodes.length / (100 * view.scale)));
+  // Real regions can contain hundreds of systems. Keep the overview legible by
+  // labeling a sparse sample; force locations, selected systems and adjacent
+  // jump targets always retain their labels regardless of this sampling.
+  const labelStep = Math.max(1, Math.ceil(nodes.length / (32 * view.scale)));
   return (
     <div className={`tac-map ${className}`}>
       <div className="tac-map-toolbar">

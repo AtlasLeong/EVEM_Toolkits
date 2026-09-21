@@ -12,6 +12,8 @@ References checked: https://pypi.org/project/channels/4.2.0/ ; https://pypi.org/
 
 ## Common API
 
+Map response addition (immersive layout): `data_source:{kind,label,is_real}` describes the drawable systems in **this response**, not the entire database. `kind` is `static-board`, `synthetic-demo`, `mixed`, or `empty`; the reserved local fixture IDs never claim to be real. This names the site static dataset/snapshot, not a guaranteed current game-client catalog. `warnings:[{code,count}]` reports `missing_coordinates` for omitted systems with invalid x/z and `nonfinite_fields` for nullable y/security/constellation coordinates normalized to null. Internal edges incident to omitted systems are not rendered. Auth and static-cache isolation remain unchanged; old `/starmap` API is untouched.
+
 Prefix `/api/tactical/`. JWT bearer authentication on every endpoint. Errors `{detail, code?}` with appropriate 400/401/403/404/409/429. Mutations require UUID `request_id` and return `{ok: true, result: {...}}`; same actor/org/request id+payload replay is safe, different payload conflicts. Recheck current authorization before returning receipts. Names/notes are plain text; bounded payloads.
 
 Roles: `founder`, `commander`, `scout`. Ship keys: `cruiser`, `battleship`, `light_carrier`, `assault_carrier`, `dreadnought`, `heavy_carrier`, `titan`, `other`. Count values nonnegative integers or null; no fabricated zero for unknown. Deployed forces have `side: enemy|friendly`.

@@ -32,6 +32,7 @@ front-codex/*.log
 front-codex/playwright-report
 front-codex/test-results
 front-codex/test-results-tactical
+front-codex/test-results-tactical-immersive/
 front-codex/.playwright-cli/
 front-codex/output/
 
@@ -50,4 +51,5 @@ front-codex/output/
 .worktrees/
 .venv/
 backend/.tactical-local.sqlite3*
+backend/.tactical-universe.json
 
