@@ -491,6 +491,7 @@ function BoardContent({ organizationId, snapshot, execute, status, organizationC
   const [error, setError] = useState("");
   const [moving, setMoving] = useState(false);
   const [systemQuery, setSystemQuery] = useState("");
+  const [focusSystem, setFocusSystem] = useState(null);
   const scopeVersion = snapshot.scope?.version;
   useEffect(() => {
     let active = true;
@@ -538,6 +539,11 @@ function BoardContent({ organizationId, snapshot, execute, status, organizationC
       id: node.system_id ?? node.id,
       name: node.zh_name || node.name,
     });
+  const focusMapSystem = (node) => {
+    chooseSystem(node);
+    setFocusSystem({ ...node, _focusToken: Date.now() });
+    setSystemQuery("");
+  };
   const chooseForce = (item) => {
     setSelectedForce(item.id);
     setSelectedSystem({ id: item.system_id, name: item.system_name });
@@ -674,14 +680,17 @@ function BoardContent({ organizationId, snapshot, execute, status, organizationC
             <CollaborationMap
               systems={mapData?.systems || []}
               stargates={mapData?.stargates || []}
+              constellations={mapData?.constellations || []}
+              scope={mapData?.scope}
               boundaryExits={mapData?.boundary_exits || []}
               forces={filteredForces}
               selectedSystemId={selectedSystem?.id}
               onSelectSystem={chooseSystem}
               selectedForceId={selectedForce}
               onSelectForce={chooseForce}
+              focusSystem={focusSystem}
               onFocusSystem={(node) => {
-                chooseSystem(node);
+                focusMapSystem(node);
                 setQuery(node.zh_name || node.name);
                 setCollapsed(false);
                 setTab("forces");
@@ -692,7 +701,7 @@ function BoardContent({ organizationId, snapshot, execute, status, organizationC
             <div className="tac-map-controls" aria-label="星图工具">
               <label className="tac-search"><Search size={16} /><input aria-label="搜索当前星图" placeholder="查找当前星图的星系" value={systemQuery} onChange={(event) => setSystemQuery(event.target.value)} /></label>
               {systemQuery.trim() && <div className="tac-map-search-results">
-                {(mapData?.systems || []).filter((node) => `${node.zh_name || ""} ${node.name || ""}`.toLowerCase().includes(systemQuery.trim().toLowerCase())).slice(0, 8).map((node) => <button key={node.system_id} type="button" onClick={() => { chooseSystem(node); setSystemQuery(""); }}><span>{node.zh_name || node.name}</span><small>{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</small></button>)}
+                {(mapData?.systems || []).filter((node) => `${node.zh_name || ""} ${node.name || ""}`.toLowerCase().includes(systemQuery.trim().toLowerCase())).slice(0, 8).map((node) => <button key={node.system_id} type="button" onClick={() => focusMapSystem(node)}><span>{node.zh_name || node.name}</span><small>{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</small></button>)}
               </div>}
               {can.manageForces && <div className="tac-side-filter" aria-label="部署阵营筛选">{[["all", "全部阵营"], ["enemy", "仅敌方"], ["friendly", "仅己方"]].map(([value, label]) => <button type="button" key={value} aria-pressed={sideFilter === value} onClick={() => setSideFilter(value)}>{label}</button>)}</div>}
               <span className="tac-map-provenance">{mapData?.data_source?.label || "星图"}{mapData?.data_source && !mapData.data_source.is_real ? " · 非完整真实星图" : ""}</span>

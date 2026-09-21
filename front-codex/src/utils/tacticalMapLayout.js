@@ -7,8 +7,9 @@ const numberOrNull = (value) => {
 };
 
 const idNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
-  return Number.isSafeInteger(number) ? number : value;
+  return Number.isSafeInteger(number) ? number : String(value);
 };
 
 const compareIds = (left, right) => {
@@ -22,6 +23,11 @@ const mergePadding = (padding = {}) => ({
   ...DEFAULT_PADDING,
   ...padding,
 });
+
+const stableAverage = (values) => {
+  if (!values.length) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+};
 
 export function validSystems(systems = []) {
   return systems.filter((system) => numberOrNull(system?.x) !== null && numberOrNull(system?.z) !== null);
@@ -92,6 +98,7 @@ export function buildConstellationOverview(systems = [], stargates = [], constel
     if (key === null || key === undefined || key === "") return null;
     if (!constellationMap.has(key)) constellationMap.set(key, {
       id: key,
+      system_id: key,
       constellation_id: key,
       label: String(key),
       region_id: null,
@@ -121,9 +128,14 @@ export function buildConstellationOverview(systems = [], stargates = [], constel
 
   for (const node of constellationMap.values()) {
     const members = node.systems.map((id) => systemMap.get(id)).filter(Boolean);
+    members.sort((left, right) => compareIds(left.system_id, right.system_id));
+    if (!members.length) {
+      constellationMap.delete(node.id);
+      continue;
+    }
     if (members.length) {
-      node.x = members.reduce((sum, member) => sum + Number(member.x), 0) / members.length;
-      node.z = members.reduce((sum, member) => sum + Number(member.z), 0) / members.length;
+      node.x = stableAverage(members.map((member) => Number(member.x)));
+      node.z = stableAverage(members.map((member) => Number(member.z)));
     }
     node.systems.sort(compareIds);
     node.system_count = node.systems.length;
@@ -132,6 +144,7 @@ export function buildConstellationOverview(systems = [], stargates = [], constel
   }
 
   const edgesMap = new Map();
+  const gateKeys = new Set();
   for (const gate of stargates) {
     const sourceSystem = systemMap.get(idNumber(gate?.system_id ?? gate?.source_system_id));
     const destinationSystem = systemMap.get(idNumber(gate?.destination_system_id ?? gate?.target_system_id));
@@ -148,10 +161,12 @@ export function buildConstellationOverview(systems = [], stargates = [], constel
       gate_pairs: [],
     });
     const edge = edgesMap.get(key);
-    const pair = {
-      source_system_id: idNumber(sourceSystem.system_id),
-      destination_system_id: idNumber(destinationSystem.system_id),
-    };
+    const [sourceSystemId, destinationSystemId] = [sourceSystem.system_id, destinationSystem.system_id].sort(compareIds);
+    const gateKey = `${left}:${right}:${sourceSystemId}:${destinationSystemId}`;
+    if (gateKeys.has(gateKey)) continue;
+    gateKeys.add(gateKey);
+    const pair = { source_system_id: idNumber(sourceId === left ? sourceSystem.system_id : destinationSystem.system_id),
+      destination_system_id: idNumber(sourceId === left ? destinationSystem.system_id : sourceSystem.system_id) };
     if (!edge.gate_pairs.some((item) => item.source_system_id === pair.source_system_id && item.destination_system_id === pair.destination_system_id)) {
       edge.gate_pairs.push(pair);
       edge.gate_pairs.sort((a, b) => compareIds(a.source_system_id, b.source_system_id) || compareIds(a.destination_system_id, b.destination_system_id));
@@ -279,4 +294,77 @@ export function boundaryPortals(boundaryExits = []) {
     })
     .filter((portal) => portal.source_system_id !== null && portal.destination_system_id !== null)
     .sort((a, b) => compareIds(a.source_system_id, b.source_system_id) || compareIds(a.destination_system_id, b.destination_system_id));
+}
+
+const topologyId = (node) => idNumber(node?.system_id ?? node?.id);
+const topologyEdge = (edge) => [
+  idNumber(edge?.source_id ?? edge?.system_id),
+  idNumber(edge?.destination_id ?? edge?.destination_system_id),
+];
+
+/**
+ * Lay out a small tactical topology in stable breadth-first columns. This is
+ * intentionally schematic: positions depend only on static node/edge data,
+ * never on current reports or force counts.
+ */
+export function layoutTopology(nodes = [], edges = [], { spacingX = 220, spacingY = 120 } = {}) {
+  const byId = new Map();
+  for (const node of nodes) {
+    const id = topologyId(node);
+    if (id !== null) byId.set(id, node);
+  }
+  const adjacency = new Map([...byId.keys()].map((id) => [id, new Set()]));
+  for (const edge of edges) {
+    const [source, destination] = topologyEdge(edge);
+    if (source === null || destination === null || !byId.has(source) || !byId.has(destination) || String(source) === String(destination)) continue;
+    adjacency.get(source).add(destination);
+    adjacency.get(destination).add(source);
+  }
+  const compareNodes = compareIds;
+  const roots = [...byId.keys()].sort(compareNodes);
+  const visited = new Set();
+  const positions = new Map();
+  const ordered = [];
+  const levelRows = new Map();
+  const visit = (root) => {
+    const queue = [{ id: root, depth: 0 }];
+    while (queue.length) {
+      const current = queue.shift();
+      if (visited.has(current.id)) continue;
+      visited.add(current.id);
+      const row = levelRows.get(current.depth) || 0;
+      levelRows.set(current.depth, row + 1);
+      positions.set(current.id, { px: current.depth * spacingX, py: row * spacingY });
+      ordered.push(current.id);
+      const neighbors = [...(adjacency.get(current.id) || [])].filter((id) => !visited.has(id)).sort(compareNodes);
+      queue.push(...neighbors.map((id) => ({ id, depth: current.depth + 1 })));
+    }
+  };
+  for (const root of roots) if (!visited.has(root)) visit(root);
+  return ordered.map((id) => ({ ...byId.get(id), px: positions.get(id).px, py: positions.get(id).py }));
+}
+
+/** Return gate exits from visible systems, retaining loaded and external targets. */
+export function visibleGateExits(systems = [], gates = [], boundaryExits = [], visibleIds = []) {
+  const visible = new Set(visibleIds.map(idNumber));
+  const names = new Map(systems.map((system) => [idNumber(system?.system_id ?? system?.id), system?.zh_name || system?.name || String(system?.system_id ?? system?.id)]));
+  const result = new Map();
+  const add = ({ id, source, destination, destinationName, loaded }) => {
+    if (source === null || destination === null || !visible.has(source) || visible.has(destination) || String(source) === String(destination)) return;
+    const key = `${source}:${destination}`;
+    if (!result.has(key)) result.set(key, { id, source_system_id: source, destination_system_id: destination, destination_name: destinationName || names.get(destination) || "范围外星系", loaded });
+  };
+  for (const gate of gates) {
+    const source = idNumber(gate?.system_id ?? gate?.source_id);
+    const destination = idNumber(gate?.destination_system_id ?? gate?.destination_id);
+    if (source === null || destination === null) continue;
+    if (visible.has(source)) add({ id: gate?.id ?? gate?.stargate_id ?? `${source}:${destination}`, source, destination, destinationName: gate?.destination_name, loaded: names.has(destination) });
+    else if (visible.has(destination)) add({ id: gate?.id ?? gate?.stargate_id ?? `${destination}:${source}`, source: destination, destination: source, destinationName: names.get(source), loaded: names.has(source) });
+  }
+  for (const portal of boundaryExits) {
+    const source = idNumber(portal?.source_system_id ?? portal?.source_id ?? portal?.system_id);
+    const destination = idNumber(portal?.destination_system_id ?? portal?.destination_id);
+    add({id: portal?.id ?? `${source}:${destination}`, source, destination, destinationName:portal?.destination_name, loaded:names.has(destination)});
+  }
+  return [...result.values()].sort((left, right) => compareIds(left.source_system_id, right.source_system_id) || compareIds(left.destination_system_id, right.destination_system_id));
 }

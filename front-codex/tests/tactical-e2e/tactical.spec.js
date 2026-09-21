@@ -4,7 +4,7 @@ import { installApiMock, json } from "../e2e/helpers/api.js";
 
 async function fixture(
   page,
-  { role = "scout", empty = false, conflict = false, full = false, createLost = false } = {},
+  { role = "scout", empty = false, conflict = false, full = false, createLost = false, overview = false } = {},
 ) {
   await page.routeWebSocket("**/ws/tactical/**", (socket) =>
     socket.close({ code: 1000 }),
@@ -127,13 +127,20 @@ async function fixture(
       });
     if (url.pathname.endsWith("/map/"))
       return json({
-        systems: [
+        systems: overview ? [
+          { system_id: 101, constellation_id: 201, zh_name: "德里克一", x: 0, z: 0, security_status: 0.5 },
+          { system_id: 102, constellation_id: 201, zh_name: "德里克二", x: 100, z: 30, security_status: -0.24 },
+          { system_id: 201, constellation_id: 202, zh_name: "边境一", x: 420, z: 260, security_status: 0.1 },
+        ] : [
           { system_id: 101, zh_name: "德里克一", x: 0, z: 0, security_status: 0.5 },
           { system_id: 102, zh_name: "德里克二", x: 100, z: 30, security_status: -0.24 },
         ],
         stargates: [{ system_id: 101, destination_system_id: 102 }],
         regions: [],
-        constellations: [],
+        constellations: overview ? [
+          { constellation_id: 201, region_id: 1, zh_name: "德里克核心" },
+          { constellation_id: 202, region_id: 1, zh_name: "德里克边境" },
+        ] : [],
         boundary_exits: [
           {
             system_id: 101,
@@ -195,6 +202,30 @@ async function fixture(
     snapshot,
   };
 }
+
+test("dense real map opens as constellation overview and drills into a local system view", async ({ page }) => {
+  await fixture(page, { role: "commander", overview: true });
+  await page.goto("/tactical");
+  await expect(page.getByRole("group", { name: "星座总览", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "进入星座 德里克核心", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "进入星座 德里克核心", exact: true }).click();
+  await expect(page.getByRole("group", { name: "局部作战星图", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "返回星座总览", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "返回星座总览", exact: true }).click();
+  await expect(page.getByRole("group", { name: "星座总览", exact: true })).toBeVisible();
+});
+
+test("dense map keeps a real-space mode and search focuses the selected constellation", async ({ page }) => {
+  await fixture(page, { role: "commander", overview: true });
+  await page.goto("/tactical");
+  await page.getByRole("button", { name: "切换真实空间", exact: true }).click();
+  await expect(page.getByRole("group", { name: "真实空间星图", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "切换星座总览", exact: true }).click();
+  await page.getByLabel("搜索当前星图").fill("德里克一");
+  await page.getByRole("button", { name: /德里克一/ }).first().click();
+  await expect(page.getByRole("group", { name: "局部作战星图", exact: true })).toBeVisible();
+  await expect(page.getByText("德里克一", { exact: true }).first()).toBeVisible();
+});
 
 test("guest sees login call to action without private requests", async ({
   page,

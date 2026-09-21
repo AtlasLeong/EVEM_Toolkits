@@ -380,6 +380,39 @@
   gap: 4px;
   pointer-events: auto;
 }
+.tac-map-mode-switch {
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+  pointer-events: auto;
+}
+.tac-map-mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-width: 0;
+  padding: 0 9px;
+  color: #dfe9df;
+  background: #2b4140;
+  border-color: #6a8b82;
+  font-size: 11px;
+}
+.tac-map-mode-switch button:hover {
+  background: #3b5a55;
+}
+.tac-map-mode-label {
+  color: #b7c9bf;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.tac-map-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  margin-right: 9px;
+}
 .tac-map-toolbar button {
   display: grid;
   place-items: center;
@@ -461,6 +494,24 @@
 .tac-map-group:focus-visible rect {
   stroke: #fff3c3;
   stroke-width: 3;
+}
+.tac-map-constellation {
+  cursor: pointer;
+  outline: none;
+}
+.tac-map-constellation:hover rect {
+  fill: #2d4848;
+  stroke: #c3ddc4;
+}
+.tac-map-constellation:focus-visible rect {
+  stroke: #fff3c3;
+  stroke-width: 3;
+}
+.tac-map-portal text {
+  paint-order: stroke;
+  stroke: #192526;
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .tac-side-filter {
   display: flex;
