@@ -22,6 +22,7 @@ import {
   listTacticalOrganizations,
   newRequestId,
 } from "../services/apiTacticalCollaboration";
+import { selectDefaultTacticalOrganization } from "../utils/tacticalOrganization";
 import useTacticalSession from "../hooks/useTacticalSession";
 import {
   ageLabel,
@@ -199,17 +200,17 @@ function AuthenticatedBoard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState(Boolean(params.get("invite")));
+  const preferRealMap = import.meta.env.MODE === "tactical-local";
   useEffect(() => {
     let current = true;
     listTacticalOrganizations()
       .then((data) => {
         if (!current) return;
         setOrganizations(data.organizations || []);
-        setSelected(
-          data.organizations?.find((item) => item.status === "active" && String(item.id) === params.get("organization"))?.id ||
-          data.organizations?.find((item) => item.status === "active")?.id ||
-            null,
-        );
+        setSelected(selectDefaultTacticalOrganization(data.organizations || [], {
+          requested: params.get("organization"),
+          preferRealMap,
+        }));
       })
       .catch((failure) => {
         if (current) setError(failure.message);
@@ -220,13 +221,12 @@ function AuthenticatedBoard() {
     return () => {
       current = false;
     };
-  }, []);
+  }, [preferRealMap]);
   useEffect(() => {
     if (loading) return;
     const requested = params.get("organization");
-    const authorized = organizations.find((item) => item.status === "active" && String(item.id) === requested);
-    setSelected(authorized?.id || organizations.find((item) => item.status === "active")?.id || null);
-  }, [params, organizations, loading]);
+    setSelected(selectDefaultTacticalOrganization(organizations, { requested, preferRealMap }));
+  }, [params, organizations, loading, preferRealMap]);
   const selectOrganization = (id) => {
     if (!organizations.some((item) => item.status === "active" && String(item.id) === String(id))) return;
     setSelected(id);
