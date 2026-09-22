@@ -19,6 +19,47 @@ const compareIds = (left, right) => {
   return String(a).localeCompare(String(b), "en");
 };
 
+/** Return the best available human-readable name for a system marker. */
+export function systemDisplayName(system = {}) {
+  const localized = String(system?.zh_name ?? "").trim();
+  if (localized) return localized;
+  const canonical = String(system?.name ?? "").trim();
+  if (canonical) return canonical;
+  const id = idNumber(system?.system_id ?? system?.id);
+  return id === null || id === undefined || id === "" ? "未命名星系" : `星系 ${id}`;
+}
+
+/**
+ * Keep the overview readable while revealing more names as the user zooms in.
+ * The quadratic budget reaches every loaded system around 3x zoom, which is
+ * useful for a local combat area without turning the overview into a text wall.
+ */
+export function labelStepForZoom(systemCount, zoom = 1) {
+  const count = Math.max(0, Number(systemCount) || 0);
+  if (!count) return 1;
+  const scale = Math.max(0.5, Number(zoom) || 1);
+  const budget = Math.max(1, Math.floor(18 * scale * scale));
+  return Math.max(1, Math.ceil(count / budget));
+}
+
+/** Validate a drag destination without weakening the one-jump movement rule. */
+export function validateMoveDrop(gates = [], sourceId, targetId) {
+  const source = idNumber(sourceId);
+  const target = idNumber(targetId);
+  if (target === null || target === undefined || target === "") {
+    return { ok: false, reason: "请将部队拖到相邻星系。" };
+  }
+  const adjacent = (gates || []).some((gate) => {
+    const left = idNumber(gate?.system_id ?? gate?.source_system_id);
+    const right = idNumber(gate?.destination_system_id ?? gate?.target_system_id);
+    return (left === source && right === target) || (left === target && right === source);
+  });
+  if (!adjacent) {
+    return { ok: false, reason: "只能拖到相邻星门连接的星系；远程纠正请使用“移动部队”。" };
+  }
+  return { ok: true, destination_system_id: target };
+}
+
 const mergePadding = (padding = {}) => ({
   ...DEFAULT_PADDING,
   ...padding,
@@ -210,6 +251,45 @@ export function summarizeOverviewForces(forces = [], systems = []) {
   return result;
 }
 
+/**
+ * Project live intelligence separately from deployments. A report is a
+ * transient map marker until a commander adopts its revision into a Force;
+ * keeping this projection independent prevents report observations from
+ * inflating force counts or being mistaken for confirmed deployments.
+ */
+export function projectReportMarkers(reports = [], systems = []) {
+  const projected = new Map(
+    systems
+      .filter((system) => numberOrNull(system?.px) !== null && numberOrNull(system?.py) !== null)
+      .map((system) => [idNumber(system?.system_id ?? system?.id), system]),
+  );
+  return reports
+    .filter((report) => report?.status !== "confirmed")
+    .map((report) => {
+      const reportId = report?.id ?? report?.report_id;
+      const systemId = idNumber(report?.system_id);
+      const system = projected.get(systemId);
+      if (reportId == null || system == null) return null;
+      const marker = {
+        id: reportId,
+        report_id: reportId,
+        system_id: systemId,
+        system_name: report.system_name ?? system.zh_name ?? system.name ?? String(systemId),
+        author_name: report.author_name ?? "未知斥候",
+        people: report.people ?? null,
+        ships: report.ships ?? {},
+        notes: report.notes ?? "",
+        status: report.status ?? "pending",
+        px: Number(system.px),
+        py: Number(system.py),
+      };
+      if (Object.prototype.hasOwnProperty.call(report, "author_id")) marker.author_id = report.author_id;
+      if (Object.prototype.hasOwnProperty.call(report, "observed_at")) marker.observed_at = report.observed_at;
+      return marker;
+    })
+    .filter(Boolean);
+}
+
 export function nearestSystemAt(nodes = [], point = {}, maxDistance = 20) {
   const x = numberOrNull(point.x);
   const y = numberOrNull(point.y);
@@ -234,6 +314,13 @@ export function nearestSystemAt(nodes = [], point = {}, maxDistance = 20) {
     }
   }
   return nearest;
+}
+
+export function nearestVisibleSystemAt(nodes, point, view, viewport, radius = 38) {
+  const inside = ({x,y}) => Number.isFinite(x) && Number.isFinite(y) && x>=0 && y>=0 && x<=viewport.width && y<=viewport.height;
+  if (!inside(point) || !Number.isFinite(view.scale) || view.scale<=0) return null;
+  const world = {x:(point.x-view.x)/view.scale,y:(point.y-view.y)/view.scale};
+  return nearestSystemAt(nodes.filter(node=>inside({x:node.px*view.scale+view.x,y:node.py*view.scale+view.y})), world, radius/view.scale);
 }
 
 export function fitCamera(bounds, viewport = {}, padding = DEFAULT_PADDING) {

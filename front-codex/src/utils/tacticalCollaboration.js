@@ -14,10 +14,30 @@ export const ROLE_LABELS = {
   scout: "斥候",
 };
 export const REPORT_LABELS = {
-  pending: "待确认",
-  confirmed: "已确认",
-  corrected: "修订待核对",
+  pending: "舰队线索",
+  confirmed: "已采纳",
+  corrected: "已修订",
 };
+export const FLEET_PRESETS = ['大航队', '远炮战列队', '近战战列队', '巡洋舰队', '无畏队', '后勤队'];
+export function createReportOutboxEntry(action, payload, requestId) {
+  return { action, payload, requestId, attempts: 0, status: 'queued' };
+}
+export function reportConflictDiff(local = {}, server = {}, prefix = '') {
+  const keys = new Set([...Object.keys(local || {}), ...Object.keys(server || {})]);
+  const changes = [];
+  for (const key of [...keys].sort()) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    const left = local?.[key]; const right = server?.[key];
+    if (left && right && typeof left === 'object' && typeof right === 'object' && !Array.isArray(left) && !Array.isArray(right)) {
+      changes.push(...reportConflictDiff(left, right, path));
+    } else if (JSON.stringify(left) !== JSON.stringify(right)) changes.push({ field: path, local: left, server: right });
+  }
+  return changes;
+}
+export function isRetryableReportFailure(failure = {}) {
+  if (failure?.code === 'VERSION_CONFLICT' || Number(failure?.status) === 409) return false;
+  return failure?.code === 'NETWORK_ERROR' || Number(failure?.status) >= 500 || failure?.status == null;
+}
 export function permissions(role) {
   return {
     manageForces: ["founder", "commander"].includes(role),
@@ -41,7 +61,24 @@ export function reportPayload(draft) {
   const observed = new Date(draft.observed_at);
   if (!Number.isFinite(observed.getTime()))
     throw new Error("请填写有效的观察时间。");
+  if (draft.report_kind !== undefined && !['fleet', 'system_count', 'fleet_intel'].includes(draft.report_kind))
+    throw new Error('上报类型无效。');
+  let fleet = {};
+  if (draft.report_kind === 'fleet_intel') {
+    if (draft.force_id !== undefined) {
+      if (!Number.isSafeInteger(draft.force_id) || draft.force_id < 1 ||
+          !Number.isSafeInteger(draft.force_expected_version) || draft.force_expected_version < 1 || draft.fleet_name !== undefined)
+        throw new Error('请重新选择要更新的舰队，不能混用新舰队名称。');
+      fleet = { force_id: draft.force_id, force_expected_version: draft.force_expected_version };
+    } else {
+      if (typeof draft.fleet_name !== 'string' || !draft.fleet_name.trim() || draft.fleet_name.length > 80 || draft.force_expected_version !== undefined)
+        throw new Error('请填写 1 至 80 字的舰队名称。');
+      fleet = { fleet_name: draft.fleet_name.trim() };
+    }
+  }
   return {
+    ...(draft.report_kind !== undefined ? { report_kind: draft.report_kind } : {}),
+    ...fleet,
     system_id: Number(draft.system_id),
     people: parseCount(draft.people),
     ships: Object.fromEntries(
@@ -67,7 +104,7 @@ export function localDateTime(value = new Date()) {
   if (!Number.isFinite(date.getTime())) return "";
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
     .toISOString()
-    .slice(0, 16);
+    .slice(0, 19);
 }
 export function ageLabel(value, now = Date.now()) {
   const time = Date.parse(value);
@@ -100,16 +137,18 @@ export function groupMapForces(forces, selectedForceId) {
     if (!groups.has(id)) groups.set(id, []);
     groups.get(id).push(force);
   }
-  return [...groups].map(([system_id, members]) => {
-    const selected = members.find((force) => force.id === selectedForceId);
+  return [...groups].sort(([left], [right]) => left - right).map(([system_id, members]) => {
+    const stable = [...members].sort((left, right) => Number(left.id) - Number(right.id) ||
+      String(left.name || '').localeCompare(String(right.name || ''), 'zh-CN'));
+    const selected = stable.find((force) => force.id === selectedForceId);
     const ordered = selected
-      ? [selected, ...members.filter((force) => force !== selected)]
-      : members;
+      ? [selected, ...stable.filter((force) => force !== selected)]
+      : stable;
     return {
       system_id,
-      visible: ordered.slice(0, 2),
+      visible: ordered.slice(0, 3),
       total: members.length,
-      hiddenCount: Math.max(0, members.length - 2),
+      hiddenCount: Math.max(0, members.length - 3),
     };
   });
 }

@@ -350,7 +350,7 @@ class Mine(PrivateAPI):
 class Claims(PrivateAPI):
     def post(self, request):
         common = ('request_id', 'statement', 'contact')
-        existing = 'corporation_id' in request.data
+        existing = isinstance(request.data, dict) and 'corporation_id' in request.data
         fields(request.data, (*common, 'corporation_id') if existing else (*common, 'name', 'short_name'))
         request_id = request_uuid(request.data)
         payload = dict(statement=text(request.data, 'statement', 1000), contact=text(request.data, 'contact', 200))

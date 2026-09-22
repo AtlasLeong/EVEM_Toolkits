@@ -4,13 +4,66 @@ import {
   boundaryPortals,
   buildConstellationOverview,
   fitCamera,
+  labelStepForZoom,
   layoutTopology,
   nearestSystemAt,
+  nearestVisibleSystemAt,
+  projectReportMarkers,
   projectSystemsScoped,
+  systemDisplayName,
   summarizeOverviewForces,
+  validateMoveDrop,
   visibleGateExits,
   zoomAroundPoint,
 } from "../../src/utils/tacticalMapLayout.js";
+
+test('drag drop rejects off-screen pointers and off-screen stars even within hit radius', () => {
+  const nodes=[{system_id:1,px:200,py:100},{system_id:2,px:505,py:100}];
+  const view={x:0,y:0,scale:1}, viewport={width:500,height:400};
+  assert.equal(nearestVisibleSystemAt(nodes,{x:505,y:100},view,viewport),null);
+  assert.equal(nearestVisibleSystemAt(nodes,{x:499,y:100},view,viewport),null);
+  assert.equal(nearestVisibleSystemAt(nodes,{x:205,y:100},view,viewport).system_id,1);
+  assert.equal(nearestVisibleSystemAt(nodes,{x:400,y:200},{x:0,y:0,scale:2},viewport).system_id,1);
+});
+
+test("report markers stay independent from force summaries and preserve reporter evidence", () => {
+  const reports = [
+    {
+      id: 7,
+      status: "pending",
+      system_id: 1,
+      system_name: "德里克一",
+      author_name: "前沿斥候",
+      people: 68,
+      ships: { cruiser: 12 },
+      notes: "西侧星门",
+    },
+    { id: 8, status: "confirmed", system_id: 1, author_name: "旧情报" },
+    { id: 9, status: "corrected", system_id: 1, author_name: "前沿斥候" },
+    { id: 10, status: "pending", system_id: 404, author_name: "范围外" },
+  ];
+  const systems = [{ system_id: 1, px: 120, py: 240 }];
+  const markers = projectReportMarkers(reports, systems);
+  assert.deepEqual(markers.map((marker) => marker.id), [7, 9]);
+  assert.deepEqual(markers[0], {
+    id: 7,
+    report_id: 7,
+    system_id: 1,
+    system_name: "德里克一",
+    author_name: "前沿斥候",
+    people: 68,
+    ships: { cruiser: 12 },
+    notes: "西侧星门",
+    status: "pending",
+    px: 120,
+    py: 240,
+  });
+  const forces = [{ side: "enemy", people: 20, system_id: 1 }];
+  assert.deepEqual(
+    summarizeOverviewForces(forces, systems),
+    summarizeOverviewForces(forces, systems, reports),
+  );
+});
 
 const systems = [
   { system_id: 1, constellation_id: 10, zh_name: "核心一", x: 0, z: 0 },
@@ -82,6 +135,31 @@ test("nearest hit testing chooses the closest valid system, not the first candid
   ];
   assert.equal(nearestSystemAt(nodes, { x: 105, y: 100 }, 20).system_id, 2);
   assert.equal(nearestSystemAt(nodes, { x: 190, y: 100 }, 20), null);
+});
+
+test("system labels always have a readable fallback", () => {
+  assert.equal(systemDisplayName({ system_id: 7, zh_name: "  德里克  " }), "德里克");
+  assert.equal(systemDisplayName({ system_id: 7, zh_name: "", name: "Derelik" }), "Derelik");
+  assert.equal(systemDisplayName({ system_id: 7 }), "星系 7");
+});
+
+test("label density increases with zoom instead of hiding most local systems", () => {
+  assert.equal(labelStepForZoom(128, 1), 8);
+  assert.equal(labelStepForZoom(128, 2), 2);
+  assert.equal(labelStepForZoom(128, 3), 1);
+});
+
+test("invalid drag targets return a user-facing movement reason", () => {
+  const gates = [{ system_id: 1, destination_system_id: 2 }];
+  assert.deepEqual(validateMoveDrop(gates, 1, 2), { ok: true, destination_system_id: 2 });
+  assert.deepEqual(validateMoveDrop(gates, 1, 9), {
+    ok: false,
+    reason: "只能拖到相邻星门连接的星系；远程纠正请使用“移动部队”。",
+  });
+  assert.deepEqual(validateMoveDrop(gates, 1, null), {
+    ok: false,
+    reason: "请将部队拖到相邻星系。",
+  });
 });
 
 test("camera fitting honors asymmetric safe padding and pointer anchored zoom", () => {

@@ -31,3 +31,10 @@ class TacticalRealtimeTests(SimpleTestCase):
         layer = object()
         with patch('TacticalCollaboration.events.get_channel_layer', return_value=layer):
             self.assertIs(events.LocalEventPublisher().channel_layer, layer)
+
+    def test_publisher_does_not_raise_when_channel_layer_is_temporarily_unavailable(self):
+        publisher = events.LocalEventPublisher()
+        publisher.channel_layer = type('Layer', (), {
+            'group_send': AsyncMock(side_effect=RuntimeError('redis unavailable')),
+        })()
+        self.assertIsNone(publisher.publish(42, 9))

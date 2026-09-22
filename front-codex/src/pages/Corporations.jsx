@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ArrowUpRight, Clock3, MapPin, Search, Users } from "lucide-react";
@@ -170,11 +170,27 @@ export default function CorporationsPage() {
 }
 
 function CorporationCard({ corporation: corp }) {
+  const card = useRef(null);
+  const [loadMedia, setLoadMedia] = useState(false);
+  useEffect(() => {
+    if (!window.IntersectionObserver) {
+      setLoadMedia(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setLoadMedia(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "300px" });
+    observer.observe(card.current);
+    return () => observer.disconnect();
+  }, []);
   const content = corp.revision;
   return (
-    <Link className="corp-card" to={`/corporations/${corp.id}`}>
+    <Link ref={card} className="corp-card" to={`/corporations/${corp.id}`}>
       <div className="corp-card-cover">
-        <CorporationCover corporation={corp} thumbnail />
+        <CorporationCover corporation={corp} thumbnail loadUpload={loadMedia} />
         <span className="corp-card-kicker">
           {corp.short_name || "CORPORATION"}
         </span>
@@ -186,7 +202,7 @@ function CorporationCard({ corporation: corp }) {
       </div>
       <div className="corp-card-body">
         <CorporationImage
-          url={corp.logo_url}
+          url={loadMedia ? corp.logo_url : null}
           className="corp-card-logo"
           alt=""
           fallback={corp.short_name?.slice(0, 2) || corp.name.slice(0, 1)}
@@ -313,6 +329,12 @@ export function CorporationDetailPage() {
             <p>{content.tagline}</p>
           </div>
           <div className="corp-profile-actions">
+            <Link
+              className="ghost-btn"
+              to={`/starsea?corporation_id=${encodeURIComponent(corp.id)}`}
+            >
+              查看关联见闻
+            </Link>
             <CorporationShare id={corp.id} />
             <button
               type="button"

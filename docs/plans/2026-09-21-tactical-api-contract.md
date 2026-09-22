@@ -42,20 +42,30 @@ Snapshot:
 ```json
 {"organization":{"id":1,"name":"北境联合"},"role":"founder","user_id":1,"permission_version":1,"scope":{"region_ids":[10000001],"border_hops":1,"version":1},"forces":[],"reports":[],"online_count":1,"capacity":100,"online":[],"server_time":"ISO8601"}
 ```
-`online` only exists for founder/commander. Scouts get all enemy forces and only own reports. Never send friendly fields/counts/history. Stable keys on forces/reports: `id,version,system_id,system_name,people,ships,notes,observed_at,updated_at`; forces also `name,side`; reports also `author_id,author_name,status` (`pending|confirmed|corrected`). Friendly forces need no report source. Response includes server_time for staleness but transport compares state excluding volatile clock.
+`online` only exists for founder/commander. Scouts get all enemy forces and all organization enemy reports, including other authors' pending/corrected reports; editing still requires report authorship. Reports are enemy observations (no friendly report type); never expand linked deployments, source relations, audit metadata or friendly fields/counts/history into the report projection. An original enemy observation remains independent if an adopted force is later changed to friendly. Stable keys on forces/reports: `id,version,system_id,system_name,people,ships,notes,observed_at,updated_at`; forces also `name,side`; reports also `author_id,author_name,status` (`pending|confirmed|corrected`). Friendly forces need no report source. Founder/commander snapshots include pending reports with author immediately, without confirmation; confirmation only adopts the observation into a deployment. Response includes server_time for staleness but transport compares state excluding volatile clock.
+
+### Strength overview projection (2026-09-22, local only)
+
+Authoritative HTTP/WS snapshots now include `in_scope:boolean` on every visible force/report. This means drawable in the organization's selected static regions + border hops, not inside the current camera viewport. It uses the same cached geometry as the map; membership/role/privacy checks remain live and outside that cache. No coordinates are added to snapshots, allowing mobile totals without downloading the graph.
+
+Founder/commander snapshots and member responses add `member_count`: distinct active memberships with enabled accounts, excluding pending/removed/disabled members. It is absent for scouts, as is the roster. `online_count` remains unique admitted online accounts, not game force size.
+
+Frontend estimates use the latest enemy `system_count` for each star, including null/zero and stale observations; without one, sum known current fleet counts at that star. Never add both sources. Friendly estimates use friendly fleets only. Unknowns and stale contributions are explicit. Current-warzone/all-organization totals are independent of search and camera movement. No new mutation endpoint or schema migration is required by this increment.
 
 ### Commands requiring live lease
 
 Include `connection_id` as well as `request_id` on report/force/scope commands.
 
-- `report.create`: `system_id,people,ships,notes,observed_at`.
-- `report.update`: `report_id,expected_version` plus same content; author only; preserve revisions and adoption baseline.
+- `report.create`: `system_id,people,ships,notes,observed_at`, optional `report_kind` (`fleet` legacy default, `system_count`, `fleet_intel`). `system_count` is a separate system-wide enemy snapshot, not a force. `fleet_intel` immediately creates/updates an enemy force: new requires `fleet_name` (1–80 chars); existing requires `force_id,force_expected_version` and forbids `fleet_name`. Names never select/merge identities. Older observations remain history; equal observed times prefer the newer observation ID.
+- `report.update`: `report_id,expected_version` plus same content; author only; immutable kind and linked force. Named reports allow `fleet_name` correction; only the current source updates the estimate, never current deployment position. Backdating a current-source revision is rejected atomically; add a separate historical observation instead. Named response adds `fleet_name,force_id,is_current`; Force adds nullable `source_report_id,source_author_id,source_author_name`. No friendly force expansion in report responses.
 - `report.confirm`: `report_id,expected_version,name,force_id?` (founder/commander); new enemy force or explicitly replace current estimate in existing enemy force. Existing force requires `force_expected_version`; duplicate confirmation cannot create a second force. Preserve source report revision, no automatic summing.
 - `force.create`: `name,side,system_id,people,ships,notes,observed_at` (founder/commander).
 - `force.update`: `force_id,expected_version` plus content (founder/commander); validates all fields. Side change filters subsequent reads, no private history in scout projection.
 - `force.move`: `force_id,expected_version,destination_system_id,kind:gate_move|correction,reason?`; correction requires reason; gate move only true adjacent edge. Preserve `observed_at` and counts; move same stable ID.
 - `force.archive`: `force_id,expected_version` (founder/commander), returns `{id,version,archived:true}`. Exclude from live state but preserve source revisions/audit; archived forces cannot be edited/moved/adopted again.
 - `scope.update`: `expected_version,region_ids,border_hops:0|1|2` (founder/commander).
+
+`report.confirm` rejects `system_count` and `fleet_intel` (already directly visible). Direct force content changes/legacy adoption clear the automatic source pointer; a move preserves source and observation time. Archived/friendly/cross-organization forces cannot receive named observations. Full named-fleet rules and local evidence are in `2026-09-22-tactical-named-fleets-design.md` and `2026-09-22-tactical-named-fleets-verification.md`.
 
 ### Static local map
 
@@ -66,6 +76,8 @@ Include `connection_id` as well as `request_id` on report/force/scope commands.
 ### WebSocket
 
 Path `/ws/tactical/<org_id>/`. Allowlisted Origin required. First client frame within5s: `{type:"authenticate",token:<accessJWT>,connection_id:<UUID>}`. No token in URL. Reject oversized frames; admit through the same database presence function. Authenticated server frames `{type:"snapshot",data:<snapshot>}`, `{type:"error",detail,code?}`. Client heartbeat `{type:"ping"}` every20s renews live lease; token expiry/revocation closes channel, frontend reacquires token through existing authenticated HTTP flow and reconnects. Do not auto-submit unsent commands on reconnect. Full sanitized snapshot recovery is deliberate for V1.
+
+HTTP reads and WebSocket initial/polled/reconnect state use the same authorized snapshot projection. Tactical V1 has no separate SSE or raw-event replay endpoint. New reports change the visible-state fingerprint and are delivered on the next poll (default 1 second); private deployment/audit changes never populate report fields.
 
 ## Development acceptance
 

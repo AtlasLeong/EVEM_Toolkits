@@ -10,10 +10,11 @@ const navItems = [
   { to: '/tactical', label: '战术板', icon: Crosshair },
   { to: '/fraudlist', label: '防诈名单', icon: Shield },
   { to: '/corporations', label: '军团大厅', icon: Users },
+  { to: '/starsea', label: '星海见闻', icon: Compass },
   { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/tactical', '/corporations', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))

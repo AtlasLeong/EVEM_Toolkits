@@ -1,185 +1,300 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Crosshair, Layers, Minus, Plus, Scan } from "lucide-react";
-import { layoutForceMarkers } from "../../utils/tacticalMarkerLayout";
-import { adjacentSystems, isStale, groupMapForces } from "../../utils/tacticalCollaboration";
-import {
-  buildConstellationOverview,
-  nearestSystemAt,
-  layoutTopology,
-  projectSystemsScoped,
-  summarizeOverviewForces,
-  visibleGateExits,
-  zoomAroundPoint,
-} from "../../utils/tacticalMapLayout";
-import { layoutSystemLabels, screenNodes } from "../../utils/tacticalMapScreen";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Crosshair, Eye, EyeOff, Minus, Plus, Type, X } from 'lucide-react';
+import { layoutForceMarkers } from '../../utils/tacticalMarkerLayout';
+import { adjacentSystems, isStale, ageLabel } from '../../utils/tacticalCollaboration';
+import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMarkerLabel, markerGroupsForViewport } from '../../utils/tacticalMapPresentation';
+import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
+import { screenNodes } from '../../utils/tacticalMapScreen';
+import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
+import { focusDenseArea, layoutIntelLabels, resolveSystemHit, shouldShowMapLeader, subscribeMapWheel, validateDirectMove } from '../../utils/tacticalMapInteraction';
+import '../../styles/tacticalMapIntel.css';
 
-const modeLabel = { overview: "星座总览", constellation: "局部作战星图", spatial: "真实空间星图" };
-const securityColor = (value) => value == null ? "#a6adb1" : Number(value) >= 0.5 ? "#97c6b0" : Number(value) > 0 ? "#d7b68c" : "#d69d96";
+const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91';
+const securityLabel = value => value == null ? '安等未知' : Number(value).toFixed(2);
+const INITIAL_VIEW = {x:0, y:0, scale:1};
 
 export default function CollaborationMap({
-  systems = [], stargates = [], constellations = [], forces = [], boundaryExits = [],
+  systems = [], stargates = [], forces = [], reports = [], boundaryExits = [],
   selectedSystemId, onSelectSystem, selectedForceId, onSelectForce, onFocusSystem,
-  focusSystem, scope = null, canMove = false, onMoveForce, className = "",
+  children, focusSystem, scope = null, canMove = false, onMoveForce, onMoveRejected, onSelectReport, onSelectCount, onFocusReports, className = '',
 }) {
-  const [viewport, setViewport] = useState({ width: 1000, height: 800 });
-  const safePadding = useMemo(() => ({ left: 76, right: viewport.width >= 1000 ? 354 : 304, top: Math.min(260, viewport.height * 0.32), bottom: 110 }), [viewport.width, viewport.height]);
-  const [mode, setMode] = useState("spatial");
-  const [activeConstellationId, setActiveConstellationId] = useState(null);
-  const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
+  const [viewport, setViewport] = useState({width:1000, height:800});
+  const [view, setView] = useState(INITIAL_VIEW);
+  const [previousViews, setPreviousViews] = useState([]);
   const [drag, setDrag] = useState(null);
-  const ref = useRef(null);
-  const gesture = useRef(null);
-  const hasOverview = constellations.length > 0 && systems.some((system) => system.constellation_id != null);
-  const overview = useMemo(() => buildConstellationOverview(systems, stargates, constellations), [systems, stargates, constellations]);
-  const overviewNodes = useMemo(() => layoutTopology(overview.nodes, overview.edges).map((node) => ({ ...node, x: node.px, z: -node.py })), [overview.edges, overview.nodes]);
-  const overviewForces = useMemo(() => summarizeOverviewForces(forces, systems), [forces, systems]);
-
-  useEffect(() => { if (hasOverview) setMode((current) => (current === "spatial" ? "overview" : current)); }, [hasOverview]);
-  const displayedSystems = useMemo(() => {
-    if (mode === "overview" && hasOverview) return overviewNodes;
-    if (mode === "constellation" && activeConstellationId != null) {
-      const coreIds = new Set(systems.filter((system) => Number(system.constellation_id) === Number(activeConstellationId)).map((system) => Number(system.system_id)));
-      const adjacentIds = new Set(coreIds);
-      for (const gate of stargates) {
-        const source = Number(gate.system_id);
-        const destination = Number(gate.destination_system_id);
-        if (coreIds.has(source)) adjacentIds.add(destination);
-        if (coreIds.has(destination)) adjacentIds.add(source);
-      }
-      return systems.filter((system) => adjacentIds.has(Number(system.system_id)));
-    }
-    return systems;
-  }, [activeConstellationId, hasOverview, mode, overviewNodes, stargates, systems]);
+  const [picker, setPicker] = useState(null);
+  const [showAllNames, setShowAllNames] = useState(false);
+  const [showReportMarkers, setShowReportMarkers] = useState(false);
+  const [hoveredSystemId, setHoveredSystemId] = useState(null);
+  const ref = useRef(null), gesture = useRef(null), suppressClick = useRef(false), wheelHandler = useRef(null), pickerRef = useRef(null);
   const fitIds = useMemo(() => {
-    if (mode === "spatial" && Array.isArray(scope?.region_ids) && scope.region_ids.length) {
-      const regionIds = new Set(scope.region_ids.map(Number));
-      const core = displayedSystems.filter((node) => regionIds.has(Number(node.region_id)));
-      if (core.length) return core.map((node) => node.system_id);
+    const regions = new Set((scope?.region_ids || []).map(Number));
+    const core = regions.size ? systems.filter(node => regions.has(Number(node.region_id))) : systems;
+    return (core.length ? core : systems).map(node => node.system_id);
+  }, [scope?.region_ids, systems]);
+  const nodes = useMemo(() => projectSystemsScoped(systems, {...viewport,
+    padding:{left:76, right:76, top:175, bottom:70}, fitIds}), [systems, viewport, fitIds]);
+  const byId = useMemo(() => new Map(nodes.map(node => [Number(node.system_id), node])), [nodes]);
+  const intel = useMemo(() => latestSystemIntel(reports), [reports]);
+  const intelById = useMemo(() => new Map(intel.map(row => [Number(row.system_id), row])), [intel]);
+  const screenSystems = useMemo(() => screenNodes(nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
+    {panX:view.x, panY:view.y, zoom:view.scale}), [nodes, view]);
+  const selectedNeighbors = useMemo(() => adjacentSystems(stargates, hoveredSystemId ?? selectedSystemId), [stargates, hoveredSystemId, selectedSystemId]);
+  const markerGroups = useMemo(() => markerGroupsForViewport([
+    ...buildMarkerGroups(forces, reports, selectedForceId), ...buildSystemCountMarkerGroups(intel),
+  ].filter(group => byId.has(Number(group.system_id))), nodes, viewport, {selectedSystemId, view, showReports:showReportMarkers}), [forces, reports, selectedForceId, intel, byId, nodes, viewport, selectedSystemId, view, showReportMarkers]);
+  const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
+  const positionedGroups = useMemo(() => layoutForceMarkers(markerGroups, screenSystems, 1,
+    {...viewport, padding:{left:16, right:16, top:175, bottom:60}}), [markerGroups, screenSystems, viewport]);
+  const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
+    x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
+  const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({
+    report:group.visible[0],x:group.x+group.rowOffsets[0],y:group.y,width:group.rowWidths[0],height:group.rowHeight,
+  })), [positionedGroups]);
+  const reportMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='report').flatMap(group => group.visible.map((report,index) => ({report,
+    x:group.x+group.rowOffsets[index], y:group.y+index*(group.rowHeight+group.rowGap), width:group.rowWidths[index], height:group.rowHeight,
+  }))), [positionedGroups]);
+  const labelLayouts = useMemo(() => layoutIntelLabels(screenSystems, {...viewport,
+    // Hover only highlights the star/its leader. It must not reprioritize the
+    // decluttering solver or every label would jump as the pointer crosses
+    // the map during a live update.
+    selectedId:selectedSystemId, hoveredId:null, intelById, forceIds:forceSystems,
+    zoom:view.scale, showAll:showAllNames, occupied:positionedGroups,
+    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups]);
+  const portals = useMemo(() => {
+    const exits = visibleGateExits(systems, stargates, boundaryExits, systems.map(node => node.system_id));
+    const grouped = new Map();
+    for (const exit of exits.filter(row => !row.loaded)) {
+      const id = Number(exit.source_system_id);
+      if (!grouped.has(id)) grouped.set(id, []);
+      grouped.get(id).push(exit);
     }
-    if (mode === "constellation" && activeConstellationId != null) return displayedSystems.filter((node) => Number(node.constellation_id) === Number(activeConstellationId)).map((node) => node.system_id);
-    return displayedSystems.map((node) => node.system_id);
-  }, [activeConstellationId, displayedSystems, mode, scope?.region_ids]);
-  const nodes = useMemo(() => projectSystemsScoped(displayedSystems, { ...viewport, padding: safePadding, fitIds }), [displayedSystems, fitIds, safePadding, viewport]);
-  const byId = useMemo(() => new Map(nodes.map((node) => [Number(node.system_id), node])), [nodes]);
-  const activeSystemNodes = mode === "overview" ? [] : nodes;
-  const activeById = useMemo(() => new Map(activeSystemNodes.map((node) => [Number(node.system_id), node])), [activeSystemNodes]);
-  const portals = useMemo(() => mode === "overview" ? [] : visibleGateExits(systems, stargates, boundaryExits, activeSystemNodes.map((node) => node.system_id)), [activeSystemNodes, boundaryExits, mode, stargates, systems]);
-  const adjacent = useMemo(() => drag ? adjacentSystems(stargates, drag.force.system_id) : new Set(), [drag?.force?.id, stargates]);
-  const forceGroups = useMemo(() => mode === "overview" ? [] : groupMapForces(forces, selectedForceId).filter((group) => activeById.has(Number(group.system_id))), [activeById, forces, mode, selectedForceId]);
-  const forceSystems = useMemo(() => new Set(forceGroups.map((group) => group.system_id)), [forceGroups]);
-  const positionedGroups = useMemo(() => layoutForceMarkers(forceGroups, activeSystemNodes, 1 / Math.max(view.scale, 0.5), { width: viewport.width, height: viewport.height, padding: safePadding }), [activeSystemNodes, forceGroups, safePadding, view.scale, viewport]);
-  const markers = positionedGroups.flatMap((group) => group.visible.map((force, index) => ({ force, x: view.x + group.x * view.scale, y: view.y + (group.y + index * (group.rowHeight + group.rowGap)) * view.scale, width: group.width * view.scale, height: group.rowHeight * view.scale })));
-  const labelLayouts = useMemo(() => mode === "constellation" ? layoutSystemLabels(screenNodes(activeSystemNodes, { panX: view.x, panY: view.y, zoom: view.scale }), {
-    selectedId: selectedSystemId,
-    forceIds: forceSystems,
-    targetIds: adjacent,
-    width: viewport.width,
-    height: viewport.height,
-    padding: safePadding,
-    occupied: markers.map(({ x, y, width, height }) => ({ x, y, width, height })),
-  }) : [], [activeSystemNodes, adjacent, forceSystems, mode, markers, safePadding, selectedSystemId, view.scale, view.x, view.y, viewport.height, viewport.width]);
-  const labelStep = Math.max(1, Math.ceil(nodes.length / 18));
-  const point = (event) => {
+    return [...grouped].map(([system_id, exits]) => ({system_id, exits}));
+  }, [systems, stargates, boundaryExits]);
+  const point = event => {
     const rect = ref.current?.getBoundingClientRect();
-    if (!rect || !rect.width || !rect.height) return { x: 0, y: 0 };
-    return {
-      x: (event.clientX - rect.left) * (viewport.width / rect.width),
-      y: (event.clientY - rect.top) * (viewport.height / rect.height),
+    if (!rect?.width || !rect?.height) return {x:-1,y:-1};
+    return {x:(event.clientX-rect.left)*viewport.width/rect.width,y:(event.clientY-rect.top)*viewport.height/rect.height};
+  };
+  const fitView = () => { setView(INITIAL_VIEW); setPreviousViews([]); setPicker(null); };
+  const zoom = (multiplier, anchor = {x:viewport.width/2,y:viewport.height/2}) => {
+    if (gesture.current?.force) return;
+    setPicker(null);
+    setView(current => {
+      const next = zoomAroundPoint({zoom:current.scale,panX:current.x,panY:current.y}, anchor, multiplier, {min:.5,max:16});
+      return {x:next.panX,y:next.panY,scale:next.zoom};
+    });
+  };
+  wheelHandler.current = event => { if (!gesture.current) zoom(event.deltaY < 0 ? 1.16 : 1/1.16, point(event)); };
+  useEffect(() => ref.current ? subscribeMapWheel(ref.current, event => wheelHandler.current?.(event)) : undefined, []);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    const measure = () => {
+      const {width,height} = node.getBoundingClientRect();
+      if (width>0 && height>0) setViewport(previous => Math.abs(previous.width-width)<1 && Math.abs(previous.height-height)<1 ? previous : {width,height});
     };
-  };
-  const fitView = () => setView({ x: 0, y: 0, scale: 1 });
-  const zoom = (multiplier, anchor = { x: viewport.width / 2, y: viewport.height / 2 }) => setView((current) => { const next = zoomAroundPoint({ zoom: current.scale, panX: current.x, panY: current.y }, anchor, multiplier, { min: 0.5, max: 4 }); return { x: next.panX, y: next.panY, scale: next.zoom }; });
-  const handleWheel = (event) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (!target?.closest("svg")) return;
-    event.preventDefault();
-    zoom(event.deltaY < 0 ? 1.16 : 1 / 1.16, point(event));
-  };
-  const openConstellation = (node) => { setActiveConstellationId(node.id); setMode("constellation"); fitView(); };
-  const returnOverview = () => { setActiveConstellationId(null); setMode("overview"); fitView(); };
-
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const lastFocusToken = useRef(null);
   useEffect(() => {
-    if (!focusSystem || !systems.length) return;
-    if (focusSystem._focusToken == null || focusSystem._focusToken === lastFocusToken.current) return;
-    lastFocusToken.current = focusSystem._focusToken;
-    if (hasOverview && focusSystem.constellation_id != null && (mode === "overview" || (mode === "constellation" && Number(activeConstellationId) !== Number(focusSystem.constellation_id)))) {
-      setActiveConstellationId(focusSystem.constellation_id);
-      setMode("constellation");
-      return;
-    }
-    if (mode === "overview") return;
-    const target = activeSystemNodes.find((node) => Number(node.system_id) === Number(focusSystem.system_id));
+    if (focusSystem?._focusToken == null || focusSystem._focusToken === lastFocusToken.current) return;
+    const target = byId.get(Number(focusSystem.system_id));
     if (!target) return;
-    const scale = 2;
-    const nextView = { scale, x: viewport.width / 2 - target.px * scale, y: viewport.height / 2 - target.py * scale };
-    setView((current) => current.scale === nextView.scale && current.x === nextView.x && current.y === nextView.y ? current : nextView);
-  }, [activeConstellationId, activeSystemNodes, focusSystem, hasOverview, mode, systems.length, viewport.height, viewport.width]);
+    lastFocusToken.current = focusSystem._focusToken;
+    setPreviousViews(previous => [...previous.slice(-7), view]);
+    setView(focusDenseArea([target], view, viewport));
+    setPicker(null);
+  }, [focusSystem, byId, viewport]); // Focus tokens represent discrete user actions.
+  const lastScopeVersion = useRef(null);
   useEffect(() => {
-    const node = ref.current; if (!node) return undefined;
-    const measure = () => { const { width, height } = node.getBoundingClientRect(); if (width > 0 && height > 0) setViewport((previous) => Math.abs(previous.width - width) < 1 && Math.abs(previous.height - height) < 1 ? previous : { width, height }); };
-    measure(); const observer = new ResizeObserver(measure); observer.observe(node); return () => observer.disconnect();
-  }, []);
-
-  const begin = (event, force) => {
-    if (event.button !== 0) return;
-    if (force) { event.stopPropagation(); onSelectForce?.(force); if (!canMove || mode === "overview") return; }
-    const p = point(event); gesture.current = { start: p, last: p, force, view, started: false }; ref.current?.setPointerCapture(event.pointerId);
-  };
-  const move = (event) => {
-    const current = gesture.current; if (!current) return;
-    const p = point(event); current.last = p;
-    if (Math.hypot(p.x - current.start.x, p.y - current.start.y) < 7 && !current.started) return;
-    current.started = true;
-    if (current.force) { const mapPoint = { x: (p.x - view.x) / view.scale, y: (p.y - view.y) / view.scale }; const target = nearestSystemAt(activeSystemNodes, mapPoint, 48 / view.scale); setDrag({ force: current.force, x: mapPoint.x, y: mapPoint.y, target }); }
-    else setView({ ...current.view, x: current.view.x + p.x - current.start.x, y: current.view.y + p.y - current.start.y });
-  };
-  const end = () => {
-    const current = gesture.current;
-    gesture.current = null;
-    let target = drag?.target;
-    if (current?.force && current.started && !target && current.last) {
-      const mapPoint = { x: (current.last.x - view.x) / view.scale, y: (current.last.y - view.y) / view.scale };
-      target = nearestSystemAt(activeSystemNodes, mapPoint, 70 / view.scale);
+    // Map fetches temporarily clear scope. Keep the last actual version so a
+    // replacement cancels gestures, while ordinary snapshot polling never pans.
+    if (scope?.version == null || !Number.isFinite(Number(scope.version))) return;
+    const version = Number(scope.version);
+    if (lastScopeVersion.current != null && lastScopeVersion.current !== version) {
+      const pointerId = gesture.current?.pointerId;
+      gesture.current = null;
+      if (pointerId != null && ref.current?.hasPointerCapture(pointerId)) ref.current.releasePointerCapture(pointerId);
+      suppressClick.current = false;
+      setDrag(null);
+      setPicker(null);
+      setHoveredSystemId(null);
+      setPreviousViews([]);
+      setView(INITIAL_VIEW);
     }
-    if (current?.force && current.started && target) {
-      // Pointer-up can arrive before React commits the last `setDrag` update.
-      // Derive the adjacency from the active force here instead of relying on
-      // the render state, otherwise a valid drop can be ignored intermittently.
-      const dropAdjacent = adjacentSystems(stargates, current.force.system_id);
-      if (dropAdjacent.has(Number(target.system_id))) {
-        onMoveForce?.(current.force, Number(target.system_id));
-      }
+    lastScopeVersion.current = version;
+  }, [scope?.version]);
+  useEffect(() => { if (picker) pickerRef.current?.querySelector('button[data-system-choice]')?.focus(); }, [picker]);
+  const openDenseArea = candidates => {
+    setPreviousViews(previous => [...previous.slice(-7), view]);
+    setView(focusDenseArea(candidates, view, viewport)); setPicker(null);
+  };
+  const selectStar = (event, node) => {
+    if (suppressClick.current) { suppressClick.current=false; return; }
+    if (!event) { onSelectSystem?.(node); return; }
+    const p=point(event), hit=resolveSystemHit(nodes,p,view,viewport,36), neighborhood=hit.candidates;
+    if (neighborhood.length>1 && view.scale<15.9) {
+      const maxDistance=Math.max(...neighborhood.map(other=>Math.hypot(other.px-node.px,other.py-node.py)));
+      if(maxDistance>.01) {openDenseArea(neighborhood);return;}
     }
+    if(hit.ambiguous) {setPicker({kind:'select',candidates:neighborhood,point:p});return;}
+    onSelectSystem?.(hit.target||node);
+  };
+  const cancel = () => {gesture.current=null;setDrag(null);setPicker(null);};
+  const submitMove = (snapshot,destination) => {
+    const result=validateDirectMove(snapshot,forces,destination,nodes,canMove);
+    if(result.ok) onMoveForce?.(snapshot,result.destination_system_id);
+    else if(result.reason) onMoveRejected?.(result.reason,{force:snapshot,target:byId.get(Number(destination))||null});
+  };
+  const begin = (event,force) => {
+    if(event.button!==0) return;
+    if(force) {event.stopPropagation();onSelectForce?.(force);if(!canMove)return;}
+    setPicker(null);suppressClick.current=false;
+    const p=point(event);
+    const starElement = event.target instanceof Element ? event.target.closest('[data-system-id]') : null;
+    gesture.current={start:p,last:p,force:force?{...force}:null,node:byId.get(Number(starElement?.dataset.systemId)),view,started:false,pointerId:event.pointerId};
+    ref.current?.setPointerCapture(event.pointerId);
+  };
+  const move = event => {
+    const current=gesture.current;
+    if(!current||event.pointerId!==current.pointerId)return;
+    const p=point(event);current.last=p;
+    if(!current.started&&Math.hypot(p.x-current.start.x,p.y-current.start.y)<7)return;
+    current.started=true;
+    if(current.force)setDrag({force:current.force,point:p,...resolveSystemHit(nodes,p,view,viewport)});
+    else setView({...current.view,x:current.view.x+p.x-current.start.x,y:current.view.y+p.y-current.start.y});
+  };
+  const end = event => {
+    const current=gesture.current;
+    if(!current||event.pointerId!==current.pointerId)return;
+    gesture.current=null;
+    if(ref.current?.hasPointerCapture(event.pointerId))ref.current.releasePointerCapture(event.pointerId);
+    suppressClick.current=current.started;
+    if(current.force&&current.started) {
+      // Pointer-up is authoritative; React may not have committed the last drag frame.
+      const p=point(event),hit=resolveSystemHit(nodes,p,view,viewport);
+      if(hit.ambiguous)setPicker({kind:'move',force:current.force,candidates:hit.candidates,point:p});
+      else if(hit.target)submitMove(current.force,hit.target.system_id);
+    }
+    if(!current.force && !current.started && current.node) selectStar(event,current.node);
     setDrag(null);
   };
-  const svgLabel = mode === "spatial" && !hasOverview ? "局部作战星图" : modeLabel[mode];
+  const pick = node => {
+    if(picker?.kind==='move')submitMove(picker.force,node.system_id);
+    else if(byId.has(Number(node.system_id)))onSelectSystem?.(byId.get(Number(node.system_id)));
+    setPicker(null);ref.current?.focus();
+  };
+  const pickerPosition=picker?{left:Math.max(12,Math.min(picker.point.x+16,viewport.width-274)),top:Math.max(175,Math.min(picker.point.y+16,viewport.height-300))}:null;
 
-  return <div className={`tac-map tac-map-mode-${mode} ${className}`} onWheelCapture={handleWheel}>
-    <div className="tac-map-toolbar">
+  return <div className={`tac-map tac-map-mode-spatial tac-system-intel-map ${className}`}>
+    <div className="tac-map-dock" aria-label="星图工具与边界星门">{children}</div>
+    <div className="tac-map-toolbar tac-intel-toolbar" aria-label="星图操作">
       <div className="tac-map-mode-switch" role="toolbar" aria-label="地图视图">
-        {mode === "constellation" && <button type="button" aria-label="返回星座总览" onClick={returnOverview}><ArrowLeft size={14} /> 返回星座总览</button>}
-        {hasOverview && mode === "overview" && <button type="button" aria-label="切换真实空间" onClick={() => { setMode("spatial"); fitView(); }}><Scan size={14} /> 真实空间</button>}
-        {hasOverview && mode === "spatial" && <button type="button" aria-label="切换星座总览" onClick={returnOverview}><Layers size={14} /> 星座总览</button>}
-        <span className="tac-map-mode-label">{svgLabel}</span>
+        {previousViews.length>0&&<button type="button" aria-label="返回上一视野" onClick={()=>{setView(previousViews[previousViews.length-1]);setPreviousViews(previous=>previous.slice(0,-1));setPicker(null);}}><ArrowLeft size={14}/> 返回</button>}
+        <button type="button" aria-label="显示全部星系名称" aria-pressed={showAllNames} onClick={()=>setShowAllNames(value=>!value)}><Type size={14}/> 名称</button>
+        <button type="button" aria-label={showReportMarkers ? '隐藏上报标记' : '显示上报标记'} aria-pressed={showReportMarkers} onClick={()=>setShowReportMarkers(value=>!value)}><span aria-hidden="true">{showReportMarkers ? <EyeOff size={14}/> : <Eye size={14}/>}</span> 上报</button>
       </div>
-      <span className="tac-map-legend"><i className="tac-enemy-dot" /> 敌方{forces.some((force) => force.side === "friendly") && <><i className="tac-friendly-dot" /> 己方</>}</span>
-      <div><button type="button" aria-label="缩小地图" onClick={() => zoom(1 / 1.25)}><Minus size={16} /></button><button type="button" aria-label="放大地图" onClick={() => zoom(1.25)}><Plus size={16} /></button><button type="button" aria-label="适应作战范围" onClick={fitView}><Crosshair size={16} /></button></div>
+      <span className="tac-map-legend"><i className="tac-enemy-dot"/> 敌方{forces.some(force=>force.side==='friendly')&&<><i className="tac-friendly-dot"/> 己方</>}</span>
+      <div><button type="button" aria-label="缩小地图" onClick={()=>zoom(1/1.25)}><Minus size={16}/></button><button type="button" aria-label="放大地图" onClick={()=>zoom(1.25)}><Plus size={16}/></button><button type="button" aria-label="适应作战范围" onClick={fitView}><Crosshair size={16}/></button></div>
     </div>
-    <svg ref={ref} viewBox={`0 0 ${viewport.width} ${viewport.height}`} role="group" aria-label={svgLabel} tabIndex={0} onPointerDown={(event) => begin(event)} onPointerMove={move} onPointerUp={end} onPointerCancel={() => { gesture.current = null; setDrag(null); }} onKeyDown={(event) => { if (event.key === "Escape") { gesture.current = null; setDrag(null); } if (event.target === ref.current && ["+", "-"].includes(event.key)) { event.preventDefault(); zoom(event.key === "+" ? 1.25 : 1 / 1.25); } }}>
-      <defs><pattern id="tac-map-grid" width="40" height="40" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".7" fill="#758388" opacity=".2" /></pattern></defs>
-      <rect width={viewport.width} height={viewport.height} fill="url(#tac-map-grid)" />
+    <svg ref={ref} viewBox={`0 0 ${viewport.width} ${viewport.height}`} role="group" aria-label="局部作战星图" tabIndex={0}
+      onPointerDown={event=>begin(event)} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel}
+      onKeyDown={event=>{if(event.key==='Escape')cancel();if(event.target===ref.current&&['+','-'].includes(event.key)){event.preventDefault();zoom(event.key==='+'?1.25:1/1.25);}}}>
       <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-        {(mode === "overview" ? [] : stargates).map((gate, index) => { const a = byId.get(Number(gate.system_id)); const b = byId.get(Number(gate.destination_system_id)); return a && b ? <line key={`${gate.id || index}`} className="tac-map-gate" x1={a.px} y1={a.py} x2={b.px} y2={b.py} stroke="#455359" strokeWidth="1.2" /> : null; })}
-        {mode === "overview" ? overview.nodes.map((node) => { const projected = byId.get(Number(node.id)); if (!projected) return null; const summary = overviewForces[String(node.id)] || { forces: 0, knownPeople: 0, enemyForces: 0, friendlyForces: 0 }; return <g key={node.id} role="button" tabIndex={0} aria-label={`进入星座 ${node.label}`} className="tac-map-constellation" onPointerDown={(event) => event.stopPropagation()} onClick={() => openConstellation(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openConstellation(node); } }}><title>{`${node.label} · ${node.system_count} 个星系`}</title><rect x={projected.px - 74} y={projected.py - 28} width="148" height="56" rx="12" fill="#243738" stroke="#6e9189" strokeWidth={1.5 / view.scale} /><circle cx={projected.px - 55} cy={projected.py - 7} r={5 / view.scale} fill={summary.enemyForces ? "#d28b72" : "#7aa69c"} /><text x={projected.px - 42} y={projected.py - 6} fill="#e8eee6" fontSize={13 / view.scale} fontWeight="600">{node.label}</text><text x={projected.px - 42} y={projected.py + 13} fill="#9db4aa" fontSize={10 / view.scale}>{node.system_count} 个星系 · {summary.forces ? `${summary.forces} 支敌情` : "暂无敌情"}</text></g>; }) : activeSystemNodes.map((node, index) => { const id = Number(node.system_id); const selected = Number(selectedSystemId) === id; const isAdjacent = adjacent.has(id); const shouldLabel = mode !== "constellation" && (index % labelStep === 0 || forceSystems.has(id) || selected || isAdjacent); return <g key={node.system_id} role="button" tabIndex={0} aria-label={`选择星系 ${node.zh_name || node.name}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => onSelectSystem?.(node)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectSystem?.(node); } }} className="tac-map-system"><title>{`${node.zh_name || node.name} · 安全系数 ${node.security_status == null ? "未知" : Number(node.security_status).toFixed(2)}`}</title><circle cx={node.px} cy={node.py} r={(isAdjacent ? 13 : selected ? 9 : 5) / view.scale} fill={isAdjacent ? "#80b2a9" : selected ? "#ede6cb" : "#b3bec0"} fillOpacity={isAdjacent ? .5 : 1} /><circle cx={node.px} cy={node.py} r={19 / view.scale} fill="transparent" />{shouldLabel && <g pointerEvents="none"><text x={node.px} y={node.py + 24 / view.scale} textAnchor="middle" fill="#c4ced0" fontSize={12 / view.scale}>{node.zh_name || node.name}</text><text x={node.px} y={node.py + 40 / view.scale} textAnchor="middle" fill={securityColor(node.security_status)} fontSize={11 / view.scale}>{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</text></g>}</g>; })}
-        {mode !== "overview" && positionedGroups.map((group) => <line key={`leader-${group.system_id}`} x1={group.leader.from.x} y1={group.leader.from.y} x2={group.leader.to.x} y2={group.leader.to.y} stroke="#8daba5" strokeWidth={1 / Math.max(view.scale, .5)} opacity=".8" pointerEvents="none" />)}
+        {stargates.map((gate,index)=>{
+          const a=byId.get(Number(gate.system_id)),b=byId.get(Number(gate.destination_system_id));
+          const active=Number(a?.system_id)===Number(hoveredSystemId??selectedSystemId)||Number(b?.system_id)===Number(hoveredSystemId??selectedSystemId);
+          // Keep every real gate, but make the unselected topology a quiet
+          // reference layer. Focused/hovered routes remain legible without
+          // competing with deployment badges and system names.
+          const opacity=active ? .88 : Math.min(.42, .18 + view.scale * .12);
+          return a&&b?<line key={gate.id||index} className={`tac-map-gate${active?' is-active':''}`} x1={a.px} y1={a.py} x2={b.px} y2={b.py} stroke={active?'#819591':'#46565c'} strokeWidth={(active?1.8:.65)/view.scale} opacity={opacity} pointerEvents="none"/>:null;
+        })}
+        {nodes.map(node=>{
+          const id=Number(node.system_id),name=systemDisplayName(node),selected=Number(selectedSystemId)===id,report=intelById.get(id);
+          const related=selectedNeighbors.has(id),color=report?'#d49a7e':selected?'#f0e5c5':related?'#bbc9c4':'#8ca0a3';
+          return <g key={id} role="button" tabIndex={0} aria-label={`选择星系 ${name}`} className="tac-map-system" data-system-id={id}
+            onClick={event=>{if(event.detail===0)onSelectSystem?.(node);}} onPointerEnter={()=>setHoveredSystemId(id)} onPointerLeave={()=>setHoveredSystemId(null)} onFocus={()=>setHoveredSystemId(id)} onBlur={()=>setHoveredSystemId(null)}
+            onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
+            <title>{`${name} · 安全系数 ${securityLabel(node.security_status)}${report?` · 敌方 ${report.people??'未知'} 人 · ${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)}`:''}`}</title>
+            {(selected||report)&&<circle className="tac-star-ring" cx={node.px} cy={node.py} r={(selected?12:9)/view.scale} fill="none" stroke={color} strokeWidth={1/view.scale} opacity={selected?.8:.4}/>}
+            <circle className="tac-star-dot" cx={node.px} cy={node.py} r={(selected?5:report?4:3)/view.scale} fill={color}/><circle className="tac-star-hit" cx={node.px} cy={node.py} r={19/view.scale} fill="transparent"/>
+          </g>;
+        })}
       </g>
-      {mode === "constellation" && labelLayouts.map((label) => { const node = activeById.get(Number(label.system_id)); if (!node) return null; return <g key={`label-${label.system_id}`} className="tac-map-system-label" pointerEvents="none"><text x={label.x + label.width / 2} y={label.y + 14} textAnchor="middle" fill="#d8e1df" fontSize="12" paintOrder="stroke" stroke="#182728" strokeWidth="4">{label.name}</text><text x={label.x + label.width / 2} y={label.y + 30} textAnchor="middle" fill={securityColor(node.security_status)} fontSize="11" paintOrder="stroke" stroke="#182728" strokeWidth="3">{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</text></g>; })}
-      {mode !== "overview" && markers.map(({ force, x, y, width, height }) => <g key={force.id} role="button" tabIndex={0} aria-label={`${force.side === "friendly" ? "己方" : "敌方"} ${force.name} ${force.people ?? "未知"} 人，${force.system_name}`} transform={`translate(${x} ${y})`} className={`tac-map-force ${isStale(force.observed_at) ? "is-stale" : ""}`} onPointerDown={(event) => begin(event, force)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelectForce?.(force); } }}><title>{`${force.name} · ${force.system_name} · ${force.people ?? "未知"} 人`}</title><rect width={width} height={height} rx="6" fill={force.side === "friendly" ? "#274b49" : "#673e35"} stroke={force.id === selectedForceId ? "#f8efdb" : force.side === "friendly" ? "#57938a" : "#ad7362"} strokeWidth={force.id === selectedForceId ? 2 : 1} /><text x="9" y="17" fill="#fff4e8" fontSize="12">{force.side === "friendly" ? "友" : "敌"} · {force.people == null ? "未知" : force.people >= 10000 ? `${(force.people / 10000).toFixed(1)}万` : force.people} 人</text></g>)}
-      {mode !== "overview" && positionedGroups.filter((group) => group.hiddenCount).map((group) => { const node = activeById.get(Number(group.system_id)); if (!node) return null; const x = view.x + group.x * view.scale; const y = view.y + (group.y + group.visible.length * (group.rowHeight + group.rowGap)) * view.scale; const width = group.width * view.scale; const height = group.rowHeight * view.scale; const focus = () => { onSelectSystem?.(node); onFocusSystem?.(node); }; return <g key={`more-${group.system_id}`} role="button" tabIndex={0} aria-label={`查看${node.zh_name || node.name}全部${group.total}支部署`} transform={`translate(${x} ${y})`} className="tac-map-group" onPointerDown={(event) => event.stopPropagation()} onClick={focus} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); focus(); } }}><rect width={width} height={height} rx="5" fill="#354643" stroke="#849e89" /><text x="9" y="17" fill="#dfe9d7" fontSize="12">+ {group.hiddenCount} 支 · 全部</text></g>; })}
-      {portals.map((portal) => { const node = byId.get(Number(portal.source_system_id)); if (!node) return null; const x = view.x + node.px * view.scale; const y = view.y + node.py * view.scale; return <g key={portal.id} className="tac-map-portal" transform={`translate(${x} ${y})`} pointerEvents="none"><circle r="10" fill="none" stroke="#d8b36e" strokeDasharray="3 3" /><text x="14" y="4" fill="#e3c991" fontSize="10">↗ {portal.label}</text></g>; })}
-      {drag && <g pointerEvents="none"><circle cx={view.x + drag.x * view.scale} cy={view.y + drag.y * view.scale} r="15" fill="#d6b987" opacity=".8" />{drag.target && <circle cx={view.x + drag.target.px * view.scale} cy={view.y + drag.target.py * view.scale} r="20" fill="none" stroke={adjacent.has(Number(drag.target.system_id)) ? "#92c7a9" : "#de8f79"} strokeWidth="3" />}</g>}
+      {positionedGroups.filter(group=>shouldShowMapLeader(group.system_id,{selectedSystemId,hoveredSystemId})).map(group=><line key={`force-leader-${group.key}`} x1={group.leader.from.x} y1={group.leader.from.y} x2={group.leader.to.x} y2={group.leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".5" pointerEvents="none"/>)}
+      {labelLayouts.map(label=>{
+        const node=byId.get(Number(label.system_id));if(!node)return null;
+        const report=label.intel,selected=Number(selectedSystemId)===Number(node.system_id),distance=Math.hypot(label.leader.from.x-label.leader.to.x,label.leader.from.y-label.leader.to.y);
+        return <g key={`label-${label.system_id}`} className={`tac-intel-label${report?' has-count':''}${report&&isStale(report.observed_at)?' is-stale':''}`} role="button" tabIndex={0}
+          aria-label={`${label.name}${report?`，敌方 ${report.people??'未知'} 人`:''}`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
+          <title>{report?`${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 安全系数 ${securityLabel(node.security_status)}`:`${label.name} · 安全系数 ${securityLabel(node.security_status)}`}</title>
+          {distance>22&&shouldShowMapLeader(label.system_id,{selectedSystemId,hoveredSystemId})&&<line x1={label.leader.from.x} y1={label.leader.from.y} x2={label.leader.to.x} y2={label.leader.to.y} stroke={report?'#b98770':'#7c9194'} opacity=".45" strokeWidth=".8" pointerEvents="none"/>}
+          <text className="tac-star-name" x={label.x+label.width/2} y={label.y+14} textAnchor="middle" fill={selected?'#f6edda':'#d2dcda'} fontSize="13" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{label.name}</text>
+          <text className="tac-star-security" x={label.x+label.width/2} y={label.y+30} textAnchor="middle" fill={securityColor(node.security_status)} fontSize="10" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{securityLabel(node.security_status)}</text>
+        </g>;
+      })}
+      {markers.map(({force,x,y,width,height})=><g key={force.id} role="button" tabIndex={0} aria-label={`${force.side==='friendly'?'己方':'敌方'} ${force.name} ${force.people??'未知'} 人，${force.system_name}`}
+        transform={`translate(${x} ${y})`} data-force-id={force.id} className={`tac-map-force${isStale(force.observed_at)?' is-stale':''}`} onPointerDown={event=>begin(event,force)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectForce?.(force);}}}>
+        <title>{`${force.name} · ${force.system_name} · ${force.people??'未知'} 人${force.source_author_name?` · 上报：${force.source_author_name}`:''} · ${ageLabel(force.observed_at)}${canMove?' · 拖动调整部署':''}`}</title>
+        <rect width={width} height={height} rx="5" fill={force.side==='friendly'?'#29443e':'#553a30'} stroke={force.id===selectedForceId?'#f2e5c8':force.side==='friendly'?'#71988b':'#ab7a65'} strokeWidth={force.id===selectedForceId?2:1}/>
+        <text x={width/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#f1e9d9" fontSize="12" fontWeight="400">{fleetMarkerLabel(force,width)}</text>
+      </g>)}
+      {countMarkers.map(({report,x,y,width,height})=>{
+        const node=byId.get(Number(report.system_id));if(!node)return null;
+        const select=()=>{ onSelectSystem?.(node); onSelectCount?.(report); };
+        return <g key={`count-${report.system_id}`} role="button" tabIndex={0}
+          aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
+          transform={`translate(${x} ${y})`} data-count-system-id={report.system_id} data-count-report-id={report.id}
+          className={`tac-map-count tac-map-report-marker${isStale(report.observed_at)?' is-stale':''}`}
+          onPointerDown={event=>event.stopPropagation()} onClick={select}
+          onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();select();}}}>
+          <title>{`${systemDisplayName(node)} · ${report.label} · 上报：${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 星系人数独立记录，不与舰队人数相加`}</title>
+          <rect width={width} height={height} rx="5" fill="#293638" stroke="#a39577" strokeDasharray="3 2" strokeWidth="1"/>
+          <text x={width/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#e8d9bb" fontSize="12" fontWeight="400">{report.label}</text>
+        </g>;
+      })}
+      {reportMarkers.map(({report,x,y,width,height})=>{
+        const node=byId.get(Number(report.system_id)); if(!node)return null;
+        const select=()=>onSelectReport?.(report);
+        const focus=()=>{onFocusReports?.(node); select();};
+        return <g key={`report-${report.id}`} role="button" tabIndex={0} aria-label={`${report.label}，${report.author_name||'未知上报者'}，${report.system_name||node.name||''}`}
+          transform={`translate(${x} ${y})`} data-report-id={report.id} className={`tac-map-report tac-map-report-marker${isStale(report.observed_at)?' is-stale':''}`}
+          onPointerDown={event=>event.stopPropagation()} onClick={select}
+          onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
+          <title>{`${report.authorLabel} · ${report.shipLabel} · ${ageLabel(report.observed_at)}`}</title>
+          <rect width={width} height={height} rx="5" fill="#3a3030" stroke="#b98770" strokeWidth="1"/>
+          <text x={width/2} y="18" textAnchor="middle" fill="#ecd5c6" fontSize="11">{fitMarkerText(report.label,width-10,11)}</text>
+          <text x={width/2} y="36" textAnchor="middle" fill="#d7c0b2" fontSize="10">{fitMarkerText(report.authorLabel,width-10,10)}</text>
+        </g>;
+      })}
+      {positionedGroups.filter(group=>group.kind==='force'&&group.hiddenCount).map(group=>{
+        const node=byId.get(Number(group.system_id)),y=group.y+group.visible.length*(group.rowHeight+group.rowGap);if(!node)return null;
+        const focus=()=>{onSelectSystem?.(node);onFocusSystem?.(node);};
+        return <g key={`more-${group.key}`} role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}全部${group.total}支部署`} transform={`translate(${group.x+group.overflowOffset} ${y})`} className="tac-map-group" onPointerDown={event=>event.stopPropagation()} onClick={focus} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
+          <rect width={group.overflowWidth} height={group.rowHeight} rx="5" fill="#2d3e3b" stroke="#7d9587"/><text x={group.overflowWidth/2} y={group.rowHeight/2} textAnchor="middle" dominantBaseline="central" fill="#dfe9d7" fontSize="12" fontWeight="400">{fitMarkerText(`+ ${group.hiddenCount} 支部署`,group.overflowWidth-18)}</text>
+        </g>;
+      })}
+      {portals.map(portal=>{
+        const node=byId.get(portal.system_id);if(!node)return null;
+        return <g key={`portal-${portal.system_id}`} className="tac-map-portal" role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}的边界星门`}
+          transform={`translate(${view.x+node.px*view.scale} ${view.y+node.py*view.scale})`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
+          <title>{portal.exits.map(exit=>exit.destination_name).join('、')}</title><text x="20" y="4" fill="#c9b388" fontSize="10">↗ {portal.exits.length}</text>
+        </g>;
+      })}
+      {drag&&<g pointerEvents="none"><circle cx={drag.point.x} cy={drag.point.y} r="12" fill="#dbc69f" opacity=".8"/>{drag.candidates.map(node=><circle key={node.system_id} cx={view.x+node.px*view.scale} cy={view.y+node.py*view.scale} r="19" fill="none" stroke={drag.ambiguous?'#d3af70':'#a7c6b0'} strokeWidth="2"/>)}
+        <text x={Math.max(110,Math.min(viewport.width-110,drag.point.x))} y={Math.max(170,drag.point.y-28)} textAnchor="middle" fill="#f2e7cf" fontSize="13" paintOrder="stroke" stroke="#19252b" strokeWidth="5">{drag.ambiguous?'松开后选择目标星系':drag.target?systemDisplayName(drag.target):'拖到目标星系'}</text></g>}
     </svg>
-    {!nodes.length && <div className="tac-map-empty"><Crosshair size={30} /><strong>先确定这次作战的范围</strong><span>选择相关星域后加载局部星图，避免下载整个宇宙。</span></div>}
+    {picker&&<div ref={pickerRef} className="tac-map-target-picker" role="dialog" aria-label={picker.kind==='move'?'选择部署目标星系':'选择重叠星系'} style={pickerPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setPicker(null);ref.current?.focus();}}}>
+      <div><strong>{picker.kind==='move'?'移动到哪个星系？':'选择星系'}</strong><button type="button" aria-label="取消星系选择" onClick={()=>setPicker(null)}><X size={15}/></button></div>
+      <ul>{picker.candidates.filter(node=>byId.has(Number(node.system_id))).map(node=>{
+        const report=intelById.get(Number(node.system_id));
+        return <li key={node.system_id}><button type="button" data-system-choice={node.system_id} onClick={()=>pick(node)}><span>{systemDisplayName(node)}<small style={{color:securityColor(node.security_status)}}>{securityLabel(node.security_status)}</small></span><em>{report?`敌方 ${report.people??'未知'}`:'选择'}</em></button></li>;
+      })}</ul>
+    </div>}
+    {!nodes.length&&<div className="tac-map-empty"><Crosshair size={30}/><strong>先确定这次作战的范围</strong><span>选择相关星域后加载局部星图。</span></div>}
   </div>;
 }

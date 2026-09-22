@@ -1,5 +1,6 @@
 """Real-catalog integration tests, using only isolated CI SQLite tables."""
 import copy
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -165,6 +166,22 @@ class CorporationLocationTests(TransactionTestCase):
         self.assertEqual(response.json()['base_region'], '德里克')
         self.revision.refresh_from_db()
         self.assertEqual(self.revision.content['base_location'], self.snapshot())
+
+    def test_location_ids_reject_lone_surrogates_without_mutating_draft(self):
+        before = copy.deepcopy(self.revision.content)
+        for field in ('region_id', 'constellation_id', 'solarsystem_id'):
+            for invalid in ('bad\ud800', 'bad\udfff'):
+                with self.subTest(field=field, invalid=repr(invalid)):
+                    payload = {'expected_version': self.revision.version,
+                               'base_location': {**self.location(), field: invalid}}
+                    response = self.client.patch(f'/api/community/revisions/{self.revision.pk}/',
+                                                 json.dumps(payload, ensure_ascii=True),
+                                                 content_type='application/json')
+                    self.assertEqual(response.status_code, 400, response.content)
+                    self.assertIn('base_location', response.json())
+                    self.revision.refresh_from_db()
+                    self.assertEqual(self.revision.content, before)
+                    self.assertEqual(self.revision.version, 1)
 
     def test_region_and_constellation_only_selections_are_valid(self):
         for selection, constellation_name, security in [

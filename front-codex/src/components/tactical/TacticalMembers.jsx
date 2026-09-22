@@ -19,6 +19,9 @@ export default function TacticalMembers({
   const [invite, setInvite] = useState(null);
   const [remove, setRemove] = useState(null);
   const alive = useRef(true);
+  const readSequence = useRef(0);
+  const pendingRead = useRef(null);
+  const writing = useRef(false);
   const failureHandler = (failure) => {
     if (!alive.current) return;
     if (
@@ -36,12 +39,38 @@ export default function TacticalMembers({
     }
     setError(failure.message);
   };
-  const reload = async () => {
+  const reload = async (force = false) => {
+    if (!alive.current || (!force && (pendingRead.current !== null || writing.current))) return;
+    const sequence = ++readSequence.current;
+    pendingRead.current?.controller.abort();
+    const controller = new AbortController();
+    pendingRead.current = { sequence, controller };
+    let timedOut = false;
+    // The shared authentication refresh can precede fetch and cannot be aborted
+    // by this caller. Bound our own read lifetime without cancelling that refresh.
+    let cancelRead;
+    const cancelled = new Promise((_, reject) => {
+      cancelRead = () => reject(new Error("人员列表读取已取消。"));
+      controller.signal.addEventListener('abort', cancelRead, { once: true });
+    });
+    const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
     try {
-      const next = await getTacticalMembers(organizationId);
-      if (alive.current) setData(next);
+      const next = await Promise.race([
+        getTacticalMembers(organizationId, { signal: controller.signal }), cancelled,
+      ]);
+      if (alive.current && sequence === readSequence.current) {
+        setData(next);
+        setError("");
+      }
     } catch (failure) {
-      failureHandler(failure);
+      if (alive.current && sequence === readSequence.current) {
+        if (timedOut) setError("人员列表刷新超时，将自动重试。");
+        else failureHandler(failure);
+      }
+    } finally {
+      clearTimeout(timeout);
+      controller.signal.removeEventListener('abort', cancelRead);
+      if (pendingRead.current?.sequence === sequence) pendingRead.current = null;
     }
   };
   useEffect(() => {
@@ -50,21 +79,29 @@ export default function TacticalMembers({
     const timer = setInterval(reload, 5000);
     return () => {
       alive.current = false;
+      readSequence.current += 1;
+      pendingRead.current?.controller.abort();
+      pendingRead.current = null;
       clearInterval(timer);
     };
   }, [organizationId]);
   const run = async (action, payload) => {
+    if (writing.current) return;
+    writing.current = true;
+    // A pre-command poll must never restore the pre-command roster afterward.
+    readSequence.current += 1;
     setBusy(true);
     setError("");
     try {
       const result = await execute(action, payload, { requireLease: false });
       if (!alive.current) return;
       setNotice("人员操作已完成");
-      await reload();
+      await reload(true);
       return alive.current ? result : undefined;
     } catch (failure) {
       failureHandler(failure);
     } finally {
+      writing.current = false;
       if (alive.current) setBusy(false);
     }
   };
@@ -95,6 +132,7 @@ export default function TacticalMembers({
               {data?.online_count ?? "—"} / {data?.capacity || 100}
             </strong>
             <span>当前在线</span>
+            <small>组织成员 {data?.member_count ?? '—'} 人</small>
           </div>
           <button
             type="button"
@@ -300,7 +338,7 @@ export default function TacticalMembers({
           <TacticalDialog title="确认移除成员" onClose={() => setRemove(null)}>
             <p>
               移除「{remove.display_name}
-              」后，将立即撤销其访问权限。历史情报仍保留；恢复成员由统帅处理。
+              」后，将立即撤销其访问权限。历史上报记录仍保留；恢复成员由统帅处理。
             </p>
             <div className="tac-form-footer">
               <button

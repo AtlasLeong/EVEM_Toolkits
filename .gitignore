@@ -52,4 +52,7 @@ front-codex/output/
 .venv/
 backend/.tactical-local.sqlite3*
 backend/.tactical-universe.json
+backend/.starsea-local.sqlite3*
+front-codex/test-results-starsea*/
+front-codex/test-results-corp*/
 

@@ -3,23 +3,30 @@ import { lazy, Suspense, useContext, useEffect } from 'react'
 import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
-import LoginPage from './pages/Login'
-import InfoCenterPage from './pages/InfoCenter'
-import FraudListPage from './pages/FraudList'
-import PlanetaryPage from './pages/Planetary'
-import TacticalBoardPage from './pages/TacticalBoard'
-import SettingPage from './pages/Setting'
-import FraudAdminLoginPage from './pages/FraudAdminLogin'
-import FraudAdminPage from './pages/FraudAdmin'
-import LicenseAdminPage from './pages/LicenseAdmin'
-import FeedbackPage from './pages/Feedback'
-
-const CorporationsPage = lazy(() => import('./pages/Corporations'))
-const TacticalCollaborationPage = lazy(() => import('./pages/TacticalCollaboration'))
+const LoginPage = lazy(() => import('./pages/Login'))
+const InfoCenterPage = lazy(() => import('./pages/InfoCenter'))
+const FraudListPage = lazy(() => import('./pages/FraudList'))
+const PlanetaryPage = lazy(() => import('./pages/Planetary'))
+const TacticalBoardPage = lazy(() => import('./pages/TacticalBoard'))
+const SettingPage = lazy(() => import('./pages/Setting'))
+const FraudAdminLoginPage = lazy(() => import('./pages/FraudAdminLogin'))
+const FraudAdminPage = lazy(() => import('./pages/FraudAdmin'))
+const LicenseAdminPage = lazy(() => import('./pages/LicenseAdmin'))
+const FeedbackPage = lazy(() => import('./pages/Feedback'))
+const CorporationsModule = lazy(() => import('./pages/Corporations'))
 const CorporationDetailPage = lazy(() => import('./pages/Corporations').then(module => ({ default: module.CorporationDetailPage })))
+const TacticalCollaborationPage = lazy(() => import('./pages/TacticalCollaboration'))
 const CorporationManagePage = lazy(() => import('./pages/CorporationManage'))
 const CorporationReviewPage = lazy(() => import('./pages/CorporationReview'))
-const corporationRoute = page => <Suspense fallback={<div className="loading-bar" aria-label="加载军团页面"><span /></div>}>{page}</Suspense>
+const StarseaPage = lazy(() => import('./pages/Starsea'))
+const StarseaDetailPage = lazy(() => import('./pages/StarseaDetail'))
+const StarseaMinePage = lazy(() => import('./pages/StarseaMine'))
+const StarseaEditorPage = lazy(() => import('./pages/StarseaEditor'))
+const StarseaReviewPage = lazy(() => import('./pages/StarseaReview'))
+const pageFallback = label => <div className="loading-bar" aria-label={label}><span /></div>
+const starseaRoute = page => <Suspense fallback={pageFallback('加载星海见闻')}>{page}</Suspense>
+const corporationRoute = page => <Suspense fallback={pageFallback('加载军团页面')}>{page}</Suspense>
+const appRoute = page => <Suspense fallback={pageFallback('加载页面')}>{page}</Suspense>
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -45,22 +52,29 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Navigate replace to="/fraudlist" />} />
-            <Route path="/infocenter" element={<InfoCenterPage />} />
-            <Route path="/fraudlist" element={<FraudListPage />} />
-            <Route path="/planetary" element={<PlanetaryPage />} />
-            <Route path="/feedback" element={<FeedbackPage />} />
-            <Route path="/corporations" element={corporationRoute(<CorporationsPage />)} />
+            <Route path="/infocenter" element={appRoute(<InfoCenterPage />)} />
+            <Route path="/fraudlist" element={appRoute(<FraudListPage />)} />
+            <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
+            <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
+            <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
             <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />
             <Route path="/corporations/review" element={corporationRoute(<CorporationReviewPage />)} />
             <Route path="/corporations/:id" element={corporationRoute(<CorporationDetailPage />)} />
+            <Route path="/starsea" element={starseaRoute(<StarseaPage />)} />
+            <Route path="/starsea/mine" element={starseaRoute(<StarseaMinePage />)} />
+            <Route path="/starsea/new" element={starseaRoute(<StarseaEditorPage />)} />
+            <Route path="/starsea/review" element={starseaRoute(<StarseaReviewPage />)} />
+            <Route path="/starsea/review/:revisionId" element={starseaRoute(<StarseaReviewPage />)} />
+            <Route path="/starsea/:id/edit" element={starseaRoute(<StarseaEditorPage />)} />
+            <Route path="/starsea/:id" element={starseaRoute(<StarseaDetailPage />)} />
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
             <Route path="/starmap" element={<TacticalBoardPage />} />
-            <Route path="/tactical" element={<Suspense fallback={<div className="loading-bar" aria-label="加载战术板"><span /></div>}><TacticalCollaborationPage /></Suspense>} />
+            <Route path="/tactical" element={appRoute(<TacticalCollaborationPage />)} />
             <Route
               path="/usersetting"
               element={
                 <RequireAuth>
-                  <SettingPage />
+                  {appRoute(<SettingPage />)}
                 </RequireAuth>
               }
             />
@@ -71,7 +85,7 @@ export default function App() {
               path="/fraudadmin"
               element={
                 <RequireAuth>
-                  <FraudAdminPage />
+                  {appRoute(<FraudAdminPage />)}
                 </RequireAuth>
               }
             />
@@ -79,13 +93,13 @@ export default function App() {
               path="/licenseadmin"
               element={
                 <RequireAuth>
-                  <LicenseAdminPage />
+                  {appRoute(<LicenseAdminPage />)}
                 </RequireAuth>
               }
             />
           </Route>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/fraudlogin" element={<FraudAdminLoginPage />} />
+          <Route path="/login" element={appRoute(<LoginPage />)} />
+          <Route path="/fraudlogin" element={appRoute(<FraudAdminLoginPage />)} />
           <Route path="*" element={<Navigate replace to="/fraudlist" />} />
         </Routes>
       </div>

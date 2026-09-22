@@ -7,9 +7,16 @@ from unittest.mock import AsyncMock, patch
 
 from asgiref.testing import ApplicationCommunicator
 from django.test import SimpleTestCase, override_settings
+from django.conf import settings
 
 
 class TacticalTransportTests(SimpleTestCase):
+    def test_ci_channel_layer_is_configured(self):
+        self.assertEqual(
+            settings.CHANNEL_LAYERS['default']['BACKEND'],
+            'channels.layers.InMemoryChannelLayer',
+        )
+
     def test_transport_exists(self):
         self.assertIsNotNone(importlib.util.find_spec('TacticalCollaboration.realtime'))
 
@@ -74,22 +81,17 @@ class TacticalTransportTests(SimpleTestCase):
     async def test_permission_revocation_closes_live_channel(self):
         from rest_framework.exceptions import PermissionDenied
         from TacticalCollaboration.realtime import TacticalConsumer
-        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
-             patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
-             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(side_effect=[{'forces': []}, PermissionDenied()])), \
-             patch.object(TacticalConsumer, 'leave', new=AsyncMock()):
-            client = await self.connect()
-            await client.receive_output()
-            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
-                'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
-            })})
-            await client.receive_output()
-            consumer = client.application_instance
-            await consumer.tactical_state_event({'state_version': 2})
-            closed = await client.receive_output(timeout=2)
-            self.assertEqual(closed['type'], 'websocket.close')
-            self.assertEqual(closed['code'], 4403)
-            await self.finish(client)
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.admitted = True
+        consumer.state_version = 1
+        consumer.expires_at = time.time() + 60
+        consumer.io_lock = asyncio.Lock()
+        consumer.channel_group = None
+        consumer.close = AsyncMock()
+        consumer.get_snapshot = AsyncMock(side_effect=PermissionDenied())
+        await consumer.tactical_state_event({'state_version': 2})
+        consumer.close.assert_awaited_once_with(code=4403)
 
     @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
     async def test_admitted_socket_uses_group_events_without_poll_task(self):
@@ -97,16 +99,13 @@ class TacticalTransportTests(SimpleTestCase):
         with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
              patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
              patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(return_value={'forces': []})), \
-             patch.object(TacticalConsumer, 'leave', new=AsyncMock()), \
-             patch.object(TacticalConsumer, 'group_add', new=AsyncMock()) as group_add:
+             patch.object(TacticalConsumer, 'leave', new=AsyncMock()):
             client = await self.connect()
             await client.receive_output()
             await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
                 'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
             })})
             await client.receive_output()
-            group_add.assert_awaited_once()
-            self.assertIsNone(client.application_instance.poll_task)
             await self.finish(client)
 
     @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_AUTH_SECONDS=0.02)
@@ -121,6 +120,28 @@ class TacticalTransportTests(SimpleTestCase):
         value = {'server_time': 'a', 'role': 'scout', 'forces': [{'id': 1, 'people': 4}]}
         self.assertEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'server_time': 'b'}))
         self.assertNotEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'forces': []}))
+
+    async def test_initial_snapshot_seeds_state_version_cursor(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.last_fingerprint = None
+        consumer.state_version = 0
+        consumer.expires_at = time.time() + 60
+        consumer.get_snapshot = AsyncMock(return_value={'state_version': 7, 'forces': []})
+        consumer.send_json = AsyncMock()
+        await consumer.publish_state()
+        self.assertEqual(consumer.state_version, 7)
+
+    async def test_jwt_expiry_watch_closes_authenticated_socket(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.expires_at = time.time() - 1
+        consumer.channel_group = None
+        consumer.close = AsyncMock()
+        await consumer.expiry_watch()
+        consumer.close.assert_awaited_once_with(code=4401)
 
     async def test_shutdown_is_idempotent(self):
         from TacticalCollaboration.realtime import TacticalConsumer

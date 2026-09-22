@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [codex/automated-deployment]
+    branches: [master, codex/automated-deployment]
   pull_request:
     branches: [master]
   workflow_call:
@@ -40,8 +40,8 @@ jobs:
       - name: License, activation, feedback, community and deployment-version tests (isolated SQLite)
         working-directory: backend
         run: |
-          python manage.py test TacticalBoard License ActivationCode Feedback Community EVE_MDjango.tests_deployment --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/backend-tests.log
-          python manage.py makemigrations Feedback Community --check --dry-run --settings=EVE_MDjango.ci_settings 2>&1 | tee ../ci-evidence/migration-check.log
+          python manage.py test TacticalBoard License ActivationCode Feedback Community Starsea EVE_MDjango.tests_deployment --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/backend-tests.log
+          python manage.py makemigrations Feedback Community Starsea --check --dry-run --settings=EVE_MDjango.ci_settings 2>&1 | tee ../ci-evidence/migration-check.log
       - name: Tactical authorization, presence and transport tests (isolated SQLite)
         working-directory: backend
         run: |
@@ -59,6 +59,9 @@ jobs:
       - name: Build frontend
         working-directory: front-codex
         run: npm run build 2>&1 | tee ../ci-evidence/frontend-build.log
+      - name: Enforce frontend bundle budget
+        working-directory: front-codex
+        run: npm run check:bundle 2>&1 | tee ../ci-evidence/frontend-bundle-budget.log
       - name: Full frontend regression suite
         working-directory: front-codex
         run: npm run test:e2e 2>&1 | tee ../ci-evidence/frontend-e2e.log

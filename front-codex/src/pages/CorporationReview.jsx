@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ShieldCheck } from "lucide-react";
 import { AuthContext } from "../context/AuthContext";
@@ -70,6 +70,8 @@ function ReviewWorkspace() {
   const [kind, setKind] = useState("claims");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
+  const activeSelection = useRef(null);
+  activeSelection.current = `${kind}-${selected}`;
   const [notice, setNotice] = useState("");
   const capability = useQuery({
     queryKey: [...prefix, "capabilities"],
@@ -182,8 +184,11 @@ function ReviewWorkspace() {
             id={selected}
             prefix={prefix}
             done={async () => {
-              setSelected(null);
-              setNotice("审核已完成");
+              // A late decision must not discard another item's review notes.
+              if (activeSelection.current === `${kind}-${selected}`) {
+                setSelected(null);
+                setNotice("审核已完成");
+              }
               await refresh();
             }}
           />

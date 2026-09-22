@@ -95,7 +95,7 @@ class PresenceTests(BoardCase):
     def test_roster_uses_last_heartbeat_and_latest_report_submission_not_observation(self):
         from TacticalCollaboration.models import ConnectionLease, Report, ReportRevision
         self.admit(self.scout)
-        report = self.cmd('report.create', **self.content()).data['result']
+        report = self.cmd('report.create', report_kind='system_count', **self.content(ships={'cruiser': None, 'titan': None})).data['result']
         submitted = timezone.now() - timedelta(minutes=2)
         ReportRevision.objects.filter(report_id=report['id']).update(created_at=submitted)
         # Command-layer confirmation changes current Report.updated_at; it must
@@ -237,7 +237,8 @@ class ReportForceTests(BoardCase):
         request_id = str(uuid4())
         response = self.cmd('force.archive', force_id=force['id'], expected_version=1, request_id=request_id)
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.data['result'], {'id': force['id'], 'version': 2, 'archived': True})
+        self.assertEqual({key: value for key, value in response.data['result'].items() if key != 'state_version'},
+                         {'id': force['id'], 'version': 2, 'archived': True})
         replay = self.cmd('force.archive', force_id=force['id'], expected_version=1, request_id=request_id)
         self.assertEqual(replay.data, response.data)
         self.assertEqual(self.snapshot().data['forces'], [])
@@ -304,7 +305,7 @@ class ReportForceTests(BoardCase):
 
     def test_removed_member_requires_founder_restore_and_retains_report_author(self):
         self.admit(self.scout)
-        self.cmd('report.create', **self.content())
+        self.cmd('report.create', report_kind='system_count', **self.content(ships={'cruiser': None, 'titan': None}))
         member = Membership.objects.get(organization=self.org, user=self.scout)
         self.client.force_authenticate(self.commander)
         self.cmd('member.remove', member_id=member.id)
@@ -320,34 +321,112 @@ class ReportForceTests(BoardCase):
         self.admit()
         self.assertEqual(self.cmd('report.create', **self.content(observed_at='0001-01-01T00:00:00Z')).status_code, 400)
 
-    def test_scout_sees_all_enemy_only_own_reports_no_friendly_metadata(self):
+    def test_scout_sees_all_enemy_reports_no_friendly_metadata(self):
         self.admit(self.owner)
         friendly = self.cmd('force.create', name='SECRET_BASE', side='friendly', **self.content(notes='SECRET_NOTE'))
         self.assertEqual(friendly.status_code, 200, friendly.content)
         self.cmd('force.create', name='敌方', side='enemy', **self.content())
         self.cmd('report.create', **self.content(notes='COMMAND_RAW'))
+        self.admit(self.other)
+        self.cmd('report.create', report_kind='system_count', **self.content(notes='OTHER_SCOUT_RAW', ships={'cruiser': None, 'titan': None}))
         self.admit(self.scout)
-        self.cmd('report.create', **self.content(notes='SCOUT_OWN'))
+        self.cmd('report.create', report_kind='system_count', **self.content(notes='SCOUT_OWN', ships={'cruiser': None, 'titan': None}))
         state = self.snapshot().data
         encoded = json.dumps(state)
         self.assertNotIn('SECRET', encoded)
-        self.assertNotIn('COMMAND_RAW', encoded)
         self.assertEqual(len(state['forces']), 1)
-        self.assertEqual(len(state['reports']), 1)
-        self.assertEqual(state['reports'][0]['notes'], 'SCOUT_OWN')
-        self.assertNotIn('source', encoded)
+        self.assertEqual({report['notes'] for report in state['reports']},
+                         {'COMMAND_RAW', 'OTHER_SCOUT_RAW', 'SCOUT_OWN'})
+        # Only the public current observation pointer/author is exposed, never
+        # private adoption history, command identities, or audit metadata.
+        self.assertEqual(set(state['forces'][0]), {
+            'id', 'version', 'system_id', 'system_name', 'people', 'ships', 'notes',
+            'observed_at', 'updated_at', 'name', 'side', 'source_report_id',
+            'source_author_id', 'source_author_name', 'in_scope',
+        })
+        self.assertIsNone(state['forces'][0]['source_report_id'])
+        self.assertNotIn('confirmer', encoded)
+        self.assertNotIn('metadata', encoded)
+        self.assertNotIn('online', state)
+
+    def test_pending_report_with_author_is_immediate_in_http_and_socket_snapshots(self):
+        from TacticalCollaboration import services
+        self.admit(self.scout)
+        scout_connection = self.connection_id
+        generation = str(uuid4())
+        services.claim_socket(self.scout, self.org.pk, scout_connection, generation)
+        self.assertEqual(services.socket_snapshot(self.scout, self.org.pk, scout_connection, generation)['reports'], [])
+        self.admit(self.other)
+        report = self.cmd('report.create', report_kind='system_count', **self.content(notes='SHARED_PENDING', ships={'cruiser': None, 'titan': None})).data['result']
+        report_snapshot = {key: value for key, value in report.items() if key != 'state_version'}
+        for actor in (self.owner, self.commander, self.scout):
+            with self.subTest(role=actor.username):
+                self.admit(actor)
+                state = self.snapshot().data
+                self.assertEqual(state['reports'], [{**report_snapshot, 'in_scope': False}])
+                self.assertEqual(state['reports'][0]['status'], 'pending')
+                self.assertEqual(state['reports'][0]['author_id'], self.other.pk)
+                self.assertEqual(state['reports'][0]['author_name'], self.other.username)
+                self.assertEqual(state['forces'], [])
+        state = services.socket_snapshot(self.scout, self.org.pk, scout_connection, generation)
+        self.assertEqual(state['reports'], [{**report_snapshot, 'in_scope': False}])
+        self.assertNotIn('online', state)
+
+    def test_shared_report_visibility_does_not_grant_edit_permission(self):
+        self.admit(self.commander)
+        other_report = self.cmd('report.create', **self.content()).data['result']
+        self.admit(self.scout)
+        own_report = self.cmd('report.create', report_kind='system_count', **self.content(ships={'cruiser': None, 'titan': None})).data['result']
+        visible_ids = {report['id'] for report in self.snapshot().data['reports']}
+        self.assertEqual(visible_ids, {other_report['id'], own_report['id']})
+        denied = self.cmd('report.update', report_id=other_report['id'], expected_version=1,
+                          **self.content(people=9))
+        self.assertEqual(denied.status_code, 403)
+        allowed = self.cmd('report.update', report_id=own_report['id'], expected_version=1,
+                           **self.content(people=9, ships={'cruiser': None, 'titan': None}))
+        self.assertEqual(allowed.status_code, 200)
+        self.assertEqual(allowed.data['result']['version'], 2)
+        self.assertEqual(self.cmd('report.update', report_id=own_report['id'], expected_version=1,
+                                  **self.content(people=10, ships={'cruiser': None, 'titan': None})).status_code, 409)
+
+    def test_shared_enemy_report_does_not_expand_linked_friendly_deployment(self):
+        from TacticalCollaboration import services
+        self.admit(self.owner)
+        report = self.cmd('report.create', **self.content(notes='ORIGINAL_ENEMY_OBSERVATION')).data['result']
+        force = self.cmd('report.confirm', report_id=report['id'], expected_version=1, name='敌方').data['result']
+        changed = self.cmd('force.update', force_id=force['id'], expected_version=1,
+                           name='SECRET_FRIENDLY', side='friendly',
+                           **self.content(system_id=4, notes='SECRET_LOCATION', people=654321))
+        self.assertEqual(changed.status_code, 200)
+        self.admit(self.scout)
+        generation = str(uuid4())
+        services.claim_socket(self.scout, self.org.pk, self.connection_id, generation)
+        states = [self.snapshot().data,
+                  services.socket_snapshot(self.scout, self.org.pk, self.connection_id, generation)]
+        for state in states:
+            with self.subTest(transport='http' if state is states[0] else 'socket'):
+                self.assertEqual(state['forces'], [])
+                self.assertEqual(len(state['reports']), 1)
+                visible = state['reports'][0]
+                self.assertEqual((visible['id'], visible['system_id'], visible['people'], visible['notes']),
+                                 (report['id'], 1, 80, 'ORIGINAL_ENEMY_OBSERVATION'))
+                self.assertEqual(set(visible), {'id', 'version', 'system_id', 'system_name', 'people', 'ships',
+                                               'notes', 'observed_at', 'updated_at', 'author_id', 'author_name', 'status', 'report_kind', 'in_scope'})
+                self.assertNotIn('SECRET', json.dumps(state))
+                self.assertNotIn('654321', json.dumps(state))
 
     def test_report_author_only_versioned_revisions_and_confirmation_does_not_follow_correction(self):
         from TacticalCollaboration.models import Force, ForceSource, ReportRevision
-        self.admit(self.scout)
+        self.admit(self.commander)
         report = self.cmd('report.create', **self.content()).data['result']
         self.assertEqual(report['version'], 1)
-        self.admit(self.commander)
+        self.admit(self.owner)
         forbidden = self.cmd('report.update', report_id=report['id'], expected_version=1, **self.content(people=9))
         self.assertEqual(forbidden.status_code, 403)
+        self.admit(self.commander)
         force = self.cmd('report.confirm', report_id=report['id'], expected_version=1, name='敌舰队').data['result']
         self.assertEqual(self.cmd('report.confirm', report_id=report['id'], expected_version=1, name='重复').status_code, 409)
-        self.admit(self.scout)
+        self.admit(self.commander)
         changed = self.cmd('report.update', report_id=report['id'], expected_version=1, **self.content(people=75))
         self.assertEqual(changed.status_code, 200, changed.content)
         self.assertEqual(changed.data['result']['status'], 'corrected')
@@ -381,7 +460,7 @@ class ReportForceTests(BoardCase):
     def test_scout_commands_cannot_modify_or_confirm_forces(self):
         self.admit(self.scout)
         self.assertEqual(self.cmd('force.create', name='敌方', side='enemy', **self.content()).status_code, 403)
-        report = self.cmd('report.create', **self.content()).data['result']
+        report = self.cmd('report.create', report_kind='system_count', **self.content(ships={'cruiser': None, 'titan': None})).data['result']
         self.assertEqual(self.cmd('report.confirm', report_id=report['id'], expected_version=1, name='x').status_code, 403)
 
     def test_live_lease_required_on_all_tactical_writes(self):
@@ -395,7 +474,10 @@ class ReportForceTests(BoardCase):
                         {'notes': '\ud800'}, {'observed_at': 'tomorrow'}, {'observed_at': '2999-01-01T00:00:00Z'},
                         {'system_id': 999}, {'people': 1000001}]:
             with self.subTest(invalid=invalid):
-                self.assertEqual(self.cmd('report.create', **self.content(**invalid)).status_code, 400)
+                payload = self.content(ships={'cruiser': None, 'titan': None})
+                payload.update(invalid)
+                self.assertEqual(self.cmd('report.create', report_kind='system_count',
+                                          **payload).status_code, 400)
 
     def test_unknown_remains_null_and_zero_is_not_unknown(self):
         self.admit()

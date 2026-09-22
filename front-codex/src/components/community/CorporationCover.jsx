@@ -3,10 +3,10 @@ import { useCommunityImage } from "./CorporationUI";
 import { defaultCorporationCoverKey } from "../../utils/corporationCover";
 import { corporationCoverUrl } from "../../utils/corporationCoverAssets";
 
-export default function CorporationCover({ corporation, thumbnail = false }) {
+export default function CorporationCover({ corporation, thumbnail = false, loadUpload = true }) {
   const key = defaultCorporationCoverKey(corporation);
   const defaultUrl = corporationCoverUrl(key, thumbnail);
-  const image = useCommunityImage(corporation.cover_url);
+  const image = useCommunityImage(loadUpload ? corporation.cover_url : null);
   const [loadedUpload, setLoadedUpload] = useState(null);
   const [failedUpload, setFailedUpload] = useState(null);
   const [failedDefault, setFailedDefault] = useState(null);

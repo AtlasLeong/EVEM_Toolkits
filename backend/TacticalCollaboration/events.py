@@ -22,10 +22,16 @@ class LocalEventPublisher:
     def publish(self, organization_id, state_version):
         if self.channel_layer is None:
             return None
-        async_to_sync(self.channel_layer.group_send)(
-            f'tactical-org-{organization_id}',
-            {'type': 'tactical.state_event', 'state_version': state_version},
-        )
+        try:
+            async_to_sync(self.channel_layer.group_send)(
+                f'tactical-org-{organization_id}',
+                {'type': 'tactical.state_event', 'state_version': state_version},
+            )
+        except Exception:
+            # Persistence is authoritative. A transient broker failure must not
+            # turn a committed command into a 500; clients recover via HTTP.
+            logger.warning('Tactical event delivery temporarily unavailable for organization %s', organization_id)
+        return None
 
 
 def get_event_publisher():

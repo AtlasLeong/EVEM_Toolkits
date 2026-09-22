@@ -22,18 +22,38 @@ export function canAcceptSnapshot(current, incoming) {
   if (!current) return true;
   if (incoming.permission_version !== current.permission_version)
     return incoming.permission_version > current.permission_version;
+  const currentVersion = Number(current.state_version);
+  const incomingVersion = Number(incoming.state_version);
+  if (Number.isSafeInteger(currentVersion) && Number.isSafeInteger(incomingVersion) &&
+      currentVersion !== incomingVersion)
+    return incomingVersion > currentVersion;
   const before = snapshotTime(current.server_time), after = snapshotTime(incoming.server_time);
   return !Number.isFinite(before) || !Number.isFinite(after) || after >= before;
 }
 
 // One socket lifetime only. The owner handles authenticated HTTP recovery, never
 // retries user commands, and fences old lifetimes when account/board changes.
-export function openTacticalSocket({ apiUrl, organizationId, connectionId, token, onSnapshot, onClose, WebSocketImpl = WebSocket }) {
+export function openTacticalSocket({ apiUrl, organizationId, connectionId, token, onSnapshot, onOpen, onClose,
+  WebSocketImpl = WebSocket, setIntervalImpl = setInterval, clearIntervalImpl = clearInterval,
+  heartbeatMs = 20000 }) {
   let stopped = false;
+  let heartbeatTimer = null;
   const socket = new WebSocketImpl(tacticalSocketUrl(apiUrl, organizationId));
-  const stop = () => { stopped = true; socket.close(); };
+  const stop = () => {
+    stopped = true;
+    if (heartbeatTimer !== null) clearIntervalImpl(heartbeatTimer);
+    heartbeatTimer = null;
+    socket.close();
+  };
   socket.onopen = () => {
-    if (!stopped) socket.send(JSON.stringify({ type: 'authenticate', token, connection_id: connectionId }));
+    if (!stopped) {
+      socket.send(JSON.stringify({ type: 'authenticate', token, connection_id: connectionId }));
+      heartbeatTimer = setIntervalImpl(() => {
+        if (!stopped && socket.readyState === (WebSocketImpl.OPEN ?? 1))
+          socket.send(JSON.stringify({ type: 'ping' }));
+      }, heartbeatMs);
+      onOpen?.();
+    }
   };
   socket.onmessage = event => {
     if (stopped) return;
@@ -49,7 +69,11 @@ export function openTacticalSocket({ apiUrl, organizationId, connectionId, token
       stop(); onClose(4400);
     }
   };
-  socket.onclose = event => { if (!stopped) { stopped = true; onClose(event.code); } };
+  socket.onclose = event => {
+    if (heartbeatTimer !== null) clearIntervalImpl(heartbeatTimer);
+    heartbeatTimer = null;
+    if (!stopped) { stopped = true; onClose(event.code); }
+  };
   // onclose follows transport errors; intentionally do not log URLs or tokens.
   socket.onerror = () => {};
   return stop;

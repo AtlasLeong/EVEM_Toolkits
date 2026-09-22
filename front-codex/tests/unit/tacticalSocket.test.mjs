@@ -25,6 +25,19 @@ test('WebSocket credentials appear only in first authentication frame, never URL
   assert.deepEqual(socket.sent, [{ type: 'authenticate', token: 'private-token', connection_id: 'tab' }]);
   stop();
 });
+test('authenticated sockets send periodic heartbeat frames without exposing credentials', () => {
+  let heartbeat;
+  const stop = openTacticalSocket({ apiUrl: 'http://127.0.0.1:8001/api', organizationId: 7, connectionId: 'tab', token: 'private-token',
+    WebSocketImpl: FakeSocket, setIntervalImpl: callback => { heartbeat = callback; return 1; }, clearIntervalImpl: () => {} });
+  const socket = FakeSocket.latest;
+  socket.open();
+  heartbeat();
+  assert.deepEqual(socket.sent, [
+    { type: 'authenticate', token: 'private-token', connection_id: 'tab' },
+    { type: 'ping' },
+  ]);
+  stop();
+});
 test('only matching organization snapshots are delivered; malformed state closes channel', () => {
   const { socket, snapshots, closed } = setup();
   socket.open(); socket.message({ type: 'snapshot', data: state });

@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from .deployment import deployment_version
 
 urlpatterns = [
+    path('api/starsea/', include('Starsea.urls')),
     path('api/tactical/', include('TacticalCollaboration.urls')),
     path('api/community/', include('Community.urls')),
     path('api/feedback/', include('Feedback.urls')),

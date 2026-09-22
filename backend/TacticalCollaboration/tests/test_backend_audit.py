@@ -1,6 +1,7 @@
 from datetime import timedelta
 from time import perf_counter
 from uuid import uuid4
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -15,6 +16,23 @@ from .test_board import BoardCase
 
 
 class TacticalBackendAuditTests(BoardCase):
+    def test_presence_join_and_leave_advance_version_for_live_roster(self):
+        before = self.org.state_version
+        with patch('TacticalCollaboration.services._publish_state_event') as publish:
+            with self.captureOnCommitCallbacks(execute=True):
+                services.admit(self.scout, self.org.pk, self.connection_id)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.state_version, before + 1)
+        publish.assert_called_once_with(self.org.pk, before + 1)
+
+        publish.reset_mock()
+        with patch('TacticalCollaboration.services._publish_state_event') as publish:
+            with self.captureOnCommitCallbacks(execute=True):
+                services.leave(self.scout, self.org.pk, self.connection_id)
+        self.org.refresh_from_db()
+        self.assertEqual(self.org.state_version, before + 2)
+        publish.assert_called_once_with(self.org.pk, before + 2)
+
     def test_system_catalog_nonfinite_security_is_json_safe(self):
         BoardSystems.objects.filter(pk=1).update(security_status=float('inf'))
         self.client.raise_request_exception = False
@@ -57,6 +75,7 @@ class TacticalBackendAuditTests(BoardCase):
 
     def test_command_advances_state_version_once(self):
         self.admit(self.owner)
+        self.org.refresh_from_db()
         before = self.org.state_version
         result = services.command(self.owner, self.org.pk, {
             'action': 'report.create', 'request_id': str(uuid4()),

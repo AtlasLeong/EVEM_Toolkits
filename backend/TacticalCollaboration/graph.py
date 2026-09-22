@@ -38,22 +38,31 @@ def sanitize_optional_numbers(rows, fields):
 def map_data(user, organization_id):
     org = locked_org(organization_id)
     membership(user, org)
-    scope = scope_data(org)
+    return {**static_projection(org.region_ids, org.border_hops), 'scope': scope_data(org)}
+
+
+def static_projection(region_ids, border_hops):
+    """Public geometry only; callers resolve current authorization/scope first.
+
+    Snapshot annotations and the map deliberately share this projection so
+    missing coordinates and border expansion cannot produce different scopes.
+    Never cache organization metadata or any member/deployment data here.
+    """
     empty = {'systems': [], 'stargates': [], 'regions': [], 'constellations': [], 'boundary_exits': [],
-             'scope': scope, 'data_source': data_source([]), 'warnings': []}
-    if not org.region_ids:
+             'data_source': data_source([]), 'warnings': []}
+    if not region_ids:
         return empty
-    key = 'tactical:graph:' + digest({'regions': sorted(org.region_ids), 'hops': org.border_hops,
+    key = 'tactical:graph:' + digest({'regions': sorted(region_ids), 'hops': border_hops,
                                     'schema': 2, 'local_demo': getattr(settings, 'TACTICAL_LOCAL_DEMO', False),
                                     'data_version': getattr(settings, 'TACTICAL_GRAPH_DATA_VERSION', '1')})
     cached = cache.get(key)
     if cached is not None:
-        # Cached content is exclusively static public universe geometry. Current
-        # organization scope/version and permission are always resolved above.
-        return {**cached, 'scope': scope}
-    selected = set(BoardSystems.objects.filter(constellation__region_id__in=org.region_ids).values_list('system_id', flat=True))
+        # Cached content is exclusively static public universe geometry. The
+        # authorized callers always resolve live organization scope/permission.
+        return cached
+    selected = set(BoardSystems.objects.filter(constellation__region_id__in=region_ids).values_list('system_id', flat=True))
     frontier = selected.copy()
-    for _ in range(org.border_hops):
+    for _ in range(border_hops):
         edges = BoardStargates.objects.filter(Q(system_id__in=frontier) | Q(destination_system_id__in=frontier)).values_list('system_id', 'destination_system_id')
         neighbors = {sid for edge in edges for sid in edge if sid is not None} - selected
         # Validate destinations against static systems, not orphan gate IDs.
@@ -95,7 +104,7 @@ def map_data(user, organization_id):
     if invalid_fields:
         warnings.append({'code': 'nonfinite_fields', 'count': invalid_fields})
     cache.set(key, result, timeout=300)
-    return {**result, 'scope': scope}
+    return result
 
 
 @transaction.atomic
@@ -110,5 +119,7 @@ def catalog(user, organization_id, kind, query):
     if not query:
         return {'results': []}
     rows = BoardSystems.objects.filter(Q(zh_name__icontains=query) | Q(name__icontains=query)).select_related('constellation__region').order_by('pk')[:30]
-    return {'results': [{'id': row.pk, 'name': row.zh_name or row.name, 'security_status': row.security_status,
-                         'region_name': row.constellation.region.zh_name or row.constellation.region.name} for row in rows]}
+    results = [{'id': row.pk, 'name': row.zh_name or row.name, 'security_status': row.security_status,
+                'region_name': row.constellation.region.zh_name or row.constellation.region.name} for row in rows]
+    sanitize_optional_numbers(results, ('security_status',))
+    return {'results': results}

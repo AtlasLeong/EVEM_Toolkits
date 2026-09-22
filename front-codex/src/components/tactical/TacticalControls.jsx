@@ -18,7 +18,7 @@ export function ShipComposition({ ships = {}, includeUnknown = false }) {
   );
 }
 
-export function TacticalDialog({ title, children, onClose, wide = false }) {
+export function TacticalDialog({ title, children, onClose, wide = false, mobileSheet = false }) {
   const ref = useRef(null);
   const id = useId();
   useEffect(() => {
@@ -36,7 +36,7 @@ export function TacticalDialog({ title, children, onClose, wide = false }) {
   return createPortal(
     <dialog
       ref={ref}
-      className={`tac-dialog${wide ? " is-wide" : ""}`}
+      className={`tac-dialog${wide ? " is-wide" : ""}${mobileSheet ? " tac-mobile-sheet" : ""}`}
       aria-labelledby={id}
       onCancel={(event) => {
         event.preventDefault();

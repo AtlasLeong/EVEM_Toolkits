@@ -38,6 +38,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
         self.closing = False
         self.poll_task = None
         self.auth_task = None
+        self.expiry_task = None
         self.last_fingerprint = None
         self.received_at = deque()
         self.io_lock = asyncio.Lock()
@@ -58,6 +59,14 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
         await asyncio.sleep(getattr(settings, 'TACTICAL_AUTH_SECONDS', 5))
         if not self.admitted:
             await self.shutdown(4401)
+
+    async def expiry_watch(self):
+        try:
+            await asyncio.sleep(max(0, self.expires_at - time.time()))
+            if not self.closing:
+                await self.shutdown(4401)
+        except asyncio.CancelledError:
+            return
 
     async def receive(self, text_data=None, bytes_data=None, **kwargs):
         if self.closing:
@@ -101,6 +110,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                         return
                     if self.auth_task:
                         self.auth_task.cancel()
+                    self.expiry_task = asyncio.create_task(self.expiry_watch())
                     await self.publish_state()
                 except APIException as error:
                     await self.shutdown(4409 if error.status_code in (409, 429) else 4403)
@@ -132,6 +142,9 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
         if time.time() >= self.expires_at:
             await self.shutdown(4401)
             return
+        incoming_version = value.get('state_version')
+        if isinstance(incoming_version, int) and incoming_version >= 0:
+            self.state_version = max(getattr(self, 'state_version', 0), incoming_version)
         fingerprint = snapshot_fingerprint(value)
         if fingerprint != self.last_fingerprint:
             # Backpressure is bounded: no unbounded application-side send queue.
@@ -170,8 +183,14 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
             return
         if incoming is not None:
             self.state_version = incoming
-        async with self.io_lock:
-            await self.publish_state()
+        try:
+            async with self.io_lock:
+                await self.publish_state()
+        except APIException:
+            await self.shutdown(4403)
+        except Exception:
+            logger.exception('Tactical state event delivery failed')
+            await self.shutdown(1011)
 
     async def shutdown(self, code):
         if self.closing:
@@ -189,7 +208,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
         self.closing = True
         if getattr(self, 'channel_group', None):
             await self.channel_layer.group_discard(self.channel_group, self.channel_name)
-        for task in (self.auth_task, self.poll_task):
+        for task in (self.auth_task, self.poll_task, self.expiry_task):
             if task and task is not asyncio.current_task():
                 task.cancel()
                 try:

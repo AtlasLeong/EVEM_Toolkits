@@ -4,6 +4,8 @@ import {
   localDateTime,
   reportPayload,
   SHIP_TYPES,
+  FLEET_PRESETS,
+  isRetryableReportFailure,
 } from "../../utils/tacticalCollaboration";
 import {
   ShipComposition,
@@ -18,25 +20,40 @@ export default function TacticalReportForm({
   selectedSystem,
   kind = "report",
   side = "enemy",
+  forces = [],
+  selectedFleet = null,
+  initialMode = 'system_count',
   execute,
   onClose,
   onSuccess,
+  onQueue,
+  onRefresh,
 }) {
   const [location, setLocation] = useState(
     initial
       ? { id: initial.system_id, name: initial.system_name }
-      : selectedSystem,
+      : selectedFleet ? { id: selectedFleet.system_id, name: selectedFleet.system_name } : selectedSystem,
   );
   const [draft, setDraft] = useState({
-    name: initial?.name || "",
+    name: initial?.fleet_name || initial?.name || "",
     side: initial?.side || side,
-    people: initial?.people ?? "",
-    ships: initial?.ships || {},
+    people: initial?.people ?? selectedFleet?.people ?? "",
+    ships: initial?.ships || selectedFleet?.ships || {},
     notes: initial?.notes || "",
     observed_at: localDateTime(initial?.observed_at || new Date()),
   });
   const [error, setError] = useState("");
+  const [reportMode, setReportMode] = useState(selectedFleet ? 'existing' : initialMode);
+  // Pin the actual fleet/version reviewed by the reporter, not the latest poll.
+  const [target, setTarget] = useState(selectedFleet);
+  const [fleetQuery, setFleetQuery] = useState('');
+  const systemCount = kind === 'report' && (initial ? initial.report_kind === 'system_count' : reportMode === 'system_count');
+  const namedFleet = kind === 'report' && (initial ? initial.report_kind === 'fleet_intel' : !systemCount);
+  const candidates = forces.filter(item => item.side === 'enemy' && !item.archived &&
+    `${item.name} ${item.system_name}`.toLowerCase().includes(fleetQuery.trim().toLowerCase()));
   const [busy, setBusy] = useState(false);
+  const [conflict, setConflict] = useState(null);
+  const [queued, setQueued] = useState(false);
   const request = useRef(null);
   const set = (field, value) =>
     setDraft((current) => ({ ...current, [field]: value }));
@@ -54,9 +71,15 @@ export default function TacticalReportForm({
     event.preventDefault();
     setError("");
     setBusy(true);
+    let payload;
     try {
-      const content = reportPayload({ ...draft, system_id: location?.id });
-      const payload = {
+      const content = reportPayload({ ...draft, system_id: location?.id,
+        ...(kind === 'report' ? { report_kind: systemCount ? 'system_count' : namedFleet ? 'fleet_intel' : 'fleet' } : {}),
+        ...(namedFleet ? (!initial && reportMode === 'existing'
+          ? { force_id: target?.id ?? null, force_expected_version: target?.version }
+          : { fleet_name: draft.name }) : {}),
+      });
+      payload = {
         ...content,
         ...(kind === "force"
           ? { name: draft.name.trim(), side: draft.side }
@@ -74,11 +97,11 @@ export default function TacticalReportForm({
       // Preserve the id only for retries of the identical user command.
       if (request.current?.serialized !== serialized)
         request.current = { serialized, id: newRequestId() };
-      await execute(`${kind}.${initial ? "update" : "create"}`, payload, {
+      const result = await execute(`${kind}.${initial ? "update" : "create"}`, payload, {
         requestId: request.current.id,
       });
       onSuccess(
-        kind === "report"
+        namedFleet && result?.is_current === false ? '已保存至历史，未覆盖舰队当前估计' : kind === "report"
           ? initial
             ? "上报修订已提交"
             : "上报已提交"
@@ -86,22 +109,60 @@ export default function TacticalReportForm({
       );
       onClose();
     } catch (failure) {
-      setError(failure.message);
+      if (Number(failure?.status) === 409) {
+        setConflict({ message: failure.message || "服务器版本已变化，请重新核对。" });
+        setError("");
+      } else if (kind === "report" && !initial && isRetryableReportFailure(failure) && onQueue) {
+        try {
+          const entry = onQueue({ action: "report.create", payload, requestId: request.current?.id });
+          if (entry) {
+            setQueued(true);
+            setError("网络暂时不可用，已保存到本机待发送草稿。恢复连接后可手动重试。");
+          } else {
+            setError(failure.message);
+          }
+        } catch (queueFailure) {
+          setError(queueFailure.message || failure.message);
+        }
+      } else {
+        setError(failure.message);
+      }
     } finally {
       setBusy(false);
     }
   };
   return (
-    <TacticalDialog title={title} onClose={onClose}>
+    <TacticalDialog title={title} onClose={onClose} mobileSheet>
       <form className="tac-form" onSubmit={submit}>
+        {kind === 'report' && !initial && <div className="tac-report-modes" role="group" aria-label="上报方式">
+          {[['system_count','人数上报'],['new','新增舰队'],['existing','更新已有舰队']].map(([value,label]) =>
+            <button type="button" key={value} aria-pressed={reportMode === value} onClick={() => { setReportMode(value); setError(''); }}>{label}</button>)}
+        </div>}
         <p className="tac-muted">
-          人数与舰船数分别填写。留空表示未知，填写 0 表示确认没有。
+          {systemCount ? '只知道人数也可以上报，无需判断舰队。填写当前星系敌方总人数，不与已标注舰队重复相加。' : namedFleet ? '确认是独立舰队时再填写名称。再次发现同一支舰队，请更新已有舰队。' : '人数与舰船数分别填写。'} 留空表示未知，填写 0 表示确认没有。
         </p>
-        {initial && kind === "report" && initial.status !== "pending" && (
+        {initial && kind === "report" && !namedFleet && !systemCount && initial.status !== "pending" && (
           <p className="tac-notice">
             此上报已被指挥采用，修订不会直接覆盖已确认的部署，指挥需重新核对。
           </p>
         )}
+        {namedFleet && initial && <p className="tac-muted">修订自己的观察记录，不改变舰队当前部署位置；历史记录不会覆盖更新的上报记录。</p>}
+        {namedFleet && (initial || reportMode === 'new') && <div className="tac-field">
+          <label className="tac-field"><span>舰队名称</span><input required maxLength={80} value={draft.name} placeholder="例如：大航队、远炮战列队，也可自定义" onChange={event => set('name', event.target.value)} /></label>
+          <div className="tac-fleet-presets" role="group" aria-label="常用舰队名称">{FLEET_PRESETS.map(name => <button type="button" key={name} aria-pressed={draft.name === name} onClick={() => set('name', name)}>{name}</button>)}</div>
+        </div>}
+        {namedFleet && !initial && reportMode === 'existing' && <div className="tac-existing-fleet">
+          <label className="tac-field"><span>查找已有舰队</span><input value={fleetQuery} onChange={event => setFleetQuery(event.target.value)} placeholder="按舰队名称或星系搜索" /></label>
+          <div className="tac-fleet-options" role="group" aria-label="选择已有敌方舰队">
+            {candidates.slice(0, 30).map(item => <button type="button" key={item.id} aria-pressed={target?.id === item.id} onClick={() => {
+              setTarget({...item}); setLocation({id:item.system_id,name:item.system_name});
+              setDraft(current => ({...current,people:item.people ?? '',ships:{...item.ships}}));
+            }}><span>{item.name}<small>{item.system_name} · #{item.id}</small></span><span>{item.people ?? '未知'}{item.people == null ? '' : '人'}</span></button>)}
+            {!candidates.length && <p className="tac-muted">没有匹配的敌方舰队，可切换至「新增舰队」。</p>}
+            {candidates.length > 30 && <p className="tac-muted">匹配较多，请输入更完整的名称。</p>}
+          </div>
+          {target && <p className="tac-fleet-selection">已选：{target.name} · #{target.id} · 版本 {target.version}<small>这会新增你的观察记录。较早的观察仅保留历史，不覆盖当前估计。</small></p>}
+        </div>}
         {kind === "force" && (
           <div className="tac-form-grid">
             <label className="tac-field">
@@ -154,13 +215,16 @@ export default function TacticalReportForm({
             <span>观察时间</span>
             <input
               type="datetime-local"
+              step="1"
               required
               value={draft.observed_at}
               onChange={(event) => set("observed_at", event.target.value)}
             />
           </label>
         </div>
-        <fieldset className="tac-field">
+        <details className="tac-report-optional" open={(!systemCount && !namedFleet) || undefined}>
+          <summary>{systemCount ? '备注' : '舰船构成与备注'} <small>选填</small></summary>
+        {!systemCount && <fieldset className="tac-field">
           <legend>
             舰船构成 <small>仅填写已确认的数量</small>
           </legend>
@@ -183,9 +247,9 @@ export default function TacticalReportForm({
               </label>
             ))}
           </div>
-        </fieldset>
+        </fieldset>}
         <label className="tac-field">
-          <span>情报备注</span>
+          <span>上报记录备注</span>
           <textarea
             maxLength={1000}
             rows={3}
@@ -194,7 +258,17 @@ export default function TacticalReportForm({
             onChange={(event) => set("notes", event.target.value)}
           />
         </label>
-        {error && (
+        </details>
+        {conflict && <div className="tac-conflict" role="alert">
+          <strong>服务器版本已变化</strong>
+          <p>{conflict.message} 本地草稿不会自动覆盖服务器数据，请刷新后重新核对。</p>
+          <div className="tac-row-actions">
+            <button type="button" className="tac-btn is-small" onClick={() => { setConflict(null); onRefresh?.(); onClose?.(); }}>刷新服务器数据</button>
+            <button type="button" className="tac-btn is-small" onClick={() => setConflict(null)}>保留本地编辑</button>
+          </div>
+        </div>}
+        {queued && <p className="tac-notice" role="status">这条人数上报已进入本机待发送草稿，可在连接恢复后重试。</p>}
+        {error && !queued && (
           <p className="tac-error" role="alert">
             {error}
           </p>
@@ -232,7 +306,7 @@ export function ConfirmReport({ report, forces, execute, onClose, onSuccess }) {
     try {
       const force = target;
       if (report.status === "corrected" && !force)
-        throw new Error("修订情报须明确关联已有部队，不能重复建立部署。");
+        throw new Error("修订上报记录须明确关联已有部队，不能重复建立部署。");
       await execute("report.confirm", {
         report_id: report.id,
         expected_version: report.version,
@@ -241,7 +315,7 @@ export function ConfirmReport({ report, forces, execute, onClose, onSuccess }) {
           ? { force_id: force.id, force_expected_version: force.version }
           : {}),
       });
-      onSuccess("情报已确认");
+      onSuccess("上报记录已确认");
       onClose();
     } catch (failure) {
       setError(failure.message);

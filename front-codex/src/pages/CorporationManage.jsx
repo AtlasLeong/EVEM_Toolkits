@@ -433,7 +433,7 @@ function DraftEditor({ corporation, revision, refresh, reload, syncRevision }) {
     setForm((value) => ({ ...value, [e.target.name]: e.target.value }));
   const create = () =>
     action.run(async () => {
-      await createCorporationDraft(
+      const result = await createCorporationDraft(
         corporation.id,
         keyFor({
           id: corporation.id,
@@ -442,6 +442,8 @@ function DraftEditor({ corporation, revision, refresh, reload, syncRevision }) {
           status: current?.status,
         }),
       );
+      await syncRevision(result);
+      adoptRevision(result);
       await refresh();
     });
   const save = async () => {
@@ -1009,10 +1011,12 @@ function DraftEditor({ corporation, revision, refresh, reload, syncRevision }) {
                     disabled={editorBusy}
                     onClick={() =>
                       action.run(async () => {
-                        await withdrawCorporationDraft(
+                        const result = await withdrawCorporationDraft(
                           current.id,
                           current.version,
                         );
+                        await syncRevision(result);
+                        adoptRevision(result);
                         await refresh();
                       }, "已撤回，可以创建新草稿。")
                     }
@@ -1165,7 +1169,7 @@ function MediaField({
       )}
       <CommunityError
         error={action.error}
-        retry={request.current ? send : undefined}
+        retry={request.current && !disabled && !action.busy ? send : undefined}
       />
       {action.message && <small>{action.message}</small>}
       <small>PNG / JPG / WEBP · 最多 5 MiB</small>

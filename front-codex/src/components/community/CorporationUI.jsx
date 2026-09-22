@@ -93,6 +93,10 @@ export function ActivityTags({ values = [], custom = [], limit = Infinity }) {
   );
 }
 export function Pagination({ page, count, change }) {
+  const lastPage = Math.max(1, Math.ceil(count / 20));
+  useEffect(() => {
+    if (page > lastPage) change(lastPage);
+  }, [page, lastPage, change]);
   if (!(count > 20)) return null;
   return (
     <div className="corp-pagination">
@@ -105,7 +109,7 @@ export function Pagination({ page, count, change }) {
         上一页
       </button>
       <span>
-        第 {page} / {Math.ceil(count / 20)} 页
+        第 {page} / {lastPage} 页
       </span>
       <button
         type="button"

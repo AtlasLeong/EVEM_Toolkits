@@ -90,6 +90,15 @@ test("分享军团复制干净链接，失败时提供可选择的地址", async
   await expect(page.getByText(/自动复制未成功/)).toBeVisible();
 });
 
+test("军团详情提供关联见闻入口", async ({ page }) => {
+  await communityFixture(page);
+  await page.goto("/corporations/1");
+  await expect(page.getByRole("link", { name: "查看关联见闻", exact: true })).toHaveAttribute(
+    "href",
+    "/starsea?corporation_id=1",
+  );
+});
+
 test("海报以独立弹窗打开，不挤压详情且关闭后恢复焦点", async ({ page }) => {
   await communityFixture(page);
   await page.goto("/corporations/1");

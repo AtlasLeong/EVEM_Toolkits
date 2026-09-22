@@ -2,7 +2,8 @@ import { motion } from 'framer-motion'
 import { CheckCircle2, CircleAlert, Mail, RotateCcw, ShieldCheck, UserRound } from 'lucide-react'
 import { useContext, useEffect, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { loginDestination } from '../utils/loginDestination'
 import {
   emailVerification,
   forgetEmaillCheck,
@@ -133,6 +134,7 @@ function AuthMessage({ message, tone = 'error' }) {
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const destination = loginDestination(useLocation().search)
   const { isAuthenticated, login: loginAction } = useContext(AuthContext)
   const [mode, setMode] = useState('login')
   const [notice, setNotice] = useState('')
@@ -184,7 +186,7 @@ export default function LoginPage() {
       localStorage.setItem('access_token', data.access)
       localStorage.setItem('refresh_token', data.refresh)
       loginAction()
-      navigate('/fraudlist')
+      navigate(destination)
     },
     onError: (error) => {
       setLoginError(normalizeAuthMessage(error.message, '登录失败，请检查邮箱和密码'))
@@ -227,7 +229,7 @@ export default function LoginPage() {
   })
 
   if (isAuthenticated) {
-    return <Navigate replace to="/fraudlist" />
+    return <Navigate replace to={destination} />
   }
 
   const switchMode = (nextMode) => {

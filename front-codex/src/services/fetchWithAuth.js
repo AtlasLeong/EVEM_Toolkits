@@ -86,11 +86,12 @@ export function hasActiveSession() {
   return Boolean(refreshToken && !isTokenExpired(refreshToken));
 }
 
-export const refreshAccessToken = async (refreshToken) => {
+export const refreshAccessToken = async (refreshToken, signal) => {
   const response = await fetch(`${API_URL}/user/token/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh: refreshToken }),
+    signal,
   });
 
   if (!response.ok) return null;
@@ -107,7 +108,7 @@ function expireSession(session) {
   Object.assign(session, captureSession());
 }
 
-async function ensureFreshAccessToken(session, forceRefresh = false) {
+async function ensureFreshAccessToken(session, forceRefresh = false, signal) {
   assertSession(session);
   const accessToken = safeStorageGet("access_token");
   if (!forceRefresh && accessToken && !isTokenExpired(accessToken)) {
@@ -122,7 +123,7 @@ async function ensureFreshAccessToken(session, forceRefresh = false) {
 
   if (!refreshFlight || refreshFlight.generation !== session.generation) {
     const flight = { generation: session.generation, promise: null };
-    flight.promise = refreshAccessToken(refreshToken).finally(() => {
+    flight.promise = refreshAccessToken(refreshToken, signal).finally(() => {
       // An old completion must not release a newer account's single-flight lock.
       if (refreshFlight === flight) refreshFlight = null;
     });
@@ -161,13 +162,14 @@ function buildHeaders(options, accessToken) {
 
 const fetchWithAuth = async (url, options = {}) => {
   const session = captureSession();
-  let accessToken = await ensureFreshAccessToken(session, false);
+  let accessToken = await ensureFreshAccessToken(session, false, options.signal);
   assertSession(session);
   const hadAuthHeader = Boolean(accessToken);
 
   let response = await fetch(url, {
     ...options,
     headers: buildHeaders(options, accessToken),
+    signal: options.signal,
   });
   assertSession(session);
 
@@ -175,7 +177,7 @@ const fetchWithAuth = async (url, options = {}) => {
     return response;
   }
 
-  accessToken = await ensureFreshAccessToken(session, true);
+  accessToken = await ensureFreshAccessToken(session, true, options.signal);
   assertSession(session);
   if (!accessToken) {
     return response;
@@ -184,6 +186,7 @@ const fetchWithAuth = async (url, options = {}) => {
   response = await fetch(url, {
     ...options,
     headers: buildHeaders(options, accessToken),
+    signal: options.signal,
   });
   assertSession(session);
 

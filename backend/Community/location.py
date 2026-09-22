@@ -3,6 +3,8 @@ import math
 
 from rest_framework.exceptions import ValidationError
 
+from .activity import is_unicode_text
+
 
 LOCATION_IDS = ('region_id', 'constellation_id', 'solarsystem_id')
 LOCATION_NAMES = ('region_name', 'constellation_name', 'solarsystem_name')
@@ -10,7 +12,7 @@ LOCATION_SECURITIES = ('region_security', 'constellation_security', 'solarsystem
 
 
 def valid_id(value):
-    return isinstance(value, str) and 0 < len(value) <= 255 and value == value.strip()
+    return is_unicode_text(value) and 0 < len(value) <= 255 and value == value.strip()
 
 
 def location_error(message):

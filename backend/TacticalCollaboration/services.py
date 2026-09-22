@@ -26,6 +26,13 @@ def _publish_state_event(organization_id, state_version):
     publish_state_event(organization_id, state_version)
 
 
+def _advance_state(org):
+    org.state_version += 1
+    org.save(update_fields=['state_version'])
+    transaction.on_commit(lambda: _publish_state_event(org.pk, org.state_version))
+    return org.state_version
+
+
 class Conflict(APIException):
     status_code = 409
     default_detail = '状态已变化，请刷新后重试。'
@@ -237,12 +244,10 @@ def command(user, organization_id, data):
     if cached:
         return cached.result
     rate_limit(user, scope)
-    result = tactical_command(user, org, data) if tactical else admin_command(user, org, actor, data)
-    org.state_version += 1
-    org.save(update_fields=['state_version'])
+    result = tactical_command(user, org, data, actor) if tactical else admin_command(user, org, actor, data)
+    _advance_state(org)
     result = {**result, 'state_version': org.state_version}
     remembered = remember(user, scope, data, result, org)
-    transaction.on_commit(lambda: _publish_state_event(org.pk, org.state_version))
     return remembered
 
 
@@ -414,7 +419,7 @@ def revise(report):
     return ReportRevision.objects.create(report=report, version=report.version, content=entity_data(report))
 
 
-def tactical_command(user, org, data):
+def tactical_command(user, org, data, actor=None):
     action = data['action']
     if action.startswith('report.'):
         if action == 'report.create':
@@ -423,22 +428,34 @@ def tactical_command(user, org, data):
             report_kind = data.get('report_kind', 'fleet')
             if report_kind not in ('fleet', 'system_count', 'fleet_intel'):
                 bad('上报类型无效。')
-            if (Membership.objects.filter(organization=org, user=user, status='active')
-                    .values_list('role', flat=True).first() == 'scout' and report_kind != 'system_count'):
+            is_scout = (actor.role if actor is not None else
+                        Membership.objects.filter(organization=org, user=user, status='active')
+                        .values_list('role', flat=True).first()) == 'scout'
+            if is_scout and report_kind != 'system_count':
                 raise PermissionDenied('斥候只能提交星系人数情报。')
             if report_kind == 'fleet_intel':
                 return create_fleet_observation(user, org, data, content(data))
+            values = content(data)
+            if is_scout and any(value is not None for value in values['ships'].values()):
+                raise PermissionDenied('斥候只能提交人数，不能填写舰船详情。')
             if any(key in data for key in ('fleet_name', 'force_id', 'force_expected_version')):
                 bad('只有具名舰队上报可以指定舰队名称或关联部署。')
-            report = Report.objects.create(organization=org, author=user, report_kind=report_kind, **content(data))
+            report = Report.objects.create(organization=org, author=user, report_kind=report_kind, **values)
             revise(report)
             return entity_data(report)
         report = org_object(Report, org, data['report_id'])
         expect_version(report, data['expected_version'])
         if action == 'report.update':
+            is_scout = (actor.role if actor is not None else
+                        Membership.objects.filter(organization=org, user=user, status='active')
+                        .values_list('role', flat=True).first()) == 'scout'
+            if is_scout and report.report_kind != 'system_count':
+                raise PermissionDenied('斥候只能修改自己上报的星系人数。')
             if data.get('report_kind', report.report_kind) != report.report_kind:
                 bad('不能更改上报类型，请另建记录。')
             values = content(data)
+            if is_scout and any(value is not None for value in values['ships'].values()):
+                raise PermissionDenied('斥候只能修改人数，不能填写舰船详情。')
             if report.report_kind == 'fleet_intel':
                 update_fleet_observation(report, values, data)
             elif 'fleet_name' in data:
@@ -598,6 +615,7 @@ def admit(user, organization_id, connection_id):
     org = locked_org(organization_id)
     membership(user, org)
     now = timezone.now()
+    presence_changed = False
     existing = ConnectionLease.objects.filter(connection_id=connection_id).first()
     if existing and (existing.user_id != user.pk or existing.organization_id != org.pk):
         raise Conflict('连接标识已被使用。')
@@ -611,18 +629,24 @@ def admit(user, organization_id, connection_id):
     # Avoid write amplification from repeated browser/transport renewals.
     if not existing:
         ConnectionLease.objects.create(organization=org, user=user, connection_id=connection_id, expires_at=now + timedelta(seconds=60))
+        presence_changed = True
     elif existing.last_seen_at <= now - timedelta(seconds=5) or existing.expires_at <= now:
         existing.last_seen_at, existing.expires_at = now, now + timedelta(seconds=60)
         existing.save(update_fields=['last_seen_at', 'expires_at'])
     # Expired rows are disposable presence state, not intelligence history.
-    ConnectionLease.objects.filter(organization=org, expires_at__lte=now).exclude(connection_id=connection_id).delete()
+    removed, _ = ConnectionLease.objects.filter(organization=org, expires_at__lte=now).exclude(connection_id=connection_id).delete()
+    presence_changed = presence_changed or bool(removed)
+    if presence_changed:
+        _advance_state(org)
     return {'connection_id': str(connection_id), 'lease_seconds': 60, **presence_data(org)}
 
 
 @transaction.atomic
 def leave(user, organization_id, connection_id):
     org = locked_org(organization_id)
-    ConnectionLease.objects.filter(organization=org, user=user, connection_id=uuid(connection_id)).delete()
+    removed, _ = ConnectionLease.objects.filter(organization=org, user=user, connection_id=uuid(connection_id)).delete()
+    if removed:
+        _advance_state(org)
     return {'ok': True}
 
 

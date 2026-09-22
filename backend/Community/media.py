@@ -1,12 +1,12 @@
 import hashlib
 import warnings
 from io import BytesIO
-from pathlib import Path
 
-from django.conf import settings
 from django.core.files.storage import FileSystemStorage
 from PIL import Image, ImageOps, UnidentifiedImageError
 from rest_framework.exceptions import APIException, ValidationError
+
+from .preflight import PreflightError, check_storage_configuration
 
 MAX_BYTES = 5 * 1024 * 1024
 MAX_PIXELS = 20_000_000
@@ -18,18 +18,13 @@ class StorageUnavailable(APIException):
 
 
 def private_storage():
-    root = getattr(settings, 'COMMUNITY_UPLOAD_ROOT', None)
-    if not root or not Path(root).is_absolute():
-        raise StorageUnavailable()
-    resolved = Path(root).resolve()
-    # Never fall back to public uploads or permit a known public root.
-    public_roots = [getattr(settings, 'MEDIA_ROOT', None), getattr(settings, 'STATIC_ROOT', None)]
-    public_roots.extend(getattr(settings, 'STATICFILES_DIRS', []))
-    for public in public_roots:
-        if public and (resolved == Path(public).resolve() or Path(public).resolve() in resolved.parents):
-            raise StorageUnavailable()
-    if any(part.lower() in ('static', 'uploads') for part in resolved.parts):
-        raise StorageUnavailable()
+    # Apply the same read-only gate during media access as during release checks.
+    # Otherwise a later configuration change could bypass the private/persistent
+    # root policy, or a valid prefixed STATICFILES_DIRS entry could break uploads.
+    try:
+        resolved = check_storage_configuration()
+    except (PreflightError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise StorageUnavailable() from exc
     return FileSystemStorage(location=resolved, base_url=None, file_permissions_mode=0o600, directory_permissions_mode=0o700)
 
 
