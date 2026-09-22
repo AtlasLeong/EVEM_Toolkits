@@ -74,8 +74,12 @@ class ShipCatalogTests(CatalogImportMixin, SimpleTestCase):
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / 'echoes.db'
         digest = create_ship_fixture(self.path)
-        self.enterContext(patch.object(self.catalog, 'PINNED_SHA256', digest))
-        self.enterContext(override_settings(STARSEA_SHIP_DB=str(self.path)))
+        digest_patch = patch.object(self.catalog, 'PINNED_SHA256', digest)
+        digest_patch.start()
+        self.addCleanup(digest_patch.stop)
+        settings_patch = override_settings(STARSEA_SHIP_DB=str(self.path))
+        settings_patch.enable()
+        self.addCleanup(settings_patch.disable)
         self.catalog._load_catalog.cache_clear()
         self.addCleanup(self.catalog._load_catalog.cache_clear)
 
