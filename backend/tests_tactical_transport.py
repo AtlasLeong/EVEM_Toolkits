@@ -70,7 +70,7 @@ class TacticalTransportTests(SimpleTestCase):
             snapshot.assert_not_called()
             await self.finish(client)
 
-    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_POLL_SECONDS=0.02)
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
     async def test_permission_revocation_closes_live_channel(self):
         from rest_framework.exceptions import PermissionDenied
         from TacticalCollaboration.realtime import TacticalConsumer
@@ -84,9 +84,29 @@ class TacticalTransportTests(SimpleTestCase):
                 'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
             })})
             await client.receive_output()
+            consumer = client.application_instance
+            await consumer.tactical_state_event({'state_version': 2})
             closed = await client.receive_output(timeout=2)
             self.assertEqual(closed['type'], 'websocket.close')
             self.assertEqual(closed['code'], 4403)
+            await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
+    async def test_admitted_socket_uses_group_events_without_poll_task(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
+             patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
+             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(return_value={'forces': []})), \
+             patch.object(TacticalConsumer, 'leave', new=AsyncMock()), \
+             patch.object(TacticalConsumer, 'group_add', new=AsyncMock()) as group_add:
+            client = await self.connect()
+            await client.receive_output()
+            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
+                'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
+            })})
+            await client.receive_output()
+            group_add.assert_awaited_once()
+            self.assertIsNone(client.application_instance.poll_task)
             await self.finish(client)
 
     @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_AUTH_SECONDS=0.02)

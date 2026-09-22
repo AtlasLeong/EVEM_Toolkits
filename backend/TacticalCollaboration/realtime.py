@@ -109,7 +109,8 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                     logger.exception('Tactical channel admission failed')
                     await self.shutdown(1011)
                     return
-                self.poll_task = asyncio.create_task(self.poll())
+                self.channel_group = f'tactical-org-{self.organization_id}'
+                await self.channel_layer.group_add(self.channel_group, self.channel_name)
             elif content.get('type') == 'ping':
                 if time.time() >= self.expires_at:
                     await self.shutdown(4401)
@@ -160,10 +161,24 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
             logger.exception('Tactical state delivery failed')
             await self.shutdown(1011)
 
+    async def tactical_state_event(self, event):
+        if self.closing or not self.admitted:
+            return
+        incoming = event.get('state_version')
+        current = getattr(self, 'state_version', 0)
+        if incoming is not None and not (incoming > current):
+            return
+        if incoming is not None:
+            self.state_version = incoming
+        async with self.io_lock:
+            await self.publish_state()
+
     async def shutdown(self, code):
         if self.closing:
             return
         self.closing = True
+        if getattr(self, 'channel_group', None):
+            await self.channel_layer.group_discard(self.channel_group, self.channel_name)
         try:
             await self.close(code=code)
         except (OSError, RuntimeError) as error:
@@ -172,6 +187,8 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
 
     async def disconnect(self, close_code):
         self.closing = True
+        if getattr(self, 'channel_group', None):
+            await self.channel_layer.group_discard(self.channel_group, self.channel_name)
         for task in (self.auth_task, self.poll_task):
             if task and task is not asyncio.current_task():
                 task.cancel()
