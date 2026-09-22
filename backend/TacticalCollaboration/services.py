@@ -21,6 +21,11 @@ from .models import (AuditLog, CommandReceipt, ConnectionLease, Force, ForceSour
                      JoinApplication, Membership, Organization, Report, ReportRevision)
 
 
+def _publish_state_event(organization_id, state_version):
+    from .events import publish_state_event
+    publish_state_event(organization_id, state_version)
+
+
 class Conflict(APIException):
     status_code = 409
     default_detail = '状态已变化，请刷新后重试。'
@@ -198,7 +203,9 @@ TACTICAL_FIELDS = {
     'force.archive': ('force_id', 'expected_version'),
     'scope.update': ('expected_version', 'region_ids', 'border_hops'),
 }
-OPTIONAL_FIELDS = {'report.confirm': ('force_id', 'force_expected_version'), 'force.move': ('reason',)}
+OPTIONAL_FIELDS = {'report.create': ('report_kind', 'fleet_name', 'force_id', 'force_expected_version'),
+                   'report.update': ('report_kind', 'fleet_name'),
+                   'report.confirm': ('force_id', 'force_expected_version'), 'force.move': ('reason',)}
 SHIP_KEYS = {'cruiser', 'battleship', 'light_carrier', 'assault_carrier', 'dreadnought', 'heavy_carrier', 'titan', 'other'}
 
 
@@ -231,7 +238,12 @@ def command(user, organization_id, data):
         return cached.result
     rate_limit(user, scope)
     result = tactical_command(user, org, data) if tactical else admin_command(user, org, actor, data)
-    return remember(user, scope, data, result, org)
+    org.state_version += 1
+    org.save(update_fields=['state_version'])
+    result = {**result, 'state_version': org.state_version}
+    remembered = remember(user, scope, data, result, org)
+    transaction.on_commit(lambda: _publish_state_event(org.pk, org.state_version))
+    return remembered
 
 
 def admin_command(user, org, actor, data):
@@ -327,10 +339,73 @@ def entity_data(row):
     result = {key: getattr(row, key) for key in ('id', 'version', 'system_id', 'system_name', 'people', 'ships', 'notes')}
     result.update(observed_at=row.observed_at.isoformat(), updated_at=row.updated_at.isoformat())
     if isinstance(row, Force):
-        result.update(name=row.name, side=row.side)
+        source = row.source_report
+        result.update(name=row.name, side=row.side, source_report_id=row.source_report_id,
+                      source_author_id=source.author_id if source else None,
+                      source_author_name=display_name(source.author) if source else None)
     else:
-        result.update(author_id=row.author_id, author_name=display_name(row.author), status=row.status)
+        result.update(author_id=row.author_id, author_name=display_name(row.author), status=row.status, report_kind=row.report_kind)
+        if row.report_kind == 'fleet_intel':
+            result.update(fleet_name=row.fleet_name, force_id=row.linked_force_id,
+                          is_current=is_current_fleet_source(row))
     return result
+
+
+def is_current_fleet_source(report):
+    force = report.linked_force
+    return bool(force and not force.archived and force.side == 'enemy' and force.source_report_id == report.pk)
+
+
+def create_fleet_observation(user, org, data, values):
+    """Stable fleet identity is selected explicitly, never guessed by name."""
+    if 'force_id' in data:
+        if 'force_expected_version' not in data or 'fleet_name' in data:
+            bad('更新已有舰队需要部署标识与版本，不能同时新建舰队。')
+        force = org_object(Force, org, data['force_id'])
+        # Do not disclose a guessed friendly force version through conflicts.
+        if force.side != 'enemy':
+            raise NotFound('敌方舰队不存在。')
+        if force.archived:
+            raise Conflict('此部署已归档，不能继续关联或修改。')
+        expect_version(force, data['force_expected_version'])
+        name = force.name
+        is_new = False
+    else:
+        if 'force_expected_version' in data or 'fleet_name' not in data:
+            bad('新建舰队需要舰队名称；更新已有舰队需要部署标识与版本。')
+        name = text(data['fleet_name'], 80)
+        if Force.objects.filter(organization=org, archived=False).count() >= 1000:
+            bad('此战术板部署数量已达上限。')
+        force = Force.objects.create(organization=org, name=name, side='enemy', **values)
+        is_new = True
+    report = Report.objects.create(organization=org, author=user, report_kind='fleet_intel',
+                                   fleet_name=name, linked_force=force, **values)
+    # Observation time, not receipt time, controls the estimate. Equal-time
+    # submissions deterministically prefer the new (higher-ID) observation.
+    if is_new or report.observed_at >= force.observed_at:
+        for key, value in values.items():
+            setattr(force, key, value)
+        force.source_report = report
+        if not is_new:
+            force.version += 1
+        force.save()
+    revise(report)
+    return entity_data(report)
+
+
+def update_fleet_observation(report, values, data):
+    if 'fleet_name' in data:
+        report.fleet_name = text(data['fleet_name'], 80)
+    if is_current_fleet_source(report):
+        force = report.linked_force
+        if values['observed_at'] < force.observed_at:
+            bad('更早的观察请通过更新已有舰队新增记录；修订不能倒退当前估计时间。')
+        # A correction to an observation must never undo a commander's move.
+        for key in ('people', 'ships', 'notes', 'observed_at'):
+            setattr(force, key, values[key])
+        force.name = report.fleet_name
+        force.version += 1
+        force.save()
 
 
 def revise(report):
@@ -345,13 +420,30 @@ def tactical_command(user, org, data):
         if action == 'report.create':
             if Report.objects.filter(organization=org).count() >= 5000:
                 bad('此战术板上报数量已达上限。')
-            report = Report.objects.create(organization=org, author=user, **content(data))
+            report_kind = data.get('report_kind', 'fleet')
+            if report_kind not in ('fleet', 'system_count', 'fleet_intel'):
+                bad('上报类型无效。')
+            if (Membership.objects.filter(organization=org, user=user, status='active')
+                    .values_list('role', flat=True).first() == 'scout' and report_kind != 'system_count'):
+                raise PermissionDenied('斥候只能提交星系人数情报。')
+            if report_kind == 'fleet_intel':
+                return create_fleet_observation(user, org, data, content(data))
+            if any(key in data for key in ('fleet_name', 'force_id', 'force_expected_version')):
+                bad('只有具名舰队上报可以指定舰队名称或关联部署。')
+            report = Report.objects.create(organization=org, author=user, report_kind=report_kind, **content(data))
             revise(report)
             return entity_data(report)
         report = org_object(Report, org, data['report_id'])
         expect_version(report, data['expected_version'])
         if action == 'report.update':
-            for key, value in content(data).items():
+            if data.get('report_kind', report.report_kind) != report.report_kind:
+                bad('不能更改上报类型，请另建记录。')
+            values = content(data)
+            if report.report_kind == 'fleet_intel':
+                update_fleet_observation(report, values, data)
+            elif 'fleet_name' in data:
+                bad('只有具名舰队上报可以指定舰队名称。')
+            for key, value in values.items():
                 setattr(report, key, value)
             report.version += 1
             if ForceSource.objects.filter(revision__report=report).exists():
@@ -359,6 +451,8 @@ def tactical_command(user, org, data):
             report.save()
             revise(report)
             return entity_data(report)
+        if report.report_kind in ('system_count', 'fleet_intel'):
+            bad('此情报已直接上图，不能重复建立部署。')
         revision = ReportRevision.objects.get(report=report, version=report.version)
         if ForceSource.objects.filter(revision=revision).exists():
             raise Conflict('此版本情报已确认，不能重复生成部署。')
@@ -376,6 +470,7 @@ def tactical_command(user, org, data):
             for key, value in values.items():
                 setattr(force, key, value)
             force.name = name
+            force.source_report = None
             force.version += 1
             force.save()
         else:
@@ -429,6 +524,7 @@ def tactical_command(user, org, data):
                 force = Force.objects.create(organization=org, name=name, side=data['side'], **values)
                 return entity_data(force)
             force.name, force.side = name, data['side']
+            force.source_report = None
             for key, value in values.items():
                 setattr(force, key, value)
         force.version += 1
@@ -462,7 +558,12 @@ def presence_data(org, include_roster=False):
     leases = active_leases(org)
     result = {'online_count': leases.values('user_id').distinct().count(), 'capacity': 100}
     if include_roster:
-        roles = dict(Membership.objects.filter(organization=org, status='active').values_list('user_id', 'role'))
+        member_rows = list(Membership.objects.filter(organization=org, status='active')
+                           .values_list('user_id', 'role', 'user__is_active'))
+        # Keep roles for disabled accounts too: a global account reactivation
+        # between these reads must not make the subsequent lease lookup fail.
+        roles = {user_id: role for user_id, role, _ in member_rows}
+        result['member_count'] = sum(1 for _, _, enabled in member_rows if enabled)
         roster = {}
         for lease in leases.select_related('user').order_by('joined_at', 'id'):
             if lease.user_id not in roster:
@@ -525,21 +626,32 @@ def leave(user, organization_id, connection_id):
     return {'ok': True}
 
 
-@transaction.atomic
-def snapshot(user, organization_id, connection_id):
-    org = locked_org(organization_id)
+def snapshot(user, organization_id, connection_id, *, socket_generation=None):
+    # Import locally because graph's authorized HTTP wrapper uses our access
+    # helpers. The shared cache contains static geometry, never this snapshot.
+    from .graph import static_projection
+    org = Organization.objects.get(pk=organization_id)
     member = membership(user, org)
-    require_lease(user, org, connection_id)
+    if socket_generation is None:
+        require_lease(user, org, connection_id)
+    else:
+        # One current authorization/organization lock per poll. The socket
+        # check already validates this same lease, plus its sole generation.
+        require_socket(user, org, connection_id, socket_generation)
     commanding = member.role in ('founder', 'commander')
-    forces = Force.objects.filter(organization=org, archived=False)
-    reports = Report.objects.filter(organization=org).select_related('author')
+    forces = Force.objects.filter(organization=org, archived=False).select_related('source_report__author')
+    reports = Report.objects.filter(organization=org).select_related('author', 'linked_force')
     if not commanding:
         forces = forces.filter(side='enemy')
-        reports = reports.filter(author=user)
+    drawable = {row['system_id'] for row in static_projection(org.region_ids, org.border_hops)['systems']}
+    # Reports are enemy observations shared across the organization, including
+    # pending/corrected reports. Reading does not grant author-only edit rights.
+    # Keep their projection independent of private ForceSource/audit metadata.
     return {'organization': {'id': org.pk, 'name': org.name}, 'role': member.role, 'user_id': user.pk,
-            'permission_version': member.permission_version, 'scope': scope_data(org),
-            'forces': [entity_data(force) for force in forces.order_by('id')],
-            'reports': [entity_data(report) for report in reports.order_by('id')],
+            'permission_version': member.permission_version, 'state_version': org.state_version,
+            'scope': scope_data(org),
+            'forces': [{**entity_data(force), 'in_scope': force.system_id in drawable} for force in forces.order_by('id')],
+            'reports': [{**entity_data(report), 'in_scope': report.system_id in drawable} for report in reports.order_by('id')],
             **presence_data(org, include_roster=commanding), 'server_time': timezone.now().isoformat()}
 
 
@@ -578,12 +690,8 @@ def claim_socket(user, organization_id, connection_id, generation):
     return result
 
 
-@transaction.atomic
 def socket_snapshot(user, organization_id, connection_id, generation):
-    org = locked_org(organization_id)
-    membership(user, org)
-    require_socket(user, org, connection_id, generation)
-    return snapshot(user, organization_id, connection_id)
+    return snapshot(user, organization_id, connection_id, socket_generation=uuid(generation))
 
 
 @transaction.atomic

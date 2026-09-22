@@ -9,6 +9,7 @@ class Organization(models.Model):
     region_ids = models.JSONField(default=list)
     border_hops = models.PositiveSmallIntegerField(default=0)
     scope_version = models.PositiveIntegerField(default=1)
+    state_version = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -70,6 +71,10 @@ class AuditLog(models.Model):
 class Report(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    # A system total is an observation of a place, not a movable fleet.
+    report_kind = models.CharField(max_length=16, default='fleet', choices=[('fleet', 'Fleet'), ('system_count', 'System enemy count'), ('fleet_intel', 'Named fleet observation')])
+    fleet_name = models.CharField(max_length=80, blank=True, default='')
+    linked_force = models.ForeignKey('Force', on_delete=models.PROTECT, related_name='observations', null=True)
     version = models.PositiveIntegerField(default=1)
     system_id = models.PositiveIntegerField()
     system_name = models.CharField(max_length=255)
@@ -97,6 +102,9 @@ class ReportRevision(models.Model):
 
 class Force(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
+    # Only this source may project later author revisions into the estimate.
+    # Manual commander edits clear it; a position-only move preserves it.
+    source_report = models.ForeignKey(Report, on_delete=models.PROTECT, related_name='+', null=True)
     version = models.PositiveIntegerField(default=1)
     name = models.CharField(max_length=80)
     side = models.CharField(max_length=8)
