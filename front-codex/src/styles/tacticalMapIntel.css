@@ -10,6 +10,12 @@
 }
 .tac-map.tac-system-intel-map .tac-intel-toolbar .tac-map-mode-switch { width: auto; flex-wrap: nowrap; }
 .tac-system-intel-map .tac-intel-toolbar .tac-map-mode-switch button { width: auto; padding: 0 9px; display: inline-flex; gap: 5px; }
+.tac-system-intel-map .tac-intel-toolbar .tac-map-mode-switch button[aria-pressed="true"] {
+  background: #48615d;
+  border-color: #a6c4b8;
+  color: #eff7ef;
+  box-shadow: 0 0 0 1px #a6c4b833;
+}
 .tac-system-intel-map .tac-intel-toolbar .tac-map-legend { margin: 0 4px; white-space: nowrap; flex-shrink: 0; }
 .tac-system-intel-map .tac-intel-toolbar > div:last-child { margin-left: 0; }
 .tac-system-intel-map .tac-intel-label { cursor: pointer; outline: none; }

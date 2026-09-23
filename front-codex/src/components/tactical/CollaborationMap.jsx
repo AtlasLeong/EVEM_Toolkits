@@ -415,7 +415,8 @@ export default function CollaborationMap({
           // Keep every real gate, but make the unselected topology a quiet
           // reference layer. Focused/hovered routes remain legible without
           // competing with deployment badges and system names.
-          const opacity=active ? .88 : Math.min(.42, .18 + view.scale * .12);
+          // Keep the topology legible at every zoom level without competing with markers.
+          const opacity=active ? .88 : Math.max(.3, Math.min(.5, .18 + view.scale * .12));
           return a&&b?<line key={gate.id||index} className={`tac-map-gate${active?' is-active':''}`} x1={a.px} y1={a.py} x2={b.px} y2={b.py} stroke={active?'#819591':'#46565c'} strokeWidth={(active?1.8:.65)/view.scale} opacity={opacity} pointerEvents="none"/>:null;
         })}
         {nodes.map(node=>{

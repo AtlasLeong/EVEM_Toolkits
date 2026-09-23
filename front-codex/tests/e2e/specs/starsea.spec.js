@@ -251,6 +251,47 @@ test("星海目录支持从军团页进入关联见闻", async ({ page }) => {
   await expect(page).toHaveURL(/\/starsea$/);
 });
 
+function parseRgb(value) {
+  const channels = value.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number);
+  if (!channels || channels.length !== 3) throw new Error(`无法解析颜色: ${value}`);
+  return channels.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+}
+
+function contrastRatio(foreground, background) {
+  const luminance = (color) =>
+    parseRgb(color).reduce(
+      (sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index],
+      0,
+    );
+  const light = Math.max(luminance(foreground), luminance(background));
+  const dark = Math.min(luminance(foreground), luminance(background));
+  return (light + 0.05) / (dark + 0.05);
+}
+
+test("星海筛选输入的提示文字和边界保持可读", async ({ page }) => {
+  await fixture(page, false);
+  await page.goto("/starsea");
+  const input = page.getByRole("textbox", { name: "搜索见闻", exact: true });
+  await expect(input).toBeVisible();
+  const metrics = await input.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      placeholderColor: getComputedStyle(element, "::placeholder").color,
+      placeholderOpacity: getComputedStyle(element, "::placeholder").opacity,
+      surfaceColor: style.backgroundColor,
+      borderColor: style.borderTopColor,
+    };
+  });
+  expect(metrics.placeholderOpacity).toBe("1");
+  expect(contrastRatio(metrics.placeholderColor, metrics.surfaceColor)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(metrics.borderColor, metrics.surfaceColor)).toBeGreaterThanOrEqual(3);
+});
+
 test("星海未保存内容拦截应用内离开，手机页面无横向溢出", async ({ page }) => {
   await fixture(page);
   await page.setViewportSize({ width: 390, height: 844 });

@@ -879,6 +879,32 @@ test("tactical map uses a compact feedback toast and a shared boundary dock", as
   await expect(notice).toBeHidden({ timeout: 4000 });
 });
 
+test("inactive map topology and view filters remain visually discoverable", async ({ page }) => {
+  await fixture(page, { role: "commander", overview: true });
+  await page.goto("/tactical");
+  const map = page.getByRole("group", { name: "局部作战星图", exact: true });
+  await expect(map.locator(".tac-map-gate")).toHaveCount(1);
+
+  const gateOpacity = Number(await map.locator(".tac-map-gate").getAttribute("opacity"));
+  expect(gateOpacity).toBeGreaterThanOrEqual(0.3);
+
+  const viewFilters = page.locator(".tac-map-mode-switch button");
+  await expect(viewFilters).toHaveCount(2);
+  const idle = viewFilters.filter({ hasText: "名称" });
+  const active = viewFilters.filter({ hasText: "上报" });
+  const idleStyle = await idle.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { background: style.backgroundColor, border: style.borderTopColor };
+  });
+  await active.click();
+  await expect(active).toHaveAttribute("aria-pressed", "true");
+  const activeStyle = await active.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { background: style.backgroundColor, border: style.borderTopColor };
+  });
+  expect(activeStyle.background !== idleStyle.background || activeStyle.border !== idleStyle.border).toBe(true);
+});
+
 test('search and bottom map controls have separate clear positions', async ({page}) => {
   await fixture(page,{role:'commander',overview:true});
   await page.goto('/tactical');
@@ -982,6 +1008,62 @@ test("immersive map projects to its viewport and displays real security without 
   expect(width / height).toBeCloseTo(box.width / box.height, 1);
   await page.getByRole("button", { name: "展开兵力总览" }).click();
   expect(await map.getAttribute("viewBox")).toBe(viewport);
+});
+
+function tacticalRgbLuminance(value) {
+  const channels = value.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number) || [];
+  return channels.reduce((sum, channel, index) => {
+    const normalized = channel / 255;
+    const linear = normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    return sum + linear * [0.2126, 0.7152, 0.0722][index];
+  }, 0);
+}
+
+function tacticalContrast(foreground, background) {
+  const light = Math.max(tacticalRgbLuminance(foreground), tacticalRgbLuminance(background));
+  const dark = Math.min(tacticalRgbLuminance(foreground), tacticalRgbLuminance(background));
+  return (light + 0.05) / (dark + 0.05);
+}
+
+test('tactical sidebar keeps key metadata readable and selected states explicit', async ({ page }) => {
+  await fixture(page, { role: 'commander', overview: true });
+  await page.goto('/tactical');
+  const reopen = page.getByRole('button', { name: '展开兵力总览' });
+  await expect(page.locator('.tac-map-force')).toBeVisible();
+  await expect(reopen).toHaveCount(1);
+  await reopen.click();
+  const panel = page.locator('.tac-side-panel');
+  await expect(panel).toBeVisible();
+
+  const styles = await panel.evaluate(element => {
+    const read = selector => {
+      const node = element.querySelector(selector);
+      const style = getComputedStyle(node);
+      return {
+        color: style.color,
+        background: style.backgroundColor,
+        fontSize: Number.parseFloat(style.fontSize),
+      };
+    };
+    return {
+      idleTab: read('.tac-panel-tabs > button:not([aria-pressed="true"])'),
+      location: read('.tac-force-location'),
+      age: read('.tac-age'),
+      source: read('.tac-fleet-source'),
+      panelBackground: getComputedStyle(element).backgroundColor,
+    };
+  });
+
+  expect(styles.idleTab.fontSize).toBeGreaterThanOrEqual(12);
+  expect(styles.location.fontSize).toBeGreaterThanOrEqual(12);
+  expect(styles.age.fontSize).toBeGreaterThanOrEqual(12);
+  expect(styles.source.fontSize).toBeGreaterThanOrEqual(12);
+  expect(tacticalContrast(styles.idleTab.color, styles.panelBackground)).toBeGreaterThanOrEqual(4.5);
+  expect(tacticalContrast(styles.location.color, styles.panelBackground)).toBeGreaterThanOrEqual(4.5);
+
+  const idleBackground = await panel.locator('.tac-panel-tabs > button:not([aria-pressed="true"]):not(.tac-panel-collapse)').evaluate(node => getComputedStyle(node).backgroundColor);
+  const activeBackground = await panel.locator('.tac-panel-tabs > button[aria-pressed="true"]').evaluate(node => getComputedStyle(node).backgroundColor);
+  expect(activeBackground).not.toBe(idleBackground);
 });
 
 test("tactical cards keep a visible connector before selection", async ({ page }) => {

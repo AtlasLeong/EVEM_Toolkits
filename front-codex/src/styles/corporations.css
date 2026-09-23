@@ -72,7 +72,7 @@
 .corp-search .text-input {
   width: 100%;
   min-width: 0;
-  border-color: #99978e;
+  border-color: var(--control-line);
 }
 .corp-search > .text-input,
 .corp-search > .primary-btn,
@@ -86,7 +86,7 @@
   align-items: center;
   gap: 12px;
   padding: 0 16px;
-  border: 1px solid #99978e;
+  border: 1px solid var(--control-line);
   border-radius: 8px;
   min-width: 0;
   background: var(--panel);
@@ -127,7 +127,7 @@
   align-items: center;
   padding: 0 36px 0 14px;
   height: 52px;
-  border-color: #99978e;
+  border-color: var(--control-line);
   background: var(--panel);
   font-size: 14px;
 }
