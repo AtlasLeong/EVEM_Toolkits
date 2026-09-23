@@ -584,7 +584,7 @@ test('named fleet existing selection pins the reviewed version while live data c
   expect(fx.commands[0]).not.toHaveProperty('fleet_name');
 });
 
-test('named fleet badges show separate names, centered text and three rows before overflow', async({page})=>{
+test('named fleet badges show separate names, centered content beside archive and three rows before overflow', async({page})=>{
   const fx=await fixture(page,{role:'commander'});
   fx.setSnapshot({...fx.snapshot,forces:['大航队','远炮战列队','后勤队','拦截队'].map((name,i)=>({...fx.snapshot.forces[0],id:11+i,name,people:i===0?100:50}))});
   await page.goto('/tactical');
@@ -592,7 +592,7 @@ test('named fleet badges show separate names, centered text and three rows befor
   await expect(page.locator('.tac-map-force').first()).toHaveText(/大航队.*100/);
   const alignment=await page.locator('.tac-map-force').evaluateAll(nodes=>nodes.map(node=>{
     const rect=node.querySelector('rect'), text=node.querySelector('text');
-    return {centerX:Number(text.getAttribute('x'))===Number(rect.getAttribute('width'))/2,
+    return {centerX:Number(text.getAttribute('x'))===(Number(rect.getAttribute('width'))-20)/2,
       centerY:Number(text.getAttribute('y'))===Number(rect.getAttribute('height'))/2,
       anchor:text.getAttribute('text-anchor'),baseline:text.getAttribute('dominant-baseline')};
   }));
@@ -1399,6 +1399,99 @@ test("commander can archive a deployment only after confirmation with reviewed v
   await expect
     .poll(() => commands.find((command) => command.action === "force.archive"))
     .toMatchObject({ force_id: 11, expected_version: 1 });
+});
+
+test("quick archive opens the existing confirmation for the clicked fleet without moving or selecting a star", async ({ page }) => {
+  const state = await fixture(page, { role: "commander" });
+  state.setSnapshot({
+    ...state.snapshot,
+    forces: [{ ...state.snapshot.forces[0], name: "远炮战列队", version: 4 }],
+  });
+  await page.goto("/tactical");
+  await page.getByRole("button", { name: "选择星系 德里克二" }).click();
+  const detail = page.getByRole("region", { name: "星系敌情详情" });
+  await expect(detail.getByRole("heading", { name: "德里克二" })).toBeVisible();
+  const badge = page.locator(".tac-map-force[data-force-id='11']");
+  await expect(badge).toContainText("远炮战列队 32人");
+  const close = page.getByRole("button", { name: "归档远炮战列队" });
+  await expect(close).toHaveAttribute("data-archive-force-id", "11");
+  await close.click();
+  const dialog = page.getByRole("dialog", { name: "归档部署" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("远炮战列队");
+  await expect(detail.getByRole("heading", { name: "德里克二" })).toBeVisible();
+  expect(state.commands).toHaveLength(0);
+  await dialog.getByRole("button", { name: "确认归档", exact: true }).click();
+  await expect.poll(() => state.commands.find(command => command.action === "force.archive"))
+    .toMatchObject({ force_id: 11, expected_version: 4 });
+  expect(state.commands.filter(command => command.action === "force.move")).toHaveLength(0);
+});
+
+test("quick archive is keyboard operable without selecting its fleet", async ({ page }) => {
+  const state = await fixture(page, { role: "commander" });
+  state.setSnapshot({
+    ...state.snapshot,
+    forces: [{ ...state.snapshot.forces[0], name: "远炮战列队" }],
+  });
+  await page.goto("/tactical");
+  const close = page.getByRole("button", { name: "归档远炮战列队" });
+  await close.focus();
+  await close.press("Enter");
+  await expect(page.getByRole("dialog", { name: "归档部署" })).toBeVisible();
+  expect(state.commands).toHaveLength(0);
+  await page.getByRole("dialog", { name: "归档部署" })
+    .getByRole("button", { name: "取消", exact: true }).click();
+  await close.focus();
+  await close.press("Space");
+  await expect(page.getByRole("dialog", { name: "归档部署" })).toBeVisible();
+  expect(state.commands).toHaveLength(0);
+  await expect(page.getByRole("region", { name: "星系敌情详情" })).toHaveCount(0);
+});
+
+test("quick archive is unavailable to a scout", async ({ page }) => {
+  const state = await fixture(page, { role: "scout" });
+  state.setSnapshot({
+    ...state.snapshot,
+    forces: [{ ...state.snapshot.forces[0], name: "远炮战列队" }],
+  });
+  await page.goto("/tactical");
+  await expect(page.locator(".tac-map-force")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "归档远炮战列队" })).toHaveCount(0);
+});
+
+test("history stays in reports after its fleet is archived without returning to the map", async ({ page }) => {
+  const state = await fixture(page, { role: "commander" });
+  const report = {
+    ...state.snapshot.reports[0],
+    report_kind: "fleet_intel",
+    fleet_name: "远炮战列队",
+    force_id: 11,
+    is_current: true,
+    status: "confirmed",
+    people: 100,
+  };
+  const sourceForce = { ...state.snapshot.forces[0], name: "远炮战列队", source_report_id: report.id };
+  state.setSnapshot({ ...state.snapshot, forces: [sourceForce], reports: [report] });
+  await page.goto("/tactical");
+  await expect(page.locator(".tac-map-force[data-force-id='11']")).toHaveCount(1);
+  await page.getByRole("button", { name: "归档远炮战列队" }).click();
+  await page.getByRole("dialog", { name: "归档部署" })
+    .getByRole("button", { name: "确认归档", exact: true }).click();
+  await expect.poll(() => state.commands.find(command => command.action === "force.archive"))
+    .toMatchObject({ force_id: sourceForce.id, expected_version: sourceForce.version });
+  // The archive response no longer includes the deployment, while its
+  // original fleet_intel observation and force_id relation remain.
+  state.setSnapshot({ ...state.snapshot, forces: [], reports: [{ ...report, is_current: false }] });
+  await expect(page.locator(".tac-map-force")).toHaveCount(0);
+  await page.getByRole("button", { name: "显示上报标记" }).click();
+  await page.getByRole("button", { name: "选择星系 德里克一" }).click();
+  await expect(page.locator(".tac-map-report")).toHaveCount(0);
+  await page.getByRole("button", { name: "展开兵力总览" }).click();
+  await page.getByRole("button", { name: "上报记录", exact: true }).click();
+  const history = page.locator(".tac-report-card[data-report-row-id='21']");
+  await expect(history).toContainText("远炮战列队");
+  await expect(history).toContainText("历史观察");
+  await expect(history).toContainText("舰队 #11");
 });
 
 test("commander filters enemy and friendly deployments without changing shared scope", async ({

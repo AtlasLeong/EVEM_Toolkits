@@ -19,10 +19,10 @@ const widthFor = (lines, fontSize, min, max) => Math.max(min, Math.min(max, Math
 
 // Reserve the number before shortening the name so a long fleet title can never
 // hide the tactical information. Full names remain in the accessible label/title.
-export function fleetMarkerLabel(force, markerWidth = 220) {
+export function fleetMarkerLabel(force, markerWidth = 220, reservedWidth = 0) {
   const name = String(force.name || (force.side === 'friendly' ? '己方' : '敌方')).trim();
   const count = force.people == null ? '未知' : `${countLabel(force.people)}人`;
-  const availableNameWidth = Math.max(0, markerWidth - 18 - textWidth(` ${count}`));
+  const availableNameWidth = Math.max(0, markerWidth - 18 - reservedWidth - textWidth(` ${count}`));
   return `${fitMarkerText(name, availableNameWidth)} ${count}`;
 }
 
@@ -41,11 +41,11 @@ export function buildSystemCountMarkerGroups(reports = []) {
 
 // Reports remain observations, never force rows. Each layer has its own bounded
 // stack and overflow link, so repeated sightings are not silently added up.
-export function buildMarkerGroups(forces = [], reports = [], selectedForceId) {
+export function buildMarkerGroups(forces = [], reports = [], selectedForceId, {canArchiveForce = false} = {}) {
   const forceGroups = groupMapForces(forces, selectedForceId).map(group => {
     const visible = group.visible.map(force => {
       const label = fleetMarkerLabel(force, Infinity);
-      return {...force, label, markerWidth: widthFor([label],12,76,220)};
+      return {...force, label, markerWidth: Math.min(220, widthFor([label],12,76,220) + (canArchiveForce ? 20 : 0))};
     });
     const overflowWidth = group.hiddenCount ? widthFor([`+ ${group.hiddenCount} 支部署`],12,76,180) : 0;
     return {...group, kind:'force', key:`force-${group.system_id}`, visible, overflowWidth,

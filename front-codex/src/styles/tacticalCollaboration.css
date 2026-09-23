@@ -471,9 +471,17 @@
   outline: none;
 }
 .tac-map-system:focus-visible circle,
-.tac-map-force:focus-visible rect {
+.tac-map-force:focus-visible > rect,
+.tac-force-close:focus-visible rect {
   stroke: #fff3c3;
   stroke-width: 3;
+}
+.tac-force-close {
+  cursor: pointer;
+  outline: none;
+}
+.tac-force-close:hover rect {
+  fill: #ffffff1c;
 }
 .tac-map-force.is-stale {
   opacity: 0.7;

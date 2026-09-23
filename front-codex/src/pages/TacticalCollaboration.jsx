@@ -856,6 +856,8 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
               onMoveRejected={(reason) => setError(reason)}
               canMove={can.manageForces && status === "live" && !moving}
               onMoveForce={move}
+              canArchiveForce={can.manageForces && status === "live"}
+              onArchiveForce={force => setDialog({kind:'archive',initial:force})}
               canMoveCount={canManageCount}
               canWithdrawCount={canManageCount}
               onMoveCount={moveCount}

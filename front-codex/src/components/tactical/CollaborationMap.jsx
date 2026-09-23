@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Crosshair, Eye, EyeOff, Minus, Plus, Type, X } from 'lucide-react';
 import { layoutForceMarkers } from '../../utils/tacticalMarkerLayout';
 import { adjacentSystems, isStale, ageLabel } from '../../utils/tacticalCollaboration';
@@ -16,7 +16,7 @@ const INITIAL_VIEW = {x:0, y:0, scale:1};
 export default function CollaborationMap({
   systems = [], stargates = [], forces = [], reports = [], boundaryExits = [],
   selectedSystemId, onSelectSystem, selectedForceId, onSelectForce, onFocusSystem,
-  children, focusSystem, scope = null, canMove = false, onMoveForce, canMoveCount, canWithdrawCount,
+  children, focusSystem, scope = null, canMove = false, onMoveForce, canArchiveForce = false, onArchiveForce, canMoveCount, canWithdrawCount,
   onMoveCount, onWithdrawCount, onMoveRejected, onSelectReport, onSelectCount, onFocusReports, className = '',
   canEditScope = false, onOpenScope,
 }) {
@@ -54,8 +54,8 @@ export default function CollaborationMap({
   }, [stargates, screenSystems, viewport]);
   const selectedNeighbors = useMemo(() => adjacentSystems(stargates, hoveredSystemId ?? selectedSystemId), [stargates, hoveredSystemId, selectedSystemId]);
   const markerGroups = useMemo(() => markerGroupsForViewport([
-    ...buildMarkerGroups(forces, reports, selectedForceId), ...buildSystemCountMarkerGroups(intel),
-  ].filter(group => byId.has(Number(group.system_id))), nodes, viewport, {selectedSystemId, view, showReports:showReportMarkers}), [forces, reports, selectedForceId, intel, byId, nodes, viewport, selectedSystemId, view, showReportMarkers]);
+    ...buildMarkerGroups(forces, reports, selectedForceId, {canArchiveForce}), ...buildSystemCountMarkerGroups(intel),
+  ].filter(group => byId.has(Number(group.system_id))), nodes, viewport, {selectedSystemId, view, showReports:showReportMarkers}), [forces, reports, selectedForceId, canArchiveForce, intel, byId, nodes, viewport, selectedSystemId, view, showReportMarkers]);
   const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
   const positionedGroups = useMemo(() => layoutForceMarkers(markerGroups, screenSystems, 1,
     {...viewport, padding:{left:16, right:16, top:175, bottom:60}}), [markerGroups, screenSystems, viewport]);
@@ -271,12 +271,23 @@ export default function CollaborationMap({
           <text className="tac-star-security" x={label.x+label.width/2} y={label.y+30} textAnchor="middle" fill={securityColor(node.security_status)} fontSize="10" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{securityLabel(node.security_status)}</text>
         </g>;
       })}
-      {markers.map(({force,x,y,width,height})=><g key={force.id} role="button" tabIndex={0} aria-label={`${force.side==='friendly'?'己方':'敌方'} ${force.name} ${force.people??'未知'} 人，${force.system_name}`}
-        transform={`translate(${x} ${y})`} data-force-id={force.id} className={`tac-map-force${isStale(force.observed_at)?' is-stale':''}`} onPointerDown={event=>begin(event,force)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectForce?.(force);}}}>
-        <title>{`${force.name} · ${force.system_name} · ${force.people??'未知'} 人${force.source_author_name?` · 上报：${force.source_author_name}`:''} · ${ageLabel(force.observed_at)}${canMove?' · 拖动调整部署':''}`}</title>
-        <rect width={width} height={height} rx="5" fill={force.side==='friendly'?'#29443e':'#553a30'} stroke={force.id===selectedForceId?'#f2e5c8':force.side==='friendly'?'#71988b':'#ab7a65'} strokeWidth={force.id===selectedForceId?2:1}/>
-        <text x={width/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#f1e9d9" fontSize="12" fontWeight="400">{fleetMarkerLabel(force,width)}</text>
-      </g>)}
+      {markers.map(({force,x,y,width,height})=><Fragment key={force.id}>
+        <g role="button" tabIndex={0} aria-label={`${force.side==='friendly'?'己方':'敌方'} ${force.name} ${force.people??'未知'} 人，${force.system_name}`}
+          transform={`translate(${x} ${y})`} data-force-id={force.id} className={`tac-map-force${isStale(force.observed_at)?' is-stale':''}`} onPointerDown={event=>begin(event,force)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectForce?.(force);}}}>
+          <title>{`${force.name} · ${force.system_name} · ${force.people??'未知'} 人${force.source_author_name?` · 上报：${force.source_author_name}`:''} · ${ageLabel(force.observed_at)}${canMove?' · 拖动调整部署':''}`}</title>
+          <rect width={width} height={height} rx="5" fill={force.side==='friendly'?'#29443e':'#553a30'} stroke={force.id===selectedForceId?'#f2e5c8':force.side==='friendly'?'#71988b':'#ab7a65'} strokeWidth={force.id===selectedForceId?2:1}/>
+          <text x={(width-(canArchiveForce?20:0))/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#f1e9d9" fontSize="12" fontWeight="400">{fleetMarkerLabel(force,width,canArchiveForce?20:0)}</text>
+        </g>
+        {canArchiveForce&&<g role="button" tabIndex={0} aria-label={`归档${force.name}`} data-archive-force-id={force.id}
+          transform={`translate(${x+width-22} ${y+2})`} className="tac-force-close"
+          onPointerDown={event=>event.stopPropagation()} onPointerUp={event=>event.stopPropagation()}
+          onClick={event=>{event.stopPropagation();onArchiveForce?.(force);}}
+          onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();onArchiveForce?.(force);}}}>
+          <title>{`归档${force.name}（需确认）`}</title>
+          <rect width="20" height={height-4} rx="4" fill="transparent"/>
+          <text x="10" y={(height-4)/2} textAnchor="middle" dominantBaseline="central" fill="#e7c8ae" fontSize="16" pointerEvents="none">×</text>
+        </g>}
+      </Fragment>)}
       {countMarkers.map(({report,x,y,width,height})=>{
         const node=byId.get(Number(report.system_id));if(!node)return null;
         const select=()=>{ onSelectSystem?.(node); onSelectCount?.(report); };
