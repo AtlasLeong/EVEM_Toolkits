@@ -148,6 +148,39 @@ test('wheel labels keep tactical stars prominent and only dim secondary names',(
   assert.deepEqual(use('wheelLabelState',{system_id:4},{zooming:false,selectedSystemId:1,forceIds}),
     {priority:false,dimmed:false});
 });
+
+test('wheel camera consumes one coalesced frame without mutating the settled view',()=>{
+  const settled={x:12,y:-8,scale:1};
+  const next=use('wheelCameraFrame',{
+    view:settled,
+    delta:-240,
+    anchor:{x:320,y:240},
+    viewport:{width:800,height:600},
+  });
+  assert.notEqual(next.view,settled);
+  assert.ok(next.view.scale>settled.scale);
+  assert.equal(next.consumedDelta,-240);
+  assert.deepEqual(settled,{x:12,y:-8,scale:1});
+});
+
+test('label visibility uses hysteresis so a zoom near the threshold does not flicker',()=>{
+  assert.deepEqual(use('labelVisibilityState',{visible:false,zoom:1.69}),{visible:false,changed:false});
+  assert.deepEqual(use('labelVisibilityState',{visible:false,zoom:1.72}),{visible:true,changed:true});
+  assert.deepEqual(use('labelVisibilityState',{visible:true,zoom:1.61}),{visible:true,changed:false});
+  assert.deepEqual(use('labelVisibilityState',{visible:true,zoom:1.49}),{visible:false,changed:true});
+});
+
+test('label motion phase separates active wheel movement from the short settle fade',()=>{
+  assert.equal(use('labelMotionPhase',{zooming:true,settling:false}),'moving');
+  assert.equal(use('labelMotionPhase',{zooming:false,settling:true}),'settling');
+  assert.equal(use('labelMotionPhase',{zooming:false,settling:false}),'idle');
+});
+test('label density can stay closed just below the hysteresis entry threshold',()=>{
+  const cloud=Array.from({length:12},(_,i)=>({system_id:i+1,px:300+(i%4)*20,py:200+Math.floor(i/4)*20,name:`星系${i+1}`}));
+  const legacy=use('layoutIntelLabels',cloud,{width:800,height:600,zoom:1.7});
+  const held=use('layoutIntelLabels',cloud,{width:800,height:600,zoom:1.7,showDense:false});
+  assert.ok(legacy.length>held.length);
+});
 test('reported dense stars keep distinct count labels using diagonal callouts',()=>{
   const cloud=Array.from({length:70},(_,i)=>({system_id:i+1,px:300+(i%10)*18,py:200+Math.floor(i/10)*22,name:`星系${i+1}`}));
   const intelById=new Map([24,25,34,35].map(id=>[id,{people:id}]));

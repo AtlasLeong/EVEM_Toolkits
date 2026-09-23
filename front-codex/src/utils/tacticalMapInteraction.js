@@ -1,5 +1,6 @@
 import { textWidth } from './tacticalMapPresentation.js';
 import { rectanglesOverlap } from './tacticalMapScreen.js';
+import { zoomAroundPoint } from './tacticalMapLayout.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const inside = (point, {width, height}) => point.x >= 0 && point.y >= 0 && point.x <= width && point.y <= height;
@@ -143,6 +144,35 @@ export function subscribeMapWheel(node, onWheel) {
   return () => node.removeEventListener('wheel', handler);
 }
 
+// Consume one accumulated wheel frame. Keeping this reducer pure lets the
+// component move a single camera layer without rebuilding label and marker
+// layouts for every native wheel event.
+export function wheelCameraFrame({view = {}, delta = 0, anchor = {}, limits = {min:.5, max:16}} = {}) {
+  const amount = Number(delta);
+  if (!Number.isFinite(amount) || amount === 0) return {view:{...view}, consumedDelta:0};
+  const factor = Math.exp(-Math.max(-120, Math.min(120, amount)) * .001);
+  const next = zoomAroundPoint({zoom:view.scale, panX:view.x, panY:view.y}, anchor, factor, limits);
+  return {
+    view:{x:next.panX, y:next.panY, scale:next.zoom},
+    consumedDelta:amount,
+  };
+}
+
+// Enter and exit thresholds are intentionally different. This prevents the
+// full name layer from flickering when a wheel gesture hovers near one zoom
+// boundary.
+export function labelVisibilityState({visible = false, zoom = 1, enter = 1.72, exit = 1.5} = {}) {
+  const previous = Boolean(visible);
+  const next = previous ? Number(zoom) >= exit : Number(zoom) >= enter;
+  return {visible:next, changed:next !== previous};
+}
+
+export function labelMotionPhase({zooming = false, settling = false} = {}) {
+  if (zooming) return 'moving';
+  if (settling) return 'settling';
+  return 'idle';
+}
+
 // Between wheel frames, keep each settled name at its chosen screen-space
 // offset from its own real star. This is linear in visible labels and avoids
 // rerunning the collision solver until the gesture has ended.
@@ -175,12 +205,16 @@ export function labelsForWheelFrame({zooming = false, settled = null, nodes = []
 // changes any real system coordinates or gate topology.
 export function layoutIntelLabels(nodes, {
   width, height, selectedId, hoveredId, intelById = new Map(), forceIds = new Set(),
-  zoom = 1, showAll = false, occupied = [], gateSegments = [], padding = {left:14, right:14, top:110, bottom:18},
+  zoom = 1, showAll = false, showDense = null, occupied = [], gateSegments = [], padding = {left:14, right:14, top:110, bottom:18},
 } = {}) {
   const gateIndex = Array.isArray(gateSegments) ? indexGateSegments(gateSegments,{width,height}) : gateSegments;
   const priority = node => Number(node.system_id) === Number(selectedId) ? 0 : Number(node.system_id) === Number(hoveredId) ? 1 : intelById.has(Number(node.system_id)) ? 2 : forceIds.has(Number(node.system_id)) ? 3 : 4;
+  // Callers that maintain a zoom hysteresis state can override the legacy
+  // threshold. Keeping null as the default preserves the standalone helper's
+  // existing behavior for consumers outside the tactical map component.
+  const revealDense = showDense == null ? zoom >= 1.7 : Boolean(showDense);
   const ordered = nodes.filter(node => inside({x:node.px, y:node.py}, {width, height}))
-    .filter(node => showAll || priority(node) < 4 || zoom >= 1.7 || !nodes.some(other => other !== node && Math.hypot(other.px-node.px, other.py-node.py) < 52))
+    .filter(node => showAll || priority(node) < 4 || revealDense || !nodes.some(other => other !== node && Math.hypot(other.px-node.px, other.py-node.py) < 52))
     .sort((a,b) => priority(a)-priority(b) || Number(a.system_id)-Number(b.system_id));
   const placed = [];
   for (const node of ordered) {

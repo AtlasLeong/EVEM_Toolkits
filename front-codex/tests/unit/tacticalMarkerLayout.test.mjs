@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as markerLayout from "../../src/utils/tacticalMarkerLayout.js";
 
-const { layoutForceMarkers, markerWidth, rememberVisibleMarkerSlots } = markerLayout;
+const { layoutForceMarkers, markerWidth, rememberVisibleMarkerSlots, translateMarkerGroups } = markerLayout;
 
 const group = (id, rows = 1) => ({ system_id: id, visible: Array.from({ length: rows }, (_, index) => ({ id: `${id}-${index}` })), hiddenCount: 0 });
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -226,4 +226,19 @@ test('marker collision checks keep only stars near the actual candidate rectangl
   assert.deepEqual(markerLayout.nodesNearMarkerCandidates(nodes,own,
     {x:400,y:300,width:200,height:100},1),[near,edge]);
   assert.equal(JSON.stringify(nodes),before);
+});
+
+test('wheel marker translation keeps card dimensions and follows each owning star', () => {
+  const settled = layoutForceMarkers([
+    { ...group(1), key: 'force-1', markerWidth: 140 },
+  ], [{ system_id: 1, px: 320, py: 260 }], 1, { width: 800, height: 600 });
+  const moved = translateMarkerGroups(settled,
+    [{ system_id: 1, px: 320, py: 260 }],
+    [{ system_id: 1, px: 370, py: 295 }]);
+  assert.equal(moved.length, 1);
+  assert.equal(moved[0].width, settled[0].width);
+  assert.equal(moved[0].height, settled[0].height);
+  assert.equal(moved[0].x, settled[0].x + 50);
+  assert.equal(moved[0].y, settled[0].y + 35);
+  assert.deepEqual(moved[0].leader.to, { x: 370, y: 295 });
 });

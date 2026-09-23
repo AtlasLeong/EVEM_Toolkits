@@ -1029,7 +1029,9 @@ test("wheel bursts zoom gently around the pointer while names settle once", asyn
   expect(Math.abs((anchor.x - after.x) / after.scale - (anchor.x - before.x) / before.scale)).toBeLessThan(1);
   expect(Math.abs((anchor.y - after.y) / after.scale - (anchor.y - before.y) / before.scale)).toBeLessThan(1);
   await expect(mapSurface).toHaveClass(/is-wheel-zooming/);
+  await expect(mapSurface).toHaveClass(/is-label-moving/);
   await expect(mapSurface).not.toHaveClass(/is-wheel-zooming/, { timeout: 1500 });
+  await expect.poll(() => mapSurface.evaluate(element => element.classList.contains('is-label-settling'))).toBe(true);
 
   let previousScale=after.scale;
   await map.hover({position:{x:600,y:300}});

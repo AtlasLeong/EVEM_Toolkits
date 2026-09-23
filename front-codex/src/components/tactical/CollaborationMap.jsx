@@ -1,17 +1,27 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Crosshair, Eye, EyeOff, Minus, Plus, Type, X } from 'lucide-react';
-import { layoutForceMarkers, rememberVisibleMarkerSlots } from '../../utils/tacticalMarkerLayout';
+import { layoutForceMarkers, rememberVisibleMarkerSlots, translateMarkerGroups } from '../../utils/tacticalMarkerLayout';
 import { adjacentSystems, isStale, ageLabel } from '../../utils/tacticalCollaboration';
 import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMarkerLabel, MARKER_CLOSE_SIZE, markerGroupsForViewport } from '../../utils/tacticalMapPresentation';
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
-import { focusDenseArea, indexGateSegments, labelsForWheelFrame, leaderSegmentsForFocus, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelLabelState } from '../../utils/tacticalMapInteraction';
+import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
 import '../../styles/tacticalMapIntel.css';
 
 const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91';
 const securityLabel = value => value == null ? '安等未知' : Number(value).toFixed(2);
 const INITIAL_VIEW = {x:0, y:0, scale:1};
+const cameraTransform = ({x = 0, y = 0, scale = 1} = {}) => `translate(${x} ${y}) scale(${scale})`;
+
+// The screen-space layer is rendered from the last committed view. During a
+// wheel burst it can follow the camera with one affine transform, so React
+// does not rebuild thousands of labels and markers for every native wheel
+// event. React commits the final camera once the burst settles.
+const relativeCameraTransform = (base = INITIAL_VIEW, next = INITIAL_VIEW) => {
+  const ratio = next.scale / Math.max(.0001, base.scale);
+  return `translate(${next.x - ratio * base.x} ${next.y - ratio * base.y}) scale(${ratio})`;
+};
 
 function MarkerCloseAction({x,y,label,title,className,dataArchiveForceId,onActivate}) {
   return <g role="button" tabIndex={0} aria-label={label} data-archive-force-id={dataArchiveForceId}
@@ -42,10 +52,15 @@ export default function CollaborationMap({
   const [showReportMarkers, setShowReportMarkers] = useState(false);
   const [hoveredSystemId, setHoveredSystemId] = useState(null);
   const [isWheelZooming, setIsWheelZooming] = useState(false);
+  const [isSettlingLabels, setIsSettlingLabels] = useState(false);
+  const [showZoomLabels, setShowZoomLabels] = useState(false);
   const [visibleMarkerSlots, setVisibleMarkerSlots] = useState({scopeVersion:scope?.version ?? null, slots:new Map()});
-  const ref = useRef(null), gesture = useRef(null), suppressClick = useRef(false), wheelHandler = useRef(null), pickerRef = useRef(null);
+  const ref = useRef(null), worldLayerRef = useRef(null), overlayLayerRef = useRef(null), gesture = useRef(null), suppressClick = useRef(false), wheelHandler = useRef(null), pickerRef = useRef(null);
   const wheelQueue = useRef({delta:0,anchor:null,frame:null,idle:null});
+  const liveViewRef = useRef(INITIAL_VIEW);
   const settledLabels = useRef(null);
+  const settledMarkerLayout = useRef(null);
+  const labelSettleTimer = useRef(null);
   const scopeVersion = scope?.version ?? null;
   const fitIds = useMemo(() => {
     const regions = new Set((scope?.region_ids || []).map(Number));
@@ -87,9 +102,14 @@ export default function CollaborationMap({
   const rememberedSlots = visibleMarkerSlots.scopeVersion === scopeVersion ? visibleMarkerSlots.slots : null;
   const preferredSlots = useMemo(() => new Map([...basePreferredSlots, ...(rememberedSlots || [])]),
     [basePreferredSlots, rememberedSlots]);
-  const positionedGroups = useMemo(() => layoutForceMarkers(markerGroups, screenSystems, 1,
-    {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects, preferredSlots}),
-    [markerGroups, screenSystems, viewport, reservedUiRects, preferredSlots]);
+  const positionedGroups = useMemo(() => {
+    const settled = settledMarkerLayout.current;
+    if (isWheelZooming && settled?.scopeVersion === scopeVersion) {
+      return translateMarkerGroups(settled.groups, settled.nodes, screenSystems);
+    }
+    return layoutForceMarkers(markerGroups, screenSystems, 1,
+      {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects, preferredSlots});
+  }, [isWheelZooming, markerGroups, screenSystems, viewport, reservedUiRects, preferredSlots, scopeVersion]);
   useEffect(() => {
     setVisibleMarkerSlots(current => {
       const previous = current.scopeVersion === scopeVersion ? current.slots : new Map();
@@ -97,6 +117,24 @@ export default function CollaborationMap({
       return current.scopeVersion === scopeVersion && slots === previous ? current : {scopeVersion, slots};
     });
   }, [positionedGroups, scopeVersion]);
+  useLayoutEffect(() => {
+    if (!isWheelZooming) {
+      settledMarkerLayout.current = {scopeVersion, groups:positionedGroups, nodes:screenSystems};
+    }
+  }, [isWheelZooming, positionedGroups, screenSystems, scopeVersion]);
+  useEffect(() => () => {
+    if (labelSettleTimer.current !== null) clearTimeout(labelSettleTimer.current);
+  }, []);
+  useEffect(() => {
+    if (isWheelZooming) return;
+    const next = labelVisibilityState({visible:showZoomLabels, zoom:view.scale}).visible;
+    if (next !== showZoomLabels) setShowZoomLabels(next);
+  }, [isWheelZooming, showZoomLabels, view.scale]);
+  useLayoutEffect(() => {
+    liveViewRef.current = view;
+    worldLayerRef.current?.setAttribute('transform', cameraTransform(view));
+    overlayLayerRef.current?.removeAttribute('transform');
+  }, [view]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
   const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({
@@ -114,9 +152,9 @@ export default function CollaborationMap({
     // decluttering solver or every label would jump as the pointer crosses
     // the map during a live update.
     selectedId:selectedSystemId, hoveredId:null, intelById, forceIds:forceSystems,
-    zoom:view.scale, showAll:showAllNames, occupied:[...positionedGroups,...reservedUiRects], gateSegments,
+    zoom:view.scale, showAll:showAllNames || showZoomLabels, showDense:showAllNames || showZoomLabels, occupied:[...positionedGroups,...reservedUiRects], gateSegments,
     padding:{left:14,right:14,top:175,bottom:60}},
-  }), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups, reservedUiRects, gateSegments, isWheelZooming, scopeVersion]);
+  }), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, showZoomLabels, positionedGroups, reservedUiRects, gateSegments, isWheelZooming, scopeVersion]);
   useLayoutEffect(() => {
     if (!isWheelZooming) settledLabels.current = {labels:labelLayouts, nodes:screenSystems, gateSegments, scopeVersion};
   }, [isWheelZooming, labelLayouts, screenSystems, gateSegments, scopeVersion]);
@@ -137,12 +175,23 @@ export default function CollaborationMap({
     if (!rect?.width || !rect?.height) return {x:-1,y:-1};
     return {x:(event.clientX-rect.left)*viewport.width/rect.width,y:(event.clientY-rect.top)*viewport.height/rect.height};
   };
+  const settleLabels = () => {
+    setIsSettlingLabels(true);
+    if (labelSettleTimer.current !== null) clearTimeout(labelSettleTimer.current);
+    labelSettleTimer.current = setTimeout(() => {
+      labelSettleTimer.current = null;
+      setIsSettlingLabels(false);
+    }, 320);
+  };
   const stopWheelZoom = () => {
     const queue = wheelQueue.current;
     if (queue.frame !== null) cancelAnimationFrame(queue.frame);
     if (queue.idle !== null) clearTimeout(queue.idle);
     queue.delta = 0; queue.anchor = null; queue.frame = null; queue.idle = null;
     setIsWheelZooming(false);
+    const settled = liveViewRef.current;
+    setView(current => current.x === settled.x && current.y === settled.y && current.scale === settled.scale ? current : settled);
+    settleLabels();
   };
   const fitView = () => { stopWheelZoom(); setView(INITIAL_VIEW); setPreviousViews([]); setPicker(null); };
   const zoom = (multiplier, anchor = {x:viewport.width/2,y:viewport.height/2}) => {
@@ -154,6 +203,15 @@ export default function CollaborationMap({
       return next.zoom === current.scale ? current : {x:next.panX,y:next.panY,scale:next.zoom};
     });
   };
+  const applyWheelFrame = (accumulated, anchor) => {
+    if (!anchor || !accumulated) return;
+    const current = liveViewRef.current;
+    const next = wheelCameraFrame({view:current, delta:accumulated, anchor, limits:{min:.5,max:16}}).view;
+    if (next.scale === current.scale && next.x === current.x && next.y === current.y) return;
+    liveViewRef.current = next;
+    worldLayerRef.current?.setAttribute('transform', cameraTransform(next));
+    overlayLayerRef.current?.setAttribute('transform', relativeCameraTransform(view, next));
+  };
   wheelHandler.current = event => {
     if (gesture.current) return;
     const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.height : 1);
@@ -164,17 +222,27 @@ export default function CollaborationMap({
     setPicker(null);
     setIsWheelZooming(true);
     if (queue.idle !== null) clearTimeout(queue.idle);
-    queue.idle = setTimeout(() => { queue.idle = null; setIsWheelZooming(false); }, 220);
+    queue.idle = setTimeout(() => {
+      queue.idle = null;
+      if (queue.frame !== null) {
+        cancelAnimationFrame(queue.frame);
+        queue.frame = null;
+        const accumulated = queue.delta;
+        const anchor = queue.anchor;
+        queue.delta = 0;
+        queue.anchor = null;
+        applyWheelFrame(accumulated, anchor);
+      }
+      const settled = liveViewRef.current;
+      setIsWheelZooming(false);
+      setView(current => current.x === settled.x && current.y === settled.y && current.scale === settled.scale ? current : settled);
+      settleLabels();
+    }, 220);
     if (queue.frame === null) queue.frame = requestAnimationFrame(() => {
       queue.frame = null;
       const accumulated = queue.delta, anchor = queue.anchor;
       queue.delta = 0; queue.anchor = null;
-      if (!anchor || !accumulated) return;
-      const factor = Math.exp(-Math.max(-120,Math.min(120,accumulated))*.001);
-      setView(current => {
-        const next = zoomAroundPoint({zoom:current.scale,panX:current.x,panY:current.y}, anchor, factor, {min:.5,max:16});
-        return next.zoom === current.scale ? current : {x:next.panX,y:next.panY,scale:next.zoom};
-      });
+      applyWheelFrame(accumulated, anchor);
     });
   };
   useEffect(() => ref.current ? subscribeMapWheel(ref.current, event => wheelHandler.current?.(event)) : undefined, []);
@@ -214,8 +282,9 @@ export default function CollaborationMap({
     const target = byId.get(Number(focusSystem.system_id));
     if (!target) return;
     lastFocusToken.current = focusSystem._focusToken;
-    setPreviousViews(previous => [...previous.slice(-7), view]);
-    setView(focusDenseArea([target], view, viewport));
+    const currentView = liveViewRef.current;
+    setPreviousViews(previous => [...previous.slice(-7), currentView]);
+    setView(focusDenseArea([target], currentView, viewport));
     setPicker(null);
   }, [focusSystem, byId, viewport]); // Focus tokens represent discrete user actions.
   const lastScopeVersion = useRef(null);
@@ -240,14 +309,15 @@ export default function CollaborationMap({
   }, [scope?.version]);
   useEffect(() => { if (picker) pickerRef.current?.querySelector('button[data-system-choice]')?.focus(); }, [picker]);
   const openDenseArea = candidates => {
-    setPreviousViews(previous => [...previous.slice(-7), view]);
-    setView(focusDenseArea(candidates, view, viewport)); setPicker(null);
+    const currentView = liveViewRef.current;
+    setPreviousViews(previous => [...previous.slice(-7), currentView]);
+    setView(focusDenseArea(candidates, currentView, viewport)); setPicker(null);
   };
   const selectStar = (event, node) => {
     if (suppressClick.current) { suppressClick.current=false; return; }
     if (!event) { onSelectSystem?.(node); return; }
-    const p=point(event), hit=resolveSystemHit(nodes,p,view,viewport,36), neighborhood=hit.candidates;
-    if (neighborhood.length>1 && view.scale<15.9) {
+    const p=point(event), liveView=liveViewRef.current, hit=resolveSystemHit(nodes,p,liveView,viewport,36), neighborhood=hit.candidates;
+    if (neighborhood.length>1 && liveView.scale<15.9) {
       const maxDistance=Math.max(...neighborhood.map(other=>Math.hypot(other.px-node.px,other.py-node.py)));
       if(maxDistance>.01) {openDenseArea(neighborhood);return;}
     }
@@ -282,7 +352,7 @@ export default function CollaborationMap({
     const p=point(event);
     const starElement = event.target instanceof Element ? event.target.closest('[data-system-id]') : null;
     gesture.current={start:p,last:p,force:force?{...force}:null,report:report?{...report}:null,
-      node:byId.get(Number(starElement?.dataset.systemId)),view,started:false,pointerId:event.pointerId};
+      node:byId.get(Number(starElement?.dataset.systemId)),view:liveViewRef.current,started:false,pointerId:event.pointerId};
     ref.current?.setPointerCapture(event.pointerId);
   };
   const move = event => {
@@ -291,7 +361,7 @@ export default function CollaborationMap({
     const p=point(event);current.last=p;
     if(!current.started&&Math.hypot(p.x-current.start.x,p.y-current.start.y)<7)return;
     current.started=true;
-    if(current.force||current.report)setDrag({point:p,...resolveSystemHit(nodes,p,view,viewport)});
+    if(current.force||current.report)setDrag({point:p,...resolveSystemHit(nodes,p,liveViewRef.current,viewport)});
     else setView({...current.view,x:current.view.x+p.x-current.start.x,y:current.view.y+p.y-current.start.y});
   };
   const end = event => {
@@ -302,7 +372,7 @@ export default function CollaborationMap({
     suppressClick.current=current.started;
     if((current.force||current.report)&&current.started) {
       // Pointer-up is authoritative; React may not have committed the last drag frame.
-      const p=point(event),hit=resolveSystemHit(nodes,p,view,viewport);
+      const p=point(event),hit=resolveSystemHit(nodes,p,liveViewRef.current,viewport);
       if(hit.ambiguous)setPicker({kind:current.report?'move-count':'move',force:current.force,report:current.report,candidates:hit.candidates,point:p});
       else if(hit.target) {
         if(current.report)submitCountMove(current.report,hit.target.system_id);
@@ -320,7 +390,8 @@ export default function CollaborationMap({
   };
   const pickerPosition=picker?{left:Math.max(12,Math.min(picker.point.x+16,viewport.width-274)),top:Math.max(175,Math.min(picker.point.y+16,viewport.height-300))}:null;
 
-  return <div className={`tac-map tac-map-mode-spatial tac-system-intel-map${isWheelZooming?' is-wheel-zooming':''} ${className}`}>
+  const motionPhase = labelMotionPhase({zooming:isWheelZooming, settling:isSettlingLabels});
+  return <div className={`tac-map tac-map-mode-spatial tac-system-intel-map${isWheelZooming?' is-wheel-zooming':''}${isSettlingLabels?' is-label-settling':''} is-label-${motionPhase} ${className}`}>
     <div className="tac-map-dock" aria-label="星图工具与边界星门">{children}</div>
     <div className="tac-map-toolbar tac-intel-toolbar" aria-label="星图操作">
       <div className="tac-map-mode-switch" role="toolbar" aria-label="地图视图">
@@ -334,7 +405,7 @@ export default function CollaborationMap({
     <svg ref={ref} viewBox={`0 0 ${viewport.width} ${viewport.height}`} role="group" aria-label="局部作战星图" tabIndex={0}
       onPointerDown={event=>begin(event)} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel}
       onKeyDown={event=>{if(event.key==='Escape')cancel();if(event.target===ref.current&&['+','-'].includes(event.key)){event.preventDefault();zoom(event.key==='+'?1.25:1/1.25);}}}>
-      <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+      <g ref={worldLayerRef} className="tac-map-world-layer" transform={cameraTransform(view)}>
         {stargates.map((gate,index)=>{
           const a=byId.get(Number(gate.system_id)),b=byId.get(Number(gate.destination_system_id));
           const active=Number(a?.system_id)===Number(hoveredSystemId??selectedSystemId)||Number(b?.system_id)===Number(hoveredSystemId??selectedSystemId);
@@ -356,6 +427,7 @@ export default function CollaborationMap({
           </g>;
         })}
       </g>
+      <g ref={overlayLayerRef} className="tac-map-overlay-layer">
       {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} className="tac-map-focus-leader" x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" pointerEvents="none"/>)}
       {labelLayouts.map(label=>{
         const node=byId.get(Number(label.system_id));if(!node)return null;
@@ -426,8 +498,9 @@ export default function CollaborationMap({
           <title>{portal.exits.map(exit=>exit.destination_name).join('、')}</title><text x="20" y="4" fill="#c9b388" fontSize="10">↗ {portal.exits.length}</text>
         </g>;
       })}
-      {drag&&<g pointerEvents="none"><circle cx={drag.point.x} cy={drag.point.y} r="12" fill="#dbc69f" opacity=".8"/>{drag.candidates.map(node=><circle key={node.system_id} cx={view.x+node.px*view.scale} cy={view.y+node.py*view.scale} r="19" fill="none" stroke={drag.ambiguous?'#d3af70':'#a7c6b0'} strokeWidth="2"/>)}
+      {drag&&<g pointerEvents="none"><circle cx={drag.point.x} cy={drag.point.y} r="12" fill="#dbc69f" opacity=".8"/>{drag.candidates.map(node=><circle key={node.system_id} cx={liveViewRef.current.x+node.px*liveViewRef.current.scale} cy={liveViewRef.current.y+node.py*liveViewRef.current.scale} r="19" fill="none" stroke={drag.ambiguous?'#d3af70':'#a7c6b0'} strokeWidth="2"/>)}
         <text x={Math.max(110,Math.min(viewport.width-110,drag.point.x))} y={Math.max(170,drag.point.y-28)} textAnchor="middle" fill="#f2e7cf" fontSize="13" paintOrder="stroke" stroke="#19252b" strokeWidth="5">{drag.ambiguous?'松开后选择目标星系':drag.target?systemDisplayName(drag.target):'拖到目标星系'}</text></g>}
+      </g>
     </svg>
     {picker&&<div ref={pickerRef} className="tac-map-target-picker" role="dialog" aria-label={picker.kind==='move'?'选择部署目标星系':picker.kind==='move-count'?'选择上报目标星系':'选择重叠星系'} style={pickerPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setPicker(null);ref.current?.focus();}}}>
       <div><strong>{picker.kind.startsWith('move')?'移动到哪个星系？':'选择星系'}</strong><button type="button" aria-label="取消星系选择" onClick={()=>setPicker(null)}><X size={15}/></button></div>

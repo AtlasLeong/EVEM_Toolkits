@@ -140,3 +140,29 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
   }
   return placed;
 }
+
+// During a wheel frame, move an already settled set of callouts with their
+// owning stars. Card dimensions and side selection stay fixed; the expensive
+// collision search is deferred until the gesture settles.
+export function translateMarkerGroups(groups = [], settledNodes = [], currentNodes = []) {
+  const previous = new Map(settledNodes.map(node => [Number(node.system_id), node]));
+  const current = new Map(currentNodes.map(node => [Number(node.system_id), node]));
+  return groups.flatMap(group => {
+    const before = previous.get(Number(group.system_id));
+    const after = current.get(Number(group.system_id));
+    if (!before || !after) return [];
+    const dx = after.px - before.px;
+    const dy = after.py - before.py;
+    const move = point => point ? {x:point.x + dx, y:point.y + dy} : point;
+    return [{
+      ...group,
+      node: after,
+      x: group.x + dx,
+      y: group.y + dy,
+      leader: group.leader ? {
+        from: move(group.leader.from),
+        to: move(group.leader.to),
+      } : group.leader,
+    }];
+  });
+}
