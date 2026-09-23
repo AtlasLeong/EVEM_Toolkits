@@ -4,11 +4,18 @@
   --console-sidebar: #f0efeb;
   --console-surface: #ffffff;
   --console-raised: #f1efea;
-  --console-line: #dedbd3;
+  --console-line: #cecac1;
+  /* Separators may stay quiet; interactive field boundaries must remain visible. */
+  --console-line-strong: #86847c;
   --console-text: #242422;
+  --console-ink: var(--console-text);
   --console-muted: #6c6a63;
+  --console-muted-strong: #57594f;
+  --console-quiet: var(--console-muted);
   --console-accent: #a6533e;
   --console-on-accent: #ffffff;
+  --focus-ring: var(--console-accent);
+  --control-line: var(--console-line-strong);
   --action: #242422;
   --action-hover: #3c3b37;
   --on-action: #ffffff;
@@ -439,9 +446,9 @@
 button, input, select, textarea { font-family: inherit; }
 button { color: inherit; }
 input, select, textarea { min-width: 0; accent-color: var(--accent); }
-input::placeholder, textarea::placeholder { color: var(--text-soft); opacity: 0.8; }
+input::placeholder, textarea::placeholder { color: var(--console-muted-strong); opacity: 1; }
 :is(button, a, summary, input, select, textarea):focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
 button:disabled { cursor: not-allowed; opacity: 0.48; }
@@ -1004,7 +1011,7 @@ a {
 
 .planetary-filters { position: relative; z-index: 10; padding: 0; border: 0; background: transparent; margin-top: 16px; }
 .planetary-filters .picker-field { display: block; }
-.planetary-filters .filter-value { border-color: #918b80; }
+.planetary-filters .filter-value { border-color: var(--control-line); }
 .planetary-filters .right-actions .ghost-btn { order: 2; background: transparent; border-color: transparent; padding-inline: 6px; color: var(--text-soft); }
 .planetary-filters .right-actions .primary-btn { min-width: 104px; }
 .advanced-filters { color: var(--text-soft); font-size: 14px; margin: 4px 0 0; }
@@ -1036,7 +1043,7 @@ a {
   grid-row: 2;
   min-width: 0;
   padding: 9px 34px 9px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   border-radius: 7px;
   background: var(--bg);
   overflow: hidden;
@@ -1374,7 +1381,7 @@ a {
 .tactical-map-search-input {
   height: 48px;
   border-radius: 7px;
-  border-color: var(--line);
+  border-color: var(--control-line);
   background: var(--bg);
   box-shadow: none;
 }
@@ -1680,15 +1687,15 @@ a {
 }
 
 .field-row label {
-  color: var(--text-soft);
-  font-size: 13px;
+  color: var(--console-muted-strong);
+  font-size: 14px;
 }
 
 .text-input {
   width: 100%;
   height: 44px;
   border-radius: 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   background: var(--bg);
   outline: none;
   padding: 0 13px;
@@ -1747,7 +1754,7 @@ a {
   display: flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   background: var(--bg);
   border-radius: 7px;
   padding: 0 11px;
@@ -3716,7 +3723,7 @@ a {
   gap: 10px;
   height: 44px;
   border-radius: 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--control-line);
   background: var(--bg);
   padding: 0 13px;
 }
@@ -4197,7 +4204,7 @@ a {
 }
 
 .fraud-hero-panel .search-box {
-  border-color: var(--line);
+  border-color: var(--control-line);
   border-width: 1.5px;
   background: var(--bg);
   box-shadow: none;

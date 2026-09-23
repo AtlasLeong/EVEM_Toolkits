@@ -70,6 +70,51 @@ const selectChoice = async (page, label, choice) => {
   await page.getByRole("radio", { name: choice, exact: true }).check();
 };
 
+function parseRgb(value) {
+  const channels = value.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number);
+  if (!channels || channels.length !== 3) throw new Error(`无法解析颜色: ${value}`);
+  return channels.map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045
+      ? normalized / 12.92
+      : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+}
+
+function contrastRatio(foreground, background) {
+  const luminance = (color) =>
+    parseRgb(color).reduce(
+      (sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index],
+      0,
+    );
+  const light = Math.max(luminance(foreground), luminance(background));
+  const dark = Math.min(luminance(foreground), luminance(background));
+  return (light + 0.05) / (dark + 0.05);
+}
+
+test("军团目录搜索提示和输入边界保持可读", async ({ page }) => {
+  await communityFixture(page);
+  await page.goto("/corporations");
+  const input = page.getByRole("textbox", { name: "搜索军团", exact: true });
+  await expect(input).toBeVisible();
+  const metrics = await input.evaluate((element) => {
+    const shell = element.closest(".corp-search-input");
+    const inputStyle = getComputedStyle(element);
+    const shellStyle = getComputedStyle(shell || element);
+    return {
+      placeholderColor: getComputedStyle(element, "::placeholder").color,
+      placeholderOpacity: getComputedStyle(element, "::placeholder").opacity,
+      surfaceColor: shellStyle.backgroundColor,
+      borderColor: shellStyle.borderTopColor,
+      inputBackground: inputStyle.backgroundColor,
+    };
+  });
+  expect(metrics.placeholderOpacity).toBe("1");
+  expect(contrastRatio(metrics.placeholderColor, metrics.surfaceColor)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastRatio(metrics.borderColor, metrics.surfaceColor)).toBeGreaterThanOrEqual(3);
+  expect(metrics.inputBackground).toBe("rgba(0, 0, 0, 0)");
+});
+
 test("分享军团复制干净链接，失败时提供可选择的地址", async ({ page }) => {
   await communityFixture(page);
   await page.addInitScript(() => {
