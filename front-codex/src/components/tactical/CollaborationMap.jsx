@@ -16,7 +16,8 @@ const INITIAL_VIEW = {x:0, y:0, scale:1};
 export default function CollaborationMap({
   systems = [], stargates = [], forces = [], reports = [], boundaryExits = [],
   selectedSystemId, onSelectSystem, selectedForceId, onSelectForce, onFocusSystem,
-  children, focusSystem, scope = null, canMove = false, onMoveForce, onMoveRejected, onSelectReport, onSelectCount, onFocusReports, className = '',
+  children, focusSystem, scope = null, canMove = false, onMoveForce, canMoveCount, canWithdrawCount,
+  onMoveCount, onWithdrawCount, onMoveRejected, onSelectReport, onSelectCount, onFocusReports, className = '',
 }) {
   const [viewport, setViewport] = useState({width:1000, height:800});
   const [view, setView] = useState(INITIAL_VIEW);
@@ -78,7 +79,7 @@ export default function CollaborationMap({
   };
   const fitView = () => { setView(INITIAL_VIEW); setPreviousViews([]); setPicker(null); };
   const zoom = (multiplier, anchor = {x:viewport.width/2,y:viewport.height/2}) => {
-    if (gesture.current?.force) return;
+    if (gesture.current?.force || gesture.current?.report) return;
     setPicker(null);
     setView(current => {
       const next = zoomAroundPoint({zoom:current.scale,panX:current.x,panY:current.y}, anchor, multiplier, {min:.5,max:16});
@@ -149,13 +150,28 @@ export default function CollaborationMap({
     if(result.ok) onMoveForce?.(snapshot,result.destination_system_id);
     else if(result.reason) onMoveRejected?.(result.reason,{force:snapshot,target:byId.get(Number(destination))||null});
   };
-  const begin = (event,force) => {
+  const submitCountMove = (snapshot,destination) => {
+    const current=reports.find(report=>Number(report.id)===Number(snapshot.id));
+    if(!current || current.version!==snapshot.version || current.status==='withdrawn') {
+      onMoveRejected?.('人数上报已被其他成员更新，请核对最新位置。');
+      return;
+    }
+    if(!canMoveCount?.(current)) {
+      onMoveRejected?.('当前无权移动这条人数上报。');
+      return;
+    }
+    if(byId.has(Number(destination)) && Number(destination)!==Number(current.system_id))
+      onMoveCount?.(current,Number(destination));
+  };
+  const begin = (event,force,report) => {
     if(event.button!==0) return;
     if(force) {event.stopPropagation();onSelectForce?.(force);if(!canMove)return;}
+    if(report) {event.stopPropagation();if(!canMoveCount?.(report))return;}
     setPicker(null);suppressClick.current=false;
     const p=point(event);
     const starElement = event.target instanceof Element ? event.target.closest('[data-system-id]') : null;
-    gesture.current={start:p,last:p,force:force?{...force}:null,node:byId.get(Number(starElement?.dataset.systemId)),view,started:false,pointerId:event.pointerId};
+    gesture.current={start:p,last:p,force:force?{...force}:null,report:report?{...report}:null,
+      node:byId.get(Number(starElement?.dataset.systemId)),view,started:false,pointerId:event.pointerId};
     ref.current?.setPointerCapture(event.pointerId);
   };
   const move = event => {
@@ -164,7 +180,7 @@ export default function CollaborationMap({
     const p=point(event);current.last=p;
     if(!current.started&&Math.hypot(p.x-current.start.x,p.y-current.start.y)<7)return;
     current.started=true;
-    if(current.force)setDrag({force:current.force,point:p,...resolveSystemHit(nodes,p,view,viewport)});
+    if(current.force||current.report)setDrag({point:p,...resolveSystemHit(nodes,p,view,viewport)});
     else setView({...current.view,x:current.view.x+p.x-current.start.x,y:current.view.y+p.y-current.start.y});
   };
   const end = event => {
@@ -173,17 +189,21 @@ export default function CollaborationMap({
     gesture.current=null;
     if(ref.current?.hasPointerCapture(event.pointerId))ref.current.releasePointerCapture(event.pointerId);
     suppressClick.current=current.started;
-    if(current.force&&current.started) {
+    if((current.force||current.report)&&current.started) {
       // Pointer-up is authoritative; React may not have committed the last drag frame.
       const p=point(event),hit=resolveSystemHit(nodes,p,view,viewport);
-      if(hit.ambiguous)setPicker({kind:'move',force:current.force,candidates:hit.candidates,point:p});
-      else if(hit.target)submitMove(current.force,hit.target.system_id);
+      if(hit.ambiguous)setPicker({kind:current.report?'move-count':'move',force:current.force,report:current.report,candidates:hit.candidates,point:p});
+      else if(hit.target) {
+        if(current.report)submitCountMove(current.report,hit.target.system_id);
+        else submitMove(current.force,hit.target.system_id);
+      }
     }
-    if(!current.force && !current.started && current.node) selectStar(event,current.node);
+    if(!current.force && !current.report && !current.started && current.node) selectStar(event,current.node);
     setDrag(null);
   };
   const pick = node => {
     if(picker?.kind==='move')submitMove(picker.force,node.system_id);
+    else if(picker?.kind==='move-count')submitCountMove(picker.report,node.system_id);
     else if(byId.has(Number(node.system_id)))onSelectSystem?.(byId.get(Number(node.system_id)));
     setPicker(null);ref.current?.focus();
   };
@@ -249,12 +269,19 @@ export default function CollaborationMap({
         return <g key={`count-${report.system_id}`} role="button" tabIndex={0}
           aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
           transform={`translate(${x} ${y})`} data-count-system-id={report.system_id} data-count-report-id={report.id}
-          className={`tac-map-count tac-map-report-marker${isStale(report.observed_at)?' is-stale':''}`}
-          onPointerDown={event=>event.stopPropagation()} onClick={select}
+          className={`tac-map-count tac-map-report-marker${canMoveCount?.(report)?' is-draggable':''}${isStale(report.observed_at)?' is-stale':''}`}
+          onPointerDown={event=>begin(event,null,report)} onClick={event=>{if(suppressClick.current){suppressClick.current=false;return;}select();}}
           onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();select();}}}>
           <title>{`${systemDisplayName(node)} · ${report.label} · 上报：${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 星系人数独立记录，不与舰队人数相加`}</title>
           <rect width={width} height={height} rx="5" fill="#293638" stroke="#a39577" strokeDasharray="3 2" strokeWidth="1"/>
-          <text x={width/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#e8d9bb" fontSize="12" fontWeight="400">{report.label}</text>
+          <text x={(width-20)/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#e8d9bb" fontSize="12" fontWeight="400">{report.label}</text>
+          {canWithdrawCount?.(report)&&<g role="button" tabIndex={0} aria-label={`撤下${systemDisplayName(node)}人数上报`}
+            className="tac-count-close" onPointerDown={event=>event.stopPropagation()}
+            onClick={event=>{event.stopPropagation();onWithdrawCount?.(report);}}
+            onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();onWithdrawCount?.(report);}}}>
+            <rect x={width-24} y="2" width="22" height={height-4} rx="4" fill="transparent"/>
+            <path d={`M${width-18} 9l7 8m0-8l-7 8`} fill="none" stroke="#d9c3a4" strokeWidth="1.5" strokeLinecap="round" pointerEvents="none"/>
+          </g>}
         </g>;
       })}
       {reportMarkers.map(({report,x,y,width,height})=>{
@@ -288,8 +315,8 @@ export default function CollaborationMap({
       {drag&&<g pointerEvents="none"><circle cx={drag.point.x} cy={drag.point.y} r="12" fill="#dbc69f" opacity=".8"/>{drag.candidates.map(node=><circle key={node.system_id} cx={view.x+node.px*view.scale} cy={view.y+node.py*view.scale} r="19" fill="none" stroke={drag.ambiguous?'#d3af70':'#a7c6b0'} strokeWidth="2"/>)}
         <text x={Math.max(110,Math.min(viewport.width-110,drag.point.x))} y={Math.max(170,drag.point.y-28)} textAnchor="middle" fill="#f2e7cf" fontSize="13" paintOrder="stroke" stroke="#19252b" strokeWidth="5">{drag.ambiguous?'松开后选择目标星系':drag.target?systemDisplayName(drag.target):'拖到目标星系'}</text></g>}
     </svg>
-    {picker&&<div ref={pickerRef} className="tac-map-target-picker" role="dialog" aria-label={picker.kind==='move'?'选择部署目标星系':'选择重叠星系'} style={pickerPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setPicker(null);ref.current?.focus();}}}>
-      <div><strong>{picker.kind==='move'?'移动到哪个星系？':'选择星系'}</strong><button type="button" aria-label="取消星系选择" onClick={()=>setPicker(null)}><X size={15}/></button></div>
+    {picker&&<div ref={pickerRef} className="tac-map-target-picker" role="dialog" aria-label={picker.kind==='move'?'选择部署目标星系':picker.kind==='move-count'?'选择上报目标星系':'选择重叠星系'} style={pickerPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setPicker(null);ref.current?.focus();}}}>
+      <div><strong>{picker.kind.startsWith('move')?'移动到哪个星系？':'选择星系'}</strong><button type="button" aria-label="取消星系选择" onClick={()=>setPicker(null)}><X size={15}/></button></div>
       <ul>{picker.candidates.filter(node=>byId.has(Number(node.system_id))).map(node=>{
         const report=intelById.get(Number(node.system_id));
         return <li key={node.system_id}><button type="button" data-system-choice={node.system_id} onClick={()=>pick(node)}><span>{systemDisplayName(node)}<small style={{color:securityColor(node.security_status)}}>{securityLabel(node.security_status)}</small></span><em>{report?`敌方 ${report.people??'未知'}`:'选择'}</em></button></li>;

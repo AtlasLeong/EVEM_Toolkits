@@ -203,6 +203,8 @@ CONTENT_FIELDS = ('system_id', 'people', 'ships', 'notes', 'observed_at')
 TACTICAL_FIELDS = {
     'report.create': CONTENT_FIELDS,
     'report.update': ('report_id', 'expected_version', *CONTENT_FIELDS),
+    'report.move': ('report_id', 'expected_version', 'destination_system_id'),
+    'report.withdraw': ('report_id', 'expected_version'),
     'report.confirm': ('report_id', 'expected_version', 'name'),
     'force.create': ('name', 'side', *CONTENT_FIELDS),
     'force.update': ('force_id', 'expected_version', 'name', 'side', *CONTENT_FIELDS),
@@ -225,15 +227,15 @@ def command(user, organization_id, data):
     required = ('action', 'request_id', 'connection_id', *TACTICAL_FIELDS[action]) if tactical else ('action', 'request_id', *ADMIN_FIELDS[action])
     fields(data, required, OPTIONAL_FIELDS.get(action, ()))
     org = locked_org(organization_id)
-    actor = membership(user, org, command=action not in ('report.create', 'report.update'))
+    actor = membership(user, org, command=action not in ('report.create', 'report.update', 'report.move', 'report.withdraw'))
     if action in ('member.role', 'member.restore') and actor.role != 'founder':
         raise PermissionDenied('只有统帅可以调整或恢复成员角色。')
     if tactical:
         require_lease(user, org, data['connection_id'])
     # Replays do not bypass current object-level authorization.
-    if action == 'report.update':
+    if action in ('report.update', 'report.move', 'report.withdraw'):
         report = org_object(Report, org, data['report_id'])
-        if report.author_id != user.pk:
+        if report.author_id != user.pk and (action == 'report.update' or actor.role == 'scout'):
             raise PermissionDenied('只能修改自己的上报。')
     if action == 'member.remove' and actor.role == 'commander':
         target = org_object(Membership, org, data['member_id'])
@@ -445,6 +447,23 @@ def tactical_command(user, org, data, actor=None):
             return entity_data(report)
         report = org_object(Report, org, data['report_id'])
         expect_version(report, data['expected_version'])
+        if report.status == 'withdrawn':
+            raise Conflict('这条人数上报已撤下，请重新上报。')
+        if action in ('report.move', 'report.withdraw'):
+            if report.report_kind != 'system_count':
+                bad('只能调整星系人数上报卡片。')
+            if action == 'report.move':
+                destination = system(data['destination_system_id'])
+                if destination.pk == report.system_id:
+                    bad('请选择其他星系。')
+                report.system_id = destination.pk
+                report.system_name = destination.zh_name or destination.name
+            else:
+                report.status = 'withdrawn'
+            report.version += 1
+            report.save()
+            revise(report)
+            return entity_data(report)
         if action == 'report.update':
             is_scout = (actor.role if actor is not None else
                         Membership.objects.filter(organization=org, user=user, status='active')

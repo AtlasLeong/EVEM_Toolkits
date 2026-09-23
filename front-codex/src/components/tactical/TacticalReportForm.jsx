@@ -527,3 +527,29 @@ export function ArchiveForce({ force, execute, onClose, onSuccess }) {
     </TacticalDialog>
   );
 }
+
+export function WithdrawCount({ report, execute, onClose, onSuccess }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const withdraw = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await execute('report.withdraw', {report_id:report.id, expected_version:report.version});
+      onSuccess('人数上报已从星图撤下，原始记录仍可查看。');
+      onClose();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <TacticalDialog title="撤下人数上报" onClose={onClose}>
+    <p>撤下「{report.system_name} · {report.people ?? '未知'} 人」的人数卡片？协作者的星图会同步更新，原始上报保留在记录中。</p>
+    {error && <p role="alert" className="tac-error">{error}</p>}
+    <div className="tac-form-footer">
+      <button type="button" className="tac-btn" onClick={onClose}>取消</button>
+      <button type="button" className="tac-btn is-primary" disabled={busy} onClick={withdraw}>{busy?'撤下中…':'确认撤下'}</button>
+    </div>
+  </TacticalDialog>;
+}

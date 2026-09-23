@@ -1,6 +1,7 @@
 import API_URL from "./backendSetting";
 
 const EXPIRY_SKEW_SECONDS = 30;
+const REFRESH_TIMEOUT_MS = 20000;
 let refreshFlight = null;
 let sessionMarker;
 let sessionGeneration = 0;
@@ -17,6 +18,7 @@ function captureSession() {
   const access = refresh ? null : safeStorageGet("access_token");
   const marker = refresh ? `refresh:${refresh}` : access ? `access:${access}` : null;
   if (marker !== sessionMarker) {
+    refreshFlight?.controller.abort();
     sessionMarker = marker;
     sessionGeneration++;
     refreshFlight = null;
@@ -71,6 +73,7 @@ export function notifyAuthChanged() {
 
 export function clearStoredAuth() {
   if (typeof window === "undefined") return;
+  refreshFlight?.controller.abort();
   sessionGeneration++;
   refreshFlight = null;
   window.localStorage.removeItem("access_token");
@@ -100,6 +103,19 @@ export const refreshAccessToken = async (refreshToken, signal) => {
   return data.access || null;
 };
 
+function waitForRefresh(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(signal.reason || new DOMException('请求已取消', 'AbortError'));
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason || new DOMException('请求已取消', 'AbortError'));
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(
+      value => { signal.removeEventListener('abort', abort); resolve(value); },
+      error => { signal.removeEventListener('abort', abort); reject(error); },
+    );
+  });
+}
+
 function expireSession(session) {
   assertSession(session);
   clearStoredAuth();
@@ -122,8 +138,10 @@ async function ensureFreshAccessToken(session, forceRefresh = false, signal) {
   }
 
   if (!refreshFlight || refreshFlight.generation !== session.generation) {
-    const flight = { generation: session.generation, promise: null };
-    flight.promise = refreshAccessToken(refreshToken, signal).finally(() => {
+    const flight = { generation: session.generation, promise: null, controller: new AbortController() };
+    const timeout = window.setTimeout(() => flight.controller.abort(), REFRESH_TIMEOUT_MS);
+    flight.promise = refreshAccessToken(refreshToken, flight.controller.signal).finally(() => {
+      window.clearTimeout(timeout);
       // An old completion must not release a newer account's single-flight lock.
       if (refreshFlight === flight) refreshFlight = null;
     });
@@ -132,7 +150,7 @@ async function ensureFreshAccessToken(session, forceRefresh = false, signal) {
 
   let nextAccessToken;
   try {
-    nextAccessToken = await refreshFlight.promise;
+    nextAccessToken = await waitForRefresh(refreshFlight.promise, signal);
   } catch (error) {
     assertSession(session);
     throw error;

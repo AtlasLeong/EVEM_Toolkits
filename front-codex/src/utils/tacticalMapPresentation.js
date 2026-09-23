@@ -26,12 +26,12 @@ export function fleetMarkerLabel(force, markerWidth = 220) {
   return `${fitMarkerText(name, availableNameWidth)} ${count}`;
 }
 
-// A count-only observation belongs to the star, not to a movable fleet. Keep
-// exactly one current snapshot in its own collision-aware marker layer.
+// Count-only observations stay distinct from fleets even when their system
+// position is corrected. Keep one current snapshot per star on the map.
 export function buildSystemCountMarkerGroups(reports = []) {
   return latestSystemIntel(reports).map(report => {
     const label = `人数上报 ${report.people == null ? '未知' : `${countLabel(report.people)}人`}`;
-    const markerWidth = widthFor([label], 12, 76, 220);
+    const markerWidth = Math.min(220, widthFor([label], 12, 76, 198) + 22);
     return {
       kind:'system_count', key:`system-count-${report.system_id}`, system_id:Number(report.system_id),
       visible:[{...report, label, markerWidth}], total:1, hiddenCount:0, markerWidth, rowHeight:26,
@@ -53,7 +53,7 @@ export function buildMarkerGroups(forces = [], reports = [], selectedForceId) {
   });
   const groupedReports = new Map();
   for (const report of reports) {
-    if (!report || report.status === 'confirmed') continue;
+    if (!report || report.status === 'confirmed' || report.status === 'withdrawn') continue;
     const systemId = Number(report.system_id);
     if (!groupedReports.has(systemId)) groupedReports.set(systemId, []);
     const label = `报 · ${countLabel(report.people)} 人`;

@@ -55,6 +55,7 @@ import TacticalReportForm, {
   ArchiveForce,
   ConfirmReport,
   MoveForce,
+  WithdrawCount,
 } from "../components/tactical/TacticalReportForm";
 import TacticalMembers from "../components/tactical/TacticalMembers";
 import "../styles/tacticalCollaboration.css";
@@ -692,6 +693,21 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
       setMoving(false);
     }
   };
+  const canManageCount = item => status === 'live' && !moving &&
+    (can.manageForces || Number(item.author_id) === Number(snapshot.user_id));
+  const moveCount = async (item, destination) => {
+    if (!canManageCount(item)) return;
+    setMoving(true);
+    setError("");
+    try {
+      await execute('report.move', {report_id:item.id, expected_version:item.version, destination_system_id:destination});
+      setNotice('人数上报位置已更正；观测时间未改变。');
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setMoving(false);
+    }
+  };
   useEffect(() => {
     if (!notice) return undefined;
     const timer = window.setTimeout(() => setNotice(""), 2800);
@@ -834,6 +850,10 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
               onMoveRejected={(reason) => setError(reason)}
               canMove={can.manageForces && status === "live" && !moving}
               onMoveForce={move}
+              canMoveCount={canManageCount}
+              canWithdrawCount={canManageCount}
+              onMoveCount={moveCount}
+              onWithdrawCount={report=>setDialog({kind:'withdraw-count',initial:report})}
             >
               <div className="tac-map-controls" aria-label="星图工具">
                 <label className="tac-search"><Search size={16} /><input aria-label="搜索当前星图" placeholder="查找当前星图的星系" value={systemQuery} onChange={(event) => setSystemQuery(event.target.value)} /></label>
@@ -865,7 +885,7 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
                     <ShipComposition ships={selectedIntel.ships} />
                   </div>}
                   <button className="tac-text-btn" type="button" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report',initialMode:'system_count' })}>更新星系总人数</button>
-                  {selectedHistory.length > 0 && <details className="tac-system-history"><summary>上报记录 · {selectedHistory.length}</summary>{selectedHistory.map(row => <div key={row.id}><span>{row.author_name} · {row.people ?? '未知'}{row.people == null ? '' : ' 人'}<small>{new Date(row.observed_at).toLocaleString()}</small></span>{row.author_id === snapshot.user_id && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report', initial: row })}>修订</button>}</div>)}</details>}
+                  {selectedHistory.length > 0 && <details className="tac-system-history"><summary>上报记录 · {selectedHistory.length}</summary>{selectedHistory.map(row => <div key={row.id}><span>{row.author_name} · {row.people ?? '未知'}{row.people == null ? '' : ' 人'}{row.status==='withdrawn'?' · 已撤下':''}<small>{new Date(row.observed_at).toLocaleString()}</small></span>{row.author_id === snapshot.user_id && row.status!=='withdrawn' && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report', initial: row })}>修订</button>}</div>)}</details>}
                   {selectedExits.length > 0 && <details className="tac-system-exits"><summary>相邻星门 · {selectedExits.length}</summary>
                   <div className="tac-boundary-list">
                     <strong>{selectedSystem.name} · 相邻星门 <button type="button" className="tac-text-btn" aria-label="收起相邻星门" onClick={() => { setSelectedSystem(null); setSystemDetailOpen(false); }}>收起</button></strong>
@@ -1213,6 +1233,8 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
           onSuccess={setNotice}
         />
       )}
+      {dialog?.kind === 'withdraw-count' && <WithdrawCount report={dialog.initial} execute={execute}
+        onClose={()=>setDialog(null)} onSuccess={setNotice}/>}
     </section>
   );
 }

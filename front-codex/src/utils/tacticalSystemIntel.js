@@ -11,5 +11,6 @@ export function latestSystemIntel(reports = []) {
     const id = Number(report.system_id), previous = latest.get(id);
     if (!previous || compare(report, previous) > 0) latest.set(id, report);
   }
-  return [...latest.entries()].sort(([a], [b]) => a - b).map(([, report]) => report);
+  return [...latest.entries()].sort(([a], [b]) => a - b)
+    .map(([, report]) => report).filter(report => report.status !== 'withdrawn');
 }

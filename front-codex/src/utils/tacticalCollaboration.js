@@ -17,6 +17,7 @@ export const REPORT_LABELS = {
   pending: "舰队线索",
   confirmed: "已采纳",
   corrected: "已修订",
+  withdrawn: "已撤下",
 };
 export const FLEET_PRESETS = ['大航队', '远炮战列队', '近战战列队', '巡洋舰队', '无畏队', '后勤队'];
 export function createReportOutboxEntry(action, payload, requestId) {

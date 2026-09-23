@@ -225,6 +225,55 @@ class PresenceTests(BoardCase):
 
 
 class ReportForceTests(BoardCase):
+    def test_count_report_moves_without_changing_observation_or_losing_history(self):
+        from TacticalCollaboration.models import ReportRevision
+        self.admit(self.scout)
+        report = self.cmd('report.create', report_kind='system_count',
+                          **self.content(ships={'cruiser': None})).data['result']
+        moved = self.cmd('report.move', report_id=report['id'], expected_version=1,
+                         destination_system_id=4)
+        self.assertEqual(moved.status_code, 200, moved.content)
+        self.assertEqual((moved.data['result']['system_id'], moved.data['result']['people'],
+                          moved.data['result']['observed_at'], moved.data['result']['version']),
+                         (4, 80, report['observed_at'], 2))
+        self.assertEqual(ReportRevision.objects.filter(report_id=report['id']).count(), 2)
+        self.assertEqual(self.cmd('report.move', report_id=report['id'], expected_version=1,
+                                  destination_system_id=3).status_code, 409)
+        self.assertEqual(self.snapshot().data['reports'][0]['system_id'], 4)
+        self.assertEqual(self.cmd('report.withdraw', report_id=report['id'], expected_version=2).status_code, 200)
+
+    def test_count_report_move_and_withdraw_permissions_and_version(self):
+        from TacticalCollaboration.models import ReportRevision
+        self.admit(self.scout)
+        report = self.cmd('report.create', report_kind='system_count',
+                          **self.content(ships={'cruiser': None})).data['result']
+        self.admit(self.other)
+        self.assertEqual(self.cmd('report.move', report_id=report['id'], expected_version=1,
+                                  destination_system_id=2).status_code, 403)
+        self.assertEqual(self.cmd('report.withdraw', report_id=report['id'], expected_version=1).status_code, 403)
+        self.admit(self.commander)
+        moved = self.cmd('report.move', report_id=report['id'], expected_version=1,
+                         destination_system_id=2)
+        self.assertEqual(moved.status_code, 200, moved.content)
+        withdrawn = self.cmd('report.withdraw', report_id=report['id'], expected_version=2)
+        self.assertEqual(withdrawn.status_code, 200, withdrawn.content)
+        self.assertEqual((withdrawn.data['result']['status'], withdrawn.data['result']['version']), ('withdrawn', 3))
+        self.assertEqual(ReportRevision.objects.filter(report_id=report['id']).count(), 3)
+        self.assertEqual(self.cmd('report.withdraw', report_id=report['id'], expected_version=2).status_code, 409)
+        self.assertEqual(self.cmd('report.move', report_id=report['id'], expected_version=3,
+                                  destination_system_id=3).status_code, 409)
+        self.admit(self.scout)
+        self.assertEqual(self.cmd('report.update', report_id=report['id'], expected_version=3,
+                                  **self.content(ships={'cruiser': None})).status_code, 409)
+        self.assertEqual(self.snapshot().data['reports'][0]['status'], 'withdrawn')
+
+    def test_count_only_commands_cannot_change_fleet_observations(self):
+        self.admit(self.commander)
+        report = self.cmd('report.create', **self.content()).data['result']
+        self.assertEqual(self.cmd('report.move', report_id=report['id'], expected_version=1,
+                                  destination_system_id=2).status_code, 400)
+        self.assertEqual(self.cmd('report.withdraw', report_id=report['id'], expected_version=1).status_code, 400)
+
     def test_archive_requires_command_role_and_current_version_preserves_history(self):
         from TacticalCollaboration.models import AuditLog, Force, ForceSource, ReportRevision
         self.admit()

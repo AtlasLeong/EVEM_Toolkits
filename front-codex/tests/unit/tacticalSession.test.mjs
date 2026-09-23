@@ -226,6 +226,8 @@ test("snapshot acceptance prefers the monotonic state version over wall clock", 
 test("auth refresh and retry preserve the tactical request abort signal", () => {
   assert.match(fetchWithAuthSource, /refreshAccessToken = async \(refreshToken, signal\)/);
   assert.match(fetchWithAuthSource, /body: JSON\.stringify\(\{ refresh: refreshToken \}\),\s*signal,/s);
+  assert.match(fetchWithAuthSource, /refreshAccessToken\(refreshToken, flight\.controller\.signal\)/);
+  assert.match(fetchWithAuthSource, /waitForRefresh\(refreshFlight\.promise, signal\)/);
   assert.match(fetchWithAuthSource, /ensureFreshAccessToken\(session, false, options\.signal\)/);
   assert.match(fetchWithAuthSource, /ensureFreshAccessToken\(session, true, options\.signal\)/);
   assert.match(fetchWithAuthSource, /headers: buildHeaders\(options, accessToken\),\s*signal: options\.signal,/s);

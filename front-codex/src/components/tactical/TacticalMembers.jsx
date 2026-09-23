@@ -64,7 +64,8 @@ export default function TacticalMembers({
       }
     } catch (failure) {
       if (alive.current && sequence === readSequence.current) {
-        if (timedOut) setError("人员列表刷新超时，将自动重试。");
+        if (timedOut || controller.signal.aborted)
+          setError("人员列表刷新超时，将自动重试。");
         else failureHandler(failure);
       }
     } finally {

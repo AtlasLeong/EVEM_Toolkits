@@ -415,7 +415,7 @@ test('strength overview count selection reveals its row from a filtered reportin
   await expect(page.locator('.tac-count-row.is-selected')).toBeInViewport();
 });
 
-test('strength overview count marker coexists with a fleet and cannot drag it', async ({page}) => {
+test('strength overview count marker coexists with a fleet and can be relocated', async ({page}) => {
   const fx=await fixture(page,{role:'commander'});
   fx.snapshot.reports=[{...fx.snapshot.reports[0],report_kind:'system_count',people:70}];
   await page.goto('/tactical');
@@ -425,11 +425,42 @@ test('strength overview count marker coexists with a fleet and cannot drag it', 
   await marker.focus(); await page.keyboard.press('Enter');
   await expect(page.getByRole('region',{name:'星系敌情详情'})).toContainText('德里克一');
   const before=await page.locator('.tac-map > svg > g').first().getAttribute('transform');
-  const box=await marker.boundingBox();
+  const box=await marker.boundingBox(), destination=await page.getByRole('button',{name:'选择星系 德里克二'}).boundingBox();
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2); await page.mouse.down();
-  await page.mouse.move(box.x+120,box.y+90,{steps:5}); await page.mouse.up();
-  expect(fx.commands).toHaveLength(0);
+  await page.mouse.move(destination.x+destination.width/2,destination.y+destination.height/2,{steps:8}); await page.mouse.up();
+  await expect.poll(()=>fx.commands.find(command=>command.action==='report.move')).toMatchObject({
+    report_id:21, expected_version:1, destination_system_id:102,
+  });
   expect(await page.locator('.tac-map > svg > g').first().getAttribute('transform')).toBe(before);
+});
+
+test('count card close asks for confirmation and withdraws the report without deleting it', async ({page}) => {
+  const fx=await fixture(page,{role:'commander'});
+  fx.snapshot.reports=[{...fx.snapshot.reports[0],report_kind:'system_count',people:70}];
+  await page.goto('/tactical');
+  const close=page.getByRole('button',{name:'撤下德里克一人数上报'});
+  await close.click();
+  const dialog=page.getByRole('dialog',{name:'撤下人数上报'});
+  await expect(dialog).toBeVisible();
+  expect(fx.commands).toHaveLength(0);
+  await dialog.getByRole('button',{name:'取消',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  await close.click();
+  await page.getByRole('dialog',{name:'撤下人数上报'}).getByRole('button',{name:'确认撤下'}).click();
+  await expect.poll(()=>fx.commands.find(command=>command.action==='report.withdraw')).toMatchObject({report_id:21,expected_version:1});
+});
+
+test('a scout sees the close control only on their own count card', async ({page}) => {
+  const fx=await fixture(page,{role:'scout'});
+  fx.snapshot.reports=[
+    {...fx.snapshot.reports[0],report_kind:'system_count',people:70},
+    {...fx.snapshot.reports[0],id:22,author_id:24,author_name:'斥候乙',report_kind:'system_count',system_id:102,system_name:'德里克二',people:44},
+  ];
+  await page.goto('/tactical');
+  await expect(page.getByRole('button',{name:'撤下德里克一人数上报'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'撤下德里克二人数上报'})).toHaveCount(0);
+  await expect(page.locator('[data-count-report-id="21"]')).toHaveCSS('cursor','grab');
+  await expect(page.locator('[data-count-report-id="22"]')).toHaveCSS('cursor','pointer');
 });
 
 test('strength overview discloses stale sources and outside labels even without mobile graph',async({page})=>{

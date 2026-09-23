@@ -21,3 +21,7 @@ test('equal observation times resolve deterministically by update, version and i
 test('invalid ids and confirmed legacy observations cannot become system totals', () => {
   assert.deepEqual(latest([null,report(1,null,5),report(2,'bad',8),report(3,2,19,{report_kind:'fleet',status:'confirmed'})]),[]);
 });
+test('withdrawing latest count hides the system card instead of reviving stale intel', () => {
+  const rows = [report(1, 10, 68), report(2, 10, 42, {observed_at:'2026-09-22T10:01:00Z', status:'withdrawn'})];
+  assert.deepEqual(latest(rows).map(row => row.id), []);
+});

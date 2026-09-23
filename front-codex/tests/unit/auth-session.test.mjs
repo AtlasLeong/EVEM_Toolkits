@@ -30,7 +30,9 @@ function fixture(fetchImpl) {
     removeItem: (key) => values.delete(key),
   };
   window.atob = atob;
-  const context = vm.createContext({ window, Event, FormData, fetch: fetchImpl });
+  window.setTimeout = setTimeout;
+  window.clearTimeout = clearTimeout;
+  const context = vm.createContext({ window, Event, FormData, AbortController, DOMException, fetch: fetchImpl });
   vm.runInContext(compiled.outputFiles[0].text, context);
   const auth = context.authModule;
   const login = (user, expires = 600, nonce = "first") => {
@@ -154,6 +156,28 @@ test("normal concurrent requests deduplicate refresh and preserve multipart head
   assert.equal(requests[0].headers["Content-Type"], "application/json");
   assert.equal(requests[1].headers["Content-Type"], undefined);
   assert.equal(requests[1].body, form);
+});
+
+test("one request timing out does not cancel another request sharing its token refresh", async () => {
+  const refresh = deferred();
+  const requests = [];
+  let refreshCount = 0;
+  const { auth, login } = fixture((url, options) => {
+    if (url.endsWith('/refresh')) { refreshCount++; return refresh.promise; }
+    requests.push(options.headers.Authorization);
+    return Promise.resolve({ status: 200 });
+  });
+  login('A', -60);
+  const controller = new AbortController();
+  const first = auth.default('http://local-test/api/one', { signal: controller.signal });
+  const second = auth.default('http://local-test/api/two');
+  controller.abort();
+  await assert.rejects(first, error => error.name === 'AbortError');
+  const access = jwt('A');
+  refresh.resolve(response(access));
+  assert.equal((await second).status, 200);
+  assert.equal(refreshCount, 1);
+  assert.deepEqual(requests, [`Bearer ${access}`]);
 });
 
 test("expired credentials are cleared while anonymous requests still work", async () => {
