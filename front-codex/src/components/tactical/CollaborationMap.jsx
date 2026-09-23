@@ -6,7 +6,7 @@ import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMa
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
-import { focusDenseArea, layoutIntelLabels, leaderSegmentsForFocus, resolveSystemHit, subscribeMapWheel, validateDirectMove } from '../../utils/tacticalMapInteraction';
+import { focusDenseArea, indexGateSegments, layoutIntelLabels, leaderSegmentsForFocus, resolveSystemHit, subscribeMapWheel, validateDirectMove } from '../../utils/tacticalMapInteraction';
 import '../../styles/tacticalMapIntel.css';
 
 const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91';
@@ -41,21 +41,17 @@ export default function CollaborationMap({
   const intelById = useMemo(() => new Map(intel.map(row => [Number(row.system_id), row])), [intel]);
   const screenSystems = useMemo(() => screenNodes(nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
     {panX:view.x, panY:view.y, zoom:view.scale}), [nodes, view]);
-  const gateSegmentsBySystem = useMemo(() => {
+  const gateSegments = useMemo(() => {
     const screenById = new Map(screenSystems.map(node => [Number(node.system_id), node]));
-    const incident = new Map();
+    const segments = [];
     for (const gate of stargates) {
       const sourceId=Number(gate.system_id), destinationId=Number(gate.destination_system_id);
       const a=screenById.get(sourceId), b=screenById.get(destinationId);
       if (!a || !b) continue;
-      const segment={x1:a.px,y1:a.py,x2:b.px,y2:b.py};
-      for (const id of [sourceId,destinationId]) {
-        if (!incident.has(id)) incident.set(id, []);
-        incident.get(id).push(segment);
-      }
+      segments.push({x1:a.px,y1:a.py,x2:b.px,y2:b.py});
     }
-    return incident;
-  }, [stargates, screenSystems]);
+    return indexGateSegments(segments,viewport);
+  }, [stargates, screenSystems, viewport]);
   const selectedNeighbors = useMemo(() => adjacentSystems(stargates, hoveredSystemId ?? selectedSystemId), [stargates, hoveredSystemId, selectedSystemId]);
   const markerGroups = useMemo(() => markerGroupsForViewport([
     ...buildMarkerGroups(forces, reports, selectedForceId), ...buildSystemCountMarkerGroups(intel),
@@ -76,8 +72,8 @@ export default function CollaborationMap({
     // decluttering solver or every label would jump as the pointer crosses
     // the map during a live update.
     selectedId:selectedSystemId, hoveredId:null, intelById, forceIds:forceSystems,
-    zoom:view.scale, showAll:showAllNames, occupied:positionedGroups, gateSegments:gateSegmentsBySystem,
-    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups, gateSegmentsBySystem]);
+    zoom:view.scale, showAll:showAllNames, occupied:positionedGroups, gateSegments,
+    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups, gateSegments]);
   const focusLeaders = useMemo(() => leaderSegmentsForFocus(positionedGroups, labelLayouts,
     {selectedSystemId, hoveredSystemId, ...viewport}), [positionedGroups, labelLayouts, selectedSystemId, hoveredSystemId, viewport]);
   const portals = useMemo(() => {

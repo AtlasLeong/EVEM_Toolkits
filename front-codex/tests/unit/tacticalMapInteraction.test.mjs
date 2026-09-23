@@ -115,6 +115,16 @@ test('labels choose a nearby gate-free slot before one crossed by a real vertica
   assert.equal(label.gateBackdrop,false);
   assert.equal(JSON.stringify({stars,gateSegments}),before);
 });
+test('spatial gate index keeps an unrelated crossing line away from a star label',()=>{
+  const stars=[{system_id:1,px:400,py:300,name:'甲'}];
+  const gates=[{system_id:2,destination_system_id:3,x1:350,y1:330,x2:450,y2:330}];
+  const before=JSON.stringify({stars,gates});
+  const gateSegments=use('indexGateSegments',gates,{width:800,height:600});
+  const [label]=use('layoutIntelLabels',stars,{width:800,height:600,gateSegments});
+  assert.ok(label.y+label.height<300);
+  assert.equal(label.gateBackdrop,false);
+  assert.equal(JSON.stringify({stars,gates}),before);
+});
 test('gate crossing recognizes finite horizontal, vertical, and diagonal segments',()=>{
   const rect={x:10,y:10,width:20,height:20};
   for(const segment of [
@@ -127,7 +137,7 @@ test('gate crossing recognizes finite horizontal, vertical, and diagonal segment
     {x1:Infinity,y1:0,x2:20,y2:40},
   ]) assert.equal(use('segmentIntersectsRect',segment,rect),false);
 });
-test('a label gets a compact backdrop only when every legal position crosses a gate',()=>{
+test('a label gets a compact backdrop when every legal position crosses a gate',()=>{
   const center={x:400,y:300};
   const gateSegments=[
     [400,0],[400,600],[0,300],[800,300],
@@ -138,6 +148,18 @@ test('a label gets a compact backdrop only when every legal position crosses a g
   });
   assert.equal(label.gateBackdrop,true);
   assert.ok(Math.hypot(label.x+label.width/2-center.x,label.y+label.height/2-center.y)<100);
+});
+test('near crossed label with backdrop beats a clear label more than 90px away',()=>{
+  const occupied=[
+    {x:0,y:0,width:800,height:300},
+    {x:0,y:300,width:365,height:300},
+    {x:435,y:300,width:365,height:300},
+  ];
+  const [label]=use('layoutIntelLabels',[{system_id:1,px:400,py:300,name:'甲'}],{
+    width:800,height:600,occupied,gateSegments:[{x1:400,y1:310,x2:400,y2:391}],
+  });
+  assert.equal(label.y,313);
+  assert.equal(label.gateBackdrop,true);
 });
 test('a reported label uses free upper-right space when cardinal and opposite-diagonal positions are blocked',()=>{
   const occupied=[{x:0,y:0,width:1000,height:235},{x:0,y:235,width:409,height:565},

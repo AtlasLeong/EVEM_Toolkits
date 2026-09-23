@@ -57,6 +57,48 @@ export function segmentIntersectsRect(segment, rect) {
   return true;
 }
 
+// Build once for the current screen transform. Querying a name slot then
+// examines only gates whose bounding boxes occupy its nearby grid cells,
+// including gates whose endpoints belong to entirely different systems.
+export function indexGateSegments(segments = [], {width, height, cellSize = 128} = {}) {
+  const size = Number.isFinite(cellSize) && cellSize > 0 ? cellSize : 128;
+  const columns = Math.max(1, Math.ceil(width / size));
+  const rows = Math.max(1, Math.ceil(height / size));
+  const cells = new Map();
+  for (const segment of segments) {
+    const {x1,y1,x2,y2} = segment;
+    if (![x1,y1,x2,y2].every(Number.isFinite)) continue;
+    const left=Math.max(0,Math.min(x1,x2)), right=Math.min(width,Math.max(x1,x2));
+    const top=Math.max(0,Math.min(y1,y2)), bottom=Math.min(height,Math.max(y1,y2));
+    if (left>right || top>bottom) continue;
+    const x0=Math.min(columns-1,Math.floor(left/size)), x1Cell=Math.min(columns-1,Math.floor(right/size));
+    const y0=Math.min(rows-1,Math.floor(top/size)), y1Cell=Math.min(rows-1,Math.floor(bottom/size));
+    for (let cy=y0;cy<=y1Cell;cy++) for (let cx=x0;cx<=x1Cell;cx++) {
+      const key=cy*columns+cx;
+      if (!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(segment);
+    }
+  }
+  return {cells,cellSize:size,columns,rows};
+}
+
+function indexedGateCrossesRect(index, rect) {
+  const {cells,cellSize,columns,rows} = index;
+  const x0=Math.max(0,Math.min(columns-1,Math.floor(rect.x/cellSize)));
+  const x1=Math.max(0,Math.min(columns-1,Math.floor((rect.x+rect.width)/cellSize)));
+  const y0=Math.max(0,Math.min(rows-1,Math.floor(rect.y/cellSize)));
+  const y1=Math.max(0,Math.min(rows-1,Math.floor((rect.y+rect.height)/cellSize)));
+  const seen=new Set();
+  for (let cy=y0;cy<=y1;cy++) for (let cx=x0;cx<=x1;cx++) {
+    for (const segment of cells.get(cy*columns+cx) || []) {
+      if (seen.has(segment)) continue;
+      seen.add(segment);
+      if (segmentIntersectsRect(segment,rect)) return true;
+    }
+  }
+  return false;
+}
+
 export function resolveSystemHit(nodes, point, view, viewport, radius = 23) {
   if (!inside(point, viewport)) return {target:null, candidates:[], ambiguous:false};
   const ranked = nodes.map(node => ({node, point:{x:node.px * view.scale + view.x, y:node.py * view.scale + view.y}}))
@@ -107,6 +149,7 @@ export function layoutIntelLabels(nodes, {
   width, height, selectedId, hoveredId, intelById = new Map(), forceIds = new Set(),
   zoom = 1, showAll = false, occupied = [], gateSegments = [], padding = {left:14, right:14, top:110, bottom:18},
 } = {}) {
+  const gateIndex = Array.isArray(gateSegments) ? indexGateSegments(gateSegments,{width,height}) : gateSegments;
   const priority = node => Number(node.system_id) === Number(selectedId) ? 0 : Number(node.system_id) === Number(hoveredId) ? 1 : intelById.has(Number(node.system_id)) ? 2 : forceIds.has(Number(node.system_id)) ? 3 : 4;
   const ordered = nodes.filter(node => inside({x:node.px, y:node.py}, {width, height}))
     .filter(node => showAll || priority(node) < 4 || zoom >= 1.7 || !nodes.some(other => other !== node && Math.hypot(other.px-node.px, other.py-node.py) < 52))
@@ -118,25 +161,33 @@ export function layoutIntelLabels(nodes, {
     const w = Math.max(56, Math.ceil(textWidth(name, 13) + 8));
     const h = 34;
     const positions = [];
-    for (const distance of [13, 34, 60, 92]) positions.push(
+    const distances=[13,34,60,92];
+    for (const distance of distances) positions.push(
       [node.px-w/2, node.py+distance], [node.px-w/2, node.py-distance-h],
       [node.px+distance, node.py-h/2], [node.px-distance-w, node.py-h/2],
       [node.px+distance, node.py+distance], [node.px-distance-w, node.py-distance-h],
       [node.px+distance, node.py-distance-h], [node.px-distance-w, node.py+distance],
     );
-    const incidentGates = gateSegments instanceof Map ? gateSegments.get(Number(node.system_id)) || [] : gateSegments;
-    let fallback = null, chosen = null;
-    for (const [x,y] of positions) {
+    let best = null;
+    for (const [index,[x,y]] of positions.entries()) {
+      const distance = distances[Math.floor(index/8)];
+      // Later candidates cannot beat this score even if no gate crosses them.
+      if (best && distance+index/100 >= best.score) break;
       const rect = {x,y,width:w,height:h};
       if (x < padding.left || y < padding.top || x+w > width-padding.right || y+h > height-padding.bottom) continue;
       if ([...occupied,...placed].some(other => rectanglesOverlap(rect, {x:other.x-4,y:other.y-3,width:other.width+8,height:other.height+6}))) continue;
       if (nodes.some(other => other !== node && rectanglesOverlap(rect, {x:other.px-6,y:other.py-6,width:12,height:12}))) continue;
-      if (incidentGates.some(segment => segmentIntersectsRect(segment, rect))) fallback ||= rect;
-      else { chosen = rect; break; }
+      const crossed = indexedGateCrossesRect(gateIndex,rect);
+      // Crossing a gate costs roughly one near-distance ring. A clear 34/60px
+      // slot wins, but a tiny backed label stays preferable to a 92px jump.
+      const score = distance + (crossed ? 50 : 0) + index/100;
+      if (!best || score<best.score) best={rect,crossed,score};
     }
-    const rect = chosen || fallback;
-    if (rect) placed.push({...rect, system_id:node.system_id, name, intel, gateBackdrop:!chosen,
+    if (best) {
+      const {rect,crossed} = best;
+      placed.push({...rect, system_id:node.system_id, name, intel, gateBackdrop:crossed,
       leader:{from:{x:node.px,y:node.py},to:{x:clamp(node.px,rect.x,rect.x+w),y:clamp(node.py,rect.y,rect.y+h)}}});
+    }
   }
   return placed;
 }
