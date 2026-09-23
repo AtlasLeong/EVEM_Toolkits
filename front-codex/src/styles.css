@@ -40,12 +40,6 @@
   --radius: 10px;
   --shadow: 0 12px 36px rgba(45, 40, 30, 0.12);
   --top-gap: 24px;
-  color-scheme: light;
-}
-
-/* Responsive polish: keep the desktop console restrained and give compact screens
-   a first-class navigation and route-planning surface. */
-:root {
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -56,7 +50,10 @@
   --radius-panel: 10px;
   --radius-chip: 999px;
   --shadow-overlay: 0 16px 40px rgba(34, 30, 24, 0.14);
+  color-scheme: light;
 }
+
+/* Responsive polish keeps the desktop console restrained and compact screens usable. */
 
 .mobile-shell-header,
 .mobile-nav {
@@ -202,15 +199,6 @@
     border-radius: var(--radius-control);
     font-weight: 650;
     letter-spacing: -0.02em;
-  }
-
-  .mobile-brand .brand-icon {
-    width: 30px;
-    height: 32px;
-  }
-
-  .mobile-brand .brand-name {
-    font-size: 16px;
   }
 
   .mobile-menu-toggle {
