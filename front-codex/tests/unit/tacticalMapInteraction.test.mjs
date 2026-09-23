@@ -20,6 +20,17 @@ test('map leaders stay hidden except for the focused or hovered system',()=>{
   assert.equal(use('shouldShowMapLeader', 42, { selectedSystemId: 7, hoveredSystemId: 8 }), false);
   assert.equal(use('shouldShowMapLeader', 'bad', { selectedSystemId: 'bad' }), false);
 });
+test('visible marker leaders keep every card attached and promote the focused card',()=>{
+  const groups=[
+    {key:'force-a',kind:'force',system_id:42,visible:[{id:7}],leader:{from:{x:400,y:220},to:{x:400,y:300}}},
+    {key:'count-b',kind:'system_count',system_id:99,visible:[{id:8}],leader:{from:{x:500,y:420},to:{x:500,y:350}}},
+    {key:'too-close',kind:'force',system_id:100,visible:[{id:9}],leader:{from:{x:100,y:100},to:{x:105,y:100}}},
+  ];
+  const leaders=use('markerLeaderSegments',groups,{selectedForceId:7});
+  assert.deepEqual(leaders.map(leader=>leader.key),['force-a','count-b']);
+  assert.equal(leaders.find(leader=>leader.key==='force-a').active,true);
+  assert.equal(leaders.find(leader=>leader.key==='count-b').active,false);
+});
 test('focused callouts share at most one nearby leader and do not mutate layout inputs',()=>{
   const groups=[
     {system_id:42,node:{px:400,py:300},leader:{from:{x:400,y:360},to:{x:400,y:300}}},

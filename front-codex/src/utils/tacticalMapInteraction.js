@@ -6,11 +6,9 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const inside = (point, {width, height}) => point.x >= 0 && point.y >= 0 && point.x <= width && point.y <= height;
 
 /**
- * Callout leaders are an aid for the focused system, not part of the map
- * topology. Rendering one for every marker makes a busy battle area look like
- * a second (fake) network and causes visual noise when the live snapshot is
- * refreshed. Keep the line only while the related system is focused/hovered.
- * The decision is pure so the SVG tree stays deterministic across snapshots.
+ * Focus leaders are an aid for the selected system, not part of the map
+ * topology. Tactical cards have their own quiet, always-visible leaders;
+ * this helper keeps the extra name/focus leader limited to one connection.
  */
 export function shouldShowMapLeader(systemId, { selectedSystemId = null, hoveredSystemId = null } = {}) {
   const id = Number(systemId);
@@ -37,6 +35,29 @@ export function leaderSegmentsForFocus(groups = [], labels = [], {
   const nearest = candidates[0];
   return nearest
     ? [{system_id:nearest.system_id, from:nearest.from, to:nearest.to}] : [];
+}
+
+// Every visible tactical card keeps a low-contrast connection to its owning
+// star. Selection or hover promotes the line without inventing a second
+// network on top of the real stargate topology.
+export function markerLeaderSegments(groups = [], {
+  selectedSystemId = null, hoveredSystemId = null, selectedForceId = null,
+} = {}) {
+  const focusId = Number(hoveredSystemId ?? selectedSystemId);
+  return groups.flatMap((group, index) => {
+    const {from, to} = group.leader || {};
+    if (![from?.x, from?.y, to?.x, to?.y].every(Number.isFinite)) return [];
+    const distance = Math.hypot(from.x - to.x, from.y - to.y);
+    if (distance < 10) return [];
+    const forceSelected = group.kind === 'force' &&
+      (group.visible || []).some(force => Number(force.id) === Number(selectedForceId));
+    return [{
+      key: group.key ?? `${group.kind || 'marker'}-${index}`,
+      system_id: Number(group.system_id),
+      from, to,
+      active: Number(group.system_id) === focusId || forceSelected,
+    }];
+  });
 }
 
 // Liang-Barsky clipping also handles horizontal and vertical gates without

@@ -984,6 +984,17 @@ test("immersive map projects to its viewport and displays real security without 
   expect(await map.getAttribute("viewBox")).toBe(viewport);
 });
 
+test("tactical cards keep a visible connector before selection", async ({ page }) => {
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  const map = page.getByRole("group", { name: "局部作战星图", exact: true });
+  await expect(map.locator(".tac-map-force")).toBeVisible();
+  const leaders = map.locator(".tac-map-marker-leader");
+  expect(await leaders.count()).toBeGreaterThan(0);
+  await map.locator(".tac-map-force").first().click();
+  await expect(map.locator(".tac-map-marker-leader.is-active")).toHaveCount(1);
+});
+
 test("map wheel zoom does not scroll the surrounding page", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await fixture(page, { role: "commander" });

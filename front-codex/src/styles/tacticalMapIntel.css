@@ -16,10 +16,13 @@
 .tac-system-intel-map .tac-intel-label:focus-visible text { fill: #fff1ca; }
 .tac-system-intel-map .tac-intel-label.is-stale { opacity: .82; }
 .tac-system-intel-map .tac-intel-label,
-.tac-system-intel-map .tac-map-focus-leader { transition: opacity 120ms ease-out; }
+.tac-system-intel-map .tac-map-focus-leader,
+.tac-system-intel-map .tac-map-marker-leader { transition: opacity 160ms ease-out; }
+.tac-system-intel-map .tac-map-marker-leader.is-active { filter: drop-shadow(0 0 2px #a9c0b466); }
 .tac-system-intel-map.is-wheel-zooming .tac-intel-label.is-wheel-secondary { opacity: .8; }
 .tac-system-intel-map.is-wheel-zooming .tac-intel-label.is-wheel-secondary:focus-visible { opacity: 1; }
 .tac-system-intel-map.is-wheel-zooming .tac-map-focus-leader { opacity: .2; }
+.tac-system-intel-map.is-wheel-zooming .tac-map-marker-leader { transition: none; }
 .tac-system-intel-map.is-label-moving .tac-intel-label,
 .tac-system-intel-map.is-label-moving .tac-map-focus-leader { transition: none; }
 .tac-system-intel-map.is-label-settling .tac-intel-label { animation: tac-label-settle-in 180ms ease-out both; }
@@ -29,7 +32,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .tac-system-intel-map .tac-intel-label,
-  .tac-system-intel-map .tac-map-focus-leader { transition: none; animation: none; }
+  .tac-system-intel-map .tac-map-focus-leader,
+  .tac-system-intel-map .tac-map-marker-leader { transition: none; animation: none; }
 }
 .tac-system-intel-map .tac-map-count { cursor: pointer; outline: none; }
 .tac-system-intel-map .tac-map-count.is-draggable { cursor: grab; touch-action: none; }

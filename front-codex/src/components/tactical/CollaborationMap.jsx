@@ -6,7 +6,7 @@ import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMa
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
-import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
+import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, markerLeaderSegments, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
 import '../../styles/tacticalMapIntel.css';
 
 const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91';
@@ -158,8 +158,11 @@ export default function CollaborationMap({
   useLayoutEffect(() => {
     if (!isWheelZooming) settledLabels.current = {labels:labelLayouts, nodes:screenSystems, gateSegments, scopeVersion};
   }, [isWheelZooming, labelLayouts, screenSystems, gateSegments, scopeVersion]);
-  const focusLeaders = useMemo(() => leaderSegmentsForFocus(positionedGroups, labelLayouts,
-    {selectedSystemId, hoveredSystemId, ...viewport}), [positionedGroups, labelLayouts, selectedSystemId, hoveredSystemId, viewport]);
+  const markerLeaders = useMemo(() => markerLeaderSegments(positionedGroups,
+    {selectedSystemId, hoveredSystemId, selectedForceId}),
+    [positionedGroups, selectedSystemId, hoveredSystemId, selectedForceId]);
+  const focusLeaders = useMemo(() => leaderSegmentsForFocus([], labelLayouts,
+    {selectedSystemId, hoveredSystemId, ...viewport}), [labelLayouts, selectedSystemId, hoveredSystemId, viewport]);
   const portals = useMemo(() => {
     const exits = visibleGateExits(systems, stargates, boundaryExits, systems.map(node => node.system_id));
     const grouped = new Map();
@@ -428,6 +431,7 @@ export default function CollaborationMap({
         })}
       </g>
       <g ref={overlayLayerRef} className="tac-map-overlay-layer">
+      {markerLeaders.map(leader=><line key={`marker-leader-${leader.key}`} className={`tac-map-marker-leader${leader.active?' is-active':''}`} x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke={leader.active?'#a9c0b4':'#718681'} strokeWidth={leader.active?1.45:.85} opacity={leader.active?.88:.46} pointerEvents="none"/>)}
       {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} className="tac-map-focus-leader" x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" pointerEvents="none"/>)}
       {labelLayouts.map(label=>{
         const node=byId.get(Number(label.system_id));if(!node)return null;
