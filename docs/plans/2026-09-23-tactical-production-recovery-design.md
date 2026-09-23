@@ -18,7 +18,7 @@ Do not change global `USE_TZ` or reinterpret historical rows. Parse and validate
 
 When the organization has no selected regions, show one central, keyboard-accessible `选择作战范围` action for founder/commander; scouts see a waiting message without an unauthorized button. Do not mistake a transient map fetch failure for an empty scope. Keep the existing compact scope control after a scope is selected.
 
-At wide desktop sizes, anchor the intelligence card below the left map tools rather than computing its position from overview visibility. At narrow desktop sizes, show intelligence in the existing right-side context area and temporarily replace the overview, with an explicit back control. This preserves room for star systems instead of stacking two cards over a narrow map. The mobile flow continues to use the no-map list view.
+At all desktop sizes, place intelligence in the existing right-side context area and temporarily replace the overview. Closing intelligence restores the overview; its deployment-detail action explicitly switches back. A first browser regression found that a fixed left card blocked the map toolbar and draggable count marker, so the original left-side proposal was rejected. The mobile flow continues to use the no-map list view.
 
 ### Realtime transport and release gate
 

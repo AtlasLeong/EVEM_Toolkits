@@ -9,6 +9,7 @@ import secrets
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from uuid import UUID
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Max, Q
@@ -259,7 +260,7 @@ def admin_command(user, org, actor, data):
         code = secrets.token_urlsafe(32)
         expires = timezone.now() + timedelta(days=7)
         Invite.objects.create(organization=org, creator=user, code_hash=hashlib.sha256(code.encode()).hexdigest(), expires_at=expires)
-        return {'invite_code': code, 'expires_at': expires.isoformat()}
+        return {'invite_code': code, 'expires_at': wire_time(expires)}
     if action == 'join.review':
         app = JoinApplication.objects.filter(pk=integer(data['application_id']), organization=org).first()
         if app is None:
@@ -336,15 +337,27 @@ def content(data):
     except ValueError:
         observed = None
     if (observed is None or timezone.is_naive(observed) or
-            observed < datetime(2000, 1, 1, tzinfo=datetime_timezone.utc) or observed > timezone.now() + timedelta(minutes=5)):
+            observed < datetime(2000, 1, 1, tzinfo=datetime_timezone.utc) or
+            observed > datetime.now(datetime_timezone.utc) + timedelta(minutes=5)):
         bad('观测时间必须包含时区，且不能在未来。')
+    # Production stores local naive datetimes (USE_TZ=False), while clients
+    # always send offset-aware ISO timestamps. Normalize before any ORM write.
+    if not settings.USE_TZ:
+        observed = timezone.make_naive(observed, timezone.get_default_timezone())
     return {'system_id': location.pk, 'system_name': location.zh_name or location.name,
             'people': people, 'ships': ships, 'notes': text(data['notes'], 1000, blank=True), 'observed_at': observed}
 
 
+def wire_time(value):
+    """Never emit a timezone-ambiguous timestamp to browser clients."""
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, timezone.get_default_timezone())
+    return value.isoformat()
+
+
 def entity_data(row):
     result = {key: getattr(row, key) for key in ('id', 'version', 'system_id', 'system_name', 'people', 'ships', 'notes')}
-    result.update(observed_at=row.observed_at.isoformat(), updated_at=row.updated_at.isoformat())
+    result.update(observed_at=wire_time(row.observed_at), updated_at=wire_time(row.updated_at))
     if isinstance(row, Force):
         source = row.source_report
         result.update(name=row.name, side=row.side, source_report_id=row.source_report_id,
@@ -604,21 +617,21 @@ def presence_data(org, include_roster=False):
         for lease in leases.select_related('user').order_by('joined_at', 'id'):
             if lease.user_id not in roster:
                 roster[lease.user_id] = {'user_id': lease.user_id, 'display_name': display_name(lease.user),
-                                         'role': roles[lease.user_id], 'joined_at': lease.joined_at.isoformat(),
-                                         'last_seen_at': lease.last_seen_at.isoformat()}
+                                         'role': roles[lease.user_id], 'joined_at': wire_time(lease.joined_at),
+                                         'last_seen_at': wire_time(lease.last_seen_at)}
             else:
                 row = roster[lease.user_id]
-                row['last_seen_at'] = max(row['last_seen_at'], lease.last_seen_at.isoformat())
+                row['last_seen_at'] = max(row['last_seen_at'], wire_time(lease.last_seen_at))
         last_reports = dict(ReportRevision.objects.filter(report__organization=org, report__author_id__in=roster)
                             .values('report__author_id').annotate(last_reported_at=Max('created_at'))
                             .values_list('report__author_id', 'last_reported_at'))
-        reconnecting_before = (timezone.now() - timedelta(seconds=30)).isoformat()
+        reconnecting_before = wire_time(timezone.now() - timedelta(seconds=30))
         for user_id, row in roster.items():
             # A missed heartbeat is a reconnect hint, not proof of logout; the
             # 60-second lease still owns the slot until it expires.
             row['connection_status'] = 'reconnecting' if row['last_seen_at'] < reconnecting_before else 'online'
             last_reported = last_reports.get(user_id)
-            row['last_reported_at'] = last_reported.isoformat() if last_reported is not None else None
+            row['last_reported_at'] = wire_time(last_reported) if last_reported is not None else None
         result['online'] = list(roster.values())
     return result
 
@@ -695,7 +708,7 @@ def snapshot(user, organization_id, connection_id, *, socket_generation=None):
             'scope': scope_data(org),
             'forces': [{**entity_data(force), 'in_scope': force.system_id in drawable} for force in forces.order_by('id')],
             'reports': [{**entity_data(report), 'in_scope': report.system_id in drawable} for report in reports.order_by('id')],
-            **presence_data(org, include_roster=commanding), 'server_time': timezone.now().isoformat()}
+            **presence_data(org, include_roster=commanding), 'server_time': wire_time(timezone.now())}
 
 
 def require_socket(user, org, connection_id, generation):
@@ -735,6 +748,20 @@ def claim_socket(user, organization_id, connection_id, generation):
 
 def socket_snapshot(user, organization_id, connection_id, generation):
     return snapshot(user, organization_id, connection_id, socket_generation=uuid(generation))
+
+
+def socket_state_version(user, organization_id, connection_id, generation):
+    """Cheap authorized cursor for idle sockets; do not build a full board."""
+    version = (Membership.objects.filter(
+        organization_id=organization_id, user_id=user.pk, user__is_active=True,
+        status='active', organization__connectionlease__user_id=user.pk,
+        organization__connectionlease__connection_id=uuid(connection_id),
+        organization__connectionlease__socket_generation=uuid(generation),
+        organization__connectionlease__expires_at__gt=timezone.now(),
+    ).values_list('organization__state_version', flat=True).first())
+    if version is None:
+        raise PermissionDenied('此连接已过期或访问权限已变化。')
+    return version
 
 
 @transaction.atomic

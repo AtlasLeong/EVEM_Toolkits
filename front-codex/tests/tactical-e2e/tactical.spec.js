@@ -90,6 +90,39 @@ test("a transient map failure can be retried without leaving the current board",
   await expect(page.getByRole("alert").filter({ hasText: "局部星图加载失败" })).toHaveCount(0);
 });
 
+test('empty scope offers a centered map action to its commander', async ({ page }) => {
+  const fx = await fixture(page, { role: 'commander' });
+  fx.setSnapshot({ ...fx.snapshot, scope: { region_ids: [], border_hops: 1, version: 1 } });
+  await page.route('**/api/tactical/organizations/1/map/', route => route.fulfill(json({
+    systems: [], stargates: [], constellations: [], boundary_exits: [],
+    scope: { region_ids: [], border_hops: 1, version: 1 },
+  })));
+  await page.goto('/tactical');
+  const map = page.getByRole('group', { name: '局部作战星图', exact: true });
+  const action = page.getByRole('button', { name: '选择作战星域' });
+  await expect(action).toBeVisible();
+  const mapBox = await map.boundingBox(), actionBox = await action.boundingBox();
+  expect(Math.abs(actionBox.x + actionBox.width / 2 - (mapBox.x + mapBox.width / 2))).toBeLessThan(24);
+  await action.click();
+  await expect(page.getByRole('dialog', { name: '设置作战星域' })).toBeVisible();
+});
+
+test('star intel replaces the overview context without leaving the viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await fixture(page, { role: 'commander' });
+  await page.goto('/tactical');
+  await page.getByRole('button', { name: '展开兵力总览' }).click();
+  await page.getByRole('button', { name: '选择星系 德里克一' }).click();
+  const detail = page.getByRole('region', { name: '星系敌情详情' });
+  await expect(detail).toBeVisible();
+  await expect(page.getByRole('complementary', { name: '兵力总览与上报记录' })).toBeHidden();
+  const rect = await detail.boundingBox();
+  expect(rect.x + rect.width).toBeLessThanOrEqual(1100);
+  expect(rect.y + rect.height).toBeLessThanOrEqual(800);
+  await detail.getByRole('button', { name: '关闭星系详情' }).click();
+  await expect(page.getByRole('complementary', { name: '兵力总览与上报记录' })).toBeVisible();
+});
+
 for (const side of ['all', 'friendly']) test(`typing in the overview search does not recompute unchanged force placement (${side})`, async ({ page }) => {
   const fx = await fixture(page, { role: "commander" });
   if (side === 'friendly') fx.setSnapshot({ ...fx.snapshot, forces: [{ ...fx.snapshot.forces[0], side: 'friendly' }] });

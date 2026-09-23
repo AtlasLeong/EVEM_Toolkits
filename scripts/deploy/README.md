@@ -84,6 +84,14 @@ v1 不自动安装生产依赖，不自动执行数据库迁移。
 
 ## 故障处理
 
+### 战术板 WebSocket 侧车
+
+`/api/` 继续由 WSGI 服务处理；`/ws/tactical/` 独立代理到回环 ASGI 服务。发布器在服务器配置 `tactical_ws: true` 后同时重启两个服务，并把公开 WebSocket 升级（HTTP 101）纳入发布/回滚健康检查。前端仍保留经认证的 HTTP 同步兜底。
+
+先通过完整 CI、本地隔离 100 人负载测试和线上现有配置核验。仅在目标应用版本已发布且后端时间契约验证通过后，由 root 将 `activate_tactical_ws.py`、`release.py`、`evem-tactical-asgi.service.example`、`tactical-nginx-location.example.conf` 放在同一受控目录，执行 `python3 activate_tactical_ws.py --bundle <目录> --expected-sha <已发布的40位SHA>`。脚本检查固定路径和当前布局，单独安装 pinned ASGI 依赖到 shared 目录，不改 WSGI venv；备份 Nginx、发布器、sudoers、发布配置，启动侧车并测试回环/公网升级后才开启发布门禁。失败自动恢复这些配置并停用侧车；保留备份与依赖目录供人工核对。不要将 `.env` 或生产令牌复制进验证日志。
+
+激活后确认 `systemctl is-active evem-backend evem-tactical-asgi`、公网 `/ws/tactical/0/` 在正确 Origin 下返回 101（但无认证数据）、正常浏览器授权连接持续收到上报变化、普通网站/API 不受影响。回滚应用仍须遵守发布器的数据库迁移限制；如果侧车健康失败，应先用备份恢复配置并保持 HTTP 兜底，不要通过关闭健康检查强行发布。
+
 - 校验/依赖/迁移失败：线上未切换。确认原因后重新运行同一 SHA，已准备版本会再次校验，不覆盖不同内容。
 - 健康失败且回滚验证通过：workflow 仍然失败，但线上已恢复旧代码；检查错误与版本记录。
 - journal 存在（包括断电/SIGKILL）：停止重试。读取 journal 的 old/new/previous_before，核对实际链接、systemd、数据库状态，按记录恢复链接和服务、验证健康后恢复 state/previous。**不要直接删除 journal 来强行发布。**目前这类不确定状态需要维护者人工恢复。

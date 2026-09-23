@@ -93,19 +93,47 @@ class TacticalTransportTests(SimpleTestCase):
         await consumer.tactical_state_event({'state_version': 2})
         consumer.close.assert_awaited_once_with(code=4403)
 
-    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'])
-    async def test_admitted_socket_uses_group_events_without_poll_task(self):
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_POLL_SECONDS=0.01)
+    async def test_admitted_socket_refreshes_after_external_wsgi_write(self):
         from TacticalCollaboration.realtime import TacticalConsumer
+        snapshots = AsyncMock(side_effect=[
+            {'state_version': 1, 'forces': []},
+            {'state_version': 2, 'forces': [{'id': 1, 'people': 80}]},
+            {'state_version': 2, 'forces': [{'id': 1, 'people': 80}]},
+        ])
         with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
              patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
-             patch.object(TacticalConsumer, 'get_snapshot', new=AsyncMock(return_value={'forces': []})), \
+             patch.object(TacticalConsumer, 'get_state_version', new=AsyncMock(return_value=2)), \
+             patch.object(TacticalConsumer, 'get_snapshot', new=snapshots), \
              patch.object(TacticalConsumer, 'leave', new=AsyncMock()):
             client = await self.connect()
             await client.receive_output()
             await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
                 'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
             })})
+            first = json.loads((await client.receive_output())['text'])
+            self.assertEqual(first['data']['state_version'], 1)
+            refreshed = json.loads((await client.receive_output(timeout=1))['text'])
+            self.assertEqual(refreshed['data']['forces'][0]['people'], 80)
+            await self.finish(client)
+
+    @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_POLL_SECONDS=0.01)
+    async def test_idle_socket_checks_cursor_without_rebuilding_full_snapshot(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        snapshots = AsyncMock(return_value={'state_version': 1, 'forces': []})
+        with patch.object(TacticalConsumer, 'authenticate', new=AsyncMock(return_value=(object(), time.time() + 60))), \
+             patch.object(TacticalConsumer, 'admit', new=AsyncMock()), \
+             patch.object(TacticalConsumer, 'get_state_version', new=AsyncMock(return_value=1)) as cursor, \
+             patch.object(TacticalConsumer, 'get_snapshot', new=snapshots):
+            client = await self.connect()
             await client.receive_output()
+            await client.send_input({'type': 'websocket.receive', 'text': json.dumps({
+                'type': 'authenticate', 'token': 'test', 'connection_id': 'cc7e503b-b012-4056-b004-665d4157c519',
+            })})
+            await client.receive_output()
+            await asyncio.sleep(0.06)
+            self.assertGreater(cursor.await_count, 0)
+            self.assertEqual(snapshots.await_count, 1)
             await self.finish(client)
 
     @override_settings(TACTICAL_ALLOWED_ORIGINS=['http://127.0.0.1:4194'], TACTICAL_AUTH_SECONDS=0.02)

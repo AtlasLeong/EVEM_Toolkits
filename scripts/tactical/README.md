@@ -77,7 +77,7 @@ npm run dev:tactical
 
 ```powershell
 .venv/Scripts/python.exe -m unittest discover -s scripts/tactical/tests -v
-.venv/Scripts/python.exe scripts/tactical/smoke_board.py --base-url http://127.0.0.1:8001
+.venv/Scripts/python.exe scripts/tactical/smoke_recovery.py --base-url http://127.0.0.1:8001
 .venv/Scripts/python.exe scripts/tactical/load_board.py --base-url http://127.0.0.1:8001 --accounts 100 --duration-seconds 600
 ```
 

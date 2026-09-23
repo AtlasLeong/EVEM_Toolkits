@@ -18,6 +18,7 @@ export default function CollaborationMap({
   selectedSystemId, onSelectSystem, selectedForceId, onSelectForce, onFocusSystem,
   children, focusSystem, scope = null, canMove = false, onMoveForce, canMoveCount, canWithdrawCount,
   onMoveCount, onWithdrawCount, onMoveRejected, onSelectReport, onSelectCount, onFocusReports, className = '',
+  canEditScope = false, onOpenScope,
 }) {
   const [viewport, setViewport] = useState({width:1000, height:800});
   const [view, setView] = useState(INITIAL_VIEW);
@@ -322,6 +323,13 @@ export default function CollaborationMap({
         return <li key={node.system_id}><button type="button" data-system-choice={node.system_id} onClick={()=>pick(node)}><span>{systemDisplayName(node)}<small style={{color:securityColor(node.security_status)}}>{securityLabel(node.security_status)}</small></span><em>{report?`敌方 ${report.people??'未知'}`:'选择'}</em></button></li>;
       })}</ul>
     </div>}
-    {!nodes.length&&<div className="tac-map-empty"><Crosshair size={30}/><strong>先确定这次作战的范围</strong><span>选择相关星域后加载局部星图。</span></div>}
+    {!nodes.length&&<div className={`tac-map-empty${!scope?.region_ids?.length ? ' is-actionable' : ''}`}>
+      <Crosshair size={30}/>
+      {!scope?.region_ids?.length ? <>
+        <strong>先确定这次作战的范围</strong>
+        <span>{canEditScope ? '选择相关星域后，星图会在这里展开。' : '等待统帅或指挥设置作战星域。'}</span>
+        {canEditScope && <button type="button" className="tac-map-scope-cta" onClick={onOpenScope}>选择作战星域</button>}
+      </> : <><strong>正在加载局部星图</strong><span>若长时间未显示，请使用“重新加载星图”。</span></>}
+    </div>}
   </div>;
 }

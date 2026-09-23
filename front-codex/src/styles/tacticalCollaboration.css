@@ -461,6 +461,10 @@
   line-height: 1.8;
   max-width: 290px;
 }
+.tac-map-empty.is-actionable { pointer-events: auto; }
+.tac-map-scope-cta { min-height: 44px; padding: 10px 20px; border: 1px solid #b9d0bc; border-radius: 8px; background: #dcebdc; color: #203c2c; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 28px #0004; }
+.tac-map-scope-cta:hover { background: #eff7eb; }
+.tac-map-scope-cta:focus-visible { outline: 3px solid #f4d49d; outline-offset: 3px; }
 .tac-map-system,
 .tac-map-force {
   cursor: pointer;
@@ -1531,9 +1535,13 @@
   .tac-immersive .tac-board-actions { top: 95px; }
   .tac-immersive .tac-board-actions .tac-btn { min-height: 38px; font-size: 12px; padding: 7px 12px; box-shadow: none; }
   .tac-immersive .tac-board-messages { right: 20px; top: auto; bottom: 18px; width: auto; max-width: 400px; }
-  .tac-system-detail { position: absolute; right: 20px; bottom: 20px; width: 285px; max-height: calc(100% - 250px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 19px; border: 1px solid #52616a; border-radius: 12px; background: #202d34f5; box-shadow: 0 12px 32px #0003; color: #dbe3e5; pointer-events: auto; }
-  .tac-system-detail.is-panel-open { right: 340px; }
+  .tac-immersive .tac-board-layout.has-system-detail .tac-side-panel,
+  .tac-immersive .tac-board-layout.has-system-detail .tac-panel-reopen { display: none; }
+  .tac-system-detail { position: absolute; right: 18px; top: 188px; width: 304px; max-height: calc(100% - 231px); overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 19px; border: 1px solid #52616a; border-radius: 12px; background: #202d34f5; box-shadow: 0 12px 32px #0003; color: #dbe3e5; pointer-events: auto; }
   .tac-system-detail > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .tac-system-detail-actions { display: flex; align-items: center; gap: 7px; }
+  .tac-system-back { display: inline-flex; align-items: center; gap: 2px; border: 1px solid #53676b; border-radius: 6px; background: #2c3d42; color: #dce9df; font: inherit; font-size: 11px; padding: 5px 7px; cursor: pointer; }
+  .tac-system-back:hover { background: #405456; }
   .tac-system-detail > header small { font-size: 10px; letter-spacing: .12em; color: #91a5ae; }
   .tac-system-detail h2 { font-size: 20px; color: #f0f3f3; margin: 5px 0 15px; line-height: 1.35; }
   .tac-system-detail .tac-icon-btn { color: #b5c4c9; border: 0; background: transparent; width: 26px; height: 26px; }
@@ -1558,6 +1566,7 @@
   .tac-system-detail .tac-boundary-list > strong { display: none; }
 }
 @media (min-width: 768px) and (max-width: 1199px) {
+  .tac-immersive .tac-board-layout.has-system-detail .tac-system-detail { width: 270px; }
   .tac-immersive .tac-command-bar { padding: 8px 10px; }
   .tac-immersive .tac-command-identity { gap: 8px; }
   .tac-immersive .tac-command-title { padding-right: 8px; }
@@ -1571,6 +1580,10 @@
   .tac-immersive .tac-side-panel { width: 270px; }
   .tac-immersive .tac-summary { max-width: calc(100% - 320px); }
   .tac-immersive .tac-board-actions .tac-btn { font-size: 11px; padding: 8px 10px; }
+}
+@media (min-width: 768px) and (max-width: 1179px) {
+  /* The responsive shell has a 64px top bar; keep bottom map controls visible. */
+  .tac-immersive { height: calc(100dvh - 89px); min-height: 0; }
 }
 @media (max-width: 767px) {
   .tac-command-bar { flex-wrap: wrap; gap: 10px; }
