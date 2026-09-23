@@ -33,6 +33,25 @@ test("a single force badge stays close above its star at laptop scale", () => {
   assert.ok(285 - badge.y <= 42 * 1.4, "one row must not reserve three-row stack space");
 });
 
+test("a clear marker is centered on the owning star", () => {
+  const [badge] = layoutForceMarkers([group(1)], [{ system_id: 1, px: 500, py: 350 }], 1,
+    { width: 1000, height: 800, padding: { left: 16, right: 16, top: 16, bottom: 16 } });
+  assert.equal(badge.x + badge.width / 2, badge.node.px);
+  assert.ok(badge.y + badge.height <= badge.node.py, "the default anchor is above the star");
+});
+
+test("a clear vertical fallback beats a horizontally shifted callout", () => {
+  const nodes = [
+    { system_id: 1, px: 500, py: 300 },
+    { system_id: 2, px: 460, py: 300 },
+  ];
+  const [badge] = layoutForceMarkers([group(1)], nodes, 1,
+    { width: 1000, height: 700, padding: { left: 16, right: 16, top: 16, bottom: 16 } });
+  assert.equal(badge.x + badge.width / 2, badge.node.px,
+    "when above is blocked, the badge should stay centered below instead of shifting right");
+  assert.ok(badge.y >= badge.node.py, "the fallback should be below the star");
+});
+
 test("actual rows determine stack height and its leader ends at the associated star", () => {
   const [badge] = layoutForceMarkers([{ ...group(1, 2), hiddenCount: 8 }], [{ system_id: 1, px: 500, py: 285 }], 1);
   assert.equal(badge.rows, 3);
