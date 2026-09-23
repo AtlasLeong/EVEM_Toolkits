@@ -6,7 +6,7 @@ import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMa
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
-import { focusDenseArea, layoutIntelLabels, resolveSystemHit, shouldShowMapLeader, subscribeMapWheel, validateDirectMove } from '../../utils/tacticalMapInteraction';
+import { focusDenseArea, layoutIntelLabels, leaderSegmentsForFocus, resolveSystemHit, subscribeMapWheel, validateDirectMove } from '../../utils/tacticalMapInteraction';
 import '../../styles/tacticalMapIntel.css';
 
 const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91';
@@ -41,6 +41,21 @@ export default function CollaborationMap({
   const intelById = useMemo(() => new Map(intel.map(row => [Number(row.system_id), row])), [intel]);
   const screenSystems = useMemo(() => screenNodes(nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
     {panX:view.x, panY:view.y, zoom:view.scale}), [nodes, view]);
+  const gateSegmentsBySystem = useMemo(() => {
+    const screenById = new Map(screenSystems.map(node => [Number(node.system_id), node]));
+    const incident = new Map();
+    for (const gate of stargates) {
+      const sourceId=Number(gate.system_id), destinationId=Number(gate.destination_system_id);
+      const a=screenById.get(sourceId), b=screenById.get(destinationId);
+      if (!a || !b) continue;
+      const segment={x1:a.px,y1:a.py,x2:b.px,y2:b.py};
+      for (const id of [sourceId,destinationId]) {
+        if (!incident.has(id)) incident.set(id, []);
+        incident.get(id).push(segment);
+      }
+    }
+    return incident;
+  }, [stargates, screenSystems]);
   const selectedNeighbors = useMemo(() => adjacentSystems(stargates, hoveredSystemId ?? selectedSystemId), [stargates, hoveredSystemId, selectedSystemId]);
   const markerGroups = useMemo(() => markerGroupsForViewport([
     ...buildMarkerGroups(forces, reports, selectedForceId), ...buildSystemCountMarkerGroups(intel),
@@ -61,8 +76,10 @@ export default function CollaborationMap({
     // decluttering solver or every label would jump as the pointer crosses
     // the map during a live update.
     selectedId:selectedSystemId, hoveredId:null, intelById, forceIds:forceSystems,
-    zoom:view.scale, showAll:showAllNames, occupied:positionedGroups,
-    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups]);
+    zoom:view.scale, showAll:showAllNames, occupied:positionedGroups, gateSegments:gateSegmentsBySystem,
+    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups, gateSegmentsBySystem]);
+  const focusLeaders = useMemo(() => leaderSegmentsForFocus(positionedGroups, labelLayouts,
+    {selectedSystemId, hoveredSystemId, ...viewport}), [positionedGroups, labelLayouts, selectedSystemId, hoveredSystemId, viewport]);
   const portals = useMemo(() => {
     const exits = visibleGateExits(systems, stargates, boundaryExits, systems.map(node => node.system_id));
     const grouped = new Map();
@@ -246,14 +263,14 @@ export default function CollaborationMap({
           </g>;
         })}
       </g>
-      {positionedGroups.filter(group=>shouldShowMapLeader(group.system_id,{selectedSystemId,hoveredSystemId})).map(group=><line key={`force-leader-${group.key}`} x1={group.leader.from.x} y1={group.leader.from.y} x2={group.leader.to.x} y2={group.leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".5" pointerEvents="none"/>)}
+      {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" pointerEvents="none"/>)}
       {labelLayouts.map(label=>{
         const node=byId.get(Number(label.system_id));if(!node)return null;
-        const report=label.intel,selected=Number(selectedSystemId)===Number(node.system_id),distance=Math.hypot(label.leader.from.x-label.leader.to.x,label.leader.from.y-label.leader.to.y);
+        const report=label.intel,selected=Number(selectedSystemId)===Number(node.system_id);
         return <g key={`label-${label.system_id}`} className={`tac-intel-label${report?' has-count':''}${report&&isStale(report.observed_at)?' is-stale':''}`} role="button" tabIndex={0}
           aria-label={`${label.name}${report?`，敌方 ${report.people??'未知'} 人`:''}`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
           <title>{report?`${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 安全系数 ${securityLabel(node.security_status)}`:`${label.name} · 安全系数 ${securityLabel(node.security_status)}`}</title>
-          {distance>22&&shouldShowMapLeader(label.system_id,{selectedSystemId,hoveredSystemId})&&<line x1={label.leader.from.x} y1={label.leader.from.y} x2={label.leader.to.x} y2={label.leader.to.y} stroke={report?'#b98770':'#7c9194'} opacity=".45" strokeWidth=".8" pointerEvents="none"/>}
+          {label.gateBackdrop&&<rect x={label.x+2} y={label.y+1} width={Math.max(0,label.width-4)} height={label.height-2} rx="3" fill="#19252b" opacity=".92" pointerEvents="none"/>}
           <text className="tac-star-name" x={label.x+label.width/2} y={label.y+14} textAnchor="middle" fill={selected?'#f6edda':'#d2dcda'} fontSize="13" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{label.name}</text>
           <text className="tac-star-security" x={label.x+label.width/2} y={label.y+30} textAnchor="middle" fill={securityColor(node.security_status)} fontSize="10" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{securityLabel(node.security_status)}</text>
         </g>;

@@ -17,6 +17,46 @@ export function shouldShowMapLeader(systemId, { selectedSystemId = null, hovered
   return id === Number(selectedSystemId) || id === Number(hoveredSystemId);
 }
 
+// A focused system may have several fleet/count groups plus a name label.
+// Prefer the shortest useful link, and leave nearby callouts unconnected.
+export function leaderSegmentsForFocus(groups = [], labels = [], {
+  selectedSystemId = null, hoveredSystemId = null, width = Infinity, height = Infinity,
+} = {}) {
+  const focusId = Number(hoveredSystemId ?? selectedSystemId);
+  if (!Number.isSafeInteger(focusId) || focusId <= 0) return [];
+  const candidates = [...groups, ...labels].filter(row => Number(row.system_id) === focusId)
+    .map(row => {
+      const {from, to} = row.leader || {};
+      if (![from?.x, from?.y, to?.x, to?.y].every(Number.isFinite)) return null;
+      if (![from, to].every(point => inside(point, {width, height}))) return null;
+      if (row.node && !inside({x:row.node.px, y:row.node.py}, {width, height})) return null;
+      return {system_id:focusId, from, to, distance:Math.hypot(from.x-to.x, from.y-to.y)};
+    }).filter(Boolean)
+    .sort((a,b) => a.distance-b.distance || a.from.x-b.from.x || a.from.y-b.from.y || a.to.x-b.to.x || a.to.y-b.to.y);
+  const nearest = candidates[0];
+  return nearest && nearest.distance > 22 && nearest.distance <= 96
+    ? [{system_id:nearest.system_id, from:nearest.from, to:nearest.to}] : [];
+}
+
+// Liang-Barsky clipping also handles horizontal and vertical gates without
+// division by zero. Reject invalid geometry before it can influence layout.
+export function segmentIntersectsRect(segment, rect) {
+  const {x1,y1,x2,y2} = segment || {};
+  const {x,y,width,height} = rect || {};
+  if (![x1,y1,x2,y2,x,y,width,height].every(Number.isFinite) || width <= 0 || height <= 0) return false;
+  const dx=x2-x1, dy=y2-y1;
+  const p=[-dx,dx,-dy,dy], q=[x1-x,x+width-x1,y1-y,y+height-y1];
+  let enter=0, exit=1;
+  for (let i=0;i<4;i++) {
+    if (p[i]===0) { if (q[i]<0) return false; continue; }
+    const bound=q[i]/p[i];
+    if (p[i]<0) enter=Math.max(enter,bound);
+    else exit=Math.min(exit,bound);
+    if (enter>exit) return false;
+  }
+  return true;
+}
+
 export function resolveSystemHit(nodes, point, view, viewport, radius = 23) {
   if (!inside(point, viewport)) return {target:null, candidates:[], ambiguous:false};
   const ranked = nodes.map(node => ({node, point:{x:node.px * view.scale + view.x, y:node.py * view.scale + view.y}}))
@@ -65,7 +105,7 @@ export function subscribeMapWheel(node, onWheel) {
 // changes any real system coordinates or gate topology.
 export function layoutIntelLabels(nodes, {
   width, height, selectedId, hoveredId, intelById = new Map(), forceIds = new Set(),
-  zoom = 1, showAll = false, occupied = [], padding = {left:14, right:14, top:110, bottom:18},
+  zoom = 1, showAll = false, occupied = [], gateSegments = [], padding = {left:14, right:14, top:110, bottom:18},
 } = {}) {
   const priority = node => Number(node.system_id) === Number(selectedId) ? 0 : Number(node.system_id) === Number(hoveredId) ? 1 : intelById.has(Number(node.system_id)) ? 2 : forceIds.has(Number(node.system_id)) ? 3 : 4;
   const ordered = nodes.filter(node => inside({x:node.px, y:node.py}, {width, height}))
@@ -84,15 +124,19 @@ export function layoutIntelLabels(nodes, {
       [node.px+distance, node.py+distance], [node.px-distance-w, node.py-distance-h],
       [node.px+distance, node.py-distance-h], [node.px-distance-w, node.py+distance],
     );
+    const incidentGates = gateSegments instanceof Map ? gateSegments.get(Number(node.system_id)) || [] : gateSegments;
+    let fallback = null, chosen = null;
     for (const [x,y] of positions) {
       const rect = {x,y,width:w,height:h};
       if (x < padding.left || y < padding.top || x+w > width-padding.right || y+h > height-padding.bottom) continue;
       if ([...occupied,...placed].some(other => rectanglesOverlap(rect, {x:other.x-4,y:other.y-3,width:other.width+8,height:other.height+6}))) continue;
       if (nodes.some(other => other !== node && rectanglesOverlap(rect, {x:other.px-6,y:other.py-6,width:12,height:12}))) continue;
-      placed.push({...rect, system_id:node.system_id, name, intel,
-        leader:{from:{x:node.px,y:node.py},to:{x:clamp(node.px,x,x+w),y:clamp(node.py,y,y+h)}}});
-      break;
+      if (incidentGates.some(segment => segmentIntersectsRect(segment, rect))) fallback ||= rect;
+      else { chosen = rect; break; }
     }
+    const rect = chosen || fallback;
+    if (rect) placed.push({...rect, system_id:node.system_id, name, intel, gateBackdrop:!chosen,
+      leader:{from:{x:node.px,y:node.py},to:{x:clamp(node.px,rect.x,rect.x+w),y:clamp(node.py,rect.y,rect.y+h)}}});
   }
   return placed;
 }

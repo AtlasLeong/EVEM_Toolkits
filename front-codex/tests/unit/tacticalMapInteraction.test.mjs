@@ -20,6 +20,27 @@ test('map leaders stay hidden except for the focused or hovered system',()=>{
   assert.equal(use('shouldShowMapLeader', 42, { selectedSystemId: 7, hoveredSystemId: 8 }), false);
   assert.equal(use('shouldShowMapLeader', 'bad', { selectedSystemId: 'bad' }), false);
 });
+test('focused callouts share at most one nearby leader and do not mutate layout inputs',()=>{
+  const groups=[
+    {system_id:42,node:{px:400,py:300},leader:{from:{x:400,y:360},to:{x:400,y:300}}},
+    {system_id:42,node:{px:400,py:300},leader:{from:{x:500,y:300},to:{x:400,y:300}}},
+    {system_id:99,node:{px:250,py:250},leader:{from:{x:250,y:300},to:{x:250,y:250}}},
+  ];
+  const labels=[{system_id:42,leader:{from:{x:400,y:300},to:{x:430,y:300}}}];
+  const before=JSON.stringify({groups,labels});
+  const leaders=use('leaderSegmentsForFocus',groups,labels,{selectedSystemId:42,width:800,height:600});
+  assert.equal(leaders.length,1);
+  assert.equal(leaders[0].system_id,42);
+  assert.equal(Math.hypot(leaders[0].to.x-leaders[0].from.x,leaders[0].to.y-leaders[0].from.y),30);
+  assert.equal(JSON.stringify({groups,labels}),before);
+});
+test('focus leaders vanish for a short gap, an offscreen star, or an unrelated system',()=>{
+  const short=[{system_id:42,node:{px:400,py:300},leader:{from:{x:400,y:313},to:{x:400,y:300}}}];
+  assert.deepEqual(use('leaderSegmentsForFocus',short,[],{selectedSystemId:42,width:800,height:600}),[]);
+  assert.deepEqual(use('leaderSegmentsForFocus',short,[],{selectedSystemId:7,width:800,height:600}),[]);
+  const offscreen=[{system_id:42,node:{px:-5,py:300},leader:{from:{x:20,y:300},to:{x:-5,y:300}}}];
+  assert.deepEqual(use('leaderSegmentsForFocus',offscreen,[],{selectedSystemId:42,width:800,height:600}),[]);
+});
 test('blank space, offscreen stars and pointer outside the map are not drop targets',()=>{
   for (const p of [{x:300,y:300},{x:-1,y:100},{x:801,y:100}]) assert.equal(use('resolveSystemHit',nodes,p,view,viewport).target,null);
   assert.equal(use('resolveSystemHit',[{system_id:4,px:-5,py:100}],{x:1,y:100},view,viewport).target,null);
@@ -84,6 +105,39 @@ test('reported dense stars keep distinct count labels using diagonal callouts',(
   const intelById=new Map([24,25,34,35].map(id=>[id,{people:id}]));
   const labels=use('layoutIntelLabels',cloud,{width:1000,height:800,intelById,zoom:1});
   assert.equal(labels.filter(label=>label.intel).length,4);
+});
+test('labels choose a nearby gate-free slot before one crossed by a real vertical gate',()=>{
+  const stars=[{system_id:1,px:400,py:300,name:'甲'}];
+  const gateSegments=[{x1:400,y1:300,x2:400,y2:500}];
+  const before=JSON.stringify({stars,gateSegments});
+  const [label]=use('layoutIntelLabels',stars,{width:800,height:600,gateSegments});
+  assert.ok(label.y+label.height<300);
+  assert.equal(label.gateBackdrop,false);
+  assert.equal(JSON.stringify({stars,gateSegments}),before);
+});
+test('gate crossing recognizes finite horizontal, vertical, and diagonal segments',()=>{
+  const rect={x:10,y:10,width:20,height:20};
+  for(const segment of [
+    {x1:20,y1:0,x2:20,y2:40},
+    {x1:0,y1:20,x2:40,y2:20},
+    {x1:0,y1:0,x2:40,y2:40},
+  ]) assert.equal(use('segmentIntersectsRect',segment,rect),true);
+  for(const segment of [
+    {x1:31,y1:0,x2:31,y2:40},
+    {x1:Infinity,y1:0,x2:20,y2:40},
+  ]) assert.equal(use('segmentIntersectsRect',segment,rect),false);
+});
+test('a label gets a compact backdrop only when every legal position crosses a gate',()=>{
+  const center={x:400,y:300};
+  const gateSegments=[
+    [400,0],[400,600],[0,300],[800,300],
+    [0,-100],[800,-100],[0,700],[800,700],
+  ].map(([x2,y2])=>({x1:center.x,y1:center.y,x2,y2}));
+  const [label]=use('layoutIntelLabels',[{system_id:1,px:center.x,py:center.y,name:'甲'}],{
+    width:800,height:600,gateSegments,
+  });
+  assert.equal(label.gateBackdrop,true);
+  assert.ok(Math.hypot(label.x+label.width/2-center.x,label.y+label.height/2-center.y)<100);
 });
 test('a reported label uses free upper-right space when cardinal and opposite-diagonal positions are blocked',()=>{
   const occupied=[{x:0,y:0,width:1000,height:235},{x:0,y:235,width:409,height:565},
