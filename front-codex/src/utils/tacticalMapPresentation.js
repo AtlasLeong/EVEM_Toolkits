@@ -54,6 +54,7 @@ export function buildMarkerGroups(forces = [], reports = [], selectedForceId) {
   const groupedReports = new Map();
   for (const report of reports) {
     if (!report || report.status === 'confirmed' || report.status === 'withdrawn') continue;
+    if (report.report_kind === 'fleet_intel' || report.report_kind === 'system_count') continue;
     const systemId = Number(report.system_id);
     if (!groupedReports.has(systemId)) groupedReports.set(systemId, []);
     const label = `报 · ${countLabel(report.people)} 人`;

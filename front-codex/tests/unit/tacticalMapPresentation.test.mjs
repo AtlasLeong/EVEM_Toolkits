@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMarkerGroups, fitMarkerText, textWidth, markerGroupsForViewport } from '../../src/utils/tacticalMapPresentation.js';
+import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, textWidth, markerGroupsForViewport } from '../../src/utils/tacticalMapPresentation.js';
 import { layoutForceMarkers } from '../../src/utils/tacticalMarkerLayout.js';
 
 test('reports are bounded independently of forces and preserve authors and observation time', () => {
-  const reports = Array.from({length: 20}, (_, id) => ({id, system_id: 1, author_name: `斥候${id}`, people: id, observed_at: '2026-09-22T00:00:00Z', status: 'pending'}));
+  const reports = Array.from({length: 20}, (_, id) => ({id, system_id: 1, report_kind:'fleet', author_name: `斥候${id}`, people: id, observed_at: '2026-09-22T00:00:00Z', status: 'pending'}));
   const groups = buildMarkerGroups([{id: 1, system_id: 1, side: 'enemy', people: 68}], reports);
   const force = groups.find(group => group.kind === 'force');
   const report = groups.find(group => group.kind === 'report');
@@ -18,8 +18,8 @@ test('reports are bounded independently of forces and preserve authors and obser
 
 test('viewport marker filtering keeps selected and nearby reports while dropping distant groups', () => {
   const groups = buildMarkerGroups([], [
-    {id:1, system_id:1, status:'pending', people:5},
-    {id:2, system_id:99, status:'pending', people:8},
+    {id:1, system_id:1, report_kind:'fleet', status:'pending', people:5},
+    {id:2, system_id:99, report_kind:'fleet', status:'pending', people:8},
   ]);
   const nodes = [{system_id:1, px:100, py:100}, {system_id:99, px:900, py:700}];
   assert.deepEqual(markerGroupsForViewport(groups, nodes, {width:400, height:300}, {showReports:true}).map(group => group.system_id), [1]);
@@ -30,8 +30,8 @@ test('historical report cards stay hidden by default and appear when requested o
   const groups = buildMarkerGroups([
     {id:4, system_id:1, side:'enemy', people:68},
   ], [
-    {id:8, system_id:1, status:'pending', people:68},
-    {id:9, system_id:2, status:'pending', people:42},
+    {id:8, system_id:1, report_kind:'fleet', status:'pending', people:68},
+    {id:9, system_id:2, report_kind:'fleet', status:'pending', people:42},
   ]);
   const nodes = [{system_id:1, px:100, py:100}, {system_id:2, px:180, py:100}];
   const compact = markerGroupsForViewport(groups, nodes, {width:400, height:300});
@@ -40,6 +40,59 @@ test('historical report cards stay hidden by default and appear when requested o
   assert.deepEqual(selected.map(group => group.kind), ['force', 'report']);
   const expanded = markerGroupsForViewport(groups, nodes, {width:400, height:300}, {showReports:true});
   assert.deepEqual(expanded.map(group => group.kind), ['force', 'report', 'report']);
+});
+
+test('a moved named fleet has one live force badge without a detached source report card', () => {
+  const force = {id:7, system_id:2, side:'friendly', name:'远炮战列队', people:100, source_report_id:51};
+  const report = {id:51, system_id:1, report_kind:'fleet_intel', status:'pending', people:100,
+    author_name:'atlas123', observed_at:'2026-09-22T00:00:00Z'};
+  const groups = buildMarkerGroups([force], [report]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].kind, 'force');
+  assert.equal(groups[0].system_id, 2);
+  assert.equal(groups[0].visible[0].source_report_id, 51);
+  assert.equal(groups.some(group => group.kind === 'report'), false);
+  const nodes = [{system_id:1, px:100, py:100}, {system_id:2, px:200, py:100}];
+  const expanded = markerGroupsForViewport(groups, nodes, {width:400, height:300},
+    {selectedSystemId:1, showReports:true});
+  assert.deepEqual(expanded.map(group => group.kind), ['force']);
+  assert.equal(report.system_id, 1);
+  assert.equal(report.author_name, 'atlas123');
+  assert.equal(report.observed_at, '2026-09-22T00:00:00Z');
+});
+
+test('archiving a named fleet leaves its historical observation off the map', () => {
+  const report = {id:51, system_id:1, report_kind:'fleet_intel', status:'pending', people:100};
+  const groups = buildMarkerGroups([], [report]);
+  assert.deepEqual(groups, []);
+  assert.deepEqual(markerGroupsForViewport(groups, [{system_id:1, px:100, py:100}],
+    {width:400, height:300}, {selectedSystemId:1, showReports:true}), []);
+  assert.equal(report.id, 51);
+  assert.equal(report.status, 'pending');
+});
+
+test('count-only observations use only the dedicated count marker layer', () => {
+  const report = {id:52, system_id:1, report_kind:'system_count', status:'pending', people:68,
+    observed_at:'2026-09-22T01:00:00Z'};
+  assert.deepEqual(buildMarkerGroups([], [report]), []);
+  const countGroups = buildSystemCountMarkerGroups([report]);
+  assert.equal(countGroups.length, 1);
+  assert.equal(countGroups[0].kind, 'system_count');
+  assert.equal(countGroups[0].visible[0].id, 52);
+  assert.equal(countGroups[0].hiddenCount, 0);
+});
+
+test('pending legacy fleet observations remain available in the generic report layer', () => {
+  const report = {id:53, system_id:1, report_kind:'fleet', status:'pending', people:42,
+    author_name:'旧斥候', observed_at:'2026-09-22T02:00:00Z'};
+  const groups = buildMarkerGroups([], [report]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].kind, 'report');
+  assert.equal(groups[0].visible[0].id, 53);
+  assert.equal(groups[0].visible[0].author_name, '旧斥候');
+  assert.equal(groups[0].visible[0].observed_at, report.observed_at);
+  assert.deepEqual(markerGroupsForViewport(groups, [{system_id:1, px:100, py:100}],
+    {width:400, height:300}, {showReports:true}), groups);
 });
 
 test('deployment marker groups use stable system and force ordering', () => {
@@ -53,7 +106,7 @@ test('deployment marker groups use stable system and force ordering', () => {
 });
 
 test('viewport marker filtering applies the current pan and zoom transform', () => {
-  const groups = buildMarkerGroups([], [{id:1, system_id:1, status:'pending', people:5}]);
+  const groups = buildMarkerGroups([], [{id:1, system_id:1, report_kind:'fleet', status:'pending', people:5}]);
   const nodes = [{system_id:1, px:1000, py:1000}];
   assert.deepEqual(markerGroupsForViewport(groups, nodes, {width:200, height:200}, {view:{x:-3900,y:-3900,scale:4}, showReports:true}), [groups[0]]);
 });
@@ -66,7 +119,7 @@ test('text truncation measures Chinese glyphs and preserves short complete label
 });
 
 test('force and report stacks at the same system do not cover one another', () => {
-  const groups = buildMarkerGroups([{id:1,system_id:1,side:'enemy',people:68}], [{id:2,system_id:1,status:'pending',author_name:'斥候甲',people:80}]);
+  const groups = buildMarkerGroups([{id:1,system_id:1,side:'enemy',people:68}], [{id:2,system_id:1,report_kind:'fleet',status:'pending',author_name:'斥候甲',people:80}]);
   const boxes = layoutForceMarkers(groups, [{system_id:1,px:400,py:350}], 1, {width:1000,height:800});
   assert.equal(boxes.length, 2);
   const [a,b] = boxes;
