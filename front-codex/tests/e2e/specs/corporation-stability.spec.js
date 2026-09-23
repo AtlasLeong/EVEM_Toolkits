@@ -299,6 +299,21 @@ test("同军团重复跳转后退取消仍保留编辑，确认离开后前进�
   await expect(page).toHaveURL(/\/corporations$/);
 });
 
+test("确认同页跳转后新修改仍会触发离开提醒", async ({ page }) => {
+  await editableFixture(page);
+  await page.goto("/corporations/manage?id=1");
+  await tagline(page).fill("第一次修改");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.locator(".corp-owned-list button").first().click();
+  await expect(page).toHaveURL(/manage\?id=1/);
+  await tagline(page).fill("第二次修改");
+  let prompts = 0;
+  page.once("dialog", (dialog) => { prompts++; return dialog.dismiss(); });
+  await page.getByRole("link", { name: "发现军团", exact: true }).click();
+  await expect(tagline(page)).toHaveValue("第二次修改");
+  expect(prompts).toBe(1);
+});
+
 test("审批后公开列表及详情不再复用旧缓存，下架立即清除公开详情", async ({
   page,
 }) => {

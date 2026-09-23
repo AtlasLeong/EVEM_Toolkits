@@ -1,5 +1,5 @@
 import { useContext, useEffect, useRef } from "react";
-import { UNSAFE_NavigationContext } from "react-router-dom";
+import { UNSAFE_NavigationContext, useLocation } from "react-router-dom";
 import { registerCorporationPopGuard } from "../../utils/corporationNavigationGuard";
 
 const message = "有未保存的军团修改，离开将丢失这些内容。确定离开吗？";
@@ -8,8 +8,15 @@ const message = "有未保存的军团修改，离开将丢失这些内容。确
 // replacing the router, and use the browser's own prompt for reload/close.
 export default function useUnsavedCorporation(dirty) {
   const { navigator } = useContext(UNSAFE_NavigationContext);
+  const location = useLocation();
   const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
+  const leavingRef = useRef(false);
+  const locationKeyRef = useRef(location.key);
+  if (locationKeyRef.current !== location.key) {
+    locationKeyRef.current = location.key;
+    leavingRef.current = false;
+  }
+  dirtyRef.current = dirty && !leavingRef.current;
   useEffect(() => {
     let index = window.history.state?.idx;
     const originals = { push: navigator.push, replace: navigator.replace };
@@ -17,6 +24,10 @@ export default function useUnsavedCorporation(dirty) {
     for (const method of Object.keys(originals)) {
       wrappers[method] = (...args) => {
         if (!dirtyRef.current || window.confirm(message)) {
+          // pushState updates the URL before React unmounts this editor. A
+          // rapid browser Back must not be intercepted by this stale guard.
+          leavingRef.current = true;
+          dirtyRef.current = false;
           const result = originals[method].apply(navigator, args);
           index = window.history.state?.idx;
           return result;
@@ -51,6 +62,10 @@ export default function useUnsavedCorporation(dirty) {
           return;
         }
       }
+      // An accepted POP can likewise be followed by another history action
+      // before the editor's effect cleanup runs.
+      leavingRef.current = true;
+      dirtyRef.current = false;
       index = next;
     };
     window.addEventListener("beforeunload", beforeUnload);
