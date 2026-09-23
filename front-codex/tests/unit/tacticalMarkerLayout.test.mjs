@@ -81,6 +81,45 @@ test("marker padding keeps edge stacks outside fixed toolbar and drawer safe are
   assert.ok(badges.every((badge) => badge.x >= 50 && badge.x + badge.width <= 1100 && badge.y >= 120 && badge.y + badge.height <= 820));
 });
 
+test('fleet badges avoid a floating search and side-filter panel when a nearby clear position exists', () => {
+  const controls = { x: 20, y: 190, width: 300, height: 82 };
+  const [badge] = layoutForceMarkers([{ ...group(1), markerWidth: 160 }],
+    [{ system_id: 1, px: 190, py: 218 }], 1,
+    { width: 1100, height: 720, reservedRects: [controls], padding: { left: 16, right: 16, top: 175, bottom: 60 } });
+  assert.equal(overlaps(badge, controls), false, 'the visible force badge must not sit beneath the search/filter controls');
+  assert.ok(Math.hypot(badge.leader.from.x - 190, badge.leader.from.y - 218) <= 150,
+    'the badge still belongs visually to its real star');
+});
+
+test('floating UI reservations do not reorder or mutate source systems across repeated layouts', () => {
+  const nodes = [{ system_id: 1, px: 190, py: 218 }, { system_id: 2, px: 420, py: 238 }];
+  const controls = { x: 20, y: 190, width: 300, height: 82 };
+  const options = { width: 1100, height: 720, reservedRects: [controls], padding: { left: 16, right: 16, top: 175, bottom: 60 } };
+  const first = layoutForceMarkers([group(1), group(2)], nodes, 1, options);
+  const second = layoutForceMarkers([group(1), group(2)], nodes, 1, options);
+  assert.deepEqual(first, second);
+  assert.deepEqual(nodes, [{ system_id: 1, px: 190, py: 218 }, { system_id: 2, px: 420, py: 238 }]);
+  assert.deepEqual(controls, { x: 20, y: 190, width: 300, height: 82 });
+});
+
+test('reserved map controls do not trade UI overlap for force-on-force overlap in a dense flank', () => {
+  const controls = { x: 20, y: 190, width: 300, height: 82 };
+  const nodes = [
+    {system_id:1,px:190,py:218}, {system_id:2,px:260,py:246},
+    {system_id:3,px:340,py:260}, {system_id:4,px:420,py:275},
+  ];
+  const badges = layoutForceMarkers(nodes.map(node => ({...group(node.system_id),markerWidth:136})),nodes,1,
+    {width:1100,height:720,reservedRects:[controls],padding:{left:16,right:16,top:175,bottom:60}});
+  assert.equal(badges.length,4);
+  for(const [index,badge] of badges.entries()) {
+    assert.equal(overlaps(badge,controls),false,`fleet ${badge.system_id} avoids the search panel`);
+    for(const other of badges.slice(index+1))
+      assert.equal(overlaps(badge,other),false,`fleets ${badge.system_id}/${other.system_id} stay separate`);
+    assert.ok(Math.hypot(badge.leader.from.x-badge.node.px,badge.leader.from.y-badge.node.py)<=170,
+      `fleet ${badge.system_id} stays visually near its star`);
+  }
+});
+
 test('short fleet rows are centered within their stack instead of left aligned', () => {
   const [stack] = layoutForceMarkers([{...group(1,2),markerWidth:180,
     visible:[{id:1,markerWidth:90},{id:2,markerWidth:180}],hiddenCount:2}],

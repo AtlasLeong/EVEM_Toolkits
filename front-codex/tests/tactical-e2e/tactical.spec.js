@@ -1401,6 +1401,53 @@ test("commander can archive a deployment only after confirmation with reviewed v
     .toMatchObject({ force_id: 11, expected_version: 1 });
 });
 
+test('top-left fleet badges remain visible beside floating map search at desktop widths', async ({page}) => {
+  const state = await fixture(page,{role:'commander'});
+  await page.route('**/api/tactical/organizations/1/map/', route => route.fulfill(json({
+    systems: [
+      {system_id:101,zh_name:'德里克一',x:0,z:240,security_status:.5},
+      {system_id:102,zh_name:'德里克二',x:420,z:0,security_status:.4},
+      {system_id:103,zh_name:'边界星系',x:-60,z:260,security_status:.3},
+    ],
+    stargates:[{system_id:101,destination_system_id:102}],
+    regions:[],constellations:[],boundary_exits:[],
+    scope:{region_ids:[1],border_hops:1,version:1},
+  })));
+  await page.goto('/tactical');
+  const marker = page.locator('.tac-map-force');
+  const controls = page.locator('.tac-map-controls');
+  const labels = page.locator('.tac-intel-label');
+  await expect(marker).toHaveCount(1);
+  const overlapsRect = (a,b) => a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y;
+  for(const [width,height] of [[1366,768],[1440,900]]) {
+    await page.setViewportSize({width,height});
+    await expect.poll(async () => overlapsRect(await marker.boundingBox(),await controls.boundingBox()),
+      {message:`fleet badge should not hide beneath map controls at ${width}×${height}`}).toBe(false);
+    await expect.poll(async () => {
+      const controlBox = await controls.boundingBox();
+      return labels.evaluateAll((nodes,control) => nodes.filter(node => {
+        const rect=node.getBoundingClientRect();
+        return rect.x<control.x+control.width && rect.x+rect.width>control.x &&
+          rect.y<control.y+control.height && rect.y+rect.height>control.y;
+      }).length,controlBox);
+    },{message:`star names should not sit beneath map controls at ${width}×${height}`}).toBe(0);
+  }
+  await page.setViewportSize({width:1366,height:768});
+  await expect.poll(async () => overlapsRect(await marker.boundingBox(),await controls.boundingBox())).toBe(false);
+  const before = await marker.boundingBox();
+  const reads = state.requests.filter(path => path.endsWith('/snapshot/')).length;
+  await expect.poll(() => state.requests.filter(path => path.endsWith('/snapshot/')).length,
+    {timeout:20000,message:'two live snapshot refreshes complete'}).toBeGreaterThanOrEqual(reads+2);
+  const after = await marker.boundingBox();
+  for(const key of ['x','y','width','height'])
+    expect(Math.abs(after[key]-before[key]),`fleet badge ${key} should not drift on snapshot refresh`).toBeLessThan(.5);
+  await page.getByRole('button',{name:'选择星系 德里克一'}).focus();
+  await page.keyboard.press('Enter');
+  const selectedLabel=page.locator('.tac-intel-label').filter({hasText:'德里克一'});
+  await expect(selectedLabel).toBeVisible();
+  expect(overlapsRect(await selectedLabel.boundingBox(),await controls.boundingBox())).toBe(false);
+});
+
 test("quick archive opens the existing confirmation for the clicked fleet without moving or selecting a star", async ({ page }) => {
   const state = await fixture(page, { role: "commander" });
   state.setSnapshot({

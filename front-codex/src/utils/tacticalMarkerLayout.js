@@ -25,6 +25,7 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
   width: viewportWidth = 1000,
   height: viewportHeight = 570,
   padding = { left: 12, right: 12, top: 65, bottom: 30 },
+  reservedRects = [],
 } = {}) {
   const { left: paddingLeft = 12, right: paddingRight = 12, top: paddingTop = 65, bottom: paddingBottom = 30 } = padding;
   const byId = new Map(nodes.map((node) => [Number(node.system_id), node]));
@@ -74,9 +75,15 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
         x: obstacle.x - 3 * unitScale, y: obstacle.y - 3 * unitScale,
         width: obstacle.width + 6 * unitScale, height: obstacle.height + 6 * unitScale,
       }), 0);
-      return { ...rect, labelOverlap: blockedBy(placed), score: blockedBy(obstacles) * 100 + index };
+      return {
+        ...rect,
+        reservedOverlap: blockedBy(reservedRects),
+        labelOverlap: blockedBy(placed),
+        score: blockedBy(obstacles) * 100 + index,
+      };
     });
-    const { x, y } = candidates.sort((a, b) => a.labelOverlap - b.labelOverlap || a.score - b.score)[0];
+    const { x, y } = candidates.sort((a, b) =>
+      a.reservedOverlap - b.reservedOverlap || a.labelOverlap - b.labelOverlap || a.score - b.score)[0];
     placed.push({
       ...group, node, x, y, width, rowWidths, rowOffsets, overflowWidth, overflowOffset, rowHeight, rowGap, rows, height,
       leader: {

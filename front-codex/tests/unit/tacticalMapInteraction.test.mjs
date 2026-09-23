@@ -115,6 +115,30 @@ test('reported dense stars keep distinct count labels using diagonal callouts',(
   const labels=use('layoutIntelLabels',cloud,{width:1000,height:800,intelById,zoom:1});
   assert.equal(labels.filter(label=>label.intel).length,4);
 });
+test('system names find nearby clear space when a floating search panel covers the closest slots',()=>{
+  const controls={x:20,y:190,width:300,height:82};
+  const star={system_id:1,px:190,py:218,name:'拉什希亚'};
+  const [label]=use('layoutIntelLabels',[star],{
+    width:1100,height:720,occupied:[controls],padding:{left:14,right:14,top:175,bottom:60},
+  });
+  assert.ok(label,'do not drop a star name if a nearby clear slot exists');
+  assert.ok(!(label.x<controls.x+controls.width && label.x+label.width>controls.x &&
+    label.y<controls.y+controls.height && label.y+label.height>controls.y));
+  assert.ok(Math.hypot(label.leader.to.x-star.px,label.leader.to.y-star.py)<=100);
+});
+test('a selected system keeps label priority beside the floating search panel',()=>{
+  const controls={x:20,y:190,width:300,height:82};
+  const stars=[{system_id:1,px:190,py:218,name:'目标星系'},
+    {system_id:2,px:220,py:250,name:'邻近星系'}];
+  const labels=use('layoutIntelLabels',stars,{
+    width:1100,height:720,selectedId:1,occupied:[controls],
+    padding:{left:14,right:14,top:175,bottom:60},
+  });
+  const selected=labels.find(label=>label.system_id===1);
+  assert.ok(selected,'selected star is not silently lost behind the controls');
+  assert.ok(!(selected.x<controls.x+controls.width && selected.x+selected.width>controls.x &&
+    selected.y<controls.y+controls.height && selected.y+selected.height>controls.y));
+});
 test('labels choose a nearby gate-free slot before one crossed by a real vertical gate',()=>{
   const stars=[{system_id:1,px:400,py:300,name:'甲'}];
   const gateSegments=[{x1:400,y1:300,x2:400,y2:500}];

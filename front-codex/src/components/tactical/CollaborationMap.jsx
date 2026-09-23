@@ -21,6 +21,7 @@ export default function CollaborationMap({
   canEditScope = false, onOpenScope,
 }) {
   const [viewport, setViewport] = useState({width:1000, height:800});
+  const [reservedUiRects, setReservedUiRects] = useState([]);
   const [view, setView] = useState(INITIAL_VIEW);
   const [previousViews, setPreviousViews] = useState([]);
   const [drag, setDrag] = useState(null);
@@ -58,7 +59,8 @@ export default function CollaborationMap({
   ].filter(group => byId.has(Number(group.system_id))), nodes, viewport, {selectedSystemId, view, showReports:showReportMarkers}), [forces, reports, selectedForceId, canArchiveForce, intel, byId, nodes, viewport, selectedSystemId, view, showReportMarkers]);
   const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
   const positionedGroups = useMemo(() => layoutForceMarkers(markerGroups, screenSystems, 1,
-    {...viewport, padding:{left:16, right:16, top:175, bottom:60}}), [markerGroups, screenSystems, viewport]);
+    {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects}),
+    [markerGroups, screenSystems, viewport, reservedUiRects]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
   const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({
@@ -72,8 +74,8 @@ export default function CollaborationMap({
     // decluttering solver or every label would jump as the pointer crosses
     // the map during a live update.
     selectedId:selectedSystemId, hoveredId:null, intelById, forceIds:forceSystems,
-    zoom:view.scale, showAll:showAllNames, occupied:positionedGroups, gateSegments,
-    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups, gateSegments]);
+    zoom:view.scale, showAll:showAllNames, occupied:[...positionedGroups,...reservedUiRects], gateSegments,
+    padding:{left:14,right:14,top:175,bottom:60}}), [screenSystems, viewport, selectedSystemId, intelById, forceSystems, view.scale, showAllNames, positionedGroups, reservedUiRects, gateSegments]);
   const focusLeaders = useMemo(() => leaderSegmentsForFocus(positionedGroups, labelLayouts,
     {selectedSystemId, hoveredSystemId, ...viewport}), [positionedGroups, labelLayouts, selectedSystemId, hoveredSystemId, viewport]);
   const portals = useMemo(() => {
@@ -108,10 +110,24 @@ export default function CollaborationMap({
     const measure = () => {
       const {width,height} = node.getBoundingClientRect();
       if (width>0 && height>0) setViewport(previous => Math.abs(previous.width-width)<1 && Math.abs(previous.height-height)<1 ? previous : {width,height});
+      // The search/filter dock floats above the SVG. Reserve its *actual*
+      // viewport-space box so its responsive width and height cannot hide a
+      // force badge; marker placement itself never changes this measurement.
+      const controls = node.parentElement?.querySelector('.tac-map-controls');
+      const bounds = controls?.getBoundingClientRect();
+      const mapBounds = node.getBoundingClientRect();
+      const next = bounds?.width && bounds?.height && mapBounds.width && mapBounds.height
+        ? [{x:bounds.left-mapBounds.left,y:bounds.top-mapBounds.top,width:bounds.width,height:bounds.height}]
+        : [];
+      setReservedUiRects(previous => previous.length === next.length && previous.every((rect,index) =>
+        ['x','y','width','height'].every(key => Math.abs(rect[key]-next[index][key])<.5)) ? previous : next);
     };
     measure();
     const observer = new ResizeObserver(measure); observer.observe(node);
-    return () => observer.disconnect();
+    const controls = node.parentElement?.querySelector('.tac-map-controls');
+    if(controls) observer.observe(controls);
+    window.addEventListener('resize',measure);
+    return () => { observer.disconnect(); window.removeEventListener('resize',measure); };
   }, []);
   const lastFocusToken = useRef(null);
   useEffect(() => {
