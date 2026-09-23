@@ -199,7 +199,7 @@ test('a preferred marker slot keeps its side of the star through neighboring zoo
   assert.equal(typeof first.slot,'number','each placed marker exposes its selected slot');
 });
 
-test('a preferred marker slot does not flip over a nearby star clearance fringe', () => {
+test('a preferred vertical marker slot stays centered over a nearby star clearance fringe', () => {
   const nodes = [
     {system_id:1,px:500,py:350}, {system_id:2,px:568,py:388},
     {system_id:5,px:409,py:390}, {system_id:6,px:597,py:317},
@@ -213,7 +213,9 @@ test('a preferred marker slot does not flip over a nearby star clearance fringe'
     px:500+(node.px-500)*scale,py:350+(node.py-350)*scale})),1,{...options,preferredSlots})[0];
   const first = at(1.04), second = at(1.05);
   assert.equal(first.slot,second.slot,'a soft clearance margin must not send the badge across its star');
-  assert.ok(first.x>=500 && second.x>=500);
+  assert.equal(first.x + first.width / 2, 500);
+  assert.equal(second.x + second.width / 2, 500);
+  assert.ok(first.y >= 350 && second.y >= 350);
 });
 
 test('a marker first seen after panning keeps that slot on the next zoom frame', () => {
