@@ -15,6 +15,7 @@ import json
 from decimal import Decimal
 from .A_Star import distance
 from .routing_data import SnapshotUnavailable, get_route_snapshot
+from .scope import public_board_filter_kwargs, stargate_cache_key
 
 
 def coerce_bool(value):
@@ -28,7 +29,9 @@ def coerce_bool(value):
 class GetBoardRegionCoordinates(APIView):
     @staticmethod
     def get(request):
-        queryset = BoardRegions.objects.exclude(zh_name__isnull=True)
+        queryset = BoardRegions.objects.filter(**public_board_filter_kwargs("region_id")).exclude(
+            zh_name__isnull=True
+        )
         serializer = BoardRegionSerializers(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -36,7 +39,8 @@ class GetBoardRegionCoordinates(APIView):
 class GetBoardSystemCoordinates(APIView):
     @staticmethod
     def get(request):
-        queryset = BoardSystems.objects.exclude(system_id__contains='3100').exclude(
+        queryset = BoardSystems.objects.filter(**public_board_filter_kwargs("system_id")).exclude(
+            system_id__contains='3100').exclude(
             system_id__contains='3200').exclude(system_id__contains='3400')
         serializer = BoardSystemSerializers(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -45,7 +49,8 @@ class GetBoardSystemCoordinates(APIView):
 class GetBoardConstellationsCoordinates(APIView):
     @staticmethod
     def get(request):
-        queryset = BoardConstellations.objects.exclude(constellation_id__contains='2100').exclude(
+        queryset = BoardConstellations.objects.filter(**public_board_filter_kwargs("constellation_id")).exclude(
+            constellation_id__contains='2100').exclude(
             constellation_id__contains='2200').exclude(constellation_id__contains='2400')
         serializer = BoardConstellationsSerializers(queryset, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -55,7 +60,7 @@ class GetStarGateData(APIView):
     @staticmethod
     def get(request):
         # 尝试从缓存获取
-        cache_key = 'stargate_data'
+        cache_key = stargate_cache_key()
         cached_data = cache.get(cache_key)
 
         if cached_data:
@@ -64,8 +69,9 @@ class GetStarGateData(APIView):
                 'Content-Length': str(len(cached_data))
             })
 
-        queryset = BoardStargates.objects.values('stargate_id', 'system_id', 'destination_system_id',
-                                                 'destination_stargate_id')
+        queryset = BoardStargates.objects.filter(**public_board_filter_kwargs("stargate_id")).values(
+            'stargate_id', 'system_id', 'destination_system_id', 'destination_stargate_id'
+        )
 
         x = time.time()
 

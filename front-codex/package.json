@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "dev:tactical": "vite --host 127.0.0.1 --port 4194 --strictPort --mode tactical-local",
+    "dev:starsea": "vite --host 127.0.0.1 --port 4195 --strictPort --mode starsea-local",
+    "build": "vite build && npm run check:bundle",
+    "check:bundle": "node scripts/check-bundle.mjs",
     "preview": "vite preview",
     "preview:ui": "node tests/preview/server.mjs",
     "test:e2e": "playwright test",
@@ -25,6 +28,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@vitejs/plugin-react": "^5.1.1",
+    "sharp": "^0.35.4",
     "vite": "^7.3.1"
   }
 }

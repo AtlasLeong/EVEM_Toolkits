@@ -1,4 +1,5 @@
 // Local visual-QA fixtures only. No production data or network calls.
+import { resolveCommunityPreview, communityLocationCatalog } from './community.mjs'
 const icon = '/preview-assets/Glossy-Alloys.png'
 export const resources = [{ label: '船菜', options: [
   { label: '光泽合金', value: '光泽合金', icon },
@@ -30,6 +31,9 @@ const feedbackTickets = [
 ]
 export function resolvePreviewRequest(url, method, body = {}) {
   const path = url.pathname
+  if (path.startsWith('/api/community/')) return resolveCommunityPreview(url, method, body)
+  if (method === 'GET' && path === '/api/constellations' && url.searchParams.has('regionID')) return { status: 200, data: communityLocationCatalog.constellations.filter(item => item.region_id === url.searchParams.get('regionID')) }
+  if (method === 'GET' && path === '/api/solarsystem' && url.searchParams.has('constellationID')) return { status: 200, data: communityLocationCatalog.systems.filter(item => item.constellation_id === url.searchParams.get('constellationID')) }
   if (path === '/api/feedback/' && method === 'GET') {
     const results = feedbackTickets.filter(item => ['type', 'module', 'status'].every(key => !url.searchParams.get(key) || item[key] === url.searchParams.get(key)))
     return { status: 200, data: { count: results.length, results, can_manage: true } }
@@ -48,7 +52,11 @@ export function resolvePreviewRequest(url, method, body = {}) {
   }
   const get = {
     '/api/planetresources': resources,
-    '/api/regions': [{ r_id: 1, r_title: '伏尔戈', r_safetylvl: 0.59 }],
+    '/api/regions': [
+      { r_id: 'derelik', r_title: '德里克', r_safetylvl: 0.5 },
+      { r_id: 'volgo', r_title: '伏尔戈', r_safetylvl: 0.59 },
+      { r_id: 'silent', r_title: '静寂谷', r_safetylvl: -0.29 },
+    ],
     '/api/constellations': [{ co_id: 11, co_title: '米沃拉', co_safetylvl: 0.2 }],
     '/api/solarsystem': [{ ss_id: 21, ss_title: '夫斯库仑', ss_safetylvl: 0.22 }],
     '/api/planetresourceprice': resources.flatMap(group => group.options.map(item => ({ resource_name: item.value, resource_type: group.label, resource_price: 1280 }))),

@@ -1,0 +1,268 @@
+import { Fragment, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { MapPin } from "lucide-react";
+import {
+  getCommunityRegions,
+  getCommunityConstellations,
+  getCommunitySolarSystems,
+} from "../../services/apiCommunity";
+import CorporationSelect, {
+  catalogOptions,
+  catalogLabel,
+  catalogSecurity,
+  CorporationSecurity,
+} from "./CorporationSelect";
+
+const LOCATION_LEVELS = ["region", "constellation", "solarsystem"];
+
+function locationSecurity(location, level) {
+  if (!location?.[`${level}_id`]) return null;
+  const key = `${level}_security`;
+  const deepest = location.solarsystem_id
+    ? "solarsystem"
+    : location.constellation_id
+      ? "constellation"
+      : "region";
+  // A legacy security belongs only to the deepest selected level. Explicit
+  // null in a new snapshot means unknown, never a fallback to another value.
+  const value = Object.hasOwn(location, key)
+    ? location[key]
+    : level === deepest
+      ? location.security
+      : null;
+  return Number.isFinite(value) ? value : null;
+}
+
+export function CorporationLocationLabel({
+  location,
+  legacy,
+  empty = "未填写",
+  regionOnly = false,
+}) {
+  const levels = (regionOnly ? ["region"] : LOCATION_LEVELS).filter(
+    (level) => location?.[`${level}_name`],
+  );
+  return (
+    <span className="corp-location-label">
+      {levels.length
+        ? levels.map((level, index) => (
+            <Fragment key={level}>
+              {index > 0 && " / "}
+              <span className="corp-location-part">
+                <span>{location[`${level}_name`]}</span>
+                <CorporationSecurity
+                  value={locationSecurity(location, level)}
+                />
+              </span>
+            </Fragment>
+          ))
+        : legacy || empty}
+    </span>
+  );
+}
+
+export default function CorporationLocation({
+  value,
+  legacy,
+  onChange,
+  onLegacyChange,
+  disabled,
+}) {
+  const [linking, setLinking] = useState(!!value);
+  const regions = useQuery({
+    queryKey: ["community-regions"],
+    queryFn: getCommunityRegions,
+    staleTime: 3600000,
+    retry: 1,
+  });
+  const constellations = useQuery({
+    queryKey: ["community-constellations", value?.region_id],
+    queryFn: () => getCommunityConstellations(value.region_id),
+    enabled: !!value?.region_id,
+    staleTime: 3600000,
+    retry: 1,
+  });
+  const systems = useQuery({
+    queryKey: ["community-systems", value?.constellation_id],
+    queryFn: () => getCommunitySolarSystems(value.constellation_id),
+    enabled: !!value?.constellation_id,
+    staleTime: 3600000,
+    retry: 1,
+  });
+  const choices = (data, prefix, placeholder) => [
+    { value: "", label: placeholder },
+    ...catalogOptions(data, prefix),
+  ];
+  const region = regions.data?.find(
+    (item) => String(item.r_id) === String(value?.region_id),
+  );
+  const constellation = constellations.data?.find(
+    (item) => String(item.co_id) === String(value?.constellation_id),
+  );
+  const system = systems.data?.find(
+    (item) => String(item.ss_id) === String(value?.solarsystem_id),
+  );
+  const currentLocation = value && {
+    ...value,
+    region_security: region
+      ? catalogSecurity(region.r_safetylvl)
+      : locationSecurity(value, "region"),
+    constellation_security: constellation
+      ? catalogSecurity(constellation.co_safetylvl)
+      : locationSecurity(value, "constellation"),
+    solarsystem_security: system
+      ? catalogSecurity(system.ss_safetylvl)
+      : locationSecurity(value, "solarsystem"),
+  };
+  const selectRegion = (id) => {
+    if (!id) return onChange(null);
+    const item = regions.data?.find((item) => String(item.r_id) === String(id));
+    onChange({
+      region_id: String(id),
+      constellation_id: null,
+      solarsystem_id: null,
+      region_name: catalogLabel(item, "r"),
+      region_security: catalogSecurity(item?.r_safetylvl),
+      constellation_security: null,
+      solarsystem_security: null,
+      security: catalogSecurity(item?.r_safetylvl),
+    });
+  };
+  const selectConstellation = (id) => {
+    const item = constellations.data?.find(
+      (item) => String(item.co_id) === String(id),
+    );
+    const region = regions.data?.find(
+      (item) => String(item.r_id) === String(value.region_id),
+    );
+    onChange({
+      ...currentLocation,
+      constellation_id: id ? String(id) : null,
+      solarsystem_id: null,
+      constellation_name: id ? catalogLabel(item, "co") : undefined,
+      solarsystem_name: undefined,
+      constellation_security: id ? catalogSecurity(item?.co_safetylvl) : null,
+      solarsystem_security: null,
+      security: catalogSecurity(id ? item?.co_safetylvl : region?.r_safetylvl),
+    });
+  };
+  const selectSystem = (id) => {
+    const item = systems.data?.find(
+      (item) => String(item.ss_id) === String(id),
+    );
+    const constellation = constellations.data?.find(
+      (item) => String(item.co_id) === String(value.constellation_id),
+    );
+    onChange({
+      ...currentLocation,
+      solarsystem_id: id ? String(id) : null,
+      solarsystem_name: id ? catalogLabel(item, "ss") : undefined,
+      solarsystem_security: id ? catalogSecurity(item?.ss_safetylvl) : null,
+      security: catalogSecurity(
+        id ? item?.ss_safetylvl : constellation?.co_safetylvl,
+      ),
+    });
+  };
+  return (
+    <section className="corp-location-editor" aria-label="军团驻地">
+      <div className="corp-location-heading">
+        <div>
+          <h3>
+            <MapPin size={16} />
+            军团驻地
+          </h3>
+          <p>关联星域、星座与星系，也可以只选到星域。</p>
+        </div>
+        {value && (
+          <button
+            className="corp-text-button"
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              onChange(null);
+              setLinking(false);
+            }}
+          >
+            清除关联驻地
+          </button>
+        )}
+      </div>
+      {!value && (
+        <label className="corp-location-legacy-input">
+          原驻地说明
+          <input
+            className="text-input"
+            value={legacy || ""}
+            maxLength={80}
+            disabled={disabled}
+            onChange={(event) => onLegacyChange?.(event.target.value)}
+            placeholder="可保留原来的文字说明，也可关联下方星图位置"
+          />
+        </label>
+      )}
+      {!linking && !value ? (
+        <div className="corp-location-legacy">
+          <p>
+            {legacy
+              ? `已有驻地文字：${legacy}（未关联星图，原内容会保留）`
+              : "尚未关联星图驻地"}
+          </p>
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={disabled}
+            onClick={() => setLinking(true)}
+          >
+            关联星图驻地
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="corp-location-selects">
+            <CorporationSelect
+              label="驻地星域"
+              value={value?.region_id || ""}
+              selectedLabel={value?.region_name}
+              selectedSecurity={locationSecurity(value, "region")}
+              options={choices(regions.data, "r", "选择星域")}
+              onChange={selectRegion}
+              disabled={disabled}
+              loading={regions.isPending}
+              error={regions.error}
+              onRetry={() => regions.refetch()}
+            />
+            <CorporationSelect
+              label="驻地星座"
+              value={value?.constellation_id || ""}
+              selectedLabel={value?.constellation_name}
+              selectedSecurity={locationSecurity(value, "constellation")}
+              options={choices(constellations.data, "co", "全部星座")}
+              onChange={selectConstellation}
+              disabled={disabled || !value?.region_id}
+              loading={!!value?.region_id && constellations.isPending}
+              error={value?.region_id ? constellations.error : null}
+              onRetry={() => constellations.refetch()}
+            />
+            <CorporationSelect
+              label="驻地星系"
+              value={value?.solarsystem_id || ""}
+              selectedLabel={value?.solarsystem_name}
+              selectedSecurity={locationSecurity(value, "solarsystem")}
+              options={choices(systems.data, "ss", "全部星系")}
+              onChange={selectSystem}
+              disabled={disabled || !value?.constellation_id}
+              loading={!!value?.constellation_id && systems.isPending}
+              error={value?.constellation_id ? systems.error : null}
+              onRetry={() => systems.refetch()}
+            />
+          </div>
+          {value && (
+            <p className="corp-hint">
+              <CorporationLocationLabel location={currentLocation} />
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

@@ -13,4 +13,9 @@ from django.core.asgi import get_asgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'EVE_MDjango.settings')
 
-application = get_asgi_application()
+if os.environ.get('TACTICAL_ASGI_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}:
+    # Keep the existing HTTP-only entry safe for deployments without Channels,
+    # while making the WebSocket-capable entry explicit and hard to miss.
+    from .tactical_asgi import application
+else:
+    application = get_asgi_application()

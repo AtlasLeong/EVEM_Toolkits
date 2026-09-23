@@ -1,0 +1,5 @@
+# Optional isolated demo and loopback test clients, never production auth.
+-r ../scripts/deploy/requirements-ci.txt
+-r requirements-tactical.txt
+django-cors-headers==4.3.1
+requests==2.34.2

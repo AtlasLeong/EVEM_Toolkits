@@ -11,6 +11,7 @@ from django.db.models.functions import Round
 
 from .A_Star import Galaxy, RouteGraph
 from .models import BoardConstellations, BoardStargates, BoardSystems
+from .scope import public_board_filter_kwargs
 
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,8 @@ class RouteSnapshot:
 
 def _base_system_queryset():
     return (
-        BoardSystems.objects.exclude(system_id__contains="3100")
+        BoardSystems.objects.filter(**public_board_filter_kwargs("system_id"))
+        .exclude(system_id__contains="3100")
         .exclude(system_id__contains="3200")
         .exclude(system_id__contains="3400")
         .annotate(rounded_security=Round(F("security_status"), 1))
@@ -108,7 +110,7 @@ def build_route_snapshot(in_high_security):
         if len(set(names)) != len(names):
             raise SnapshotUnavailable("duplicate route system names")
 
-        stargates = BoardStargates.objects.values(
+        stargates = BoardStargates.objects.filter(**public_board_filter_kwargs("stargate_id")).values(
             "system_id", "destination_system_id"
         )
         connections = {}
@@ -120,7 +122,9 @@ def build_route_snapshot(in_high_security):
             connections.setdefault(source, set()).add(destination)
             connections.setdefault(destination, set()).add(source)
 
-        constellation_rows = BoardConstellations.objects.values("constellation_id", "region_id")
+        constellation_rows = BoardConstellations.objects.filter(
+            **public_board_filter_kwargs("constellation_id")
+        ).values("constellation_id", "region_id")
         constellation_regions = {int(row["constellation_id"]): int(row["region_id"]) for row in constellation_rows}
         new8_constellations = frozenset(
             constellation_id

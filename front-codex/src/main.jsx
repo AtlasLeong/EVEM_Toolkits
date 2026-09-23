@@ -5,6 +5,9 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './context/AuthContext'
 import './styles.css'
+import { installCorporationNavigationGuard } from './utils/corporationNavigationGuard'
+
+installCorporationNavigationGuard()
 
 const queryClient = new QueryClient({
   defaultOptions: {

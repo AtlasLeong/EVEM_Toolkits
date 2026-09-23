@@ -250,6 +250,27 @@ def prepare_backend(root, staged, manifest, config):
     for database in ('default', 'license'):
         command([python, str(Path(__file__).with_name('migration_check.py')),
                  '--database', database], cwd=backend)
+    prepare_community(root, backend, config,
+                      required='backend/Community/health.py' in manifest['files'])
+
+
+def requires_community_readiness(backend, state=None):
+    # The flag is derived from the validated artifact inventory. Checking the
+    # target's module too preserves compatibility with state files made before
+    # this publisher upgrade; a missing flag never disables a new target's gate.
+    return (state or {}).get('community_ready') is True or (Path(backend) / 'Community/health.py').is_file()
+
+
+def prepare_community(root, backend, config, required=False):
+    if not required and not requires_community_readiness(backend):
+        return  # A historical target predating this capability has no command.
+    args = [str(Path(backend) / '.venv/bin/python'), 'manage.py', 'community_preflight']
+    for forbidden in (Path(root) / 'releases', Path(root) / 'current',
+                      Path(root) / 'shared/assets', Path(config['uploads'])):
+        args.extend(['--forbidden-root', str(forbidden)])
+    # Validates candidate settings/path only. The running service, not this
+    # deploy account, checks its own effective filesystem access after restart.
+    command(args, cwd=backend)
 
 
 def prepare_assets(root, frontend):
@@ -304,6 +325,10 @@ def health(config, state):
                 actual = json.loads(get(origin + route + '?expected=' + expected))
                 if actual.get('sha') != expected:
                     raise ReleaseError('wrong live version: ' + component)
+            if requires_community_readiness(state['backend']['path'], state['backend']):
+                ready = json.loads(get(origin + '/api/community/ready/?expected=' + state['backend']['sha']))
+                if ready != {'status': 'ok'}:
+                    raise ReleaseError('Community readiness failed')
             return
         except (OSError, ValueError, ReleaseError, subprocess.SubprocessError) as exc:
             failure = exc
@@ -346,6 +371,8 @@ def publish(root, archive=None, rollback=False):
                         command([str(backend / '.venv/bin/python'),
                                  str(Path(__file__).with_name('migration_check.py')),
                                  '--database', database], cwd=backend)
+                    prepare_community(root, backend, config,
+                                      required=new['backend'].get('community_ready') is True)
         else:
             manifest = validate(archive)
             changed = changed_components(old, manifest)
@@ -357,6 +384,8 @@ def publish(root, archive=None, rollback=False):
             for component in changed:
                 new[component] = {'source': manifest['sources'][component], 'sha': manifest['sha'],
                                   'path': str(staged / component)}
+                if component == 'backend' and 'backend/Community/health.py' in manifest['files']:
+                    new[component]['community_ready'] = True
             def prepare():
                 if 'backend' in changed:
                     prepare_backend(root, staged, manifest, config)

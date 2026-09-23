@@ -1,0 +1,4 @@
+# Optional ASGI runtime, in addition to the existing backend requirements.
+channels==4.2.0
+uvicorn==0.34.3
+websockets==15.0.1

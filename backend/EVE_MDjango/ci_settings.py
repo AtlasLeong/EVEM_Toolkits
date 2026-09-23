@@ -8,7 +8,7 @@ USE_TZ = True
 ALLOWED_HOSTS = ['testserver', 'localhost']
 INSTALLED_APPS = [
     'django.contrib.auth', 'django.contrib.contenttypes', 'rest_framework',
-    'ActivationCode', 'License', 'Feedback', 'TacticalBoard',
+    'ActivationCode', 'License', 'Feedback', 'TacticalBoard', 'Community', 'TacticalCollaboration', 'Starsea',
 ]
 DATABASES = {alias: {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}
              for alias in ('default', 'license')}
@@ -20,6 +20,9 @@ MIDDLEWARE = []
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+CHANNEL_LAYERS = {
+    'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
+}
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
 }

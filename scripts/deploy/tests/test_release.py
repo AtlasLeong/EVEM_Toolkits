@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'release.py'
@@ -228,6 +229,91 @@ class ReleaseTests(unittest.TestCase):
                 run()
         self.assertEqual(json.loads((self.root / 'state.json').read_text()), old)
         self.assertEqual(json.loads((self.root / 'previous.json').read_text()), {'earlier': True})
+        self.assertFalse((self.root / 'transaction.json').exists())
+
+    def community_backend(self, path):
+        (path / 'Community').mkdir(parents=True, exist_ok=True)
+        (path / 'Community/health.py').write_text('# readiness capability', encoding='utf-8')
+
+    def test_candidate_community_preflight_precedes_switch_and_does_not_assume_service_identity(self):
+        archive, manifest = self.bundle(changes={'backend/Community/health.py': b'# readiness capability'})
+        staged = release.stage(archive, self.root / 'releases')
+        environment = self.root / 'environment'
+        (environment / 'bin').mkdir(parents=True)
+        (environment / 'bin/python').touch()
+        (self.root / 'shared').mkdir()
+        release.atomic_json(self.root / 'shared/environments.json', {manifest['dependencies']: str(environment)})
+        config = {}
+        for key in ('env_file', 'logs', 'uploads'):
+            config[key] = str(self.root / key)
+            Path(config[key]).mkdir()
+        calls = []
+        def command(args, cwd=None):
+            calls.append(args)
+            if 'community_preflight' in args:
+                raise release.ReleaseError('Community storage preflight failed')
+        with patch.object(release, 'link'), patch.object(release, 'command', side_effect=command):
+            with self.assertRaisesRegex(release.ReleaseError, 'Community storage preflight failed'):
+                release.prepare_backend(self.root, staged, manifest, config)
+        self.assertTrue(any('community_preflight' in args for args in calls))
+        gate = next(args for args in calls if 'community_preflight' in args)
+        for path in (self.root / 'releases', self.root / 'current', self.root / 'shared/assets', Path(config['uploads'])):
+            self.assertIn(str(path), gate)
+
+    def http_health(self, state, ready_status=200, ready_body=None):
+        calls = []
+        class Response(io.BytesIO):
+            status = 200
+        def get(request, **kwargs):
+            route = request.full_url.split('http://fixture')[1].split('?')[0]
+            calls.append(route)
+            if route == '/api/community/ready/':
+                if ready_status != 200:
+                    raise HTTPError(request.full_url, ready_status, 'fixture failure', {}, None)
+                return Response(json.dumps(ready_body or {'status': 'ok'}).encode())
+            if route in ('/deploy-version.json', '/api/deploy-version/'):
+                component = 'frontend' if route == '/deploy-version.json' else 'backend'
+                return Response(json.dumps({'sha': state[component]['sha']}).encode())
+            return Response(b'[]' if route == '/api/boardregions' else b'<html></html>')
+        with patch.object(release, 'command'), patch.object(release.time, 'sleep'), patch.object(release.urllib.request, 'urlopen', side_effect=get):
+            release.health({'origin': 'http://fixture'}, state)
+        return calls
+
+    def test_new_community_version_requires_ready_even_without_state_flag(self):
+        state = self.state()
+        self.community_backend(Path(state['backend']['path']))
+        for status in (404, 503):
+            with self.subTest(status=status), self.assertRaises(release.ReleaseError):
+                self.http_health(state, ready_status=status)
+        with self.assertRaises(release.ReleaseError):
+            self.http_health(state, ready_body={'status': 'unavailable'})
+        self.assertIn('/api/community/ready/', self.http_health(state))
+
+    def test_recorded_capability_cannot_be_skipped_when_module_is_missing(self):
+        state = self.state()
+        state['backend']['community_ready'] = True
+        with self.assertRaises(release.ReleaseError):
+            self.http_health(state, ready_status=404)
+
+    def test_old_rollback_target_without_capability_uses_existing_health_checks(self):
+        calls = self.http_health(self.state(), ready_status=404)
+        self.assertNotIn('/api/community/ready/', calls)
+        self.assertIn('/api/deploy-version/', calls)
+
+    def test_community_runtime_failure_rolls_back_to_old_version_without_endpoint(self):
+        old = self.state()
+        new = {name: {**item, 'sha': 'a' * 40, 'path': str(self.root / 'new' / name)} for name, item in old.items()}
+        self.community_backend(Path(new['backend']['path']))
+        release.atomic_json(self.root / 'state.json', old)
+        events = []
+        def check(state):
+            events.append(('health', state))
+            self.http_health(state, ready_status=503)
+        with self.assertRaisesRegex(release.ReleaseError, 'rolled back and recovery verified'):
+            release.transact(self.root, old, new, ['backend'], lambda: None,
+                             lambda *args: events.append(('switch', args)), lambda: None, check)
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), old)
+        self.assertEqual(events[-1], ('health', old))
         self.assertFalse((self.root / 'transaction.json').exists())
 
 

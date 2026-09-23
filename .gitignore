@@ -7,6 +7,10 @@ backend/logs/
 backend/static/uploads/
 backend/db.sqlite3
 
+# Python tool and nested app bytecode
+__pycache__/
+*.py[cod]
+
 # Frontend (Node/Vue)
 frontend/node_modules
 frontend/dist
@@ -27,6 +31,10 @@ front-codex/*.local
 front-codex/*.log
 front-codex/playwright-report
 front-codex/test-results
+front-codex/test-results-tactical
+front-codex/test-results-tactical-immersive/
+front-codex/.playwright-cli/
+front-codex/output/
 
 # Editor
 .vscode/*
@@ -41,4 +49,10 @@ front-codex/test-results
 
 # Isolated feature worktrees
 .worktrees/
+.venv/
+backend/.tactical-local.sqlite3*
+backend/.tactical-universe.json
+backend/.starsea-local.sqlite3*
+front-codex/test-results-starsea*/
+front-codex/test-results-corp*/
 

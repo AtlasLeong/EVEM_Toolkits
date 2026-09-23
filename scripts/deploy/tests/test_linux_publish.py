@@ -49,7 +49,9 @@ class LinuxPublishTests(unittest.TestCase):
         self.manage = ("import os,sys\nfrom pathlib import Path\n"
                        "root=Path(os.environ['EVEM_TEST_ROOT'])\n"
                        "with (root/'manage-events').open('a') as f: f.write(' '.join(sys.argv[1:])+'\\n')\n"
-                       "sys.exit(1 if 'migrate' in sys.argv and (root/'pending').exists() else 0)\n").encode()
+                       "failed_migrations='migrate' in sys.argv and (root/'pending').exists()\n"
+                       "failed_storage='community_preflight' in sys.argv and (root/'bad-storage').exists()\n"
+                       "sys.exit(1 if failed_migrations or failed_storage else 0)\n").encode()
         self.old = {}
         for component, tree in [('frontend', 'd'), ('backend', 'e')]:
             directory = self.root / 'releases/old' / component
@@ -71,6 +73,14 @@ class LinuxPublishTests(unittest.TestCase):
                 route = self.path.split('?')[0]
                 if route == '/api/boardregions':
                     data = b'[]'
+                elif route == '/api/community/ready/':
+                    sha = (root / 'current/backend/.release-sha').read_text()
+                    if (root / 'bad-community-ready').exists() and sha != '0' * 40:
+                        self.send_response(503)
+                        self.end_headers()
+                        self.wfile.write(b'{"status":"unavailable"}')
+                        return
+                    data = b'{"status":"ok"}'
                 elif route == '/api/deploy-version/':
                     sha = (root / 'current/backend/.release-sha').read_text()
                     if (root / 'bad-health').exists() and sha != '0' * 40:
@@ -106,13 +116,15 @@ class LinuxPublishTests(unittest.TestCase):
     def json(self, name, value):
         (self.root / name).write_text(json.dumps(value))
 
-    def bundle(self, backend='c'):
+    def bundle(self, backend='c', community=False):
         sha = 'a' * 40
         files = {'backend/manage.py': self.manage, 'backend/requirements.txt': self.requirements,
                  'backend/.release-sha': sha.encode(),
                  'frontend/index.html': b'<html><script src="/assets/test-a.js"></script></html>',
                  'frontend/assets/test-a.js': b'console.log("new")',
                  'frontend/deploy-version.json': json.dumps({'sha': sha}).encode()}
+        if community:
+            files['backend/Community/health.py'] = b'# readiness capability\n'
         manifest = {'format': 1, 'sha': sha, 'sources': {'frontend': 'b' * 40, 'backend': backend * 40},
                     'dependencies': hashlib.sha256(self.requirements).hexdigest(),
                     'files': {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
@@ -176,3 +188,30 @@ class LinuxPublishTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
         self.assertFalse((self.root / 'service-events').exists())
+
+    def test_community_preflight_failure_never_switches(self):
+        (self.root / 'bad-storage').touch()
+        result = self.run_cli('publish', self.bundle(community=True))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
+        self.assertEqual((self.root / 'current/backend').resolve(), self.root / 'releases/old/backend')
+        self.assertFalse((self.root / 'service-events').exists())
+        self.assertFalse((self.root / 'transaction.json').exists())
+
+    def test_community_ready_failure_rolls_back_to_historical_backend(self):
+        (self.root / 'bad-community-ready').touch()
+        result = self.run_cli('publish', self.bundle(community=True))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('rolled back and recovery verified', result.stderr)
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
+        self.assertFalse((self.root / 'transaction.json').exists())
+
+    def test_community_publish_records_capability_then_manual_rollback_is_compatible(self):
+        result = self.run_cli('publish', self.bundle(community=True))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        state = json.loads((self.root / 'state.json').read_text())
+        self.assertIs(state['backend']['community_ready'], True)
+        self.assertIn('community_preflight', (self.root / 'manage-events').read_text())
+        result = self.run_cli('rollback')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)

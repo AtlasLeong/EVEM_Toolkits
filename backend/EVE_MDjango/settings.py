@@ -48,6 +48,19 @@ def config(key, default=_MISSING):
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY')
 
+# Opt-in ASGI collaboration only. Empty allowlist denies all WebSocket origins.
+# Existing WSGI deployment does not import Channels or change its runtime.
+TACTICAL_ALLOWED_ORIGINS = [origin.strip() for origin in config('TACTICAL_ALLOWED_ORIGINS', default='').split(',') if origin.strip()]
+TACTICAL_GRAPH_DATA_VERSION = config('TACTICAL_GRAPH_DATA_VERSION', default='1')
+CHANNEL_LAYERS = {
+    'default': ({
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {'hosts': [config('TACTICAL_REDIS_URL')]},
+    } if config('TACTICAL_REDIS_URL', default='') else {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    }),
+}
+
 # SECURITY WARNING: don't run with debug turned on in production!
 
 def parse_debug_flag(value, default=True):
@@ -70,7 +83,11 @@ def parse_debug_flag(value, default=True):
 
 DEBUG = parse_debug_flag(config('DEBUG', default=True))
 
-ALLOWED_HOSTS = ['*']
+def parse_csv(value):
+    return [item.strip() for item in str(value).split(',') if item.strip()]
+
+
+ALLOWED_HOSTS = parse_csv(config('ALLOWED_HOSTS', default='*' if DEBUG else 'localhost,127.0.0.1'))
 
 # Application definition
 
@@ -92,6 +109,9 @@ INSTALLED_APPS = [
     'ActivationCode',
     'License',
     'Feedback',
+    'Community',
+    'TacticalCollaboration',
+    'Starsea',
 ]
 
 MIDDLEWARE = [
@@ -216,6 +236,8 @@ AUTH_USER_MODEL = 'Authentication.EVEMUser'
 
 # Private feedback attachments must be outside any Nginx/static/media public root.
 FEEDBACK_UPLOAD_ROOT = config('FEEDBACK_UPLOAD_ROOT', default=None)
+COMMUNITY_UPLOAD_ROOT = config('COMMUNITY_UPLOAD_ROOT', default=None)
+STARSEA_UPLOAD_ROOT = config('STARSEA_UPLOAD_ROOT', default=None)
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
@@ -241,8 +263,11 @@ STATICFILES_DIRS = [
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-# 允许跨域
-CORS_ALLOW_ALL_ORIGINS = True
+# 允许跨域. Production must use an explicit origin allowlist.
+CORS_ALLOWED_ORIGINS = parse_csv(config('CORS_ALLOWED_ORIGINS', default=''))
+CORS_ALLOW_ALL_ORIGINS = DEBUG and config('CORS_ALLOW_ALL_ORIGINS', default='true').lower() in {'1', 'true', 'yes'}
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(config('DATA_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(config('FILE_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024))
 
 # 邮件发送配置
 EMAIL_BACKEND = 'EVE_MDjango.EmailBackend.CustomEmailBackend'
