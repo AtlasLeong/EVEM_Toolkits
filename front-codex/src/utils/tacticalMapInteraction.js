@@ -31,10 +31,10 @@ export function leaderSegmentsForFocus(groups = [], labels = [], {
       if (![from, to].every(point => inside(point, {width, height}))) return null;
       if (row.node && !inside({x:row.node.px, y:row.node.py}, {width, height})) return null;
       return {system_id:focusId, from, to, distance:Math.hypot(from.x-to.x, from.y-to.y)};
-    }).filter(Boolean)
+    }).filter(candidate => candidate && candidate.distance > 22 && candidate.distance <= 96)
     .sort((a,b) => a.distance-b.distance || a.from.x-b.from.x || a.from.y-b.from.y || a.to.x-b.to.x || a.to.y-b.to.y);
   const nearest = candidates[0];
-  return nearest && nearest.distance > 22 && nearest.distance <= 96
+  return nearest
     ? [{system_id:nearest.system_id, from:nearest.from, to:nearest.to}] : [];
 }
 

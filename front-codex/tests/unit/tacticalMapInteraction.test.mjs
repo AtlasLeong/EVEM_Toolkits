@@ -41,6 +41,15 @@ test('focus leaders vanish for a short gap, an offscreen star, or an unrelated s
   const offscreen=[{system_id:42,node:{px:-5,py:300},leader:{from:{x:20,y:300},to:{x:-5,y:300}}}];
   assert.deepEqual(use('leaderSegmentsForFocus',offscreen,[],{selectedSystemId:42,width:800,height:600}),[]);
 });
+test('a close star name does not suppress the one useful leader to a displaced fleet',()=>{
+  const [label]=use('layoutIntelLabels',[{system_id:42,px:400,py:300,name:'甲'}],{width:800,height:600});
+  const group={system_id:42,node:{px:400,py:300},leader:{from:{x:400,y:240},to:{x:400,y:300}}};
+  const leaders=use('leaderSegmentsForFocus',[group],[label],{selectedSystemId:42,width:800,height:600});
+  assert.equal(Math.hypot(label.leader.from.x-label.leader.to.x,label.leader.from.y-label.leader.to.y),13);
+  assert.equal(leaders.length,1);
+  assert.deepEqual(leaders[0].from,group.leader.from);
+  assert.deepEqual(leaders[0].to,group.leader.to);
+});
 test('blank space, offscreen stars and pointer outside the map are not drop targets',()=>{
   for (const p of [{x:300,y:300},{x:-1,y:100},{x:801,y:100}]) assert.equal(use('resolveSystemHit',nodes,p,view,viewport).target,null);
   assert.equal(use('resolveSystemHit',[{system_id:4,px:-5,py:100}],{x:1,y:100},view,viewport).target,null);
