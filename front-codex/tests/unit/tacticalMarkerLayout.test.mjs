@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { layoutForceMarkers, markerWidth } from "../../src/utils/tacticalMarkerLayout.js";
+import * as markerLayout from "../../src/utils/tacticalMarkerLayout.js";
+
+const { layoutForceMarkers, markerWidth, rememberVisibleMarkerSlots } = markerLayout;
 
 const group = (id, rows = 1) => ({ system_id: id, visible: Array.from({ length: rows }, (_, index) => ({ id: `${id}-${index}` })), hiddenCount: 0 });
 const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -176,4 +178,52 @@ test('a preferred marker slot keeps its side of the star through neighboring zoo
   assert.equal(side(first),side(second),'zoom must not flip a clear callout from the left to the star center');
   assert.equal(first.slot,second.slot,'a clear preferred slot must remain stable');
   assert.equal(typeof first.slot,'number','each placed marker exposes its selected slot');
+});
+
+test('a preferred marker slot does not flip over a nearby star clearance fringe', () => {
+  const nodes = [
+    {system_id:1,px:500,py:350}, {system_id:2,px:568,py:388},
+    {system_id:5,px:409,py:390}, {system_id:6,px:597,py:317},
+    {system_id:9,px:438,py:319}, {system_id:16,px:549,py:250},
+  ];
+  const marker = {...group(1),key:'force-1',markerWidth:148};
+  const options = {width:1000,height:700,padding:{left:16,right:16,top:175,bottom:60}};
+  const base = layoutForceMarkers([marker],nodes,1,options)[0];
+  const preferredSlots = new Map([[marker.key,base.slot]]);
+  const at = scale => layoutForceMarkers([marker],nodes.map(node => ({...node,
+    px:500+(node.px-500)*scale,py:350+(node.py-350)*scale})),1,{...options,preferredSlots})[0];
+  const first = at(1.04), second = at(1.05);
+  assert.equal(first.slot,second.slot,'a soft clearance margin must not send the badge across its star');
+  assert.ok(first.x>=500 && second.x>=500);
+});
+
+test('a marker first seen after panning keeps that slot on the next zoom frame', () => {
+  assert.equal(typeof rememberVisibleMarkerSlots,'function');
+  const nodes = [
+    {system_id:1,px:1108,py:269}, {system_id:2,px:1102,py:251},
+    {system_id:6,px:1076,py:338},
+  ];
+  const marker = {...group(1),key:'force-1',markerWidth:148};
+  const options = {width:1000,height:700,padding:{left:16,right:16,top:175,bottom:60}};
+  assert.equal(layoutForceMarkers([marker],nodes,1,options).length,0,'the initial view cannot choose this slot');
+  const at = (scale,panX,panY,preferredSlots) => layoutForceMarkers([marker],nodes.map(node => ({...node,
+    px:node.px*scale+panX,py:node.py*scale+panY})),1,{...options,preferredSlots})[0];
+  const first = at(1,-458,106);
+  const slots = rememberVisibleMarkerSlots(new Map(),[first]);
+  const next = at(1.16,-611.28,66.96,slots);
+  assert.equal(next.slot,first.slot,'newly visible badge should keep its established direction');
+  assert.equal(rememberVisibleMarkerSlots(slots,[{...next,slot:5}]).get(marker.key),first.slot,
+    'later layouts must not overwrite its first visible slot');
+});
+test('marker collision checks keep only stars near the actual candidate rectangles', () => {
+  assert.equal(typeof markerLayout.nodesNearMarkerCandidates,'function');
+  const own={system_id:1,px:500,py:350};
+  const near={system_id:2,px:410,py:328};
+  const edge={system_id:3,px:623,py:419};
+  const far={system_id:4,px:950,py:650};
+  const nodes=[own,near,edge,far];
+  const before=JSON.stringify(nodes);
+  assert.deepEqual(markerLayout.nodesNearMarkerCandidates(nodes,own,
+    {x:400,y:300,width:200,height:100},1),[near,edge]);
+  assert.equal(JSON.stringify(nodes),before);
 });

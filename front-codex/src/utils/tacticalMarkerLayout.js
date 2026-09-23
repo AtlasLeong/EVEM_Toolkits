@@ -16,6 +16,28 @@ export function markerWidth(label = "", options = {}) {
   return clamp(Math.ceil((padding + units * charWidth) * unitScale), min * unitScale, max * unitScale);
 }
 
+/** Keep the first visible direction of badges whose stars began off-screen. */
+export function rememberVisibleMarkerSlots(slots = new Map(), groups = []) {
+  let next = slots;
+  for (const group of groups) {
+    if (group.key == null || !Number.isInteger(group.slot) || next.has(group.key)) continue;
+    if (next === slots) next = new Map(slots);
+    next.set(group.key, group.slot);
+  }
+  return next;
+}
+
+// Candidate boxes already include viewport clamping. A distant star cannot
+// overlap any of them, so do not scan it 32 times for every badge.
+export function nodesNearMarkerCandidates(nodes, origin, bounds, unitScale = 1) {
+  const left = bounds.x - 23 * unitScale;
+  const right = bounds.x + bounds.width + 23 * unitScale;
+  const top = bounds.y - 30 * unitScale;
+  const bottom = bounds.y + bounds.height + 19 * unitScale;
+  return nodes.filter(other => other !== origin &&
+    other.px >= left && other.px <= right && other.py >= top && other.py <= bottom);
+}
+
 // Keep count badges beside their actual star, not in a fixed three-row slot.
 // Search a fixed set of nearby callouts, never an unbounded repulsion loop.
 // Existing labels take precedence over the softer star-name reservation area:
@@ -61,19 +83,27 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
         [node.px - width / 2, below], [right, below], [left, below],
       );
     }
-    const obstacles = nodes.filter((other) => other !== node).map((other) => ({
+    const candidateRects = positions.map(([x, y], slot) => {
+      const insideViewport = x >= paddingLeft && y >= paddingTop &&
+        x + width <= viewportWidth - paddingRight && y + height <= viewportHeight - paddingBottom;
+      return {
+        x: clamp(x, paddingLeft, viewportWidth - paddingRight - width),
+        y: clamp(y, paddingTop, viewportHeight - paddingBottom - height),
+        width, height, slot, insideViewport,
+      };
+    });
+    const leftBound = Math.min(...candidateRects.map(candidate => candidate.x));
+    const topBound = Math.min(...candidateRects.map(candidate => candidate.y));
+    const nearbyNodes = nodesNearMarkerCandidates(nodes, node, {
+      x:leftBound, y:topBound,
+      width:Math.max(...candidateRects.map(candidate => candidate.x + candidate.width)) - leftBound,
+      height:Math.max(...candidateRects.map(candidate => candidate.y + candidate.height)) - topBound,
+    }, unitScale);
+    const obstacles = nearbyNodes.map((other) => ({
       x: other.px - 20 * unitScale, y: other.py - 9 * unitScale,
       width: 40 * unitScale, height: 36 * unitScale,
     }));
-    const candidates = positions.map(([x, y], index) => {
-      const insideViewport = x >= paddingLeft && y >= paddingTop &&
-        x + width <= viewportWidth - paddingRight && y + height <= viewportHeight - paddingBottom;
-      const rect = {
-        x: clamp(x, paddingLeft, viewportWidth - paddingRight - width),
-        y: clamp(y, paddingTop, viewportHeight - paddingBottom - height),
-        width,
-        height,
-      };
+    const candidates = candidateRects.map(rect => {
       const blockedBy = items => items.reduce((sum, obstacle) => sum + overlapArea(rect, {
         x: obstacle.x - 3 * unitScale, y: obstacle.y - 3 * unitScale,
         width: obstacle.width + 6 * unitScale, height: obstacle.height + 6 * unitScale,
@@ -81,17 +111,23 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
       const obstacleOverlap = blockedBy(obstacles);
       return {
         ...rect,
-        slot: index,
-        insideViewport,
         reservedOverlap: blockedBy(reservedRects),
         labelOverlap: blockedBy(placed),
         obstacleOverlap,
-        score: obstacleOverlap * 100 + index,
+        score: obstacleOverlap * 100 + rect.slot,
       };
     });
     const preferredSlot = preferredSlots instanceof Map ? preferredSlots.get(group.key) : preferredSlots?.[group.key];
+    // The ordinary search uses generous *soft* clearance around stars and
+    // badges. A tiny zoom can cross that margin without covering anything;
+    // do not make an established callout jump to the other side for that.
     const preferred = candidates.find(candidate => candidate.slot === preferredSlot && candidate.insideViewport &&
-      candidate.reservedOverlap === 0 && candidate.labelOverlap === 0 && candidate.obstacleOverlap === 0);
+      candidate.reservedOverlap === 0 &&
+      !placed.some(other => overlapArea(candidate, other) > 0) &&
+      !nearbyNodes.some(other => overlapArea(candidate, {
+        x: other.px - 19 * unitScale, y: other.py - 19 * unitScale,
+        width: 38 * unitScale, height: 38 * unitScale,
+      }) > 0));
     const { x, y, slot } = preferred || candidates.sort((a, b) =>
       a.reservedOverlap - b.reservedOverlap || a.labelOverlap - b.labelOverlap || a.score - b.score)[0];
     placed.push({

@@ -696,8 +696,9 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
       setMoving(false);
     }
   };
-  const canManageCount = item => status === 'live' && !moving &&
-    (can.manageForces || Number(item.author_id) === Number(snapshot.user_id));
+  const canManageCount = useCallback(item => status === 'live' && !moving &&
+    (can.manageForces || Number(item.author_id) === Number(snapshot.user_id)),
+    [status, moving, can.manageForces, snapshot.user_id]);
   const moveCount = async (item, destination) => {
     if (!canManageCount(item)) return;
     setMoving(true);

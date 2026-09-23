@@ -483,6 +483,77 @@ test('count card close asks for confirmation and withdraws the report without de
   await expect.poll(()=>fx.commands.find(command=>command.action==='report.withdraw')).toMatchObject({report_id:21,expected_version:1});
 });
 
+test('archive and withdraw confirmations are compact, readable and viewport-safe', async ({page}) => {
+  const fx=await fixture(page,{role:'commander'});
+  fx.snapshot.forces[0].name='远炮战列队';
+  fx.snapshot.reports=[{...fx.snapshot.reports[0],report_kind:'system_count',people:70}];
+  await page.goto('/tactical');
+  const inspect = async (dialog,target,kind) => {
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(target);
+    await expect(dialog).toContainText('保留');
+    expect((await dialog.boundingBox()).width).toBeLessThanOrEqual(460);
+    const margins=await dialog.locator('.tac-dialog-body > p').first().evaluate(node=>({
+      top:getComputedStyle(node).marginTop,bottom:getComputedStyle(node).marginBottom,
+    }));
+    expect(margins).toEqual({top:'0px',bottom:'0px'});
+    await page.screenshot({path:`output/playwright/tactical-${kind}-confirm-desktop.png`});
+    await page.setViewportSize({width:320,height:640});
+    const mobile=await dialog.boundingBox();
+    expect(mobile.x).toBeGreaterThanOrEqual(0);
+    expect(mobile.x+mobile.width).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:`output/playwright/tactical-${kind}-confirm-mobile.png`});
+    await dialog.getByRole('button',{name:'取消',exact:true}).click();
+    await expect(dialog).toHaveCount(0);
+    await page.setViewportSize({width:1440,height:1000});
+  };
+  await page.getByRole('button',{name:'归档远炮战列队'}).click();
+  await expect(page.getByRole('dialog',{name:'归档部署'})).toContainText('已关联的上报不受影响');
+  await inspect(page.getByRole('dialog',{name:'归档部署'}),'远炮战列队','archive');
+  await page.getByRole('button',{name:'撤下德里克一人数上报'}).click();
+  await inspect(page.getByRole('dialog',{name:'撤下人数上报'}),'德里克一 · 70 人','withdraw');
+  expect(fx.commands).toHaveLength(0);
+});
+
+test('unknown count confirmation does not display a dangling people suffix', async ({page}) => {
+  const fx=await fixture(page,{role:'commander'});
+  fx.snapshot.reports=[{...fx.snapshot.reports[0],report_kind:'system_count',people:null}];
+  await page.goto('/tactical');
+  await page.getByRole('button',{name:'撤下德里克一人数上报'}).click();
+  await expect(page.getByRole('dialog',{name:'撤下人数上报'}).locator('.tac-confirm-target strong'))
+    .toHaveText('德里克一 · 人数未知');
+});
+
+test('failed confirmations keep error messages readable against the dark dialog', async ({page}) => {
+  const fx=await fixture(page,{role:'commander'});
+  fx.snapshot.reports=[{...fx.snapshot.reports[0],report_kind:'system_count',people:70}];
+  await page.route('**/api/tactical/organizations/1/commands/',route=>route.fulfill(json({detail:'操作失败，请重试'},409)));
+  await page.goto('/tactical');
+  for (const {open,title,confirm} of [
+    {open:'归档敌方前锋',title:'归档部署',confirm:'确认归档'},
+    {open:'撤下德里克一人数上报',title:'撤下人数上报',confirm:'确认撤下'},
+  ]) {
+    await page.getByRole('button',{name:open}).click();
+    const dialog=page.getByRole('dialog',{name:title});
+    await dialog.getByRole('button',{name:confirm}).click();
+    const alert=dialog.getByRole('alert');
+    await expect(alert).toContainText('操作失败');
+    const contrast=await alert.evaluate(node=>{
+      const css=getComputedStyle(node);
+      const channels=value=>value.match(/[\d.]+/g).slice(0,3).map(Number);
+      const luminance=value=>channels(value).map(channel=>{
+        const normalized=channel/255;
+        return normalized<=.04045?normalized/12.92:((normalized+.055)/1.055)**2.4;
+      }).reduce((sum,channel,index)=>sum+channel*[.2126,.7152,.0722][index],0);
+      const first=luminance(css.color),second=luminance(css.backgroundColor);
+      return (Math.max(first,second)+.05)/(Math.min(first,second)+.05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+    await dialog.getByRole('button',{name:'取消',exact:true}).click();
+  }
+});
+
 test('a scout sees the close control only on their own count card', async ({page}) => {
   const fx=await fixture(page,{role:'scout'});
   fx.snapshot.reports=[
@@ -592,13 +663,55 @@ test('named fleet badges show separate names, centered content beside archive an
   await expect(page.locator('.tac-map-force').first()).toHaveText(/大航队.*100/);
   const alignment=await page.locator('.tac-map-force').evaluateAll(nodes=>nodes.map(node=>{
     const rect=node.querySelector('rect'), text=node.querySelector('text');
-    return {centerX:Number(text.getAttribute('x'))===(Number(rect.getAttribute('width'))-20)/2,
+    return {centerX:Number(text.getAttribute('x'))===(Number(rect.getAttribute('width'))-24)/2,
       centerY:Number(text.getAttribute('y'))===Number(rect.getAttribute('height'))/2,
       anchor:text.getAttribute('text-anchor'),baseline:text.getAttribute('dominant-baseline')};
   }));
   expect(alignment.every(a=>a.centerX&&a.centerY&&a.anchor==='middle'&&a.baseline==='central')).toBe(true);
   await page.getByRole('button',{name:'查看德里克一全部4支部署'}).click();
   await expect(page.locator('.tac-force-card')).toHaveCount(4);
+});
+
+test('fleet and count cards share one centered close control and content area', async ({page}) => {
+  const fx = await fixture(page,{role:'commander'});
+  fx.snapshot.reports=[{...fx.snapshot.reports[0],report_kind:'system_count',people:70}];
+  await page.goto('/tactical');
+  const fleet = page.locator('.tac-map-force').first(), count = page.locator('.tac-map-count').first();
+  await expect(fleet).toBeVisible();
+  await expect(count).toBeVisible();
+  const centers = async card => card.evaluate(node => {
+    const rect=node.querySelector(':scope > rect'), text=node.querySelector(':scope > text');
+    return {width:Number(rect.getAttribute('width')),textX:Number(text.getAttribute('x'))};
+  });
+  for (const card of [fleet,count]) {
+    const {width,textX} = await centers(card);
+    expect(textX).toBe((width-24)/2);
+  }
+  const fleetClose=page.locator('.tac-force-close'),countClose=page.locator('.tac-count-close');
+  const paths=[];
+  for (const close of [fleetClose,countClose]) {
+    await expect(close).toBeVisible();
+    const hit=await close.locator('rect').boundingBox(),icon=await close.locator('path').boundingBox();
+    expect(hit.width).toBe(24);
+    expect(hit.height).toBe(24);
+    expect(Math.abs(hit.x+hit.width/2-icon.x-icon.width/2)).toBeLessThan(.5);
+    expect(Math.abs(hit.y+hit.height/2-icon.y-icon.height/2)).toBeLessThan(.5);
+    paths.push(await close.locator('path').getAttribute('d'));
+  }
+  expect(paths[0]).toBe(paths[1]);
+});
+
+test('read-only count cards center their text without a phantom close slot', async ({page}) => {
+  const fx=await fixture(page,{role:'scout'});
+  fx.snapshot.reports=[{...fx.snapshot.reports[0],id:22,author_id:24,author_name:'斥候乙',
+    report_kind:'system_count',system_id:102,system_name:'德里克二',people:44}];
+  await page.goto('/tactical');
+  const count=page.locator('.tac-map-count[data-count-report-id="22"]');
+  await expect(count).toBeVisible();
+  const {width,textX}=await count.evaluate(node=>({width:Number(node.querySelector(':scope > rect').getAttribute('width')),
+    textX:Number(node.querySelector(':scope > text').getAttribute('x'))}));
+  expect(textX).toBe(width/2);
+  await expect(count.locator('.tac-count-close')).toHaveCount(0);
 });
 
 test('named fleet source and observation update are visible to scouts without force management',async({page})=>{
@@ -885,6 +998,62 @@ test("map wheel zoom does not scroll the surrounding page", async ({ page }) => 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before);
 });
 
+test("wheel bursts zoom gently around the pointer while names settle once", async ({ page }) => {
+  await fixture(page, { role: "commander" });
+  await page.goto("/tactical");
+  const map = page.getByRole("group", { name: "局部作战星图", exact: true });
+  await expect(map).toBeVisible();
+  const mapSurface = page.locator(".tac-system-intel-map");
+  const camera = map.locator('g[transform^="translate("]').first();
+  const readCamera = async () => {
+    const transform = await camera.getAttribute("transform");
+    const match = transform.match(/^translate\(([-\d.e]+) ([-\d.e]+)\) scale\(([-\d.e]+)\)$/);
+    expect(match).not.toBeNull();
+    return { x: Number(match[1]), y: Number(match[2]), scale: Number(match[3]) };
+  };
+  const [, , width, height] = (await map.getAttribute("viewBox")).split(" ").map(Number);
+  const anchor = { x: width * .56, y: height * .42 };
+  const before = await readCamera();
+  await map.evaluate((svg, point) => {
+    const rect = svg.getBoundingClientRect();
+    for (let index = 0; index < 8; index++) svg.dispatchEvent(new WheelEvent("wheel", {
+      bubbles: true, cancelable: true, deltaY: -100,
+      clientX: rect.left + point.x * rect.width / point.width,
+      clientY: rect.top + point.y * rect.height / point.height,
+    }));
+  }, { ...anchor, width, height });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const after = await readCamera();
+  expect(after.scale).toBeGreaterThan(before.scale);
+  expect(after.scale / before.scale).toBeLessThan(1.16);
+  expect(Math.abs((anchor.x - after.x) / after.scale - (anchor.x - before.x) / before.scale)).toBeLessThan(1);
+  expect(Math.abs((anchor.y - after.y) / after.scale - (anchor.y - before.y) / before.scale)).toBeLessThan(1);
+  await expect(mapSurface).toHaveClass(/is-wheel-zooming/);
+  await expect(mapSurface).not.toHaveClass(/is-wheel-zooming/, { timeout: 1500 });
+
+  let previousScale=after.scale;
+  await map.hover({position:{x:600,y:300}});
+  for (let index=0;index<4;index++) {
+    await page.mouse.wheel(0,-100);
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+    const currentScale=(await readCamera()).scale;
+    expect(currentScale).toBeGreaterThan(previousScale);
+    expect(currentScale/previousScale).toBeLessThan(1.16);
+    previousScale=currentScale;
+  }
+  await expect(mapSurface).not.toHaveClass(/is-wheel-zooming/, { timeout: 1500 });
+
+  for (let index = 0; index < 15; index++) await page.getByRole("button", { name: "放大地图" }).click();
+  const limit = await readCamera();
+  expect(limit.scale).toBe(16);
+  await map.evaluate(svg => svg.dispatchEvent(new WheelEvent("wheel", {
+    bubbles: true, cancelable: true, deltaY: -100, clientX: 400, clientY: 400,
+  })));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await readCamera()).toEqual(limit);
+  await expect(mapSurface).not.toHaveClass(/is-wheel-zooming/);
+});
+
 test("stable marker slots keep a fleet on the same side of its star during wheel zoom", async ({ page }) => {
   const state = await fixture(page, { role: "commander" });
   const original = state.snapshot.forces[0];
@@ -909,18 +1078,24 @@ test("stable marker slots keep a fleet on the same side of its star during wheel
   await expect(badge).toBeVisible();
   const mapBox = await map.boundingBox();
   await page.mouse.move(mapBox.x + 350, mapBox.y + 190);
-  const direction = async () => {
+  const offset = async () => {
     const b = await badge.boundingBox(), d = await dot.boundingBox();
-    return Math.sign(b.x + b.width / 2 - d.x - d.width / 2);
+    return {x:b.x+b.width/2-d.x-d.width/2,y:b.y+b.height/2-d.y-d.height/2};
   };
   for (let step = 0; step < 2; step++) {
     await page.mouse.wheel(0, -100);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
   }
-  const before = await direction();
-  await page.mouse.wheel(0, -100);
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  expect(await direction()).toBe(before);
+  const before = await offset();
+  for (let step=0;step<3;step++) {
+    await page.mouse.wheel(0,-100);
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+    const after=await offset();
+    expect(Math.sign(after.x)).toBe(Math.sign(before.x));
+    if (Math.abs(before.y)>10) expect(Math.sign(after.y)).toBe(Math.sign(before.y));
+    expect(Math.hypot(after.x-before.x,after.y-before.y)).toBeLessThan(90);
+  }
+  await page.screenshot({path:'output/playwright/tactical-stable-slots-after-zoom.png'});
 });
 
 test("pending intelligence appears on the map with its reporter without inflating deployments", async ({ page }) => {

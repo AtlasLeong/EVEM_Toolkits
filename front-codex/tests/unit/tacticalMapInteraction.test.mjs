@@ -109,6 +109,45 @@ test('map wheel listener explicitly cancels native scrolling and is fully detach
   target.dispatchEvent(new Event('wheel',{cancelable:true}));
   assert.equal(count,1);
 });
+test('wheel labels follow their own star without resolving a new layout',()=>{
+  const settled=[{system_id:1,x:180,y:212,width:60,height:34,name:'甲',leader:{from:{x:200,y:200},to:{x:210,y:212}}},
+    {system_id:2,x:500,y:400,width:60,height:34,name:'乙'}];
+  const before=JSON.stringify(settled);
+  const moved=use('translateWheelLabels',settled,
+    [{system_id:1,px:200,py:200},{system_id:2,px:520,py:390}],
+    [{system_id:1,px:260,py:230}]);
+  assert.equal(moved.length,1,'a star that left the loaded map must not keep a detached label');
+  assert.deepEqual({x:moved[0].x,y:moved[0].y,width:moved[0].width,height:moved[0].height},
+    {x:240,y:242,width:60,height:34});
+  assert.deepEqual(moved[0].leader,{from:{x:260,y:230},to:{x:270,y:242}});
+  assert.equal(JSON.stringify(settled),before,'the settled layout is not mutated');
+});
+test('wheel frames reuse the settled name choice and resolve changes once when idle',()=>{
+  const before=[{system_id:1,px:400,py:300,name:'旧名'}];
+  const options={width:800,height:600};
+  const labels=use('layoutIntelLabels',before,options);
+  const settled={labels,nodes:before};
+  const current=[{system_id:1,px:440,py:330,name:'新名'}];
+  const frame=use('labelsForWheelFrame',{zooming:true,settled,nodes:current,options});
+  assert.equal(frame[0].name,'旧名');
+  assert.equal(frame[0].x,labels[0].x+40);
+  assert.equal(frame[0].y,labels[0].y+30);
+  const idle=use('labelsForWheelFrame',{zooming:false,settled,nodes:current,options});
+  assert.equal(idle[0].name,'新名');
+});
+test('wheel labels keep tactical stars prominent and only dim secondary names',()=>{
+  const forceIds=new Set([3]);
+  assert.deepEqual(use('wheelLabelState',{system_id:1},{zooming:true,selectedSystemId:1,forceIds}),
+    {priority:true,dimmed:false});
+  assert.deepEqual(use('wheelLabelState',{system_id:2,intel:{people:68}},{zooming:true,selectedSystemId:1,forceIds}),
+    {priority:true,dimmed:false});
+  assert.deepEqual(use('wheelLabelState',{system_id:3},{zooming:true,selectedSystemId:1,forceIds}),
+    {priority:true,dimmed:false});
+  assert.deepEqual(use('wheelLabelState',{system_id:4},{zooming:true,selectedSystemId:1,forceIds}),
+    {priority:false,dimmed:true});
+  assert.deepEqual(use('wheelLabelState',{system_id:4},{zooming:false,selectedSystemId:1,forceIds}),
+    {priority:false,dimmed:false});
+});
 test('reported dense stars keep distinct count labels using diagonal callouts',()=>{
   const cloud=Array.from({length:70},(_,i)=>({system_id:i+1,px:300+(i%10)*18,py:200+Math.floor(i/10)*22,name:`星系${i+1}`}));
   const intelById=new Map([24,25,34,35].map(id=>[id,{people:id}]));

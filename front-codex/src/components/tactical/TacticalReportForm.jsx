@@ -501,11 +501,13 @@ export function ArchiveForce({ force, execute, onClose, onSuccess }) {
     }
   };
   return (
-    <TacticalDialog title="归档部署" onClose={onClose}>
-      <p>
-        确认将「{force.name}
-        」从当前部署中归档？适用于已撤离、解散或失去战术意义的部队。原始上报与审计记录仍保留。
-      </p>
+    <TacticalDialog title="归档部署" onClose={onClose} confirm>
+      <div className="tac-confirm-target">
+        <span>即将归档的部署</span>
+        <strong>{force.name}</strong>
+        <small>{force.system_name || '所在星系未知'} · {force.people == null ? '人数未知' : `${force.people} 人`}</small>
+      </div>
+      <p>协作者地图将同步移除这支部署；操作记录保留，已关联的上报不受影响。</p>
       {error && (
         <p role="alert" className="tac-error">
           {error}
@@ -517,7 +519,7 @@ export function ArchiveForce({ force, execute, onClose, onSuccess }) {
         </button>
         <button
           type="button"
-          className="tac-btn is-primary"
+          className="tac-btn is-confirm-danger"
           disabled={busy}
           onClick={archive}
         >
@@ -544,12 +546,17 @@ export function WithdrawCount({ report, execute, onClose, onSuccess }) {
       setBusy(false);
     }
   };
-  return <TacticalDialog title="撤下人数上报" onClose={onClose}>
-    <p>撤下「{report.system_name} · {report.people ?? '未知'} 人」的人数卡片？协作者的星图会同步更新，原始上报保留在记录中。</p>
+  return <TacticalDialog title="撤下人数上报" onClose={onClose} confirm>
+    <div className="tac-confirm-target">
+      <span>即将撤下的人数卡片</span>
+      <strong>{report.system_name} · {report.people == null ? '人数未知' : `${report.people} 人`}</strong>
+      <small>只影响当前地图展示</small>
+    </div>
+    <p>协作者地图将同步更新；原始上报仍保留在记录中。</p>
     {error && <p role="alert" className="tac-error">{error}</p>}
     <div className="tac-form-footer">
       <button type="button" className="tac-btn" onClick={onClose}>取消</button>
-      <button type="button" className="tac-btn is-primary" disabled={busy} onClick={withdraw}>{busy?'撤下中…':'确认撤下'}</button>
+      <button type="button" className="tac-btn is-confirm-danger" disabled={busy} onClick={withdraw}>{busy?'撤下中…':'确认撤下'}</button>
     </div>
   </TacticalDialog>;
 }

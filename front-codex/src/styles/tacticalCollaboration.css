@@ -880,6 +880,71 @@
   font-size: 14px;
   line-height: 1.8;
 }
+.tac-dialog.is-confirm {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  background: #223136;
+  color: #e4eae3;
+  border-color: #596b6b;
+  border-radius: 12px;
+  box-shadow: 0 24px 72px #07131699;
+  font-family: inherit;
+}
+.tac-dialog.is-confirm .tac-dialog-head {
+  background: #223136;
+  border-bottom-color: #405359;
+  padding: 16px 20px;
+}
+.tac-dialog.is-confirm .tac-dialog-head h2 {
+  margin: 0;
+  color: #f1f0e9;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+.tac-dialog.is-confirm .tac-icon-btn { color: #b7c6c3; width: 28px; height: 28px; }
+.tac-dialog.is-confirm .tac-icon-btn:hover { background: #ffffff16; color: #fff; }
+.tac-dialog.is-confirm .tac-dialog-body { display: grid; gap: 15px; padding: 18px 20px 20px; }
+.tac-dialog.is-confirm .tac-dialog-body > p {
+  margin: 0;
+  color: #c0ceca;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.tac-dialog.is-confirm .tac-dialog-body > p.tac-error {
+  padding: 10px 12px;
+  background: #483431;
+  border-color: #ad745f;
+  color: #f9dfd3;
+}
+.tac-confirm-target {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  background: #2b3c40;
+  border: 1px solid #4e6262;
+  border-left: 3px solid #c29479;
+  border-radius: 8px;
+  min-width: 0;
+}
+.tac-confirm-target span { color: #a9bbb6; font-size: 11px; letter-spacing: .04em; }
+.tac-confirm-target strong { color: #f4e9db; font-size: 16px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.tac-confirm-target small { color: #b3c5c0; font-size: 12px; }
+.tac-dialog.is-confirm .tac-form-footer { margin: 0; padding-top: 15px; border-top-color: #405359; }
+.tac-dialog.is-confirm .tac-form-footer .tac-btn { min-height: 38px; font-weight: 600; }
+.tac-dialog.is-confirm .tac-form-footer .tac-btn:not(.is-confirm-danger) { background: transparent; color: #dce6e0; border-color: #657774; }
+.tac-dialog.is-confirm .tac-form-footer .tac-btn:not(.is-confirm-danger):hover { background: #ffffff12; }
+.tac-dialog.is-confirm .tac-btn.is-confirm-danger { background: #955949; border-color: #b77d69; color: #fff7f0; }
+.tac-dialog.is-confirm .tac-btn.is-confirm-danger:hover { background: #a96955; border-color: #ca927b; }
+.tac-dialog.is-confirm .tac-btn:focus-visible { outline-color: #e6b69a; }
+@media (max-width: 767px) {
+  .tac-dialog.is-confirm { width: min(440px, calc(100vw - 20px)); }
+  .tac-dialog.is-confirm .tac-dialog-head { padding: 15px 16px; }
+  .tac-dialog.is-confirm .tac-dialog-body { padding: 16px 16px max(17px, env(safe-area-inset-bottom)); }
+  .tac-dialog.is-confirm .tac-form-footer .tac-btn { flex: 1; }
+}
 .tac-form {
   display: flex;
   flex-direction: column;

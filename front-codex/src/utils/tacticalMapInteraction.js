@@ -143,6 +143,34 @@ export function subscribeMapWheel(node, onWheel) {
   return () => node.removeEventListener('wheel', handler);
 }
 
+// Between wheel frames, keep each settled name at its chosen screen-space
+// offset from its own real star. This is linear in visible labels and avoids
+// rerunning the collision solver until the gesture has ended.
+export function translateWheelLabels(labels = [], settledNodes = [], currentNodes = []) {
+  const previous = new Map(settledNodes.map(node => [Number(node.system_id), node]));
+  const current = new Map(currentNodes.map(node => [Number(node.system_id), node]));
+  return labels.flatMap(label => {
+    const before = previous.get(Number(label.system_id)), after = current.get(Number(label.system_id));
+    if (!before || !after) return [];
+    const dx = after.px - before.px, dy = after.py - before.py;
+    const movePoint = point => ({x:point.x + dx, y:point.y + dy});
+    return [{...label, x:label.x + dx, y:label.y + dy,
+      ...(label.leader ? {leader:{from:movePoint(label.leader.from),to:movePoint(label.leader.to)}} : {})}];
+  });
+}
+
+export function wheelLabelState(label, {zooming = false, selectedSystemId = null, forceIds = new Set()} = {}) {
+  const id = Number(label.system_id);
+  const priority = id === Number(selectedSystemId) || Boolean(label.intel) || forceIds.has(id);
+  return {priority, dimmed:zooming && !priority};
+}
+
+export function labelsForWheelFrame({zooming = false, settled = null, nodes = [], options = {}} = {}) {
+  return zooming && settled
+    ? translateWheelLabels(settled.labels, settled.nodes, nodes)
+    : layoutIntelLabels(nodes, options);
+}
+
 // Labels are screen-space annotations only. Neither decluttering nor focus
 // changes any real system coordinates or gate topology.
 export function layoutIntelLabels(nodes, {

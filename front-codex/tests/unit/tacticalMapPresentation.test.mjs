@@ -82,6 +82,19 @@ test('count-only observations use only the dedicated count marker layer', () => 
   assert.equal(countGroups[0].hiddenCount, 0);
 });
 
+test('only actionable map cards reserve the same 24px close slot', () => {
+  const report = {id:52,system_id:1,report_kind:'system_count',status:'pending',people:68,
+    observed_at:'2026-09-22T01:00:00Z'};
+  const countOpen = buildSystemCountMarkerGroups([report],{canWithdrawCount:()=>true})[0];
+  const countReadOnly = buildSystemCountMarkerGroups([report],{canWithdrawCount:()=>false})[0];
+  assert.equal(countOpen.markerWidth-countReadOnly.markerWidth,24);
+  assert.equal(countOpen.visible[0].markerWidth-countReadOnly.visible[0].markerWidth,24);
+  const force = {id:11,system_id:1,side:'enemy',name:'大航队',people:100};
+  const forceOpen = buildMarkerGroups([force],[],null,{canArchiveForce:true})[0];
+  const forceReadOnly = buildMarkerGroups([force],[],null,{canArchiveForce:false})[0];
+  assert.equal(forceOpen.visible[0].markerWidth-forceReadOnly.visible[0].markerWidth,24);
+});
+
 test('pending legacy fleet observations remain available in the generic report layer', () => {
   const report = {id:53, system_id:1, report_kind:'fleet', status:'pending', people:42,
     author_name:'旧斥候', observed_at:'2026-09-22T02:00:00Z'};

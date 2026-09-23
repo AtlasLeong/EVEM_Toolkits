@@ -15,6 +15,7 @@ export function fitMarkerText(value, availableWidth, fontSize = 12) {
 }
 
 export const countLabel = count => count == null ? '未知' : count >= 10000 ? `${(count / 10000).toFixed(1)}万` : String(count);
+export const MARKER_CLOSE_SIZE = 24;
 const widthFor = (lines, fontSize, min, max) => Math.max(min, Math.min(max, Math.ceil(Math.max(...lines.map(line => textWidth(line, fontSize))) + 18)));
 
 // Reserve the number before shortening the name so a long fleet title can never
@@ -28,10 +29,10 @@ export function fleetMarkerLabel(force, markerWidth = 220, reservedWidth = 0) {
 
 // Count-only observations stay distinct from fleets even when their system
 // position is corrected. Keep one current snapshot per star on the map.
-export function buildSystemCountMarkerGroups(reports = []) {
+export function buildSystemCountMarkerGroups(reports = [], {canWithdrawCount} = {}) {
   return latestSystemIntel(reports).map(report => {
     const label = `人数上报 ${report.people == null ? '未知' : `${countLabel(report.people)}人`}`;
-    const markerWidth = Math.min(220, widthFor([label], 12, 76, 198) + 22);
+    const markerWidth = Math.min(220, widthFor([label], 12, 76, 198) + (canWithdrawCount?.(report) ? MARKER_CLOSE_SIZE : 0));
     return {
       kind:'system_count', key:`system-count-${report.system_id}`, system_id:Number(report.system_id),
       visible:[{...report, label, markerWidth}], total:1, hiddenCount:0, markerWidth, rowHeight:26,
@@ -45,7 +46,7 @@ export function buildMarkerGroups(forces = [], reports = [], selectedForceId, {c
   const forceGroups = groupMapForces(forces, selectedForceId).map(group => {
     const visible = group.visible.map(force => {
       const label = fleetMarkerLabel(force, Infinity);
-      return {...force, label, markerWidth: Math.min(220, widthFor([label],12,76,220) + (canArchiveForce ? 20 : 0))};
+      return {...force, label, markerWidth: Math.min(220, widthFor([label],12,76,220) + (canArchiveForce ? MARKER_CLOSE_SIZE : 0))};
     });
     const overflowWidth = group.hiddenCount ? widthFor([`+ ${group.hiddenCount} 支部署`],12,76,180) : 0;
     return {...group, kind:'force', key:`force-${group.system_id}`, visible, overflowWidth,
