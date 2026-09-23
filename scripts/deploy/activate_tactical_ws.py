@@ -27,6 +27,7 @@ BACKEND = Path('/EVEMTK/deploy/current/backend')
 RUNTIME = Path('/EVEMTK/deploy/shared/tactical-python')
 BACKUP_ROOT = Path('/root')
 SUDO_RULE = 'evem-deploy ALL=(root) NOPASSWD: /bin/systemctl restart evem-tactical-asgi.service\n'
+INTERRUPT_SIGNALS = (signal.SIGINT, signal.SIGTERM) + ((signal.SIGHUP,) if hasattr(signal, 'SIGHUP') else ())
 
 
 def run(*command, **kwargs):
@@ -99,12 +100,19 @@ def activate(bundle, expected_sha):
         run(str(BACKEND / '.venv/bin/python'), '-c',
             'import django, channels, uvicorn, websockets, asgiref, click, h11; '
             'import EVE_MDjango.tactical_asgi', cwd=BACKEND, env=environment)
+        # mkdtemp is root-only (0700). The nginx service must be able to
+        # traverse this isolated dependency tree after it is promoted.
+        os.chmod(staged, 0o755)
         staged.rename(RUNTIME)
     else:
         environment = {**os.environ, 'PYTHONPATH': str(RUNTIME)}
         run(str(BACKEND / '.venv/bin/python'), '-c',
             'import django, channels, uvicorn, websockets, asgiref, click, h11; '
             'import EVE_MDjango.tactical_asgi', cwd=BACKEND, env=environment)
+    run('runuser', '-u', 'nginx', '--', 'env', 'PYTHONPATH=' + str(RUNTIME),
+        str(BACKEND / '.venv/bin/python'), '-c',
+        'import django, channels, uvicorn, websockets, asgiref, click, h11; '
+        'import EVE_MDjango.tactical_asgi', cwd=BACKEND)
 
     backup = BACKUP_ROOT / ('evem-tactical-backup-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
     backup.mkdir(mode=0o700)
@@ -142,8 +150,7 @@ def activate(bundle, expected_sha):
     except BaseException:
         # A Ctrl-C or SIGTERM during cutover must restore the exact old
         # publisher/config, too. Ignore a second signal only while restoring.
-        previous_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
-        previous_term = signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        previous_handlers = {signum: signal.signal(signum, signal.SIG_IGN) for signum in INTERRUPT_SIGNALS}
         try:
             for path, data in original.items():
                 replace_file(path, data)
@@ -153,8 +160,8 @@ def activate(bundle, expected_sha):
             UNIT.unlink(missing_ok=True)
             run('systemctl', 'daemon-reload')
         finally:
-            signal.signal(signal.SIGINT, previous_int)
-            signal.signal(signal.SIGTERM, previous_term)
+            for signum, handler in previous_handlers.items():
+                signal.signal(signum, handler)
         raise
     print('Tactical WebSocket active; config backups: ' + str(backup))
 
@@ -163,7 +170,8 @@ if __name__ == '__main__':
     def interrupted(signum, frame):
         raise RuntimeError('tactical activation interrupted; rolling back')
 
-    signal.signal(signal.SIGTERM, interrupted)
+    for signum in INTERRUPT_SIGNALS:
+        signal.signal(signum, interrupted)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle', type=Path, required=True)
     parser.add_argument('--expected-sha', required=True)

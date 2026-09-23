@@ -2,6 +2,7 @@
 from contextlib import ExitStack
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,7 +34,7 @@ class TacticalActivationTests(unittest.TestCase):
         self.bundle = self.root / 'bundle'
         self.bundle.mkdir()
         self.paths['BACKUP_ROOT'].mkdir()
-        self.paths['RUNTIME'].mkdir(parents=True)
+        self.paths['RUNTIME'].parent.mkdir(parents=True)
         self.sha = 'a' * 40
         files = {
             self.paths['NGINX']: b'    location /api/ {\n    }\n',
@@ -82,6 +83,10 @@ class TacticalActivationTests(unittest.TestCase):
         commands = self.activate()
         self.assertTrue(json.loads(self.paths['CONFIG'].read_text())['tactical_ws'])
         self.assertTrue(self.paths['UNIT'].is_file())
+        self.assertTrue(self.paths['RUNTIME'].is_dir())
+        if os.name != 'nt':
+            self.assertEqual(self.paths['RUNTIME'].stat().st_mode & 0o777, 0o755)
+        self.assertTrue(any(command[:5] == ('runuser', '-u', 'nginx', '--', 'env') for command in commands))
         self.assertIn('location ^~ /ws/tactical/', self.paths['NGINX'].read_text())
         self.assertTrue(any(len(command) >= 3 and 'release.health(' in command[2] for command in commands))
 
