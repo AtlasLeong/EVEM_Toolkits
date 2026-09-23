@@ -54,13 +54,20 @@ export default function CollaborationMap({
     return indexGateSegments(segments,viewport);
   }, [stargates, screenSystems, viewport]);
   const selectedNeighbors = useMemo(() => adjacentSystems(stargates, hoveredSystemId ?? selectedSystemId), [stargates, hoveredSystemId, selectedSystemId]);
-  const markerGroups = useMemo(() => markerGroupsForViewport([
+  const allMarkerGroups = useMemo(() => [
     ...buildMarkerGroups(forces, reports, selectedForceId, {canArchiveForce}), ...buildSystemCountMarkerGroups(intel),
-  ].filter(group => byId.has(Number(group.system_id))), nodes, viewport, {selectedSystemId, view, showReports:showReportMarkers}), [forces, reports, selectedForceId, canArchiveForce, intel, byId, nodes, viewport, selectedSystemId, view, showReportMarkers]);
+  ].filter(group => byId.has(Number(group.system_id))), [forces, reports, selectedForceId, canArchiveForce, intel, byId]);
+  const eligibleMarkerGroups = useMemo(() => allMarkerGroups.filter(group => group.kind !== 'report' ||
+    showReportMarkers || Number(group.system_id) === Number(selectedSystemId)), [allMarkerGroups, showReportMarkers, selectedSystemId]);
+  const markerGroups = useMemo(() => markerGroupsForViewport(eligibleMarkerGroups, nodes, viewport,
+    {selectedSystemId, view, showReports:showReportMarkers}), [eligibleMarkerGroups, nodes, viewport, selectedSystemId, view, showReportMarkers]);
   const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
+  const preferredSlots = useMemo(() => new Map(layoutForceMarkers(eligibleMarkerGroups, nodes, 1,
+    {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects})
+    .map(group => [group.key, group.slot])), [eligibleMarkerGroups, nodes, viewport, reservedUiRects]);
   const positionedGroups = useMemo(() => layoutForceMarkers(markerGroups, screenSystems, 1,
-    {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects}),
-    [markerGroups, screenSystems, viewport, reservedUiRects]);
+    {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects, preferredSlots}),
+    [markerGroups, screenSystems, viewport, reservedUiRects, preferredSlots]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
   const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({

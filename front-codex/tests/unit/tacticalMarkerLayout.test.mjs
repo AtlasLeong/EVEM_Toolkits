@@ -158,3 +158,22 @@ test('dense nearby fleet groups prefer bounded clear callouts over overlapping a
   }
   assert.deepEqual(nodes,originals,'decluttering must never move star coordinates');
 });
+
+test('a preferred marker slot keeps its side of the star through neighboring zoom levels', () => {
+  const baseNodes = [
+    {system_id:1,px:450,py:300},
+    {system_id:2,px:485,py:315},
+    {system_id:3,px:520,py:300},
+  ];
+  const groups = baseNodes.map(node => ({...group(node.system_id),key:`force-${node.system_id}`,markerWidth:148}));
+  const options = {width:1200,height:800};
+  const preferredSlots = new Map(layoutForceMarkers(groups,baseNodes,1,options).map(marker => [marker.key,marker.slot]));
+  const at = scale => layoutForceMarkers(groups,baseNodes.map(node => ({...node,px:node.px*scale,py:node.py*scale})),1,
+    {...options,preferredSlots});
+  const first = at(1.3456).find(marker => marker.system_id===1);
+  const second = at(1.56).find(marker => marker.system_id===1);
+  const side = marker => Math.sign(marker.x+marker.width/2-marker.node.px);
+  assert.equal(side(first),side(second),'zoom must not flip a clear callout from the left to the star center');
+  assert.equal(first.slot,second.slot,'a clear preferred slot must remain stable');
+  assert.equal(typeof first.slot,'number','each placed marker exposes its selected slot');
+});

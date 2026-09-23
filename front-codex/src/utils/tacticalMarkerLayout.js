@@ -26,6 +26,7 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
   height: viewportHeight = 570,
   padding = { left: 12, right: 12, top: 65, bottom: 30 },
   reservedRects = [],
+  preferredSlots = new Map(),
 } = {}) {
   const { left: paddingLeft = 12, right: paddingRight = 12, top: paddingTop = 65, bottom: paddingBottom = 30 } = padding;
   const byId = new Map(nodes.map((node) => [Number(node.system_id), node]));
@@ -65,6 +66,8 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
       width: 40 * unitScale, height: 36 * unitScale,
     }));
     const candidates = positions.map(([x, y], index) => {
+      const insideViewport = x >= paddingLeft && y >= paddingTop &&
+        x + width <= viewportWidth - paddingRight && y + height <= viewportHeight - paddingBottom;
       const rect = {
         x: clamp(x, paddingLeft, viewportWidth - paddingRight - width),
         y: clamp(y, paddingTop, viewportHeight - paddingBottom - height),
@@ -75,17 +78,24 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
         x: obstacle.x - 3 * unitScale, y: obstacle.y - 3 * unitScale,
         width: obstacle.width + 6 * unitScale, height: obstacle.height + 6 * unitScale,
       }), 0);
+      const obstacleOverlap = blockedBy(obstacles);
       return {
         ...rect,
+        slot: index,
+        insideViewport,
         reservedOverlap: blockedBy(reservedRects),
         labelOverlap: blockedBy(placed),
-        score: blockedBy(obstacles) * 100 + index,
+        obstacleOverlap,
+        score: obstacleOverlap * 100 + index,
       };
     });
-    const { x, y } = candidates.sort((a, b) =>
+    const preferredSlot = preferredSlots instanceof Map ? preferredSlots.get(group.key) : preferredSlots?.[group.key];
+    const preferred = candidates.find(candidate => candidate.slot === preferredSlot && candidate.insideViewport &&
+      candidate.reservedOverlap === 0 && candidate.labelOverlap === 0 && candidate.obstacleOverlap === 0);
+    const { x, y, slot } = preferred || candidates.sort((a, b) =>
       a.reservedOverlap - b.reservedOverlap || a.labelOverlap - b.labelOverlap || a.score - b.score)[0];
     placed.push({
-      ...group, node, x, y, width, rowWidths, rowOffsets, overflowWidth, overflowOffset, rowHeight, rowGap, rows, height,
+      ...group, node, x, y, slot, width, rowWidths, rowOffsets, overflowWidth, overflowOffset, rowHeight, rowGap, rows, height,
       leader: {
         from: { x: clamp(node.px, x, x + width), y: clamp(node.py, y, y + height) },
         to: { x: node.px, y: node.py },

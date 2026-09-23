@@ -885,6 +885,44 @@ test("map wheel zoom does not scroll the surrounding page", async ({ page }) => 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before);
 });
 
+test("stable marker slots keep a fleet on the same side of its star during wheel zoom", async ({ page }) => {
+  const state = await fixture(page, { role: "commander" });
+  const original = state.snapshot.forces[0];
+  state.setSnapshot({ ...state.snapshot, forces: [
+    { ...original, id: 11, name: "敌方主力", system_id: 101, system_name: "前沿一" },
+    { ...original, id: 12, name: "敌方主力", system_id: 102, system_name: "前沿二" },
+    { ...original, id: 13, name: "敌方主力", system_id: 103, system_name: "前沿三" },
+  ] });
+  await page.route('**/api/tactical/organizations/1/map/', route => route.fulfill(json({
+    systems: [
+      {system_id:101,zh_name:'前沿一',x:-300,z:267,security_status:-.2},
+      {system_id:102,zh_name:'前沿二',x:-257,z:264,security_status:-.2},
+      {system_id:103,zh_name:'前沿三',x:-214,z:267,security_status:-.2},
+      {system_id:104,zh_name:'西侧边界',x:-500,z:-500,security_status:-.2},
+      {system_id:105,zh_name:'东侧边界',x:500,z:500,security_status:-.2},
+    ], stargates: [], boundary_exits: [], scope: state.snapshot.scope,
+  })));
+  await page.goto('/tactical');
+  const map = page.getByRole('group', { name: '局部作战星图', exact: true });
+  const badge = page.locator('.tac-map-force[data-force-id="11"]');
+  const dot = page.locator('.tac-map-system[data-system-id="101"] .tac-star-dot');
+  await expect(badge).toBeVisible();
+  const mapBox = await map.boundingBox();
+  await page.mouse.move(mapBox.x + 350, mapBox.y + 190);
+  const direction = async () => {
+    const b = await badge.boundingBox(), d = await dot.boundingBox();
+    return Math.sign(b.x + b.width / 2 - d.x - d.width / 2);
+  };
+  for (let step = 0; step < 2; step++) {
+    await page.mouse.wheel(0, -100);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  }
+  const before = await direction();
+  await page.mouse.wheel(0, -100);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  expect(await direction()).toBe(before);
+});
+
 test("pending intelligence appears on the map with its reporter without inflating deployments", async ({ page }) => {
   const state = await fixture(page, { role: "commander" });
   state.setSnapshot({
