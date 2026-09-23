@@ -1,6 +1,6 @@
 # Isolated ASGI sidecar additions; install with --no-deps into a dedicated
 # PYTHONPATH target. The existing WSGI virtualenv remains unchanged.
-asgiref==3.8.1
+asgiref==3.7.2
 channels==4.2.0
 click==8.1.8
 h11==0.16.0

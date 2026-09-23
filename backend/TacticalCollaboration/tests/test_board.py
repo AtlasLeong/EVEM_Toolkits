@@ -108,6 +108,29 @@ class ObservationTimezoneTests(BoardCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(datetime.fromisoformat(response.data['result']['observed_at']), observed)
 
+    @override_settings(USE_TZ=False, TIME_ZONE='Asia/Shanghai')
+    def test_offset_observation_update_round_trips_for_report_and_force(self):
+        from TacticalCollaboration.models import Force, Report
+        self.admit(self.owner)
+        observed = datetime.now(datetime_timezone.utc).replace(microsecond=0) - timedelta(minutes=2)
+        report = self.cmd('report.create', report_kind='system_count', **self.content(
+            observed_at=observed.isoformat(), ships={'cruiser': None})).data['result']
+        revised = observed - timedelta(minutes=1)
+        changed = self.cmd('report.update', report_id=report['id'], expected_version=1,
+                           report_kind='system_count', **self.content(
+                               observed_at=revised.isoformat(), people=64, ships={'cruiser': None}))
+        self.assertEqual(changed.status_code, 200, changed.content)
+        self.assertEqual(datetime.fromisoformat(changed.data['result']['observed_at']), revised)
+        self.assertIsNone(Report.objects.get(pk=report['id']).observed_at.tzinfo)
+
+        force = self.cmd('force.create', name='敌方', side='enemy', **self.content(
+            observed_at=observed.isoformat())).data['result']
+        changed = self.cmd('force.update', force_id=force['id'], expected_version=1,
+                           name='敌方', side='enemy', **self.content(observed_at=revised.isoformat()))
+        self.assertEqual(changed.status_code, 200, changed.content)
+        self.assertEqual(datetime.fromisoformat(changed.data['result']['observed_at']), revised)
+        self.assertIsNone(Force.objects.get(pk=force['id']).observed_at.tzinfo)
+
 
 class SocketCursorTests(BoardCase):
     def test_authorized_cursor_is_one_query_and_rechecks_membership(self):

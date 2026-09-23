@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -21,8 +22,10 @@ UNIT = Path('/etc/systemd/system/evem-tactical-asgi.service')
 PUBLISHER = Path('/usr/local/lib/evem-deploy/release.py')
 SUDOERS = Path('/etc/sudoers.d/evem-deploy')
 CONFIG = Path('/EVEMTK/deploy/config.json')
+STATE = Path('/EVEMTK/deploy/state.json')
 BACKEND = Path('/EVEMTK/deploy/current/backend')
 RUNTIME = Path('/EVEMTK/deploy/shared/tactical-python')
+BACKUP_ROOT = Path('/root')
 SUDO_RULE = 'evem-deploy ALL=(root) NOPASSWD: /bin/systemctl restart evem-tactical-asgi.service\n'
 
 
@@ -69,7 +72,7 @@ def activate(bundle, expected_sha):
         raise RuntimeError('root is required')
     if not re.fullmatch(r'[0-9a-f]{40}', expected_sha):
         raise RuntimeError('invalid expected release SHA')
-    required = (NGINX, PUBLISHER, SUDOERS, CONFIG, BACKEND / 'requirements-tactical-runtime.txt')
+    required = (NGINX, PUBLISHER, SUDOERS, CONFIG, STATE, BACKEND / 'requirements-tactical-runtime.txt')
     if not all(path.is_file() for path in required):
         raise RuntimeError('expected production files are missing')
     if (BACKEND / '.release-sha').read_text().strip() != expected_sha:
@@ -103,7 +106,7 @@ def activate(bundle, expected_sha):
             'import django, channels, uvicorn, websockets, asgiref, click, h11; '
             'import EVE_MDjango.tactical_asgi', cwd=BACKEND, env=environment)
 
-    backup = Path('/root') / ('evem-tactical-backup-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
+    backup = BACKUP_ROOT / ('evem-tactical-backup-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
     backup.mkdir(mode=0o700)
     original = {path: path.read_bytes() for path in (NGINX, PUBLISHER, SUDOERS, CONFIG)}
     for path in original:
@@ -133,20 +136,34 @@ def activate(bundle, expected_sha):
         replace_file(CONFIG, (json.dumps(config, indent=2, ensure_ascii=False) + '\n').encode())
         run(str(BACKEND / '.venv/bin/python'), '-c',
             "import sys; sys.path.insert(0, '/usr/local/lib/evem-deploy'); "
-            "import release; release.probe_tactical_websocket('https://evemtk.com')")
-    except Exception:
-        for path, data in original.items():
-            replace_file(path, data)
-        run('nginx', '-t')
-        run('systemctl', 'reload', 'nginx')
-        run('systemctl', 'disable', '--now', 'evem-tactical-asgi.service')
-        UNIT.unlink(missing_ok=True)
-        run('systemctl', 'daemon-reload')
+            "import json, release; "
+            "release.health(json.load(open('/EVEMTK/deploy/config.json')), "
+            "json.load(open('/EVEMTK/deploy/state.json')))")
+    except BaseException:
+        # A Ctrl-C or SIGTERM during cutover must restore the exact old
+        # publisher/config, too. Ignore a second signal only while restoring.
+        previous_int = signal.signal(signal.SIGINT, signal.SIG_IGN)
+        previous_term = signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        try:
+            for path, data in original.items():
+                replace_file(path, data)
+            run('nginx', '-t')
+            run('systemctl', 'reload', 'nginx')
+            run('systemctl', 'disable', '--now', 'evem-tactical-asgi.service')
+            UNIT.unlink(missing_ok=True)
+            run('systemctl', 'daemon-reload')
+        finally:
+            signal.signal(signal.SIGINT, previous_int)
+            signal.signal(signal.SIGTERM, previous_term)
         raise
     print('Tactical WebSocket active; config backups: ' + str(backup))
 
 
 if __name__ == '__main__':
+    def interrupted(signum, frame):
+        raise RuntimeError('tactical activation interrupted; rolling back')
+
+    signal.signal(signal.SIGTERM, interrupted)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--bundle', type=Path, required=True)
     parser.add_argument('--expected-sha', required=True)
