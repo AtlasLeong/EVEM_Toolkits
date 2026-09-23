@@ -260,7 +260,7 @@ class ReleaseTests(unittest.TestCase):
         for path in (self.root / 'releases', self.root / 'current', self.root / 'shared/assets', Path(config['uploads'])):
             self.assertIn(str(path), gate)
 
-    def http_health(self, state, ready_status=200, ready_body=None):
+    def http_health(self, state, ready_status=200, ready_body=None, tactical_ws=False):
         calls = []
         class Response(io.BytesIO):
             status = 200
@@ -275,9 +275,28 @@ class ReleaseTests(unittest.TestCase):
                 component = 'frontend' if route == '/deploy-version.json' else 'backend'
                 return Response(json.dumps({'sha': state[component]['sha']}).encode())
             return Response(b'[]' if route == '/api/boardregions' else b'<html></html>')
-        with patch.object(release, 'command'), patch.object(release.time, 'sleep'), patch.object(release.urllib.request, 'urlopen', side_effect=get):
-            release.health({'origin': 'http://fixture'}, state)
+        with patch.object(release, 'command') as service, patch.object(release.time, 'sleep'), \
+             patch.object(release.urllib.request, 'urlopen', side_effect=get), \
+             patch.object(release, 'probe_tactical_websocket') as socket_probe:
+            release.health({'origin': 'http://fixture', 'tactical_ws': tactical_ws}, state)
+        if tactical_ws:
+            service.assert_any_call(['systemctl', 'is-active', '--quiet', 'evem-tactical-asgi.service'])
+            socket_probe.assert_called_once_with('http://fixture')
+        else:
+            socket_probe.assert_not_called()
         return calls
+
+    def test_tactical_release_health_is_opt_in_and_checks_upgrade(self):
+        self.http_health(self.state(), tactical_ws=True)
+        self.http_health(self.state(), tactical_ws=False)
+
+    def test_tactical_release_restart_is_opt_in(self):
+        with patch.object(release, 'command') as command:
+            release.restart_services({'tactical_ws': True})
+        self.assertEqual(command.call_args_list, [
+            unittest.mock.call(['sudo', '-n', '/bin/systemctl', 'restart', 'evem-backend.service']),
+            unittest.mock.call(['sudo', '-n', '/bin/systemctl', 'restart', 'evem-tactical-asgi.service']),
+        ])
 
     def test_new_community_version_requires_ready_even_without_state_flag(self):
         state = self.state()

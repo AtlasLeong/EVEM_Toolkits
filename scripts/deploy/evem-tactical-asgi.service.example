@@ -1,0 +1,24 @@
+# Install as /etc/systemd/system/evem-tactical-asgi.service after the isolated
+# Python target and current backend release have passed their preflight.
+[Unit]
+Description=EVEM Tactical WebSocket Sidecar
+After=network.target evem-backend.service
+PartOf=evem-backend.service
+
+[Service]
+Type=simple
+User=nginx
+Group=nginx
+WorkingDirectory=/EVEMTK/deploy/current/backend
+Environment="PYTHONPATH=/EVEMTK/deploy/shared/tactical-python"
+Environment="TACTICAL_ALLOWED_ORIGINS=https://evemtk.com,https://www.evemtk.com"
+ExecStart=/EVEMTK/deploy/current/backend/.venv/bin/python -m uvicorn EVE_MDjango.tactical_asgi:application --host 127.0.0.1 --port 8001 --ws-max-size 4096 --ws-max-queue 4 --no-access-log
+Restart=always
+RestartSec=3
+LimitNOFILE=4096
+MemoryLimit=256M
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -121,6 +121,10 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                     return
                 self.channel_group = f'tactical-org-{self.organization_id}'
                 await self.channel_layer.group_add(self.channel_group, self.channel_name)
+                # WSGI commands run in other processes. An in-memory channel
+                # layer cannot deliver those events to this ASGI worker, so a
+                # bounded poll is required even when group events are enabled.
+                self.poll_task = asyncio.create_task(self.poll())
             elif content.get('type') == 'ping':
                 if time.time() >= self.expires_at:
                     await self.shutdown(4401)
@@ -139,6 +143,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
         value = await self.get_snapshot()
         if self.closing:
             return
+        self.last_snapshot_at = time.monotonic()
         if time.time() >= self.expires_at:
             await self.shutdown(4401)
             return
@@ -165,7 +170,9 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                     if time.time() >= self.expires_at:
                         await self.shutdown(4401)
                         return
-                    await self.publish_state()
+                    version = await self.get_state_version()
+                    if version != getattr(self, 'state_version', None) or time.monotonic() - getattr(self, 'last_snapshot_at', 0) >= 20:
+                        await self.publish_state()
         except asyncio.CancelledError:
             return
         except APIException:
@@ -241,3 +248,8 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
     def get_snapshot(self):
         from .services import socket_snapshot
         return socket_snapshot(self.actor, self.organization_id, self.connection_id, self.socket_generation)
+
+    @database_sync_to_async
+    def get_state_version(self):
+        from .services import socket_state_version
+        return socket_state_version(self.actor, self.organization_id, self.connection_id, self.socket_generation)

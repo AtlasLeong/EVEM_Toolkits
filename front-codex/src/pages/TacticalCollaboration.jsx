@@ -656,7 +656,10 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
   };
   const chooseForce = (item, focus = false) => {
     setSelectedForce(item.id);
-    setSystemDetailOpen(true);
+    // Keep an already-open overview usable when its row or a map marker is
+    // selected. The star detail takes the right context slot only on explicit
+    // star selection or while the overview is collapsed.
+    setSystemDetailOpen(collapsed);
     setSelectedSystem({ id: item.system_id, name: item.system_name });
     setTab("forces");
     if (!focus) setQuery('');
@@ -667,7 +670,7 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
   };
   const chooseCount = (row, focus = true) => {
     setSelectedForce(null);
-    setSystemDetailOpen(true);
+    setSystemDetailOpen(collapsed);
     setSelectedSystem({ id: row.systemId, name: row.systemName });
     if (focus) {
       const node = mapData?.systems?.find(node => Number(node.system_id) === row.systemId);
@@ -804,7 +807,7 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
         </div>)}
       </section>}
       <div
-        className={`tac-board-layout${collapsed && !mobile ? " is-panel-collapsed" : ""}`}
+        className={`tac-board-layout${collapsed && !mobile ? " is-panel-collapsed" : ""}${selectedSystem && (collapsed || systemDetailOpen) && !mobile ? " has-system-detail" : ""}`}
       >
         {!mobile && (
           <section className="tac-map-section">
@@ -812,7 +815,9 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
               systems={mapData?.systems || []}
               stargates={mapData?.stargates || []}
               constellations={mapData?.constellations || []}
-              scope={mapData?.scope}
+              scope={mapData?.scope || snapshot.scope}
+              canEditScope={can.manageForces && status === "live"}
+              onOpenScope={() => setDialog({ kind: "scope" })}
               boundaryExits={mapData?.boundary_exits || []}
               forces={filteredForces}
               reports={mapReports}
@@ -834,13 +839,14 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
                 setCollapsed(false);
               }}
               onSelectCount={(report) => {
-                const row = countRows.find(item => Number(item.report?.id) === Number(report.id)) ||
-                  countRows.find(item => Number(item.systemId) === Number(report.system_id));
+                // Resolve against the unfiltered source: a map selection must
+                // still work when the overview search hides the matching row.
+                const row = overview.enemy.systems.find(item => Number(item.report?.id) === Number(report.id)) ||
+                  overview.enemy.systems.find(item => Number(item.systemId) === Number(report.system_id));
                 if (row) chooseCount(row, false);
                 setSelectedReportId(null);
                 setQuery("");
                 setTab("forces");
-                setCollapsed(false);
               }}
               onFocusReports={(node) => {
                 setTab("reports");
@@ -863,14 +869,14 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
                 {can.manageForces && <div className="tac-side-filter" aria-label="部署阵营筛选">{[["all", "全部阵营"], ["enemy", "仅敌方"], ["friendly", "仅己方"]].map(([value, label]) => <button type="button" key={value} aria-pressed={sideFilter === value} onClick={() => setSideFilter(value)}>{label}</button>)}</div>}
               </div>
               {selectedSystem && (collapsed || systemDetailOpen) && (
-                <section className={`tac-system-detail${collapsed ? '' : ' is-panel-open'}`} aria-label="星系敌情详情">
-                  <header><div><small>星系敌情</small><h2>{selectedSystem.name}</h2></div><button type="button" className="tac-icon-btn" aria-label="关闭星系详情" onClick={() => { setSelectedSystem(null); setSystemDetailOpen(false); }}><X size={17} /></button></header>
+                <section className="tac-system-detail" aria-label="星系敌情详情">
+                  <header><div><small>星系敌情</small><h2>{selectedSystem.name}</h2></div><div className="tac-system-detail-actions">{collapsed && <button type="button" className="tac-system-back" aria-label="展开兵力总览" onClick={() => { setSystemDetailOpen(false); setCollapsed(false); }}><ChevronLeft size={14} />总览</button>}<button type="button" className="tac-icon-btn" aria-label="关闭星系详情" onClick={() => { setSelectedSystem(null); setSystemDetailOpen(false); }}><X size={17} /></button></div></header>
                   <div className="tac-system-fleets">
                     {selectedFleets.slice(0, 6).map(item => <div className={`tac-system-fleet-row is-${item.side}`} key={item.id}>
                       <button type="button" onClick={() => chooseForce(item)}><span>{item.name}</span><span>{item.people ?? '未知'}{item.people == null ? '' : '人'}</span></button>
                       <small>{item.source_author_name ? `${item.source_author_name} 上报` : '指挥录入'} · {ageLabel(item.observed_at, currentServerTime)}</small>
                       {item.side === 'enemy' && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({kind:'report',selectedFleet:item})}>更新这支舰队</button>}
-                      {item.id === selectedForce && <button type="button" className="tac-text-btn" onClick={() => { setCollapsed(false); setTab('forces'); setQuery(''); }}>查看部署详情</button>}
+                      {item.id === selectedForce && <button type="button" className="tac-text-btn" onClick={() => { setCollapsed(false); setSystemDetailOpen(false); setTab('forces'); setQuery(''); }}>查看部署详情</button>}
                     </div>)}
                     {selectedFleets.length > 6 && <button type="button" className="tac-text-btn" onClick={() => { setCollapsed(false); setTab('forces'); setQuery(selectedSystem.name); }}>查看全部 {selectedFleets.length} 支舰队</button>}
                   </div>
@@ -917,7 +923,7 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
                 </section>
                 )}
             </CollaborationMap>
-            {collapsed && <button className="tac-panel-reopen tac-btn" type="button" aria-label="展开兵力总览" onClick={() => setCollapsed(false)}><ChevronLeft size={16} />兵力总览</button>}
+            {collapsed && <button className="tac-panel-reopen tac-btn" type="button" aria-label="展开兵力总览" onClick={() => { setSystemDetailOpen(false); setCollapsed(false); }}><ChevronLeft size={16} />兵力总览</button>}
           </section>
         )}
         {(!collapsed || mobile) && (

@@ -4,8 +4,10 @@ No dependency installation, database mutation, automatic cleanup, or service con
 The server must be initialized by an operator before publish/rollback can be used.
 """
 import argparse
+import base64
 from contextlib import contextmanager
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -17,6 +19,7 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+from urllib.parse import urlsplit
 
 
 COMPONENTS = ('frontend', 'backend')
@@ -301,6 +304,35 @@ def prepare_assets(root, frontend):
                 os.unlink(temporary)
 
 
+def restart_services(config):
+    command(['sudo', '-n', '/bin/systemctl', 'restart', 'evem-backend.service'])
+    if config.get('tactical_ws') is True:
+        command(['sudo', '-n', '/bin/systemctl', 'restart', 'evem-tactical-asgi.service'])
+
+
+def probe_tactical_websocket(origin):
+    """Require a real HTTP 101 through the public TLS proxy, without credentials."""
+    parsed = urlsplit(origin)
+    if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.path not in ('', '/'):
+        raise ReleaseError('invalid tactical WebSocket health origin')
+    connection_type = http.client.HTTPSConnection if parsed.scheme == 'https' else http.client.HTTPConnection
+    connection = connection_type(parsed.hostname, parsed.port, timeout=5)
+    try:
+        connection.request('GET', '/ws/tactical/0/', headers={
+            'Host': parsed.netloc,
+            'Origin': origin.rstrip('/'),
+            'Connection': 'Upgrade',
+            'Upgrade': 'websocket',
+            'Sec-WebSocket-Key': base64.b64encode(os.urandom(16)).decode('ascii'),
+            'Sec-WebSocket-Version': '13',
+        })
+        response = connection.getresponse()
+        if response.status != 101 or response.getheader('Upgrade', '').lower() != 'websocket':
+            raise ReleaseError('tactical WebSocket upgrade failed')
+    finally:
+        connection.close()
+
+
 def health(config, state):
     def get(url):
         request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
@@ -329,8 +361,11 @@ def health(config, state):
                 ready = json.loads(get(origin + '/api/community/ready/?expected=' + state['backend']['sha']))
                 if ready != {'status': 'ok'}:
                     raise ReleaseError('Community readiness failed')
+            if config.get('tactical_ws') is True:
+                command(['systemctl', 'is-active', '--quiet', 'evem-tactical-asgi.service'])
+                probe_tactical_websocket(origin)
             return
-        except (OSError, ValueError, ReleaseError, subprocess.SubprocessError) as exc:
+        except (OSError, ValueError, ReleaseError, http.client.HTTPException, subprocess.SubprocessError) as exc:
             failure = exc
             if attempt < 5:
                 time.sleep(2)
@@ -393,7 +428,7 @@ def publish(root, archive=None, rollback=False):
                     prepare_assets(root, staged / 'frontend')
         transact(root, old, new, changed, prepare,
                  lambda c, dest: link(root / 'current' / c, dest),
-                 lambda: command(['sudo', '-n', '/bin/systemctl', 'restart', 'evem-backend.service']),
+                 lambda: restart_services(config),
                  lambda state: health(config, state))
         print('Release verified: ' + ', '.join(changed))
 

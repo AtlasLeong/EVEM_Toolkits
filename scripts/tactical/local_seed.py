@@ -123,7 +123,7 @@ def initialize(load_accounts=0):
         services.admit(users['scout'], org.pk, scout_cid)
         services.command(users['scout'], org.pk, {
             'action': 'report.create', 'request_id': str(uuid4()), 'connection_id': scout_cid,
-            'system_id': 99001007, 'people': 32, 'ships': {'battleship': 20, 'cruiser': 8},
+            'report_kind': 'system_count', 'system_id': 99001007, 'people': 32, 'ships': {},
             'notes': '星门附近发现敌方集结，尚未确认是否为主力分队。', 'observed_at': timezone.now().isoformat(),
         })
         services.leave(users['scout'], org.pk, scout_cid)

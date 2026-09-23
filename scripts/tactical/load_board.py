@@ -123,11 +123,13 @@ async def exercise(base_url, org_id, tokens, accounts, duration):
     try:
         # Stagger start to measure sustained live capacity separately from the
         # real-MySQL atomic burst-admission test, not claim both from SQLite.
+        # Start renewals during the stagger: 100 SQLite admissions can take
+        # longer than a 60-second lease on slower test machines.
+        tasks.append(asyncio.create_task(heartbeat()))
         for index in range(accounts):
             ws, _ = await connect_client(index, tokens[index])
             tasks.append(asyncio.create_task(read_client(index, ws)))
             await asyncio.sleep(0.05)
-        tasks.append(asyncio.create_task(heartbeat()))
         if accounts == 100:
             extra = await connect(ws_url, origin='http://127.0.0.1:4194', proxy=None)
             try:

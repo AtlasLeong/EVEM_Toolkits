@@ -1,11 +1,12 @@
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -79,6 +80,73 @@ class BoardCase(TestCase):
 
     def snapshot(self):
         return self.client.get(self.url('snapshot'), {'connection_id': self.connection_id})
+
+
+class ObservationTimezoneTests(BoardCase):
+    @override_settings(USE_TZ=False, TIME_ZONE='Asia/Shanghai')
+    def test_offset_observation_is_saved_and_serialized_with_offset_without_use_tz(self):
+        from TacticalCollaboration.models import Report
+        self.admit(self.scout)
+        observed = datetime.now(datetime_timezone.utc).replace(microsecond=0) - timedelta(minutes=1)
+        response = self.cmd('report.create', report_kind='system_count', **self.content(
+            observed_at=observed.isoformat(), ships={'cruiser': None}))
+        self.assertEqual(response.status_code, 200, response.content)
+        report = Report.objects.get(pk=response.data['result']['id'])
+        self.assertIsNone(report.observed_at.tzinfo)
+        self.assertEqual(datetime.fromisoformat(response.data['result']['observed_at']), observed)
+        snapshot = self.snapshot()
+        self.assertEqual(snapshot.status_code, 200, snapshot.content)
+        self.assertEqual(datetime.fromisoformat(snapshot.data['reports'][0]['observed_at']), observed)
+        self.assertIsNotNone(datetime.fromisoformat(snapshot.data['server_time']).tzinfo)
+
+    @override_settings(USE_TZ=True, TIME_ZONE='Asia/Shanghai')
+    def test_offset_observation_remains_aware_with_use_tz(self):
+        self.admit(self.scout)
+        observed = datetime.now(datetime_timezone.utc).replace(microsecond=0) - timedelta(minutes=1)
+        response = self.cmd('report.create', report_kind='system_count', **self.content(
+            observed_at=observed.isoformat(), ships={'cruiser': None}))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(datetime.fromisoformat(response.data['result']['observed_at']), observed)
+
+    @override_settings(USE_TZ=False, TIME_ZONE='Asia/Shanghai')
+    def test_offset_observation_update_round_trips_for_report_and_force(self):
+        from TacticalCollaboration.models import Force, Report
+        self.admit(self.owner)
+        observed = datetime.now(datetime_timezone.utc).replace(microsecond=0) - timedelta(minutes=2)
+        report = self.cmd('report.create', report_kind='system_count', **self.content(
+            observed_at=observed.isoformat(), ships={'cruiser': None})).data['result']
+        revised = observed - timedelta(minutes=1)
+        changed = self.cmd('report.update', report_id=report['id'], expected_version=1,
+                           report_kind='system_count', **self.content(
+                               observed_at=revised.isoformat(), people=64, ships={'cruiser': None}))
+        self.assertEqual(changed.status_code, 200, changed.content)
+        self.assertEqual(datetime.fromisoformat(changed.data['result']['observed_at']), revised)
+        self.assertIsNone(Report.objects.get(pk=report['id']).observed_at.tzinfo)
+
+        force = self.cmd('force.create', name='敌方', side='enemy', **self.content(
+            observed_at=observed.isoformat())).data['result']
+        changed = self.cmd('force.update', force_id=force['id'], expected_version=1,
+                           name='敌方', side='enemy', **self.content(observed_at=revised.isoformat()))
+        self.assertEqual(changed.status_code, 200, changed.content)
+        self.assertEqual(datetime.fromisoformat(changed.data['result']['observed_at']), revised)
+        self.assertIsNone(Force.objects.get(pk=force['id']).observed_at.tzinfo)
+
+
+class SocketCursorTests(BoardCase):
+    def test_authorized_cursor_is_one_query_and_rechecks_membership(self):
+        from rest_framework.exceptions import PermissionDenied
+        from TacticalCollaboration import services
+        self.admit(self.scout)
+        generation = str(uuid4())
+        services.claim_socket(self.scout, self.org.pk, self.connection_id, generation)
+        self.org.refresh_from_db()
+        with CaptureQueriesContext(connection) as queries:
+            version = services.socket_state_version(self.scout, self.org.pk, self.connection_id, generation)
+        self.assertEqual(version, self.org.state_version)
+        self.assertLessEqual(len(queries), 1)
+        Membership.objects.filter(organization=self.org, user=self.scout).update(status='removed')
+        with self.assertRaises(PermissionDenied):
+            services.socket_state_version(self.scout, self.org.pk, self.connection_id, generation)
 
 
 class PresenceTests(BoardCase):
