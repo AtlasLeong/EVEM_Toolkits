@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for due EVEM market price collection
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+AccuracySec=10s
+Unit=evem-market-collector.service
+
+[Install]
+WantedBy=timers.target

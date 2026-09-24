@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -26,6 +27,45 @@ COMPONENTS = ('frontend', 'backend')
 SHA = re.compile(r'^[0-9a-f]{40}$')
 HASH = re.compile(r'^[0-9a-f]{64}$')
 MAX_BYTES = 1024 ** 3
+MARKET_CAPABILITY_FILE = 'Market/management/commands/market_tick.py'
+MARKET_MSGPACK_VERSION = '1.2.2'
+
+# Run only with the candidate interpreter and its real collector PYTHONPATH.
+# No Django settings, session load, database, or game connection is needed.
+# Capture output at the parent boundary; dependency tracebacks may contain paths.
+MARKET_RUNTIME_PROBE = r'''
+import importlib
+import os
+from pathlib import Path
+import sys
+
+backend = Path(sys.argv[1]).resolve()
+expected = sys.argv[2]
+runtime = Path(sys.argv[3]).resolve()
+private = Path(sys.argv[4]).resolve()
+
+def no_external_io(event, args):
+    if event.startswith('socket.'):
+        raise RuntimeError('Network access is forbidden in market preflight')
+    if event == 'open' and args and isinstance(args[0], (str, bytes, os.PathLike)):
+        path = Path(os.fsdecode(args[0])).resolve()
+        if (path.is_relative_to(private) or path.name.startswith('.env')
+                or path.name == 'session.json'
+                or path.suffix.lower() in ('.dpapi', '.pcap', '.pcapng', '.pem', '.key')):
+            raise RuntimeError('Credential access is forbidden in market preflight')
+
+sys.addaudithook(no_external_io)
+msgpack = importlib.import_module('msgpack')
+if msgpack.__version__ != expected or not Path(msgpack.__file__).resolve().is_relative_to(runtime):
+    raise RuntimeError('Market runtime dependency mismatch')
+session = importlib.import_module('Market.session_bundle')
+protocol = importlib.import_module('Market.collector_protocol')
+for module in (session, protocol):
+    if not Path(module.__file__).resolve().is_relative_to(backend / 'Market'):
+        raise RuntimeError('Wrong market application module')
+if not callable(session.load_session) or not callable(protocol.MarketSession):
+    raise RuntimeError('Incomplete market runtime')
+'''
 
 
 class ReleaseError(RuntimeError):
@@ -170,7 +210,66 @@ def changed_components(state, manifest):
     return [c for c in COMPONENTS if state[c]['source'] != manifest['sources'][c]]
 
 
-def transact(root, old, new, changed, prepare, switch, restart, health):
+def requires_market_collector(backend, state=None):
+    """Recognize deployed and candidate capability without trusting a false flag."""
+    return ((state or {}).get('market_collector') is True
+            or (Path(backend) / MARKET_CAPABILITY_FILE).is_file())
+
+
+@contextmanager
+def market_collector_lock(root, required=False):
+    """Share the collector's pre-provisioned lock for the entire transaction.
+
+    Never create/recreate this file: doing so could split the lock identity or
+    grant incorrect ownership. Root provisions it for both service and deploy
+    users; collector and publisher open the same regular inode without unlink.
+    """
+    if not required:
+        yield
+        return
+    path = Path(root) / 'shared/market/collector.lock'
+    descriptor = None
+    try:
+        original = path.lstat()
+        if not stat.S_ISREG(original.st_mode) or path.resolve() != path:
+            raise ReleaseError('market collector lock must be a provisioned regular file')
+        descriptor = os.open(path, os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0)
+                             | getattr(os, 'O_NONBLOCK', 0))
+        opened = os.fstat(descriptor)
+        if (not stat.S_ISREG(opened.st_mode)
+                or (opened.st_dev, opened.st_ino) != (original.st_dev, original.st_ino)):
+            raise ReleaseError('market collector lock identity changed')
+    except (OSError, ValueError):
+        if descriptor is not None:
+            os.close(descriptor)
+        raise ReleaseError('market collector lock unavailable; provision it before publishing') from None
+    except BaseException:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise
+    try:
+        import fcntl
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ReleaseError('market collector is busy; retry after the collection finishes') from None
+        except OSError:
+            raise ReleaseError('market collector lock could not be acquired') from None
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def transact(root, old, new, changed, prepare, switch, restart, health, *, market_required=False):
+    required = market_required or any(
+        requires_market_collector(state['backend']['path'], state['backend'])
+        for state in (old, new)
+    )
+    with market_collector_lock(root, required=required):
+        return _transact_locked(root, old, new, changed, prepare, switch, restart, health)
+
+
+def _transact_locked(root, old, new, changed, prepare, switch, restart, health):
     """Journal before switching; only commit state AFTER exact-version health succeeds.
 
     Hooks allow testing the transaction without running systemd or a production DB.
@@ -255,6 +354,31 @@ def prepare_backend(root, staged, manifest, config):
                  '--database', database], cwd=backend)
     prepare_community(root, backend, config,
                       required='backend/Community/health.py' in manifest['files'])
+    prepare_market(root, backend,
+                   required=('backend/' + MARKET_CAPABILITY_FILE) in manifest['files'])
+
+
+def prepare_market(root, backend, required=False):
+    """Check isolated collector dependencies without loading any private session."""
+    backend = Path(backend).resolve()
+    if not required and not requires_market_collector(backend):
+        return
+    runtime = (Path(root) / 'shared/market-python').resolve()
+    if not runtime.is_dir():
+        raise ReleaseError('market runtime unavailable; provision pinned dependencies before publishing')
+    environment = dict(os.environ, PYTHONPATH=str(runtime), PYTHONDONTWRITEBYTECODE='1')
+    # Importing these modules must not depend on Django or a provisioned account.
+    environment.pop('DJANGO_SETTINGS_MODULE', None)
+    environment.pop('MARKET_SESSION_FILE', None)
+    try:
+        subprocess.run(
+            [str(backend / '.venv/bin/python'), '-B', '-c', MARKET_RUNTIME_PROBE,
+             str(backend), MARKET_MSGPACK_VERSION, str(runtime),
+             str((Path(root) / 'shared/market').resolve())],
+            cwd=backend, env=environment, check=True, capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise ReleaseError('market runtime preflight failed; verify the pinned dependency environment') from None
 
 
 def requires_community_readiness(backend, state=None):
@@ -408,6 +532,8 @@ def publish(root, archive=None, rollback=False):
                                  '--database', database], cwd=backend)
                     prepare_community(root, backend, config,
                                       required=new['backend'].get('community_ready') is True)
+                    prepare_market(root, backend,
+                                   required=new['backend'].get('market_collector') is True)
         else:
             manifest = validate(archive)
             changed = changed_components(old, manifest)
@@ -421,6 +547,8 @@ def publish(root, archive=None, rollback=False):
                                   'path': str(staged / component)}
                 if component == 'backend' and 'backend/Community/health.py' in manifest['files']:
                     new[component]['community_ready'] = True
+                if component == 'backend' and ('backend/' + MARKET_CAPABILITY_FILE) in manifest['files']:
+                    new[component]['market_collector'] = True
             def prepare():
                 if 'backend' in changed:
                     prepare_backend(root, staged, manifest, config)
@@ -429,7 +557,8 @@ def publish(root, archive=None, rollback=False):
         transact(root, old, new, changed, prepare,
                  lambda c, dest: link(root / 'current' / c, dest),
                  lambda: restart_services(config),
-                 lambda state: health(config, state))
+                 lambda state: health(config, state),
+                 market_required=config.get('market_collector') is True)
         print('Release verified: ' + ', '.join(changed))
 
 
