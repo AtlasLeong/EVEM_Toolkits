@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { canAcceptSnapshot } from "../utils/tacticalSocket";
+import { nextTacticalPollDelay, TACTICAL_POLL_MIN_MS } from "../utils/tacticalPolling";
 import {
   enterTacticalBoard,
   getTacticalSnapshot,
@@ -23,7 +24,6 @@ export default function useTacticalSession(organizationId) {
   const requestRef = useRef(async operation => operation());
   useEffect(() => {
     let cancelled = false;
-    let timer;
     let heartbeatAt = 0;
     let stopStream = null;
     let streamLive = false;
@@ -31,6 +31,8 @@ export default function useTacticalSession(organizationId) {
     let retryStreamAt = 0;
     let reconnectAttempt = 0;
     let lastAccepted = null;
+    let pollTimer = null;
+    let pollDelay = TACTICAL_POLL_MIN_MS;
     const epoch = ++generation.current;
     const connectionId = newRequestId();
     connection.current = connectionId;
@@ -86,12 +88,45 @@ export default function useTacticalSession(organizationId) {
               setStatus("offline");
               setError("实时连接正在恢复；暂时保留只读上报记录。");
             }
+            clearPoll();
+            schedulePoll(0);
           },
         });
       } catch {
         reconnectAttempt += 1;
         retryStreamAt = Date.now() + Math.min(30000, 1000 * 2 ** (reconnectAttempt - 1)) * (0.75 + Math.random() * 0.5);
       }
+    };
+    const isVisible = () => typeof document === "undefined" || document.visibilityState !== "hidden";
+    const clearPoll = () => {
+      if (pollTimer !== null) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+    };
+    const schedulePoll = (delay = pollDelay) => {
+      if (cancelled || pollTimer !== null || !isVisible()) return;
+      pollTimer = window.setTimeout(async () => {
+        pollTimer = null;
+        const succeeded = await refresh();
+        const nextDelay = nextTacticalPollDelay({
+          visible: isVisible(),
+          streamLive,
+          requestSucceeded: succeeded,
+          previousDelay: pollDelay,
+        });
+        if (nextDelay === null) return;
+        pollDelay = nextDelay;
+        schedulePoll(nextDelay);
+      }, Math.max(0, delay));
+    };
+    const handleVisibilityChange = () => {
+      if (!isVisible()) {
+        clearPoll();
+        return;
+      }
+      pollDelay = TACTICAL_POLL_MIN_MS;
+      schedulePoll(0);
     };
     const request = (operation) => {
       const controller = new AbortController();
@@ -107,8 +142,8 @@ export default function useTacticalSession(organizationId) {
     };
     requestRef.current = request;
     const refresh = async (force = false) => {
-      if (cancelled || busy) return;
-      if (!force && streamLive && Date.now() - heartbeatAt < 20000) return;
+      if (cancelled || busy) return null;
+      if (!force && streamLive && Date.now() - heartbeatAt < 20000) return null;
       busy = true;
       const sequence = streamSequence;
       let admissionAttempted = false;
@@ -119,14 +154,15 @@ export default function useTacticalSession(organizationId) {
           heartbeatAt = Date.now();
         }
         // Cleanup may have released this lease while admission was in flight.
-        if (cancelled) return;
+        if (cancelled) return null;
         const data = await request((signal) => getTacticalSnapshot(organizationId, connectionId, { signal }));
-        if (cancelled) return;
+        if (cancelled) return null;
         // A delayed HTTP snapshot must not resurrect state superseded by WS.
         if (sequence === streamSequence) accept(data);
         connectStream();
+        return true;
       } catch (failure) {
-        if (cancelled) return;
+        if (cancelled) return null;
         if (
           [401, 403, 404].includes(failure.status) ||
           failure.name === "AuthSessionChangedError"
@@ -141,6 +177,7 @@ export default function useTacticalSession(organizationId) {
           setError(failure.message || "连接暂时中断；未提交的内容仍保留。");
           heartbeatAt = 0;
         }
+        return false;
       } finally {
         busy = false;
         // An admission can commit AFTER effect cleanup's DELETE. Release its
@@ -152,13 +189,21 @@ export default function useTacticalSession(organizationId) {
       }
     };
     refreshRef.current = () => refresh(true);
-    refresh();
-    timer = window.setInterval(refresh, 2000);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", handleVisibilityChange);
+    refresh().then((succeeded) => {
+      if (cancelled) return;
+      const nextDelay = nextTacticalPollDelay({ visible: isVisible(), streamLive, requestSucceeded: succeeded, previousDelay: pollDelay });
+      if (nextDelay !== null) {
+        pollDelay = nextDelay;
+        schedulePoll(nextDelay);
+      }
+    });
     return () => {
       cancelled = true;
       stopStream?.();
       generation.current = epoch + 1;
-      window.clearInterval(timer);
+      clearPoll();
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", handleVisibilityChange);
       connection.current = null;
       // Cleanup is best-effort; the server expires abandoned leases after 60s.
       request((signal) => leaveTacticalBoard(organizationId, connectionId, { signal })).catch(() => {});

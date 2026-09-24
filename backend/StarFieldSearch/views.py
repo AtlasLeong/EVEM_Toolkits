@@ -1,5 +1,3 @@
-import requests
-from django.shortcuts import render
 from .models import Region, Constellation, Solarsystem
 from rest_framework import generics
 from .serializers import RegionSerializer, ConstellationSerializer, SolarSystemSerializer
