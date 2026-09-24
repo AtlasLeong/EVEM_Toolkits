@@ -90,7 +90,7 @@ jobs:
       - name: Market price and collection tests (isolated SQLite)
         working-directory: backend
         run: |
-          python manage.py test Market EVE_MDjango.tests_market_worker_settings EVE_MDjango.tests_market_mysql_ci_settings --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/market-backend-tests.log
+          python manage.py test Market EVE_MDjango.tests_market_worker_settings EVE_MDjango.tests_market_mysql_ci_settings EVE_MDjango.tests_market_rehearsal_settings --settings=EVE_MDjango.ci_settings --noinput 2>&1 | tee ../ci-evidence/market-backend-tests.log
           python manage.py makemigrations Market --check --dry-run --settings=EVE_MDjango.ci_settings 2>&1 | tee ../ci-evidence/market-migration-check.log
       - name: Install frontend dependencies
         working-directory: front-codex
