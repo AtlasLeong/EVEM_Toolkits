@@ -4,7 +4,7 @@ import hashlib
 import importlib.util
 import io
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import subprocess
 import tempfile
 import threading
@@ -74,7 +74,7 @@ class FakeSsh:
 
     def __call__(self, args, *, stdin, stdout, stderr, env):
         self.calls.append(args)
-        executable = Path(args[0])
+        executable = PureWindowsPath(args[0])
         self.case.assertTrue(executable.is_absolute(), 'SSH executable used PATH or CWD')
         self.case.assertEqual(executable.name.lower(), 'ssh.exe')
         self.case.assertEqual(executable.parent.name.lower(), 'openssh')
