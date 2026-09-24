@@ -92,6 +92,7 @@ class TacticalPreflightSafetyTests(unittest.TestCase):
             folder = Path(temporary)
             dump = folder / 'before-0007.sql'
             dump.write_bytes(b'CREATE TABLE test (id int);\n-- Dump completed on 2026-09-24\n')
+            os.chmod(dump, 0o600)
             evidence = preflight.dump_evidence(dump, folder)
             self.assertEqual(evidence['sha256'], hashlib.sha256(dump.read_bytes()).hexdigest())
             preflight.require_dump(evidence, folder)
@@ -272,6 +273,7 @@ class TacticalPreflightSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'backups'
             root.mkdir()
+            os.chmod(root, 0o700)
             options = Path(temporary) / 'mysql.cnf'
             options.write_text('[client]\nuser=operator\n', encoding='utf-8')
             os.chmod(options, 0o600)
@@ -293,6 +295,7 @@ class TacticalPreflightSafetyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'backups'
             root.mkdir()
+            os.chmod(root, 0o700)
             options = Path(temporary) / 'mysql.cnf'
             options.write_text('[client]\nuser=operator\n', encoding='utf-8')
             os.chmod(options, 0o600)
@@ -353,6 +356,7 @@ class TacticalPreflightSafetyTests(unittest.TestCase):
             folder = Path(temporary)
             dump = folder / 'before-0007.sql'
             dump.write_bytes(b'-- Dump completed on 2026-09-24\n')
+            os.chmod(dump, 0o600)
             evidence = preflight.dump_evidence(dump, folder)
             options = folder / 'mysql.cnf'
             options.write_text('[client]\nuser=operator\n', encoding='utf-8')
