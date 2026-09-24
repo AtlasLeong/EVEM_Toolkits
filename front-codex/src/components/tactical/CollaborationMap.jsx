@@ -307,9 +307,14 @@ export default function CollaborationMap({
       setHoveredSystemId(null);
       setPreviousViews([]);
       setView(INITIAL_VIEW);
+      // A scope replacement invalidates the previous map focus as well. The
+      // parent keeps the last focus token while the new map is loading; mark
+      // it consumed here so a changed `byId` map cannot refocus the old star
+      // after the camera has intentionally been reset.
+      if (focusSystem?._focusToken != null) lastFocusToken.current = focusSystem._focusToken;
     }
     lastScopeVersion.current = version;
-  }, [scope?.version]);
+  }, [scope?.version, focusSystem]);
   useEffect(() => { if (picker) pickerRef.current?.querySelector('button[data-system-choice]')?.focus(); }, [picker]);
   const openDenseArea = candidates => {
     const currentView = liveViewRef.current;
