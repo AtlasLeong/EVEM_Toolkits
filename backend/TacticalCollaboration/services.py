@@ -18,7 +18,7 @@ from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, Throttled, ValidationError
 
 from TacticalBoard.models import BoardRegions, BoardStargates, BoardSystems
-from .models import (AuditLog, CommandReceipt, ConnectionLease, Force, ForceSource, Invite,
+from .models import (AuditLog, Board, CommandReceipt, ConnectionLease, Force, ForceSource, Invite,
                      JoinApplication, Membership, Organization, Report, ReportRevision)
 
 
@@ -121,21 +121,102 @@ def remember(user, scope, data, result, org=None):
     return result
 
 
+def board_data(board):
+    return {'id': board.pk, 'name': board.name, 'kind': board.kind, 'is_default': board.is_default}
+
+
+def resolve_board(org, board_id=None, *, kind=None):
+    """The unqualified legacy URL has one immutable war-board destination.
+
+    Old test fixtures create organizations directly, without the service; only
+    a truly board-less organization gets that compatibility board on demand.
+    """
+    boards = Board.objects.filter(organization=org).select_related('organization')
+    if board_id is None:
+        board = boards.filter(is_default=True, kind='war').first()
+        if board is None and not boards.exists():
+            board = Board.objects.create(organization=org, name='战争沙盘', kind='war', is_default=True,
+                                         region_ids=org.region_ids, border_hops=org.border_hops,
+                                         scope_version=org.scope_version)
+    else:
+        if isinstance(board_id, str) and board_id.isascii() and board_id.isdecimal():
+            board_id = int(board_id)
+        board = boards.filter(pk=integer(board_id)).first()
+    if board is None or (kind is not None and board.kind != kind):
+        raise NotFound('板不存在。')
+    return board
+
+
+def board_scope(board):
+    # The fixed default board keeps the old Organization scope columns as a
+    # compatibility mirror for external readers and legacy direct fixtures.
+    return board.organization if board.is_default else board
+
+
 @transaction.atomic
 def create_organization(user, data):
-    fields(data, ('name', 'request_id'))
+    fields(data, ('name', 'request_id'), ('board_type',))
     name = text(data['name'], 80)
+    kind = data.get('board_type', 'war')
+    if kind not in ('war', 'pirate'):
+        bad('板类型无效。')
+    if kind == 'pirate' and not getattr(settings, 'TACTICAL_MULTIBOARD_WRITES_ENABLED', False):
+        raise PermissionDenied('当前阶段暂未开放海盗情报板创建。')
     get_user_model().objects.select_for_update().get(pk=user.pk)
     active_user(user)
     cached = receipt(user, 'create', data)
     if cached:
+        if 'boards' not in cached.result:
+            org = Organization.objects.get(pk=cached.result['id'])
+            return {**cached.result, 'boards': [board_data(board) for board in
+                                                  Board.objects.filter(organization=org).order_by('id')]}
         return cached.result
     rate_limit(user, 'create', 5)
-    if Membership.objects.filter(user=user, role='founder', status='active').count() >= 10:
-        bad('最多创建 10 个组织。')
+    if Organization.objects.filter(founder=user).count() >= 3:
+        bad('最多创建 3 个组织。')
     org = Organization.objects.create(name=name, founder=user)
     Membership.objects.create(organization=org, user=user, role='founder')
-    return remember(user, 'create', data, {'id': org.id, 'name': org.name, 'role': 'founder', 'status': 'active'}, org)
+    board = Board.objects.create(organization=org, name='战争沙盘' if kind == 'war' else '海盗情报',
+                                 kind=kind, is_default=kind == 'war')
+    return remember(user, 'create', data, {'id': org.id, 'name': org.name, 'role': 'founder',
+                                          'status': 'active', 'boards': [board_data(board)]}, org)
+
+
+@transaction.atomic
+def create_board(user, organization_id, data):
+    fields(data, ('name', 'kind', 'request_id'))
+    name = text(data['name'], 80)
+    kind = data['kind']
+    if kind not in ('war', 'pirate'):
+        bad('板类型无效。')
+    org = locked_org(organization_id)
+    membership(user, org, command=True)
+    if not getattr(settings, 'TACTICAL_MULTIBOARD_WRITES_ENABLED', False):
+        raise PermissionDenied('当前阶段暂未开放新建战术板。')
+    if not Board.objects.filter(organization=org).exists():
+        resolve_board(org, kind='war')
+    scope = f'org:{org.pk}:board.create'
+    cached = receipt(user, scope, data)
+    if cached:
+        return cached.result
+    rate_limit(user, scope, 10)
+    if Board.objects.filter(organization=org).count() >= 3:
+        bad('每个组织最多创建 3 块板。')
+    if Board.objects.filter(organization=org, name=name).exists():
+        raise Conflict('此组织已存在同名板。')
+    board = Board.objects.create(organization=org, name=name, kind=kind)
+    _advance_state(org)
+    return remember(user, scope, data, board_data(board), org)
+
+
+@transaction.atomic
+def list_boards(user, organization_id):
+    org = locked_org(organization_id)
+    membership(user, org)
+    boards = list(Board.objects.filter(organization=org).order_by('id'))
+    if not boards:
+        boards = [resolve_board(org, kind='war')]
+    return {'boards': [board_data(board) for board in boards]}
 
 
 @transaction.atomic
@@ -172,12 +253,20 @@ def join_organization(user, data):
 
 def list_organizations(user):
     active_user(user)
-    result = [{'id': m.organization_id, 'name': m.organization.name, 'role': m.role, 'status': m.status}
-              for m in Membership.objects.filter(user=user).select_related('organization').order_by('id')]
+    memberships = list(Membership.objects.filter(user=user).select_related('organization')
+                       .prefetch_related('organization__boards').order_by('id'))
+    result = []
+    for m in memberships:
+        boards = sorted(m.organization.boards.all(), key=lambda board: board.pk) if m.status == 'active' else []
+        if not boards and m.status == 'active':
+            boards = [resolve_board(m.organization)]
+        result.append({'id': m.organization_id, 'name': m.organization.name, 'role': m.role,
+                       'status': m.status, 'boards': [board_data(board) for board in boards]})
     known = {r['id'] for r in result}
     for app in JoinApplication.objects.filter(user=user, status='pending').select_related('organization').order_by('id'):
         if app.organization_id not in known:
-            result.append({'id': app.organization_id, 'name': app.organization.name, 'role': 'scout', 'status': 'pending'})
+            result.append({'id': app.organization_id, 'name': app.organization.name, 'role': 'scout',
+                           'status': 'pending', 'boards': []})
             known.add(app.organization_id)
     return {'organizations': result}
 
@@ -226,31 +315,35 @@ def command(user, organization_id, data):
     action = data['action']
     tactical = action in TACTICAL_FIELDS
     required = ('action', 'request_id', 'connection_id', *TACTICAL_FIELDS[action]) if tactical else ('action', 'request_id', *ADMIN_FIELDS[action])
-    fields(data, required, OPTIONAL_FIELDS.get(action, ()))
+    fields(data, required, (*OPTIONAL_FIELDS.get(action, ()), *(('board_id',) if tactical else ())))
     org = locked_org(organization_id)
     actor = membership(user, org, command=action not in ('report.create', 'report.update', 'report.move', 'report.withdraw'))
     if action in ('member.role', 'member.restore') and actor.role != 'founder':
         raise PermissionDenied('只有统帅可以调整或恢复成员角色。')
     if tactical:
         require_lease(user, org, data['connection_id'])
+        board = resolve_board(org, data.get('board_id'), kind='war')
+    else:
+        board = None
     # Replays do not bypass current object-level authorization.
     if action in ('report.update', 'report.move', 'report.withdraw'):
-        report = org_object(Report, org, data['report_id'])
+        report = org_object(Report, org, data['report_id'], board)
         if report.author_id != user.pk and (action == 'report.update' or actor.role == 'scout'):
             raise PermissionDenied('只能修改自己的上报。')
     if action == 'member.remove' and actor.role == 'commander':
         target = org_object(Membership, org, data['member_id'])
         if target.role != 'scout':
             raise PermissionDenied('指挥只能移除斥候。')
-    scope = f'org:{org.pk}'
-    cached = receipt(user, scope, data)
+    scope = f'org:{org.pk}' if not tactical or board.is_default else f'board:{board.pk}'
+    receipt_data = {key: value for key, value in data.items() if key != 'board_id'} if tactical and board.is_default else data
+    cached = receipt(user, scope, receipt_data)
     if cached:
         return cached.result
     rate_limit(user, scope)
-    result = tactical_command(user, org, data, actor) if tactical else admin_command(user, org, actor, data)
+    result = tactical_command(user, org, board, data, actor) if tactical else admin_command(user, org, actor, data)
     _advance_state(org)
     result = {**result, 'state_version': org.state_version}
-    remembered = remember(user, scope, data, result, org)
+    remembered = remember(user, scope, receipt_data, result, org)
     return remembered
 
 
@@ -305,8 +398,11 @@ def admin_command(user, org, actor, data):
     return {'id': target.id, 'role': target.role, 'status': target.status}
 
 
-def org_object(model, org, object_id):
-    row = model.objects.filter(pk=integer(object_id), organization=org).first()
+def org_object(model, org, object_id, board=None):
+    query = model.objects.filter(pk=integer(object_id), organization=org)
+    if board is not None:
+        query = query.filter(Q(board=board) | (Q(board__isnull=True) if board.is_default else Q(pk__isnull=True)))
+    row = query.first()
     if row is None:
         raise NotFound('对象不存在。')
     return row
@@ -376,12 +472,12 @@ def is_current_fleet_source(report):
     return bool(force and not force.archived and force.side == 'enemy' and force.source_report_id == report.pk)
 
 
-def create_fleet_observation(user, org, data, values):
+def create_fleet_observation(user, org, board, data, values):
     """Stable fleet identity is selected explicitly, never guessed by name."""
     if 'force_id' in data:
         if 'force_expected_version' not in data or 'fleet_name' in data:
             bad('更新已有舰队需要部署标识与版本，不能同时新建舰队。')
-        force = org_object(Force, org, data['force_id'])
+        force = org_object(Force, org, data['force_id'], board)
         # Do not disclose a guessed friendly force version through conflicts.
         if force.side != 'enemy':
             raise NotFound('敌方舰队不存在。')
@@ -394,11 +490,11 @@ def create_fleet_observation(user, org, data, values):
         if 'force_expected_version' in data or 'fleet_name' not in data:
             bad('新建舰队需要舰队名称；更新已有舰队需要部署标识与版本。')
         name = text(data['fleet_name'], 80)
-        if Force.objects.filter(organization=org, archived=False).count() >= 1000:
+        if Force.objects.filter(board=board, archived=False).count() >= 1000:
             bad('此战术板部署数量已达上限。')
-        force = Force.objects.create(organization=org, name=name, side='enemy', **values)
+        force = Force.objects.create(organization=org, board=board, name=name, side='enemy', **values)
         is_new = True
-    report = Report.objects.create(organization=org, author=user, report_kind='fleet_intel',
+    report = Report.objects.create(organization=org, board=board, author=user, report_kind='fleet_intel',
                                    fleet_name=name, linked_force=force, **values)
     # Observation time, not receipt time, controls the estimate. Equal-time
     # submissions deterministically prefer the new (higher-ID) observation.
@@ -434,11 +530,11 @@ def revise(report):
     return ReportRevision.objects.create(report=report, version=report.version, content=entity_data(report))
 
 
-def tactical_command(user, org, data, actor=None):
+def tactical_command(user, org, board, data, actor=None):
     action = data['action']
     if action.startswith('report.'):
         if action == 'report.create':
-            if Report.objects.filter(organization=org).count() >= 5000:
+            if Report.objects.filter(board=board).count() >= 5000:
                 bad('此战术板上报数量已达上限。')
             report_kind = data.get('report_kind', 'fleet')
             if report_kind not in ('fleet', 'system_count', 'fleet_intel'):
@@ -449,16 +545,16 @@ def tactical_command(user, org, data, actor=None):
             if is_scout and report_kind != 'system_count':
                 raise PermissionDenied('斥候只能提交星系人数情报。')
             if report_kind == 'fleet_intel':
-                return create_fleet_observation(user, org, data, content(data))
+                return create_fleet_observation(user, org, board, data, content(data))
             values = content(data)
             if is_scout and any(value is not None for value in values['ships'].values()):
                 raise PermissionDenied('斥候只能提交人数，不能填写舰船详情。')
             if any(key in data for key in ('fleet_name', 'force_id', 'force_expected_version')):
                 bad('只有具名舰队上报可以指定舰队名称或关联部署。')
-            report = Report.objects.create(organization=org, author=user, report_kind=report_kind, **values)
+            report = Report.objects.create(organization=org, board=board, author=user, report_kind=report_kind, **values)
             revise(report)
             return entity_data(report)
-        report = org_object(Report, org, data['report_id'])
+        report = org_object(Report, org, data['report_id'], board)
         expect_version(report, data['expected_version'])
         if report.status == 'withdrawn':
             raise Conflict('这条人数上报已撤下，请重新上报。')
@@ -510,7 +606,7 @@ def tactical_command(user, org, data, actor=None):
         if 'force_id' in data:
             if 'force_expected_version' not in data:
                 bad('关联已有部署需要部署版本。')
-            force = org_object(Force, org, data['force_id'])
+            force = org_object(Force, org, data['force_id'], board)
             expect_version(force, data['force_expected_version'])
             if force.archived:
                 raise Conflict('此部署已归档，不能继续关联或修改。')
@@ -529,9 +625,9 @@ def tactical_command(user, org, data, actor=None):
             # existing force, never create another copy of the same fleet.
             if ForceSource.objects.filter(revision__report=report).exists():
                 raise Conflict('此上报已有部署，请明确关联已有部署并核对版本。')
-            if Force.objects.filter(organization=org, archived=False).count() >= 1000:
+            if Force.objects.filter(board=board, archived=False).count() >= 1000:
                 bad('此战术板部署数量已达上限。')
-            force = Force.objects.create(organization=org, name=name, side='enemy', **values)
+            force = Force.objects.create(organization=org, board=board, name=name, side='enemy', **values)
         ForceSource.objects.create(force=force, revision=revision, confirmer=user, force_version=force.version)
         report.status = 'confirmed'
         report.save(update_fields=['status', 'updated_at'])
@@ -539,7 +635,7 @@ def tactical_command(user, org, data, actor=None):
     if action.startswith('force.'):
         force = None
         if action != 'force.create':
-            force = org_object(Force, org, data['force_id'])
+            force = org_object(Force, org, data['force_id'], board)
             expect_version(force, data['expected_version'])
             if force.archived:
                 raise Conflict('此部署已归档，不能继续关联或修改。')
@@ -568,9 +664,9 @@ def tactical_command(user, org, data, actor=None):
                 bad('部署阵营无效。')
             values = content(data)
             if force is None:
-                if Force.objects.filter(organization=org, archived=False).count() >= 1000:
+                if Force.objects.filter(board=board, archived=False).count() >= 1000:
                     bad('此战术板部署数量已达上限。')
-                force = Force.objects.create(organization=org, name=name, side=data['side'], **values)
+                force = Force.objects.create(organization=org, board=board, name=name, side=data['side'], **values)
                 return entity_data(force)
             force.name, force.side = name, data['side']
             force.source_report = None
@@ -579,7 +675,8 @@ def tactical_command(user, org, data, actor=None):
         force.version += 1
         force.save()
         return entity_data(force)
-    if org.scope_version != integer(data['expected_version']):
+    scope = board_scope(board)
+    if scope.scope_version != integer(data['expected_version']):
         raise Conflict('战区范围已被修改，请刷新后重试。')
     regions = data['region_ids']
     if not isinstance(regions, list) or len(regions) > 20:
@@ -587,14 +684,18 @@ def tactical_command(user, org, data, actor=None):
     regions = sorted({integer(r) for r in regions})
     if BoardRegions.objects.filter(pk__in=regions).count() != len(regions):
         bad('星域不存在。')
-    org.region_ids, org.border_hops = regions, integer(data['border_hops'], 0, 2)
-    org.scope_version += 1
-    org.save(update_fields=['region_ids', 'border_hops', 'scope_version'])
-    return scope_data(org)
+    scope.region_ids, scope.border_hops = regions, integer(data['border_hops'], 0, 2)
+    scope.scope_version += 1
+    scope.save(update_fields=['region_ids', 'border_hops', 'scope_version'])
+    if board.is_default:
+        board.region_ids, board.border_hops, board.scope_version = scope.region_ids, scope.border_hops, scope.scope_version
+        board.save(update_fields=['region_ids', 'border_hops', 'scope_version'])
+    return scope_data(board)
 
 
-def scope_data(org):
-    return {'region_ids': org.region_ids, 'border_hops': org.border_hops, 'version': org.scope_version}
+def scope_data(board):
+    scope = board_scope(board)
+    return {'region_ids': scope.region_ids, 'border_hops': scope.border_hops, 'version': scope.scope_version}
 
 
 def active_leases(org):
@@ -682,33 +783,53 @@ def leave(user, organization_id, connection_id):
     return {'ok': True}
 
 
-def snapshot(user, organization_id, connection_id, *, socket_generation=None):
+def snapshot(user, organization_id, connection_id, board_id=None, *, socket_generation=None):
     # Import locally because graph's authorized HTTP wrapper uses our access
     # helpers. The shared cache contains static geometry, never this snapshot.
     from .graph import static_projection
-    org = Organization.objects.get(pk=organization_id)
-    member = membership(user, org)
-    if socket_generation is None:
-        require_lease(user, org, connection_id)
-    else:
-        # One current authorization/organization lock per poll. The socket
-        # check already validates this same lease, plus its sole generation.
-        require_socket(user, org, connection_id, socket_generation)
-    commanding = member.role in ('founder', 'commander')
-    forces = Force.objects.filter(organization=org, archived=False).select_related('source_report__author')
-    reports = Report.objects.filter(organization=org).select_related('author', 'linked_force')
-    if not commanding:
-        forces = forces.filter(side='enemy')
-    drawable = {row['system_id'] for row in static_projection(org.region_ids, org.border_hops)['systems']}
-    # Reports are enemy observations shared across the organization, including
-    # pending/corrected reports. Reading does not grant author-only edit rights.
-    # Keep their projection independent of private ForceSource/audit metadata.
-    return {'organization': {'id': org.pk, 'name': org.name}, 'role': member.role, 'user_id': user.pk,
-            'permission_version': member.permission_version, 'state_version': org.state_version,
-            'scope': scope_data(org),
-            'forces': [{**entity_data(force), 'in_scope': force.system_id in drawable} for force in forces.order_by('id')],
-            'reports': [{**entity_data(report), 'in_scope': report.system_id in drawable} for report in reports.order_by('id')],
-            **presence_data(org, include_roster=commanding), 'server_time': wire_time(timezone.now())}
+    for _ in range(3):
+        # Public geometry can be expensive. Check access before calculating it,
+        # then do the calculation without holding the organization write lock.
+        org = Organization.objects.get(pk=organization_id)
+        membership(user, org)
+        board = resolve_board(org, board_id, kind='war')
+        if socket_generation is None:
+            require_lease(user, org, connection_id)
+        else:
+            require_socket(user, org, connection_id, socket_generation)
+        scope = scope_data(board)
+        drawable = {row['system_id'] for row in static_projection(scope['region_ids'], scope['border_hops'])['systems']}
+
+        with transaction.atomic():
+            org = locked_org(organization_id)
+            member = membership(user, org)
+            board = resolve_board(org, board_id, kind='war')
+            if board.is_default:
+                board.organization = org
+            if socket_generation is None:
+                require_lease(user, org, connection_id)
+            else:
+                require_socket(user, org, connection_id, socket_generation)
+            if scope_data(board) != scope:
+                # Scope changed during the static read. Retry outside the row
+                # lock so the response never mixes old geometry with new scope.
+                continue
+            commanding = member.role in ('founder', 'commander')
+            board_filter = Q(board=board) | (Q(board__isnull=True) if board.is_default else Q(pk__isnull=True))
+            forces = Force.objects.filter(organization=org, archived=False).filter(board_filter).select_related('source_report__author')
+            reports = Report.objects.filter(organization=org).filter(board_filter).select_related('author', 'linked_force')
+            if not commanding:
+                forces = forces.filter(side='enemy')
+            # Materialize private content before releasing the lock: a member
+            # removal cannot interleave with this authorized projection.
+            return {'organization': {'id': org.pk, 'name': org.name}, 'board': board_data(board),
+                    'role': member.role, 'user_id': user.pk,
+                    'permission_version': member.permission_version, 'state_version': org.state_version,
+                    'scope': scope,
+                    'forces': [{**entity_data(force), 'in_scope': force.system_id in drawable} for force in forces.order_by('id')],
+                    'reports': [{**entity_data(report), 'in_scope': report.system_id in drawable} for report in reports.order_by('id')],
+                    **presence_data(org, include_roster=commanding), 'server_time': wire_time(timezone.now())}
+    raise Conflict('战区范围正在变化，请重试。')
 
 
 def require_socket(user, org, connection_id, generation):
@@ -721,7 +842,7 @@ def require_socket(user, org, connection_id, generation):
 
 
 @transaction.atomic
-def claim_socket(user, organization_id, connection_id, generation):
+def claim_socket(user, organization_id, connection_id, generation, board_id=None):
     """The server generates a fresh UUID per physical socket, never the client.
 
     HTTP admission/renewal retains the logical tab lease. A replacement WS takes
@@ -730,6 +851,7 @@ def claim_socket(user, organization_id, connection_id, generation):
     """
     org = locked_org(organization_id)
     membership(user, org)
+    resolve_board(org, board_id, kind='war')
     result = admit(user, organization_id, connection_id)
     lease = ConnectionLease.objects.get(organization=org, user=user, connection_id=uuid(connection_id))
     generation = uuid(generation)
@@ -746,12 +868,16 @@ def claim_socket(user, organization_id, connection_id, generation):
     return result
 
 
-def socket_snapshot(user, organization_id, connection_id, generation):
-    return snapshot(user, organization_id, connection_id, socket_generation=uuid(generation))
+def socket_snapshot(user, organization_id, connection_id, generation, board_id=None):
+    return snapshot(user, organization_id, connection_id, board_id, socket_generation=uuid(generation))
 
 
-def socket_state_version(user, organization_id, connection_id, generation):
+def socket_state_version(user, organization_id, connection_id, generation, board_id=None):
     """Cheap authorized cursor for idle sockets; do not build a full board."""
+    # Validate board membership on each poll, including if a board was removed
+    # or the authenticated frame selected a different organization.
+    if board_id is not None and not Board.objects.filter(pk=integer(board_id), organization_id=organization_id, kind='war').exists():
+        raise PermissionDenied('此板不可用。')
     version = (Membership.objects.filter(
         organization_id=organization_id, user_id=user.pk, user__is_active=True,
         status='active', organization__connectionlease__user_id=user.pk,
@@ -765,8 +891,9 @@ def socket_state_version(user, organization_id, connection_id, generation):
 
 
 @transaction.atomic
-def socket_heartbeat(user, organization_id, connection_id, generation):
+def socket_heartbeat(user, organization_id, connection_id, generation, board_id=None):
     org = locked_org(organization_id)
     membership(user, org)
+    resolve_board(org, board_id, kind='war')
     require_socket(user, org, connection_id, generation)
     return admit(user, organization_id, connection_id)

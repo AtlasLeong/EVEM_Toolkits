@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from . import graph, services
+from . import graph, pirate, services
 
 
 class BoundedJSONParser(JSONParser):
@@ -55,6 +55,14 @@ class Members(PrivateView):
         return Response(services.members(request.user, organization_id))
 
 
+class Boards(PrivateView):
+    def get(self, request, organization_id):
+        return Response(services.list_boards(request.user, organization_id))
+
+    def post(self, request, organization_id):
+        return Response({'ok': True, 'result': services.create_board(request.user, organization_id, request.data)})
+
+
 class Commands(PrivateView):
     def post(self, request, organization_id):
         return Response({'ok': True, 'result': services.command(request.user, organization_id, request.data)})
@@ -72,12 +80,29 @@ class Presence(PrivateView):
 
 class Snapshot(PrivateView):
     def get(self, request, organization_id):
-        return Response(services.snapshot(request.user, organization_id, request.query_params.get('connection_id')))
+        return Response(services.snapshot(request.user, organization_id, request.query_params.get('connection_id'),
+                                          request.query_params.get('board_id')))
 
 
 class Map(PrivateView):
     def get(self, request, organization_id):
-        return Response(graph.map_data(request.user, organization_id))
+        return Response(graph.map_data(request.user, organization_id, request.query_params.get('board_id')))
+
+
+class BoardMap(PrivateView):
+    def get(self, request, organization_id, board_id):
+        return Response(graph.map_data(request.user, organization_id, board_id, kind=None))
+
+
+class Pirate(PrivateView):
+    def get(self, request, organization_id, board_id):
+        return Response(pirate.snapshot(request.user, organization_id, board_id,
+                                        request.query_params.get('revision')))
+
+
+class PirateCommands(PrivateView):
+    def post(self, request, organization_id, board_id):
+        return Response({'ok': True, 'result': pirate.command(request.user, organization_id, board_id, request.data)})
 
 
 class Catalog(PrivateView):

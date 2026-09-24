@@ -3,6 +3,7 @@
 These tests are not a substitute for a full MySQL application integration suite.
 """
 SECRET_KEY = 'isolated-ci-only-not-a-production-secret'
+TACTICAL_MULTIBOARD_WRITES_ENABLED = True
 DEBUG = False
 USE_TZ = True
 ALLOWED_HOSTS = ['testserver', 'localhost']
