@@ -143,11 +143,30 @@ class TacticalTransportTests(SimpleTestCase):
         self.assertEqual((await client.receive_output(timeout=1))['code'], 4401)
         await self.finish(client)
 
-    def test_fingerprint_ignores_only_clock_not_permissions_or_forces(self):
+    def test_fingerprint_ignores_clock_and_transport_cursor_not_permissions_or_forces(self):
         from TacticalCollaboration.realtime import snapshot_fingerprint
-        value = {'server_time': 'a', 'role': 'scout', 'forces': [{'id': 1, 'people': 4}]}
+        value = {'server_time': 'a', 'state_version': 1, 'role': 'scout', 'forces': [{'id': 1, 'people': 4}]}
         self.assertEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'server_time': 'b'}))
+        self.assertEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'state_version': 2}))
         self.assertNotEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'forces': []}))
+        self.assertNotEqual(snapshot_fingerprint(value), snapshot_fingerprint({**value, 'role': 'commander'}))
+
+    async def test_unrelated_board_cursor_advance_does_not_resend_unchanged_snapshot(self):
+        from TacticalCollaboration.realtime import TacticalConsumer
+        consumer = TacticalConsumer()
+        consumer.closing = False
+        consumer.last_fingerprint = None
+        consumer.state_version = 0
+        consumer.expires_at = time.time() + 60
+        consumer.get_snapshot = AsyncMock(side_effect=[
+            {'state_version': 1, 'forces': [{'id': 1, 'people': 4}]},
+            {'state_version': 2, 'forces': [{'id': 1, 'people': 4}]},
+        ])
+        consumer.send_json = AsyncMock()
+        await consumer.publish_state()
+        await consumer.publish_state()
+        self.assertEqual(consumer.state_version, 2)
+        consumer.send_json.assert_awaited_once()
 
     async def test_initial_snapshot_seeds_state_version_cursor(self):
         from TacticalCollaboration.realtime import TacticalConsumer
