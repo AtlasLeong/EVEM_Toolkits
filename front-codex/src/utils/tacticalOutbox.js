@@ -2,16 +2,17 @@ const PREFIX = "evem:tactical-report-outbox";
 const MAX_ENTRIES = 30;
 const MAX_AGE = 24 * 60 * 60 * 1000;
 
-export function outboxStorageKey(userId, organizationId) {
+export function outboxStorageKey(userId, organizationId, boardId = null) {
   if (!Number.isSafeInteger(Number(userId)) || Number(userId) <= 0 ||
-      !Number.isSafeInteger(Number(organizationId)) || Number(organizationId) <= 0) {
+      !Number.isSafeInteger(Number(organizationId)) || Number(organizationId) <= 0 ||
+      (boardId !== null && (!Number.isSafeInteger(Number(boardId)) || Number(boardId) <= 0))) {
     throw new Error("无法确认当前账号与组织，未保存本地草稿。");
   }
-  return `${PREFIX}:${Number(userId)}:${Number(organizationId)}`;
+  return `${PREFIX}:${Number(userId)}:${Number(organizationId)}${boardId === null ? '' : `:${Number(boardId)}`}`;
 }
 
-export function readReportOutbox({ userId, organizationId, storage = localStorage }) {
-  const key = outboxStorageKey(userId, organizationId);
+export function readReportOutbox({ userId, organizationId, boardId = null, storage = localStorage }) {
+  const key = outboxStorageKey(userId, organizationId, boardId);
   const raw = storage.getItem(key);
   if (!raw) return [];
   let entries;
@@ -20,6 +21,7 @@ export function readReportOutbox({ userId, organizationId, storage = localStorag
   return entries.filter(entry => entry?.action === "report.create" && entry?.payload &&
     typeof entry.payload === "object" && typeof entry.requestId === "string" && entry.id === entry.requestId &&
     entry.userId === Number(userId) && entry.organizationId === Number(organizationId) &&
+    (boardId === null ? entry.boardId == null : entry.boardId === Number(boardId)) &&
     Number.isFinite(entry.createdAt) && Date.now() - entry.createdAt < MAX_AGE).slice(-MAX_ENTRIES);
 }
 
@@ -35,6 +37,7 @@ export function queueReportOutbox(scope, command) {
     ...JSON.parse(JSON.stringify(command)),
     id: command.requestId,
     userId: Number(scope.userId), organizationId: Number(scope.organizationId),
+    ...(scope.boardId == null ? {} : { boardId: Number(scope.boardId) }),
     createdAt: Date.now(), attempts: 0, status: "queued",
   };
   write(scope, [...entries, entry]);
@@ -43,7 +46,7 @@ export function queueReportOutbox(scope, command) {
 
 function write(scope, entries) {
   const storage = scope.storage || localStorage;
-  const key = outboxStorageKey(scope.userId, scope.organizationId);
+  const key = outboxStorageKey(scope.userId, scope.organizationId, scope.boardId ?? null);
   if (entries.length) storage.setItem(key, JSON.stringify(entries));
   else storage.removeItem(key);
 }
@@ -66,7 +69,8 @@ export function updateReportOutbox(scope, id, changes) {
 }
 
 export async function retryReportOutbox(scope, entry, execute) {
-  if (entry.userId !== Number(scope.userId) || entry.organizationId !== Number(scope.organizationId)) {
+  if (entry.userId !== Number(scope.userId) || entry.organizationId !== Number(scope.organizationId) ||
+      (scope.boardId == null ? entry.boardId != null : entry.boardId !== Number(scope.boardId))) {
     throw new Error("草稿不属于当前账号或组织，已阻止发送。");
   }
   const saved = readReportOutbox(scope).find(item => item.id === entry.id);

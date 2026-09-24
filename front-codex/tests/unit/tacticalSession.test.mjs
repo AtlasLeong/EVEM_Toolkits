@@ -46,7 +46,7 @@ function sessionHarness({ enter = async () => {}, read = async id => snapshot(id
     canAcceptSnapshot,
     ...new Function(`${pollingSource}; return { nextTacticalPollDelay, TACTICAL_POLL_MIN_MS };`)(),
     enterTacticalBoard: (id, connectionId) => { calls.push({ type: "enter", id, connectionId }); return enter(id, connectionId); },
-    getTacticalSnapshot: (id, connectionId) => { calls.push({ type: "snapshot", id, connectionId }); return read(id, connectionId); },
+    getTacticalSnapshot: (id, connectionId, options) => { calls.push({ type: "snapshot", id, connectionId, options }); return read(id, connectionId); },
     leaveTacticalBoard: async (id, connectionId) => { calls.push({ type: "leave", id, connectionId }); return leave(id, connectionId); },
     newRequestId: () => `connection-${++nextId}`,
     openTacticalStream: options => {
@@ -54,20 +54,35 @@ function sessionHarness({ enter = async () => {}, read = async id => snapshot(id
       streams.push(stream);
       return () => { stream.stopped = true; };
     },
-    sendTacticalCommand: async () => ({ result: {} }),
+    sendTacticalCommand: async (id, payload) => { calls.push({ type: 'command', id, payload }); return { result: {} }; },
     window: { setInterval: () => 1, clearInterval: () => {}, setTimeout: () => 1, clearTimeout: () => {} },
   };
   const useSession = new Function(...Object.keys(dependencies), `${source}\nreturn useTacticalSession;`)(...Object.values(dependencies));
   return {
     calls, streams,
     get state() { return { snapshot: values[0], status: values[1], error: values[2] }; },
-    mount(id) {
+    mount(id, boardId = null) {
       stateIndex = refIndex = 0;
-      const api = useSession(id);
+      const api = useSession(id, boardId);
       return { api, cleanup: effect() };
+    },
+    render(id, boardId = null) {
+      stateIndex = refIndex = 0;
+      return useSession(id, boardId);
     },
   };
 }
+
+test('war session carries board identity across snapshot, socket, and commands', async () => {
+  const harness = sessionHarness();
+  const mounted = harness.mount(7, 31);
+  await settle();
+  assert.equal(harness.calls.find(call => call.type === 'snapshot')?.options?.boardId, 31);
+  assert.equal(harness.streams[0]?.boardId, 31);
+  await harness.render(7, 31).execute('report.create', { system_id: 101 });
+  assert.equal(harness.calls.find(call => call.type === 'command')?.payload?.board_id, 31);
+  mounted.cleanup();
+});
 
 test("StrictMode cleanup suppresses a stale snapshot after delayed admission", async () => {
   const firstAdmission = deferred();
@@ -203,10 +218,11 @@ test("tactical commands share the abortable request deadline", () => {
 
 test("admission, snapshot, and cleanup requests share the abortable request deadline", () => {
   assert.match(source, /enterTacticalBoard\(organizationId, connectionId, \{ signal \}\)/);
-  assert.match(source, /getTacticalSnapshot\(organizationId, connectionId, \{ signal \}\)/);
+  assert.match(source, /getTacticalSnapshot\(organizationId, connectionId, \{ signal, boardId \}\)/);
   assert.match(source, /leaveTacticalBoard\(organizationId, connectionId, \{ signal \}\)/);
   assert.match(apiSource, /enterTacticalBoard = \(id, connectionId, options = \{\}\)/);
-  assert.match(apiSource, /getTacticalSnapshot = \(id, connectionId, options = \{\}\)/);
+  assert.match(apiSource, /getTacticalSnapshot = \(id, connectionId, \{ boardId = null, \.\.\.options \} = \{\}\)/);
+  assert.match(apiSource, /board_id: boardId/);
   assert.match(apiSource, /leaveTacticalBoard = \(id, connectionId, options = \{\}\)/);
 });
 

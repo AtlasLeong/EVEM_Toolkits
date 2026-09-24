@@ -32,8 +32,19 @@ const post = (path, body, method = "POST", options = {}) =>
   request(path, { ...options, method, body: JSON.stringify(body) });
 export const newRequestId = () => crypto.randomUUID();
 export const listTacticalOrganizations = () => request("organizations/");
-export const createTacticalOrganization = (name, requestId = newRequestId()) =>
-  post("organizations/", { name, request_id: requestId });
+export const createTacticalOrganization = (name, requestId = newRequestId(), boardType = 'war') =>
+  post("organizations/", { name, board_type: boardType, request_id: requestId });
+export const createTacticalBoard = (organizationId, name, kind, requestId = newRequestId()) =>
+  post(`organizations/${organizationId}/boards/`, { name, kind, request_id: requestId });
+export const getPirateSnapshot = (organizationId, boardId, options = {}) => {
+  const { revision, ...requestOptions } = options;
+  const query = revision ? `?revision=${encodeURIComponent(revision)}` : '';
+  return request(`organizations/${organizationId}/boards/${boardId}/pirate/${query}`, requestOptions);
+};
+export const sendPirateCommand = (organizationId, boardId, payload, options = {}) =>
+  post(`organizations/${organizationId}/boards/${boardId}/pirate/commands/`, payload, 'POST', options);
+export const getPirateMap = (organizationId, boardId, options = {}) =>
+  request(`organizations/${organizationId}/boards/${boardId}/map/`, options);
 export const joinTacticalOrganization = (
   inviteCode,
   requestId = newRequestId(),
@@ -55,12 +66,13 @@ export const leaveTacticalBoard = (id, connectionId, options = {}) =>
     "DELETE",
     options,
   );
-export const getTacticalSnapshot = (id, connectionId, options = {}) =>
+export const getTacticalSnapshot = (id, connectionId, { boardId = null, ...options } = {}) =>
   request(
-    `organizations/${id}/snapshot/?${new URLSearchParams({ connection_id: connectionId })}`,
+    `organizations/${id}/snapshot/?${new URLSearchParams({ connection_id: connectionId, ...(boardId ? { board_id: boardId } : {}) })}`,
     options,
   );
-export const getTacticalMap = (id) => request(`organizations/${id}/map/`);
+export const getTacticalMap = (id, boardId = null) =>
+  request(`organizations/${id}/map/${boardId ? `?board_id=${encodeURIComponent(boardId)}` : ''}`);
 export const getTacticalCatalog = (id, kind, query = "") =>
   request(
     `organizations/${id}/catalog/?${new URLSearchParams({ kind, q: query })}`,

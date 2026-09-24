@@ -33,7 +33,7 @@ export function canAcceptSnapshot(current, incoming) {
 
 // One socket lifetime only. The owner handles authenticated HTTP recovery, never
 // retries user commands, and fences old lifetimes when account/board changes.
-export function openTacticalSocket({ apiUrl, organizationId, connectionId, token, onSnapshot, onOpen, onClose,
+export function openTacticalSocket({ apiUrl, organizationId, boardId = null, connectionId, token, onSnapshot, onOpen, onClose,
   WebSocketImpl = WebSocket, setIntervalImpl = setInterval, clearIntervalImpl = clearInterval,
   heartbeatMs = 20000 }) {
   let stopped = false;
@@ -47,7 +47,8 @@ export function openTacticalSocket({ apiUrl, organizationId, connectionId, token
   };
   socket.onopen = () => {
     if (!stopped) {
-      socket.send(JSON.stringify({ type: 'authenticate', token, connection_id: connectionId }));
+      socket.send(JSON.stringify({ type: 'authenticate', token, connection_id: connectionId,
+        ...(boardId == null ? {} : { board_id: boardId }) }));
       heartbeatTimer = setIntervalImpl(() => {
         if (!stopped && socket.readyState === (WebSocketImpl.OPEN ?? 1))
           socket.send(JSON.stringify({ type: 'ping' }));
@@ -61,6 +62,7 @@ export function openTacticalSocket({ apiUrl, organizationId, connectionId, token
       const message = JSON.parse(event.data);
       const data = message.data;
       if (message.type !== 'snapshot' || Number(data?.organization?.id) !== Number(organizationId) ||
+          (boardId != null && Number(data?.board?.id) !== Number(boardId)) ||
           !['founder', 'commander', 'scout'].includes(data.role) || !Array.isArray(data.forces) || !Array.isArray(data.reports)) {
         throw new Error('Malformed tactical snapshot');
       }
