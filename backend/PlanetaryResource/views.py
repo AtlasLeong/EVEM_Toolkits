@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 import hashlib
+import heapq
 import json
 from .models import (PlanetResource, Region, Constellation, Solarsystem, PlResourcePrice, PreSearchPlanetary,
                      PlanetaryProgramme, UserPrePrice)
@@ -194,11 +195,14 @@ class PlanetaryResourceView(APIView):
             resource_yield_field = info.get('cnt')
 
             # 使用已加载的queryset，只排序和切片
-            top_resources = sorted(
+            # Keep the existing top-three semantics without sorting the full
+            # queryset for every resource type (O(n log n)); nlargest keeps a
+            # bounded heap and is substantially cheaper for large datasets.
+            top_resources = heapq.nlargest(
+                3,
                 all_resources,
                 key=lambda x: getattr(x, resource_yield_field) or 0,
-                reverse=True
-            )[:3]
+            )
 
             icon_url = icon_lookup[field]
             for resource in top_resources:

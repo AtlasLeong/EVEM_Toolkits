@@ -1,11 +1,11 @@
-from django.shortcuts import render
+from collections import defaultdict
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import BazaarRank, BazaarBox
 from .serializers import BazaarRankSerializer, BazaarChartSerializer, BazaarBoxSerializer
 
-from django.db.models import Count
+from django.db.models import Avg, Count, Q
 from datetime import datetime, timedelta
 from rest_framework import status
 
@@ -48,14 +48,12 @@ class BazaarInfoView(APIView):
         select_date = request.GET.get('selectDate')
         queryset = BazaarRank.objects.filter(bazaar_name=bazaar_name, server=server)
 
-        # 获取 rank=5 和 rank=20 的 score 列
-        rank_5_scores = queryset.filter(rank=5, score__isnull=False).values_list('score', flat=True)
-        rank_20_scores = queryset.filter(rank=20, score__isnull=False).values_list('score', flat=True)
-
-        print(rank_5_scores)
-        # 计算平均值
-        average_score_5 = sum(rank_5_scores) / len(rank_5_scores) if rank_5_scores else 0
-        average_score_20 = sum(rank_20_scores) / len(rank_20_scores) if rank_20_scores else 0
+        averages = queryset.aggregate(
+            average_score_5=Avg('score', filter=Q(rank=5)),
+            average_score_20=Avg('score', filter=Q(rank=20)),
+        )
+        average_score_5 = averages['average_score_5'] or 0
+        average_score_20 = averages['average_score_20'] or 0
 
         if select_date is None or select_date == 'undefined':
 
@@ -113,8 +111,8 @@ class BazaarChartInfo(APIView):
         if not isinstance(data_list, list):
             return Response({'error': 'Expected a list of items.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        results = []
-
+        requests = []
+        filters = Q(pk__in=[])
         for data in data_list:
             bazaarName = data.get('bazaarName', '').strip()
             server = data.get('server', '').strip()
@@ -124,11 +122,27 @@ class BazaarChartInfo(APIView):
                 return Response({'error': 'All fields must be filled and not empty.'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            queryset = BazaarRank.objects.filter(bazaar_name=bazaarName, server=server, rank=rank).order_by('date')
-            serializer = BazaarChartSerializer(queryset, many=True)
+            try:
+                rank_value = int(rank)
+            except (TypeError, ValueError):
+                return Response({'error': 'rank must be an integer.'}, status=status.HTTP_400_BAD_REQUEST)
+            request_key = (bazaarName, server, rank_value)
+            requests.append(request_key)
+            filters |= Q(bazaar_name=bazaarName, server=server, rank=rank_value)
 
-            formatted_data = formatData(serializer)
-            results.append(formatted_data)
+        if not requests:
+            return Response([])
+
+        rows_by_key = defaultdict(list)
+        for row in BazaarRank.objects.filter(filters).order_by('date'):
+            rows_by_key[(row.bazaar_name, row.server, row.rank)].append(row)
+
+        # Preserve the request order while using one database query for all
+        # requested series instead of one query per chart.
+        results = [
+            formatData(BazaarChartSerializer(rows_by_key[key], many=True))
+            for key in requests
+        ]
 
         return Response(results)
 

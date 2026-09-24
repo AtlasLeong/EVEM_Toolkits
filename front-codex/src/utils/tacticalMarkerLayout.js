@@ -76,11 +76,18 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
       const below = node.py + 32 * unitScale + offset;
       const left = node.px - gap - width - offset;
       const right = node.px + gap + offset;
+      // Keep the callout visually attached to its star whenever there is a
+      // usable vertical lane. Side placements are a last-resort escape hatch
+      // for dense clusters, so a clear below/above slot beats a horizontally
+      // shifted slot even when that shifted slot is slightly closer.
       positions.push(
         [node.px - width / 2, above],
+        [node.px - width / 2, below],
+        [node.px - width / 2 + offset, above], [node.px - width / 2 - offset, above],
+        [node.px - width / 2 + offset, below], [node.px - width / 2 - offset, below],
         [right, above], [left, above],
         [right, node.py - height / 2], [left, node.py - height / 2],
-        [node.px - width / 2, below], [right, below], [left, below],
+        [right, below], [left, below],
       );
     }
     const candidateRects = positions.map(([x, y], slot) => {

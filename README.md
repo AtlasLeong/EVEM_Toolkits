@@ -13,8 +13,7 @@ EVEM Toolkits 是一套面向 EVE Echoes 玩家和群组管理者的全栈工具
 ```text
 EVEM_Toolkits/
 ├─ backend/         Django REST Framework 后端
-├─ frontend/        旧版前端
-├─ front-codex/     当前重构后的前端
+├─ front-codex/     当前前端（生产构建入口）
 ├─ LOCAL_DEV.md     本地开发说明
 └─ README.md        项目说明
 ```
@@ -61,8 +60,7 @@ npm run dev
 ## 文档
 
 - [后端说明](./backend/README.md)
-- [旧版前端说明](./frontend/README.md)
-- [重构前端自动化说明](./front-codex/AUTOMATION_TESTS.md)
+- [前端自动化说明](./front-codex/AUTOMATION_TESTS.md)
 
 ## 环境要求
 

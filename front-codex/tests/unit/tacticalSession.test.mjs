@@ -4,6 +4,9 @@ import { readFileSync } from "node:fs";
 import { canAcceptSnapshot } from "../../src/utils/tacticalSocket.js";
 const fetchWithAuthSource = readFileSync(new URL("../../src/services/fetchWithAuth.js", import.meta.url), "utf8");
 const apiSource = readFileSync(new URL("../../src/services/apiTacticalCollaboration.js", import.meta.url), "utf8");
+const pollingSource = readFileSync(new URL("../../src/utils/tacticalPolling.js", import.meta.url), "utf8")
+  .replaceAll("export const ", "const ")
+  .replaceAll("export function ", "function ");
 
 const source = readFileSync(new URL("../../src/hooks/useTacticalSession.js", import.meta.url), "utf8")
   .replace(/^import[\s\S]*?;\s*/gm, "")
@@ -41,6 +44,7 @@ function sessionHarness({ enter = async () => {}, read = async id => snapshot(id
       return [values[index], value => { values[index] = typeof value === "function" ? value(values[index]) : value; }];
     },
     canAcceptSnapshot,
+    ...new Function(`${pollingSource}; return { nextTacticalPollDelay, TACTICAL_POLL_MIN_MS };`)(),
     enterTacticalBoard: (id, connectionId) => { calls.push({ type: "enter", id, connectionId }); return enter(id, connectionId); },
     getTacticalSnapshot: (id, connectionId) => { calls.push({ type: "snapshot", id, connectionId }); return read(id, connectionId); },
     leaveTacticalBoard: async (id, connectionId) => { calls.push({ type: "leave", id, connectionId }); return leave(id, connectionId); },
@@ -184,6 +188,12 @@ test("session source uses bounded request timeout and jittered reconnect backoff
   assert.match(source, /REQUEST_TIMEOUT_MS/);
   assert.match(source, /Math\.random/);
   assert.match(source, /retryStreamAt/);
+});
+
+test("HTTP fallback is visibility-aware and no longer uses a fixed two-second interval", () => {
+  assert.doesNotMatch(source, /setInterval\(refresh,\s*2000\)/);
+  assert.match(source, /visibilitychange/);
+  assert.match(source, /schedulePoll/);
 });
 
 test("tactical commands share the abortable request deadline", () => {

@@ -1,18 +1,14 @@
 import math
-import time
 
-from django.shortcuts import render
 from django.core.cache import cache
+from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import BoardSystems, BoardStargates, BoardConstellations, BoardRegions
-from .serializers import (BoardSystemSerializers, BoardStarGateSerializers, BoardConstellationsSerializers,
-                          BoardRegionSerializers)
 from rest_framework import status
-from django.http import JsonResponse, HttpResponse
+from django.http import HttpResponse
 import gzip
 import json
-from decimal import Decimal
 from .A_Star import distance
 from .routing_data import SnapshotUnavailable, get_route_snapshot
 from .scope import public_board_filter_kwargs, stargate_cache_key
@@ -26,14 +22,30 @@ def coerce_bool(value):
     return bool(value)
 
 
+def _board_cache_key(name):
+    scope = "local" if getattr(settings, "TACTICAL_LOCAL_DEMO", False) else "production"
+    return f"board:{name}:{scope}:v1"
+
+
+def _cached_board_response(cache_name, queryset, fields):
+    data = cache.get(cache_name)
+    if data is None:
+        # The board tables are static map data. Returning dictionaries avoids
+        # model construction and serializer work on every map load.
+        data = list(queryset.values(*fields))
+        cache.set(cache_name, data, 3600)
+    return Response(data, status=status.HTTP_200_OK)
+
+
 class GetBoardRegionCoordinates(APIView):
     @staticmethod
     def get(request):
         queryset = BoardRegions.objects.filter(**public_board_filter_kwargs("region_id")).exclude(
             zh_name__isnull=True
         )
-        serializer = BoardRegionSerializers(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return _cached_board_response(
+            _board_cache_key("regions"), queryset, ("region_id", "zh_name")
+        )
 
 
 class GetBoardSystemCoordinates(APIView):
@@ -42,8 +54,11 @@ class GetBoardSystemCoordinates(APIView):
         queryset = BoardSystems.objects.filter(**public_board_filter_kwargs("system_id")).exclude(
             system_id__contains='3100').exclude(
             system_id__contains='3200').exclude(system_id__contains='3400')
-        serializer = BoardSystemSerializers(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return _cached_board_response(
+            _board_cache_key("systems"),
+            queryset,
+            ("system_id", "zh_name", "security_status", "x", "y", "z"),
+        )
 
 
 class GetBoardConstellationsCoordinates(APIView):
@@ -52,8 +67,11 @@ class GetBoardConstellationsCoordinates(APIView):
         queryset = BoardConstellations.objects.filter(**public_board_filter_kwargs("constellation_id")).exclude(
             constellation_id__contains='2100').exclude(
             constellation_id__contains='2200').exclude(constellation_id__contains='2400')
-        serializer = BoardConstellationsSerializers(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return _cached_board_response(
+            _board_cache_key("constellations"),
+            queryset,
+            ("constellation_id", "zh_name", "region_id", "x", "y", "z"),
+        )
 
 
 class GetStarGateData(APIView):
@@ -63,7 +81,7 @@ class GetStarGateData(APIView):
         cache_key = stargate_cache_key()
         cached_data = cache.get(cache_key)
 
-        if cached_data:
+        if cached_data is not None:
             return HttpResponse(cached_data, content_type='application/json', headers={
                 'Content-Encoding': 'gzip',
                 'Content-Length': str(len(cached_data))
@@ -72,8 +90,6 @@ class GetStarGateData(APIView):
         queryset = BoardStargates.objects.filter(**public_board_filter_kwargs("stargate_id")).values(
             'stargate_id', 'system_id', 'destination_system_id', 'destination_stargate_id'
         )
-
-        x = time.time()
 
         data = [
             {

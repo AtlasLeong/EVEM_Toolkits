@@ -1,19 +1,16 @@
-﻿from django.shortcuts import render
-from rest_framework.views import APIView, Response, status
+﻿from rest_framework.views import APIView, Response, status
 from .models import (FraudList, FraudAuthUserGroup, FraudBehaviorFlow, FraudAuthGroup, FraudListReportFlow,
                      FraudEvidenceFlow)
 from .serializers import FraudListSerializer, FraudBehaviorFlowSerializer, FraudListReportFlowSerializer
 from .permissions import get_user_group_ids
-from Authentication.models import EVEMUser
-from Authentication.serializers import UserTokenObtainPairSerializer
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
+from django.db.models import Q
 import uuid
 import os
 import hashlib
-from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.core.files.storage import FileSystemStorage
 
@@ -27,11 +24,13 @@ PUBLIC_REPORT_GROUP_ICON = getattr(settings, 'PUBLIC_REPORT_GROUP_ICON',
 class FraudListSearch(APIView):
     @staticmethod
     def post(request):
-        search_number = request.data.get("searchNumber").strip()
+        search_number = str(request.data.get("searchNumber") or "").strip()
+        if not search_number:
+            return Response([], status=status.HTTP_200_OK)
         result = FraudList.objects.filter(fraud_account=search_number)
 
         serializers = FraudListSerializer(result, many=True)
-        if len(result) != 0:
+        if result.exists():
             return Response(serializers.data, status=status.HTTP_200_OK)
         else:
             return Response([], status=status.HTTP_200_OK)
@@ -407,11 +406,18 @@ class FraudListReport(APIView):
         if not all([fraud_account, account_type, description, contact_number]):
             return Response({"error": "必填字段未填写"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 验证 evidence_list 中的 URL 是否都存在于 FraudEvidenceFlow
-        valid_evidence = []
-        for evidence_url in evidence_list:
-            if FraudEvidenceFlow.objects.filter(image_url=evidence_url, user_id=create_user).exists():
-                valid_evidence.append(evidence_url)
+        # 验证 evidence_list 中的 URL 是否都存在于 FraudEvidenceFlow。
+        # 批量读取 URL，避免每张证据触发一次 exists 查询。
+        requested_evidence = [
+            evidence_url.strip()
+            for evidence_url in evidence_list
+            if isinstance(evidence_url, str) and evidence_url.strip()
+        ]
+        valid_urls = set(FraudEvidenceFlow.objects.filter(
+            user_id=create_user,
+            image_url__in=requested_evidence,
+        ).values_list('image_url', flat=True))
+        valid_evidence = [url for url in requested_evidence if url in valid_urls]
 
         if not valid_evidence:
             return Response({"error": "没有有效的证据 URL"}, status=status.HTTP_400_BAD_REQUEST)
@@ -449,9 +455,12 @@ class FraudAdminListReport(APIView):
             return Response({"message": "UnAuthorized Users"}, status=status.HTTP_401_UNAUTHORIZED)
 
         else:
-            result = FraudListReportFlow.objects.filter(approver_group__in=[
-                FraudAuthGroup.objects.get(group_id=gid).group_name for gid in group_id_list
-            ]) | FraudListReportFlow.objects.filter(report_status='pending')
+            group_names = FraudAuthGroup.objects.filter(
+                group_id__in=group_id_list
+            ).values_list('group_name', flat=True)
+            result = FraudListReportFlow.objects.filter(
+                Q(approver_group__in=group_names) | Q(report_status='pending')
+            )
             serializers = FraudListReportFlowSerializer(result, many=True)
             return Response(serializers.data, status=status.HTTP_200_OK)
 
