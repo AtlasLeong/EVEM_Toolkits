@@ -128,14 +128,19 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
     // The ordinary search uses generous *soft* clearance around stars and
     // badges. A tiny zoom can cross that margin without covering anything;
     // do not make an established callout jump to the other side for that.
-    const preferred = candidates.find(candidate => candidate.slot === preferredSlot && candidate.insideViewport &&
-      candidate.reservedOverlap === 0 &&
+    const isClear = candidate => candidate.insideViewport && candidate.reservedOverlap === 0 &&
       !placed.some(other => overlapArea(candidate, other) > 0) &&
       !nearbyNodes.some(other => overlapArea(candidate, {
         x: other.px - 19 * unitScale, y: other.py - 19 * unitScale,
         width: 38 * unitScale, height: 38 * unitScale,
-      }) > 0));
-    const { x, y, slot } = preferred || candidates.sort((a, b) =>
+      }) > 0);
+    const preferred = candidates.find(candidate => candidate.slot === preferredSlot && isClear(candidate));
+    // A remembered side slot is only a fallback: as soon as a collision-free
+    // vertical lane exists, keep the badge centered on the actual star.
+    const centered = candidates.filter(candidate => Math.abs(candidate.x + width / 2 - node.px) < .5 && isClear(candidate));
+    const sameSide = preferred && centered.find(candidate =>
+      (candidate.y + height / 2 < node.py) === (preferred.y + height / 2 < node.py));
+    const { x, y, slot } = sameSide || centered[0] || preferred || candidates.sort((a, b) =>
       a.reservedOverlap - b.reservedOverlap || a.labelOverlap - b.labelOverlap || a.score - b.score)[0];
     placed.push({
       ...group, node, x, y, slot, width, rowWidths, rowOffsets, overflowWidth, overflowOffset, rowHeight, rowGap, rows, height,

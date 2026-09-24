@@ -40,6 +40,21 @@ test("a clear marker is centered on the owning star", () => {
   assert.ok(badge.y + badge.height <= badge.node.py, "the default anchor is above the star");
 });
 
+test("a remembered side slot yields to a clear centered position above its star", () => {
+  const node = { system_id: 1, px: 500, py: 350 };
+  for (const kind of ["force", "system_count"]) {
+    const key = `${kind}-1`;
+    const marker = { ...group(1), kind, key, markerWidth: 148 };
+    const [badge] = layoutForceMarkers([marker], [node], 1, {
+      width: 1000, height: 800,
+      padding: { left: 16, right: 16, top: 175, bottom: 60 },
+      preferredSlots: new Map([[key, 6]]),
+    });
+    assert.equal(badge.x + badge.width / 2, node.px, `${kind} must not keep a stale right-side slot`);
+    assert.ok(badge.y + badge.height < node.py, `${kind} stays above its star`);
+  }
+});
+
 test("a clear vertical fallback beats a horizontally shifted callout", () => {
   const nodes = [
     { system_id: 1, px: 500, py: 300 },
@@ -50,6 +65,21 @@ test("a clear vertical fallback beats a horizontally shifted callout", () => {
   assert.equal(badge.x + badge.width / 2, badge.node.px,
     "when above is blocked, the badge should stay centered below instead of shifting right");
   assert.ok(badge.y >= badge.node.py, "the fallback should be below the star");
+});
+
+test("nearby stars push a card farther vertically before it shifts sideways", () => {
+  const nodes = [
+    { system_id: 1, px: 500, py: 350 },
+    { system_id: 2, px: 500, py: 310 },
+    { system_id: 3, px: 500, py: 390 },
+  ];
+  const [badge] = layoutForceMarkers([{ ...group(1), key: "force-1", markerWidth: 148 }], nodes, 1, {
+    width: 1000, height: 800,
+    padding: { left: 16, right: 16, top: 175, bottom: 60 },
+    preferredSlots: new Map([["force-1", 8]]),
+  });
+  assert.equal(badge.x + badge.width / 2, nodes[0].px);
+  assert.ok(badge.y + badge.height < nodes[1].py || badge.y > nodes[2].py);
 });
 
 test("actual rows determine stack height and its leader ends at the associated star", () => {
