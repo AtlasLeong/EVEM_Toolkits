@@ -139,6 +139,15 @@ class UnstoppableStdout:
 class FetchBackupTests(TransferValidationTests):
     IDENTITY = Path('C:/synthetic-profile/.ssh/evem_cloud_admin')
 
+    def setUp(self):
+        super().setUp()
+        # Stream tests exercise the protocol/timeout path on Linux CI too;
+        # resolving the Windows installation is a separate platform check.
+        resolver = patch.object(backup, '_system_ssh_executable',
+                                return_value=Path('C:/Windows/System32/OpenSSH/ssh.exe'))
+        resolver.start()
+        self.addCleanup(resolver.stop)
+
     def test_fetch_streams_authenticated_ssh_stdout_into_memory(self):
         payload = b'-- synthetic only\nCREATE TABLE `x` (`id` int);\n'
         fake = FakeSsh(self, payload)
