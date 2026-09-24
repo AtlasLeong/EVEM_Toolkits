@@ -12,7 +12,7 @@ import {
 
 // Commands stay HTTP, versioned and non-optimistic. WebSocket snapshots are
 // authoritative; HTTP fallback recovers if a proxy does not support upgrades.
-export default function useTacticalSession(organizationId) {
+export default function useTacticalSession(organizationId, boardId = null) {
   const REQUEST_TIMEOUT_MS = 15000;
   const [snapshot, setSnapshot] = useState(null);
   const [status, setStatus] = useState("connecting");
@@ -61,7 +61,7 @@ export default function useTacticalSession(organizationId) {
       if (cancelled || stopStream || Date.now() < retryStreamAt) return;
       try {
         stopStream = openTacticalStream({
-          organizationId, connectionId,
+          organizationId, boardId, connectionId,
           onSnapshot: (data) => {
             if (cancelled) return;
             streamLive = true;
@@ -155,7 +155,7 @@ export default function useTacticalSession(organizationId) {
         }
         // Cleanup may have released this lease while admission was in flight.
         if (cancelled) return null;
-        const data = await request((signal) => getTacticalSnapshot(organizationId, connectionId, { signal }));
+        const data = await request((signal) => getTacticalSnapshot(organizationId, connectionId, { signal, boardId }));
         if (cancelled) return null;
         // A delayed HTTP snapshot must not resurrect state superseded by WS.
         if (sequence === streamSequence) accept(data);
@@ -208,7 +208,7 @@ export default function useTacticalSession(organizationId) {
       // Cleanup is best-effort; the server expires abandoned leases after 60s.
       request((signal) => leaveTacticalBoard(organizationId, connectionId, { signal })).catch(() => {});
     };
-  }, [organizationId]);
+  }, [organizationId, boardId]);
   const refresh = useCallback(() => refreshRef.current(), []);
   const invalidateAccess = useCallback(() => invalidateRef.current(), []);
   const execute = useCallback(
@@ -225,13 +225,14 @@ export default function useTacticalSession(organizationId) {
           ...payload,
           request_id: requestId,
           ...(requireLease ? { connection_id: connection.current } : {}),
+          ...(requireLease && boardId != null ? { board_id: boardId } : {}),
         }, { signal }));
       if (epoch !== generation.current)
         throw new Error("已切换战术板，旧请求结果已忽略。");
       if (requireLease) await refreshRef.current();
       return result.result;
     },
-    [organizationId, status],
+    [organizationId, boardId, status],
   );
   return {
     snapshot,

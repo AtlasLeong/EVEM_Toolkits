@@ -18,3 +18,6 @@ test('local startup command uses explicit mode, loopback and strict port', async
   assert.match(pkg.scripts['dev:tactical'] || '', /--mode tactical-local/);
   assert.match(pkg.scripts['dev:tactical'], /--host 127\.0\.0\.1.*--port 4194.*--strictPort/);
 });
+test('development server ignores browser test artifacts so traces cannot reload the page mid-test', () => {
+  assert.ok(config('serve', 'development').server.watch.ignored.includes('**/test-results-tactical/**'));
+});

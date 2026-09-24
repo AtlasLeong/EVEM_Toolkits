@@ -8,6 +8,7 @@ import {
   Flag,
   Map,
   Plus,
+  Radar,
   Radio,
   RefreshCw,
   Search,
@@ -18,12 +19,14 @@ import {
 import { AuthContext } from "../context/AuthContext";
 import {
   createTacticalOrganization,
+  createTacticalBoard,
   getTacticalMap,
   joinTacticalOrganization,
   listTacticalOrganizations,
   newRequestId,
 } from "../services/apiTacticalCollaboration";
 import { selectDefaultTacticalOrganization } from "../utils/tacticalOrganization";
+import { BOARD_KINDS, boardsForOrganization, createBoardAttemptSignature, selectTacticalBoard } from "../utils/tacticalBoards";
 import useTacticalSession from "../hooks/useTacticalSession";
 import {
   ageLabel,
@@ -58,6 +61,7 @@ import TacticalReportForm, {
   WithdrawCount,
 } from "../components/tactical/TacticalReportForm";
 import TacticalMembers from "../components/tactical/TacticalMembers";
+import PirateIntelBoard from "../components/tactical/PirateIntelBoard";
 import "../styles/tacticalCollaboration.css";
 import "../styles/tacticalOverview.css";
 
@@ -76,6 +80,7 @@ function useMobile() {
 
 function OrganizationForm({ initialInvite = "", onClose, onSuccess }) {
   const [kind, setKind] = useState(initialInvite ? "join" : "create");
+  const [boardType, setBoardType] = useState('war');
   const [name, setName] = useState("");
   const [invite, setInvite] = useState(initialInvite);
   const [busy, setBusy] = useState(false);
@@ -86,14 +91,14 @@ function OrganizationForm({ initialInvite = "", onClose, onSuccess }) {
     event.preventDefault();
     if (submitting.current) return;
     submitting.current = true;
-    const signature = JSON.stringify([kind, kind === 'create' ? name.trim() : invite.trim()]);
+    const signature = createBoardAttemptSignature(kind, kind === 'create' ? name : invite, boardType);
     if (attempt.current?.signature !== signature) attempt.current = { signature, id: newRequestId() };
     setBusy(true);
     setError("");
     try {
       const result =
         kind === "create"
-          ? await createTacticalOrganization(name.trim(), attempt.current.id)
+          ? await createTacticalOrganization(name.trim(), attempt.current.id, boardType)
           : await joinTacticalOrganization(invite.trim(), attempt.current.id);
       onSuccess(result.result, kind);
       onClose();
@@ -124,19 +129,34 @@ function OrganizationForm({ initialInvite = "", onClose, onSuccess }) {
           </button>
         </div>
         <p className="tac-muted">
-          一个组织共用一张战术板。加入只需审批一次，不需要反复切换作战房间。
+          一个组织最多三块板，共用同一批成员。加入组织只需审批一次。
         </p>
         {kind === "create" ? (
-          <label className="tac-field">
-            <span>组织名称</span>
-            <input
-              value={name}
-              required
-              maxLength={80}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="如：北境联合指挥部"
-            />
-          </label>
+          <>
+            <fieldset className="tac-board-kind-field">
+              <legend>选择首块战术板</legend>
+              <div className="tac-board-kind-options">
+                {BOARD_KINDS.map((item) => {
+                  const Icon = item.kind === 'pirate' ? Radar : Crosshair;
+                  return <button key={item.kind} type="button" className="tac-board-kind-option"
+                    aria-pressed={boardType === item.kind} onClick={() => setBoardType(item.kind)}>
+                    <span className="tac-board-kind-icon"><Icon size={21} strokeWidth={1.8} /></span>
+                    <span className="tac-board-kind-copy"><strong>{item.label}</strong><small>{item.description}</small></span>
+                  </button>;
+                })}
+              </div>
+            </fieldset>
+            <label className="tac-field">
+              <span>组织名称</span>
+              <input
+                value={name}
+                required
+                maxLength={80}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="如：北境联合指挥部"
+              />
+            </label>
+          </>
         ) : (
           <label className="tac-field">
             <span>邀请码</span>
@@ -165,6 +185,48 @@ function OrganizationForm({ initialInvite = "", onClose, onSuccess }) {
       </form>
     </TacticalDialog>
   );
+}
+
+function BoardForm({ organizationId, existingCount, onClose, onSuccess }) {
+  const [kind, setKind] = useState('war');
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const attempt = useRef(null);
+  const submit = async (event) => {
+    event.preventDefault();
+    const finalName = name.trim();
+    const signature = JSON.stringify([organizationId, kind, finalName]);
+    if (attempt.current?.signature !== signature) attempt.current = { signature, id: newRequestId() };
+    setBusy(true);
+    setError('');
+    try {
+      const response = await createTacticalBoard(organizationId, finalName, kind, attempt.current.id);
+      onSuccess(response.result);
+      onClose();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <TacticalDialog title="新建战术板" onClose={onClose}>
+    <form className="tac-form" onSubmit={submit}>
+      <p className="tac-muted">这个组织已有 {existingCount} / 3 块板。新板独立保存范围和内容，仍共用组织成员。</p>
+      <fieldset className="tac-board-kind-field"><legend>板类型</legend><div className="tac-board-kind-options">
+        {BOARD_KINDS.map(item => {
+          const Icon = item.kind === 'pirate' ? Radar : Crosshair;
+          return <button type="button" key={item.kind} className="tac-board-kind-option" aria-pressed={kind === item.kind} onClick={() => setKind(item.kind)}>
+            <span className="tac-board-kind-icon"><Icon size={21} strokeWidth={1.8} /></span>
+            <span className="tac-board-kind-copy"><strong>{item.label}</strong><small>{item.description}</small></span>
+          </button>;
+        })}
+      </div></fieldset>
+      <label className="tac-field"><span>板名称</span><input required maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="如：北境伏击线索" /></label>
+      {error && <p role="alert" className="tac-error">{error}</p>}
+      <div className="tac-form-footer"><button type="button" className="tac-btn" onClick={onClose}>取消</button><button className="tac-btn is-primary" disabled={busy}>{busy ? '创建中…' : '创建战术板'}</button></div>
+    </form>
+  </TacticalDialog>;
 }
 
 export default function TacticalCollaborationPage() {
@@ -215,53 +277,106 @@ function AuthenticatedBoard() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState(Boolean(params.get("invite")));
+  const [boardForm, setBoardForm] = useState(false);
+  const directoryRevision = useRef(0);
   const preferRealMap = import.meta.env.MODE === "tactical-local";
   useEffect(() => {
     let current = true;
-    listTacticalOrganizations()
-      .then((data) => {
-        if (!current) return;
-        setOrganizations(data.organizations || []);
-        setSelected(selectDefaultTacticalOrganization(data.organizations || [], {
-          requested: params.get("organization"),
-          preferRealMap,
+    let inFlight = false;
+    const refreshDirectory = async (initial = false) => {
+      if (inFlight || (!initial && document.hidden)) return;
+      inFlight = true;
+      const revision = directoryRevision.current;
+      let timeoutId;
+      try {
+        const timeout = new Promise((_, reject) => {
+          timeoutId = window.setTimeout(() => reject(new Error("组织目录请求超时，请稍后重试。")), 12000);
+        });
+        const data = await Promise.race([listTacticalOrganizations(), timeout]);
+        if (!current || directoryRevision.current !== revision) return;
+        setOrganizations((previous) => directoryRevision.current === revision ? data.organizations || [] : previous);
+        if (initial) setSelected(selectDefaultTacticalOrganization(data.organizations || [], {
+          requested: params.get("organization"), preferRealMap,
         }));
-      })
-      .catch((failure) => {
-        if (current) setError(failure.message);
-      })
-      .finally(() => {
-        if (current) setLoading(false);
-      });
+        setError("");
+      } catch (failure) {
+        if (current && initial && directoryRevision.current === revision) setError(failure.message);
+      } finally {
+        window.clearTimeout(timeoutId);
+        inFlight = false;
+        if (current && initial) setLoading(false);
+      }
+    };
+    void refreshDirectory(true);
+    const intervalId = window.setInterval(() => { void refreshDirectory(); }, 45000);
+    const onReturn = () => { if (!document.hidden) void refreshDirectory(); };
+    document.addEventListener("visibilitychange", onReturn);
+    window.addEventListener("focus", onReturn);
     return () => {
       current = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onReturn);
+      window.removeEventListener("focus", onReturn);
     };
-  }, [preferRealMap]);
+  }, []);
   useEffect(() => {
     if (loading) return;
     const requested = params.get("organization");
-    setSelected(selectDefaultTacticalOrganization(organizations, { requested, preferRealMap }));
+    setSelected((current) => {
+      const active = organizations.filter((item) => item.status === "active");
+      const explicit = active.find((item) => String(item.id) === String(requested));
+      if (explicit) return explicit.id;
+      if (active.some((item) => String(item.id) === String(current))) return current;
+      return selectDefaultTacticalOrganization(organizations, { requested, preferRealMap });
+    });
   }, [params, organizations, loading, preferRealMap]);
   const selectOrganization = (id) => {
     if (!organizations.some((item) => item.status === "active" && String(item.id) === String(id))) return;
     setSelected(id);
     const next = new URLSearchParams(params);
     next.set("organization", String(id));
+    next.delete('board');
     setParams(next, { replace: true });
   };
   const organization = organizations.find(
     (item) => String(item.id) === String(selected),
   );
+  const boards = boardsForOrganization(organization);
+  const board = selectTacticalBoard(boards, params.get('board'));
+  const selectBoard = (id) => {
+    if (!boards.some(item => String(item.id) === String(id))) return;
+    const next = new URLSearchParams(params);
+    if (id == null) next.delete('board'); else next.set('board', String(id));
+    setParams(next, { replace: true });
+  };
+  const organizationControls = <div className="tac-organization-bar">
+    <div className="tac-org-identity">
+      <Shield size={19} />
+      <TacticalSelect
+        label="选择组织"
+        value={selected}
+        onChange={selectOrganization}
+        options={organizations
+          .filter((item) => item.status === "active")
+          .map((item) => ({ value: item.id, label: item.name }))}
+      />
+    </div>
+  </div>;
   const success = async (result, kind) => {
     if (kind === "create") {
+      directoryRevision.current += 1;
       setOrganizations((current) => [...current, result]);
       setSelected(result.id);
       const next = new URLSearchParams(params);
       next.set("organization", String(result.id));
+      const firstBoard = boardsForOrganization(result)[0];
+      if (firstBoard?.id) next.set('board', String(firstBoard.id));
+      else next.delete('board');
       setParams(next, { replace: true });
       setNotice("组织已创建，你是该组织的统帅。");
     } else {
       setNotice("申请已提交，等待统帅或指挥审批。");
+      directoryRevision.current += 1;
       try {
         const data = await listTacticalOrganizations();
         setOrganizations(data.organizations || []);
@@ -316,21 +431,24 @@ function AuthenticatedBoard() {
           正在读取组织…
         </div>
       ) : organization ? (
-          <ConnectedBoard key={organization.id} organization={organization}
+          <>
+          <div className="tac-board-switcher" role="group" aria-label="选择战术板">
+            {boards.map(item => {
+              const Icon = item.kind === 'pirate' ? Radar : Crosshair;
+              return <button type="button" key={item.id ?? 'legacy'} className="tac-board-switch"
+                aria-pressed={String(board?.id) === String(item.id)} onClick={() => selectBoard(item.id)}>
+                <Icon size={17} /><span>{item.name}</span><small>{item.kind === 'pirate' ? '海盗情报' : '战争沙盘'}</small>
+              </button>;
+            })}
+            {['founder', 'commander'].includes(organization.role) && boards.length < 3 &&
+              <button type="button" className="tac-board-add" onClick={() => setBoardForm(true)}><Plus size={16} /> 新建战术板</button>}
+          </div>
+          {board?.kind === 'pirate' ? <PirateIntelBoard key={`${organization.id}:${board.id}`} organization={organization} board={board}
+            organizationControls={organizationControls} onOpenOrganization={() => setForm(true)} /> :
+          <ConnectedBoard key={`${organization.id}:${board?.id ?? 'legacy'}`} organization={organization} boardId={board?.id}
             onOpenOrganization={() => setForm(true)}
-            organizationControls={<div className="tac-organization-bar">
-            <div className="tac-org-identity">
-              <Shield size={19} />
-              <TacticalSelect
-                label="选择组织"
-                value={selected}
-                onChange={selectOrganization}
-                options={organizations
-                  .filter((item) => item.status === "active")
-                  .map((item) => ({ value: item.id, label: item.name }))}
-              />
-            </div>
-          </div>} />
+            organizationControls={organizationControls} />}
+          </>
       ) : (
         <section className="tac-welcome">
           <div className="tac-welcome-icon">
@@ -369,12 +487,21 @@ function AuthenticatedBoard() {
           onSuccess={success}
         />
       )}
+      {boardForm && organization && <BoardForm organizationId={organization.id} existingCount={boards.length}
+        onClose={() => setBoardForm(false)} onSuccess={created => {
+          directoryRevision.current += 1;
+          setOrganizations(current => current.map(item => item.id === organization.id ? { ...item, boards: [...boardsForOrganization(item), created] } : item));
+          const next = new URLSearchParams(params);
+          next.set('board', String(created.id));
+          setParams(next, { replace: true });
+          setNotice('新战术板已创建。');
+        }} />}
     </>
   );
 }
 
-function ConnectedBoard({ organization, organizationControls, onOpenOrganization }) {
-  const session = useTacticalSession(organization.id);
+function ConnectedBoard({ organization, boardId, organizationControls, onOpenOrganization }) {
+  const session = useTacticalSession(organization.id, boardId);
   const { snapshot, status, error, refresh, execute, invalidateAccess } =
     session;
   const role = snapshot?.role || organization.role;
@@ -440,6 +567,7 @@ function ConnectedBoard({ organization, organizationControls, onOpenOrganization
         <BoardContent
           key={`${snapshot.permission_version}:${snapshot.role}`}
           organizationId={organization.id}
+          boardId={boardId}
           snapshot={snapshot}
           execute={execute}
           refresh={refresh}
@@ -491,7 +619,7 @@ function ConnectedBoard({ organization, organizationControls, onOpenOrganization
   );
 }
 
-function BoardContent({ organizationId, snapshot, execute, refresh, status, organizationControls, connectionControls, connectionError, onOpenOrganization, onOpenMembers }) {
+function BoardContent({ organizationId, boardId, snapshot, execute, refresh, status, organizationControls, connectionControls, connectionError, onOpenOrganization, onOpenMembers }) {
   const mobile = useMobile();
   const can = permissions(snapshot.role);
   const [mapData, setMapData] = useState(null);
@@ -524,8 +652,9 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
   const outboxScope = useMemo(() => ({
     userId: snapshot.user_id,
     organizationId,
+    boardId: snapshot.board?.is_default ? null : boardId,
     storage: window.localStorage,
-  }), [snapshot.user_id, organizationId]);
+  }), [snapshot.user_id, organizationId, boardId, snapshot.board?.is_default]);
   const [outbox, setOutbox] = useState(() => {
     try { return readReportOutbox(outboxScope); } catch { return []; }
   });
@@ -558,7 +687,7 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
     setMapData(null);
     setMapError("");
     if (mobile) return;
-    getTacticalMap(organizationId)
+    getTacticalMap(organizationId, boardId)
       .then((data) => {
         if (active) setMapData(data);
       })
@@ -568,7 +697,7 @@ function BoardContent({ organizationId, snapshot, execute, refresh, status, orga
     return () => {
       active = false;
     };
-  }, [organizationId, scopeVersion, mobile, mapAttempt]);
+  }, [organizationId, boardId, scopeVersion, mobile, mapAttempt]);
   const overview = useMemo(() => buildTacticalOverview({ forces: snapshot.forces, reports: snapshot.reports, role: snapshot.role,
     scope: overviewScope, systemIds: mapData ? new Set(mapData.systems.map(node => Number(node.system_id))) : null, now: currentServerTime }),
     [snapshot.forces, snapshot.reports, snapshot.role, overviewScope, mapData, currentServerTime]);

@@ -25,6 +25,21 @@ test('WebSocket credentials appear only in first authentication frame, never URL
   assert.deepEqual(socket.sent, [{ type: 'authenticate', token: 'private-token', connection_id: 'tab' }]);
   stop();
 });
+test('a board-scoped socket authenticates its board and rejects another board snapshot', () => {
+  const snapshots = [], closed = [];
+  const stop = openTacticalSocket({ apiUrl: 'http://127.0.0.1:8001/api', organizationId: 7, boardId: 31,
+    connectionId: 'tab', token: 'private-token', WebSocketImpl: FakeSocket,
+    onSnapshot: data => snapshots.push(data), onClose: code => closed.push(code) });
+  const socket = FakeSocket.latest;
+  socket.open();
+  assert.equal(socket.sent[0].board_id, 31);
+  socket.message({ type: 'snapshot', data: { ...state, board: { id: 31, kind: 'war' } } });
+  assert.equal(snapshots.length, 1);
+  socket.message({ type: 'snapshot', data: { ...state, board: { id: 32, kind: 'war' } } });
+  assert.equal(snapshots.length, 1);
+  assert.deepEqual(closed, [4400]);
+  stop();
+});
 test('authenticated sockets send periodic heartbeat frames without exposing credentials', () => {
   let heartbeat;
   const stop = openTacticalSocket({ apiUrl: 'http://127.0.0.1:8001/api', organizationId: 7, connectionId: 'tab', token: 'private-token',

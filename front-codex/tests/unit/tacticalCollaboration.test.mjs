@@ -169,6 +169,21 @@ test("report outbox is isolated by user and organization and supports discard/up
   assert.deepEqual(readReportOutbox(scope), []);
 });
 
+test('additional war boards keep their offline reports out of the legacy board outbox', () => {
+  const memory = new Map();
+  const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
+  const legacy = { userId: 7, organizationId: 12, storage };
+  const extra = { ...legacy, boardId: 32 };
+  assert.equal(outboxStorageKey(7, 12), 'evem:tactical-report-outbox:7:12');
+  assert.equal(outboxStorageKey(7, 12, 32), 'evem:tactical-report-outbox:7:12:32');
+  queueReportOutbox(legacy, { action: 'report.create', payload: { system_id: 10 }, requestId: 'old' });
+  queueReportOutbox(extra, { action: 'report.create', payload: { system_id: 20 }, requestId: 'new' });
+  assert.deepEqual(readReportOutbox(legacy).map(entry => entry.id), ['old']);
+  assert.deepEqual(readReportOutbox(extra).map(entry => entry.id), ['new']);
+  assert.equal(readReportOutbox(extra)[0].boardId, 32);
+  assert.rejects(() => retryReportOutbox(extra, readReportOutbox(legacy)[0], async () => {}));
+});
+
 test("outbox replay keeps the original request id and refuses mismatched scope or conflicts", async () => {
   const memory = new Map();
   const scope = { userId: 7, organizationId: 12, storage: {

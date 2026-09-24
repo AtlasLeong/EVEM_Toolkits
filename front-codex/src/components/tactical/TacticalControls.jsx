@@ -206,7 +206,7 @@ export function SystemPicker({
   );
 }
 
-export function ScopeEditor({ organizationId, scope, execute, onClose }) {
+export function ScopeEditor({ organizationId, scope, execute, onClose, variant = 'war' }) {
   const [reviewedVersion] = useState(scope.version);
   const [regions, setRegions] = useState([]);
   const [selected, setSelected] = useState(scope.region_ids || []);
@@ -251,10 +251,12 @@ export function ScopeEditor({ organizationId, scope, execute, onClose }) {
     }
   };
   return (
-    <TacticalDialog title="设置作战星域" onClose={onClose}>
+    <TacticalDialog title={variant === 'pirate' ? '设置情报覆盖星域' : '设置作战星域'} onClose={onClose}>
       <form onSubmit={save} className="tac-form">
         <p className="tac-muted">
-          所有成员共享作战范围；范围外部署仍保留在列表中。只加载选中星域与边界星系。
+          {variant === 'pirate'
+            ? '这块情报板独立选择星图范围；线索仍保留历史记录，只加载选中星域与边界星系。'
+            : '所有成员共享作战范围；范围外部署仍保留在列表中。只加载选中星域与边界星系。'}
         </p>
         <label className="tac-field">
           <span>搜索星域</span>
@@ -306,7 +308,7 @@ export function ScopeEditor({ organizationId, scope, execute, onClose }) {
             取消
           </button>
           <button className="tac-btn is-primary" disabled={busy}>
-            {busy ? "保存中…" : "应用作战范围"}
+            {busy ? "保存中…" : variant === 'pirate' ? '应用情报范围' : '应用作战范围'}
           </button>
         </div>
       </form>
