@@ -156,8 +156,9 @@ test('map renders one floating identity card per location marker and preserves s
   assert.match(html, /role="button" tabindex="0" aria-label="双星座：1 个目标，星座范围（非精确星系）"/)
   assert.match(html, /pirate-map__marker--constellation pirate-map__marker--selected/)
   assert.match(html, /aria-label="双星座：1 个目标，星座范围（非精确星系）"/)
-  assert.match(html, /class="pirate-map__labels"[^>]*font-size:10px/)
-  assert.ok(html.includes(`<text x="${alpha.px}" y="${alpha.py}" dx="0.9em" dy="-0.5em">Alpha</text>`))
+  assert.match(html, /class="pirate-map__labels"/)
+  assert.match(html, /class="tac-star-name"[^>]*>Alpha<\/text>/)
+  assert.match(html, /class="tac-star-security"[^>]*>安等未知<\/text>/)
   assert.doesNotMatch(html, /<\/title>0<circle/)
   assert.equal((html.match(/data-pirate-card=/g) || []).length, 2)
   assert.match(html, /data-pirate-card="system:101"[^>]*>.*?Alpha.*?2 个目标/)
@@ -464,4 +465,59 @@ test('ending a drag commits its final pointer position without a delayed post-re
   assert.deepEqual(cancelled, [1])
   assert.equal(frames.size, 0)
   scheduler.dispose()
+})
+
+test('pirate map shares the war board small stars and centered name/security typography', async () => {
+  const { default: PirateIntelMap } = await loadMap()
+  const html = renderToStaticMarkup(React.createElement(PirateIntelMap, {
+    mapData: { ...mapData, systems: [{ ...mapData.systems[0], security_status: -.76 }] }, targets: [],
+  }))
+  assert.match(html, /class="pirate-map__star"[^>]*r="3"/)
+  assert.match(html, /class="tac-star-name"[^>]*text-anchor="middle"[^>]*font-size="13"[^>]*font-weight="400"/)
+  assert.match(html, /class="tac-star-security"[^>]*font-size="10"[^>]*>-0.76<\/text>/)
+  assert.doesNotMatch(html, /dx="0.9em"/)
+})
+
+test('a sparse target card is centered above or below its real system', async () => {
+  const { layoutPirateTargetCards } = await loadMap()
+  const [card] = layoutPirateTargetCards([{ key: 'system:1', x: 400, y: 300, targets: [] }],
+    { width: 900, height: 700 }, { x: 0, y: 0, scale: 1 })
+  assert.equal(card.left + card.width / 2, card.anchorX)
+  assert.equal(card.tetherX, card.anchorX)
+})
+
+test('wheel previews move layers per frame but commit React once when the gesture settles', async () => {
+  const { createPirateCameraScheduler } = await loadMap()
+  const commits = [], previews = [], frames = new Map(), timers = new Map()
+  let id = 0
+  const scheduler = createPirateCameraScheduler(camera => commits.push(camera), {
+    requestFrame(callback) { frames.set(++id, callback); return id },
+    cancelFrame(key) { frames.delete(key) },
+    setTimer(callback) { timers.set(++id, callback); return id },
+    clearTimer(key) { timers.delete(key) },
+    onPreview(camera) { previews.push(camera) },
+  })
+  assert.equal(typeof scheduler.preview, 'function')
+  const runFrame = () => { const [key, callback] = frames.entries().next().value; frames.delete(key); callback() }
+  scheduler.preview(camera => ({ ...camera, scale: 2 }))
+  scheduler.preview(camera => ({ ...camera, x: 24 }))
+  assert.equal(frames.size, 1)
+  runFrame()
+  assert.deepEqual(previews, [{ x: 24, y: 0, scale: 2 }])
+  assert.equal(commits.length, 0)
+  scheduler.preview(camera => ({ ...camera, scale: 3 }))
+  runFrame()
+  assert.equal(commits.length, 0)
+  assert.equal(timers.size, 1)
+  const [timer, settle] = timers.entries().next().value
+  timers.delete(timer); settle()
+  assert.deepEqual(commits, [{ x: 24, y: 0, scale: 3 }])
+  scheduler.preview(camera => ({ ...camera, x: 100 }))
+  scheduler.immediate({ x: 0, y: 0, scale: 1 })
+  assert.equal(frames.size, 0)
+  assert.equal(timers.size, 0)
+  scheduler.preview(camera => ({ ...camera, y: 100 }))
+  scheduler.dispose()
+  assert.equal(frames.size, 0)
+  assert.equal(timers.size, 0)
 })

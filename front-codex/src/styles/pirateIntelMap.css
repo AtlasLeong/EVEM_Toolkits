@@ -6,7 +6,7 @@
   overflow: hidden;
   border: 1px solid #34494d;
   border-radius: 12px;
-  background: radial-gradient(ellipse at 40% 35%, #24343a 0%, #162328 58%, #111b20 100%);
+  background: #19252b;
   color: #e4e9e6;
 }
 
@@ -121,33 +121,18 @@
 .pirate-map__target-card--constellation .pirate-map__target-card-meta { color: #b8dfdd; }
 .pirate-map__target-card-meta > span { color: #c4d4d0; font-size: 10px; }
 .pirate-map__gate {
-  stroke: #557079;
-  stroke-width: 1.15;
-  opacity: .68;
-  vector-effect: non-scaling-stroke;
+  shape-rendering: geometricPrecision;
 }
 .pirate-map__star {
-  fill: #d0dbd6;
-  stroke: #182a2c;
-  stroke-width: .75;
-  vector-effect: non-scaling-stroke;
+  shape-rendering: geometricPrecision;
 }
 .pirate-map__label {
-  fill: #b5c6c4;
-  font-weight: 500;
-  letter-spacing: .01em;
-  opacity: 0;
+  opacity: 1;
   pointer-events: none;
-  transition: opacity 180ms ease-out;
+  animation: pirate-label-reveal 190ms ease-out both;
 }
-.pirate-map__label--primary,
-.pirate-map--detailed .pirate-map__label { opacity: 1; }
-.pirate-map__label text {
-  paint-order: stroke;
-  stroke: #152328;
-  stroke-width: .28em;
-  stroke-linejoin: round;
-}
+.pirate-map--wheel-motion .pirate-map__label { animation: none; }
+@keyframes pirate-label-reveal { from { opacity: .15; } to { opacity: 1; } }
 .pirate-map__marker {
   cursor: pointer;
   outline: none;
@@ -374,5 +359,5 @@
   .pirate-map__zoom-controls button { min-width: 44px; height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pirate-map__label { transition: none; }
+  .pirate-map__label { animation: none; }
 }

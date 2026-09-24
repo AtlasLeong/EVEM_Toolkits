@@ -7,10 +7,9 @@ import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPo
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
 import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, markerLeaderSegments, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
+import { BoardGateLine, BoardStarGlyph, BoardSystemLabel, securityColor, securityLabel } from './BoardMapPrimitives';
 import '../../styles/tacticalMapIntel.css';
 
-const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91';
-const securityLabel = value => value == null ? '安等未知' : Number(value).toFixed(2);
 const INITIAL_VIEW = {x:0, y:0, scale:1};
 const cameraTransform = ({x = 0, y = 0, scale = 1} = {}) => `translate(${x} ${y}) scale(${scale})`;
 
@@ -417,22 +416,16 @@ export default function CollaborationMap({
         {stargates.map((gate,index)=>{
           const a=byId.get(Number(gate.system_id)),b=byId.get(Number(gate.destination_system_id));
           const active=Number(a?.system_id)===Number(hoveredSystemId??selectedSystemId)||Number(b?.system_id)===Number(hoveredSystemId??selectedSystemId);
-          // Keep every real gate, but make the unselected topology a quiet
-          // reference layer. Focused/hovered routes remain legible without
-          // competing with deployment badges and system names.
-          // Keep the topology legible at every zoom level without competing with markers.
-          const opacity=active ? .88 : Math.max(.3, Math.min(.5, .18 + view.scale * .12));
-          return a&&b?<line key={gate.id||index} className={`tac-map-gate${active?' is-active':''}`} x1={a.px} y1={a.py} x2={b.px} y2={b.py} stroke={active?'#819591':'#46565c'} strokeWidth={(active?1.8:.65)/view.scale} opacity={opacity} pointerEvents="none"/>:null;
+          return a&&b?<BoardGateLine key={gate.id||index} a={a} b={b} scale={view.scale} active={active}/>:null;
         })}
         {nodes.map(node=>{
           const id=Number(node.system_id),name=systemDisplayName(node),selected=Number(selectedSystemId)===id,report=intelById.get(id);
-          const related=selectedNeighbors.has(id),color=report?'#d49a7e':selected?'#f0e5c5':related?'#bbc9c4':'#8ca0a3';
+          const related=selectedNeighbors.has(id);
           return <g key={id} role="button" tabIndex={0} aria-label={`选择星系 ${name}`} className="tac-map-system" data-system-id={id}
             onClick={event=>{if(event.detail===0)onSelectSystem?.(node);}} onPointerEnter={()=>setHoveredSystemId(id)} onPointerLeave={()=>setHoveredSystemId(null)} onFocus={()=>setHoveredSystemId(id)} onBlur={()=>setHoveredSystemId(null)}
             onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
             <title>{`${name} · 安全系数 ${securityLabel(node.security_status)}${report?` · 敌方 ${report.people??'未知'} 人 · ${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)}`:''}`}</title>
-            {(selected||report)&&<circle className="tac-star-ring" cx={node.px} cy={node.py} r={(selected?12:9)/view.scale} fill="none" stroke={color} strokeWidth={1/view.scale} opacity={selected?.8:.4}/>}
-            <circle className="tac-star-dot" cx={node.px} cy={node.py} r={(selected?5:report?4:3)/view.scale} fill={color}/><circle className="tac-star-hit" cx={node.px} cy={node.py} r={19/view.scale} fill="transparent"/>
+            <BoardStarGlyph node={node} scale={view.scale} selected={selected} reported={Boolean(report)} related={related} showHit/>
           </g>;
         })}
       </g>
@@ -446,9 +439,7 @@ export default function CollaborationMap({
         return <g key={`label-${label.system_id}`} className={`tac-intel-label${report?' has-count':''}${report&&isStale(report.observed_at)?' is-stale':''}${labelState.dimmed?' is-wheel-secondary':''}`} role="button" tabIndex={0}
           aria-label={`${label.name}${report?`，敌方 ${report.people??'未知'} 人`:''}`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
           <title>{report?`${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 安全系数 ${securityLabel(node.security_status)}`:`${label.name} · 安全系数 ${securityLabel(node.security_status)}`}</title>
-          {label.gateBackdrop&&<rect x={label.x+2} y={label.y+1} width={Math.max(0,label.width-4)} height={label.height-2} rx="3" fill="#19252b" opacity=".92" pointerEvents="none"/>}
-          <text className="tac-star-name" x={label.x+label.width/2} y={label.y+14} textAnchor="middle" fill={selected?'#f6edda':'#d2dcda'} fontSize="13" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{label.name}</text>
-          <text className="tac-star-security" x={label.x+label.width/2} y={label.y+30} textAnchor="middle" fill={securityColor(node.security_status)} fontSize="10" fontWeight="400" paintOrder="stroke" stroke="#19252b" strokeWidth="4">{securityLabel(node.security_status)}</text>
+          <BoardSystemLabel label={label} node={node} selected={selected}/>
         </g>;
       })}
       {markers.map(({force,x,y,width,height})=><Fragment key={force.id}>
