@@ -13,6 +13,21 @@ class Organization(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class Board(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT, related_name='boards')
+    name = models.CharField(max_length=80)
+    kind = models.CharField(max_length=8, choices=[('war', 'War'), ('pirate', 'Pirate')])
+    # Only the original/default war board is addressable by legacy org URLs.
+    is_default = models.BooleanField(default=False)
+    region_ids = models.JSONField(default=list)
+    border_hops = models.PositiveSmallIntegerField(default=0)
+    scope_version = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['organization', 'name'], name='tactical_board_org_name_unique')]
+
+
 class Membership(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
@@ -70,6 +85,7 @@ class AuditLog(models.Model):
 
 class Report(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
+    board = models.ForeignKey(Board, on_delete=models.PROTECT, null=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     # A system total is an observation of a place, not a movable fleet.
     report_kind = models.CharField(max_length=16, default='fleet', choices=[('fleet', 'Fleet'), ('system_count', 'System enemy count'), ('fleet_intel', 'Named fleet observation')])
@@ -102,6 +118,7 @@ class ReportRevision(models.Model):
 
 class Force(models.Model):
     organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
+    board = models.ForeignKey(Board, on_delete=models.PROTECT, null=True)
     # Only this source may project later author revisions into the estimate.
     # Manual commander edits clear it; a position-only move preserves it.
     source_report = models.ForeignKey(Report, on_delete=models.PROTECT, related_name='+', null=True)
@@ -144,3 +161,26 @@ class ConnectionLease(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=['organization', 'expires_at', 'user'], name='tactical_lease_org_expiry')]
+
+
+class PirateSighting(models.Model):
+    board = models.ForeignKey(Board, on_delete=models.PROTECT, related_name='sightings')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    version = models.PositiveIntegerField(default=1)
+    character_name = models.CharField(max_length=120)
+    ship_type = models.CharField(max_length=120)
+    normalized_name = models.CharField(max_length=2560)
+    normalized_ship = models.CharField(max_length=2560)
+    location_kind = models.CharField(max_length=16)
+    location_id = models.PositiveIntegerField()
+    location_name = models.CharField(max_length=255)
+    observed_at = models.DateTimeField()
+    activity_start_utc = models.CharField(max_length=5, null=True, blank=True)
+    activity_end_utc = models.CharField(max_length=5, null=True, blank=True)
+    notes = models.CharField(max_length=1000, blank=True)
+    status = models.CharField(max_length=12, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['board', 'author', 'status'], name='tactical_pirate_visible')]

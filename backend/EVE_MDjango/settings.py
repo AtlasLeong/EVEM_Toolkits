@@ -52,6 +52,8 @@ SECRET_KEY = config('SECRET_KEY')
 # Existing WSGI deployment does not import Channels or change its runtime.
 TACTICAL_ALLOWED_ORIGINS = [origin.strip() for origin in config('TACTICAL_ALLOWED_ORIGINS', default='').split(',') if origin.strip()]
 TACTICAL_GRAPH_DATA_VERSION = config('TACTICAL_GRAPH_DATA_VERSION', default='1')
+# X-stage deployments fail closed; Y enables new board writes explicitly.
+TACTICAL_MULTIBOARD_WRITES_ENABLED = str(config('TACTICAL_MULTIBOARD_WRITES_ENABLED', default='false')).strip().lower() in {'1', 'true', 'yes', 'on'}
 CHANNEL_LAYERS = {
     'default': ({
         'BACKEND': 'channels_redis.core.RedisChannelLayer',

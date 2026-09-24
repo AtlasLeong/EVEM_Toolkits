@@ -5,7 +5,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 from TacticalBoard.models import BoardConstellations, BoardRegions, BoardStargates, BoardSystems
-from .services import bad, digest, locked_org, membership, scope_data, text
+from .services import bad, digest, locked_org, membership, resolve_board, scope_data, text
 
 
 def data_source(systems):
@@ -35,10 +35,12 @@ def sanitize_optional_numbers(rows, fields):
 
 
 @transaction.atomic
-def map_data(user, organization_id):
+def map_data(user, organization_id, board_id=None, *, kind='war'):
     org = locked_org(organization_id)
     membership(user, org)
-    return {**static_projection(org.region_ids, org.border_hops), 'scope': scope_data(org)}
+    board = resolve_board(org, board_id, kind=kind)
+    scope = scope_data(board)
+    return {**static_projection(scope['region_ids'], scope['border_hops']), 'scope': scope}
 
 
 def static_projection(region_ids, border_hops):
@@ -113,11 +115,17 @@ def catalog(user, organization_id, kind, query):
     membership(user, org)
     if kind == 'regions':
         return {'results': [{'id': r.pk, 'name': r.zh_name or r.name} for r in BoardRegions.objects.order_by('region_id')[:500]]}
-    if kind != 'systems':
+    if kind not in ('systems', 'constellations'):
         bad('不支持的目录类型。')
     query = text(query, 80, blank=True)
     if not query:
         return {'results': []}
+    if kind == 'constellations':
+        rows = BoardConstellations.objects.filter(
+            Q(zh_name__icontains=query) | Q(name__icontains=query)
+        ).select_related('region').order_by('pk')[:30]
+        return {'results': [{'id': row.pk, 'name': row.zh_name or row.name,
+                             'region_name': row.region.zh_name or row.region.name} for row in rows]}
     rows = BoardSystems.objects.filter(Q(zh_name__icontains=query) | Q(name__icontains=query)).select_related('constellation__region').order_by('pk')[:30]
     results = [{'id': row.pk, 'name': row.zh_name or row.name, 'security_status': row.security_status,
                 'region_name': row.constellation.region.zh_name or row.constellation.region.name} for row in rows]

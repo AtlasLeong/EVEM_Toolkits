@@ -25,7 +25,10 @@ def transport_closed(error):
 
 
 def snapshot_fingerprint(value):
-    stable = {key: item for key, item in value.items() if key != 'server_time'}
+    # The organization-wide cursor wakes sockets on writes to any board, but
+    # is transport metadata rather than visible content. A different board's
+    # write must not resend this board's unchanged (potentially large) state.
+    stable = {key: item for key, item in value.items() if key not in ('server_time', 'state_version')}
     return hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -33,6 +36,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.actor = None
         self.connection_id = None
+        self.board_id = None
         self.socket_generation = str(uuid4())
         self.admitted = False
         self.closing = False
@@ -99,6 +103,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                     if not isinstance(token, str) or not token:
                         raise ValueError('missing token')
                     self.connection_id = str(UUID(str(content.get('connection_id', ''))))
+                    self.board_id = content.get('board_id')
                     self.actor, self.expires_at = await self.authenticate(token)
                 except Exception:
                     await self.shutdown(4401)
@@ -237,7 +242,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
     def admit(self):
         from .services import claim_socket, socket_heartbeat
         operation = socket_heartbeat if self.admitted else claim_socket
-        return operation(self.actor, self.organization_id, self.connection_id, self.socket_generation)
+        return operation(self.actor, self.organization_id, self.connection_id, self.socket_generation, self.board_id)
 
     @database_sync_to_async
     def leave(self):
@@ -247,9 +252,9 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def get_snapshot(self):
         from .services import socket_snapshot
-        return socket_snapshot(self.actor, self.organization_id, self.connection_id, self.socket_generation)
+        return socket_snapshot(self.actor, self.organization_id, self.connection_id, self.socket_generation, self.board_id)
 
     @database_sync_to_async
     def get_state_version(self):
         from .services import socket_state_version
-        return socket_state_version(self.actor, self.organization_id, self.connection_id, self.socket_generation)
+        return socket_state_version(self.actor, self.organization_id, self.connection_id, self.socket_generation, self.board_id)
