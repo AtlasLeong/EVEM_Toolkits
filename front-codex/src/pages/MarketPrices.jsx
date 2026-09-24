@@ -1,13 +1,14 @@
 import { useContext, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { RefreshCw, Search } from 'lucide-react'
+import { Activity, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
 import { AuthContext } from '../context/AuthContext'
-import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
-import { getMarketHistory, listMarketItems } from '../services/apiMarket'
+import { LoadingBar } from '../components/ui/Primitives'
+import { getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
+import MarketTrendChart from './MarketTrendChart'
 import '../styles/market.css'
 
-const HISTORY_DAYS = [1, 7, 30]
+const WINDOWS = [{ days: 1, label: '24 小时' }, { days: 7, label: '7 天' }, { days: 30, label: '30 天' }]
 
 export function formatMarketPrice(value) {
   if (value === null || value === undefined || value === '') return '暂无报价'
@@ -41,119 +42,135 @@ function quoteStatus(item) {
   if (!item.observed_at || item.status === 'uncollected') return { label: '尚未采集', tone: 'neutral' }
   if (item.status === 'empty') return { label: '暂无挂单', tone: 'neutral' }
   if (item.status === 'stale' || Date.now() - new Date(item.observed_at).getTime() > 2 * 3600000) return { label: '已过期', tone: 'warning' }
-  return { label: '最新', tone: 'success' }
+  return { label: '最新观测', tone: 'success' }
 }
 
-function MarketRow({ item, onHistory }) {
-  const status = quoteStatus(item)
-  return (
-    <tr>
-      <td data-label="物品">
-        <strong className="market-item-name">{item.name}</strong>
-        <span className="market-item-detail">{item.category || '未分类'} · ID {item.item_id}</span>
-      </td>
-      <td data-label="市场范围">{marketScopeLabel(item.scope)}</td>
-      <td data-label="最低卖价" className="market-price-value">{formatMarketPrice(item.best_sell)}</td>
-      <td data-label="最高买价" className="market-price-value">{formatMarketPrice(item.best_buy)}</td>
-      <td data-label="采集时间">
-        <Pill tone={status.tone}>{status.label}</Pill>
-        {item.observed_at ? <>
-          <time className="market-sample-time" dateTime={item.observed_at}>{formatMarketTime(item.observed_at)}</time>
-          <span className="market-sample-age">{ageLabel(item.observed_at)}</span>
-        </> : null}
-      </td>
-      <td data-label="历史">
-        <button type="button" className="ghost-btn compact" aria-label={`查看${item.name}历史`} onClick={() => onHistory(item)}>查看历史</button>
-      </td>
-    </tr>
-  )
+function formatChange(change) {
+  if (!change || change.absolute === null || change.percent === null) return { text: '样本不足', tone: 'neutral' }
+  const negative = String(change.absolute).startsWith('-')
+  const zero = /^-?0(?:\.0+)?$/.test(String(change.absolute))
+  const prefix = negative ? '−' : zero ? '' : '+'
+  const absolute = String(change.absolute).replace(/^-/, '')
+  const percent = String(change.percent).replace(/^-/, '')
+  return { text: `${prefix}${formatMarketPrice(absolute)} · ${prefix}${percent}%`, tone: negative ? 'down' : zero ? 'neutral' : 'up' }
 }
 
-function MarketHistory({ item, onClose }) {
-  const [days, setDays] = useState(1)
-  const [page, setPage] = useState(1)
-  const query = useQuery({
-    queryKey: ['market-history', item.item_id, days, page],
-    queryFn: ({ signal }) => getMarketHistory(item.item_id, days, { page, signal }),
-    retry: false,
-  })
-  const rows = query.data?.results || []
-  return (
-    <Panel title={`${item.name} · 历史报价`} subtitle="仅展示实际采集结果；缺少买卖盘时保留空值。" className="market-history-panel" action={<button type="button" className="ghost-btn compact" onClick={onClose}>关闭历史</button>}>
-      <div className="market-history-tabs" role="group" aria-label="历史时间范围">
-        {HISTORY_DAYS.map(value => <button type="button" key={value} className={`market-tab${days === value ? ' active' : ''}`} aria-pressed={days === value} onClick={() => { setDays(value); setPage(1) }}>{value} 天</button>)}
-      </div>
-      {query.isPending ? <LoadingBar /> : null}
-      {query.isError ? <EmptyState title="历史报价暂时无法加载" desc={query.error.message} /> : null}
-      {query.isSuccess && rows.length === 0 ? <EmptyState title="这段时间尚无采集记录" desc="换一个时间范围，或等待下一次采集。" /> : null}
-      {rows.length > 0 ? <div className="market-history-list">
-        {rows.map((row, index) => <div className="market-history-entry" key={`${row.observed_at}-${index}`}>
-          <time dateTime={row.observed_at}>{formatMarketTime(row.observed_at)}</time>
-          <span>卖价 <strong>{formatMarketPrice(row.best_sell)}</strong></span>
-          <span>买价 <strong>{formatMarketPrice(row.best_buy)}</strong></span>
-        </div>)}
-      </div> : null}
-      {query.isSuccess && (page > 1 || page * 50 < (query.data.count || 0)) ? <div className="market-pagination">
-        <button type="button" className="ghost-btn compact" aria-label="上一页历史" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>上一页</button>
-        <span>第 {page} 页</span>
-        <button type="button" className="ghost-btn compact" aria-label="下一页历史" disabled={page * 50 >= query.data.count} onClick={() => setPage(value => value + 1)}>下一页</button>
-      </div> : null}
-    </Panel>
-  )
+function CategoryNav({ categories, active, onSelect }) {
+  const all = categories.reduce((sum, category) => sum + category.count, 0)
+  return <nav className="market-category-nav" aria-label="物品分类">
+    <button type="button" aria-current={active === null ? 'true' : undefined} className={active === null ? 'active' : ''} onClick={() => onSelect(null)}><span>全部物品</span><strong>{all}</strong></button>
+    {categories.map(category => <button type="button" key={category.id} aria-current={active === String(category.id) ? 'true' : undefined} className={active === String(category.id) ? 'active' : ''} onClick={() => onSelect(String(category.id))}><span>{category.label}</span><strong>{category.count}</strong></button>)}
+  </nav>
+}
+
+function ItemNav({ rows, selectedId, onSelect }) {
+  return <div className="market-item-nav" role="group" aria-label="快速切换物品">
+    {rows.map(item => {
+      const status = quoteStatus(item)
+      return <button type="button" key={item.item_id} aria-current={selectedId === item.item_id ? 'true' : undefined} className={`market-item-choice${selectedId === item.item_id ? ' active' : ''}`} onClick={() => onSelect(item.item_id)}>
+        <span className="market-choice-head"><strong>{item.name}</strong><span className={`market-choice-status ${status.tone}`}>{status.label}</span></span>
+        <span className="market-choice-meta">{item.category || '未分类'} · ID {item.item_id}</span>
+        <span className="market-choice-quote">卖 {formatMarketPrice(item.best_sell)}</span>
+      </button>
+    })}
+  </div>
+}
+
+function QuoteCard({ title, value, change, tone }) {
+  const displayChange = formatChange(change)
+  return <div className={`market-quote-card market-quote-card--${tone}`}>
+    <span className="market-quote-label">{title}</span>
+    <strong className="market-quote-value">{formatMarketPrice(value)}</strong>
+    <span className={`market-quote-change ${displayChange.tone}`}>{displayChange.text}</span>
+  </div>
 }
 
 export default function MarketPricesPage() {
   const { isAuthenticated } = useContext(AuthContext)
   const [search, setSearch] = useState('')
   const [queryText, setQueryText] = useState('')
+  const [categoryId, setCategoryId] = useState(null)
   const [page, setPage] = useState(1)
-  const [historyItem, setHistoryItem] = useState(null)
+  const [selectedId, setSelectedId] = useState(null)
+  const [days, setDays] = useState(1)
+  const [showBuy, setShowBuy] = useState(true)
+  const [showSell, setShowSell] = useState(true)
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setQueryText(search.trim()); setPage(1) }, 250)
     return () => window.clearTimeout(timer)
   }, [search])
 
-  const query = useQuery({
-    queryKey: ['market-items', queryText, page],
-    queryFn: ({ signal }) => listMarketItems({ q: queryText, page, signal }),
-    retry: false,
-    refetchInterval: 120000,
-    refetchIntervalInBackground: false,
+  const categoriesQuery = useQuery({ queryKey: ['market-categories'], queryFn: ({ signal }) => listMarketCategories({ signal }), retry: false, refetchInterval: 120000, refetchIntervalInBackground: false })
+  const itemsQuery = useQuery({
+    queryKey: ['market-items', queryText, categoryId, page],
+    queryFn: ({ signal }) => listMarketItems({ q: queryText, categoryId, page, signal }),
+    retry: false, refetchInterval: 120000, refetchIntervalInBackground: false,
   })
-  const rows = query.data?.results || []
-  const total = query.data?.count ?? 0
-  const hasNext = page * 50 < total
+  const rows = itemsQuery.data?.results || []
+  const total = itemsQuery.data?.count ?? 0
+  const selected = rows.find(item => item.item_id === selectedId) || rows[0] || null
+  const seriesQuery = useQuery({
+    queryKey: ['market-series', selected?.item_id, days],
+    queryFn: ({ signal }) => getMarketSeries(selected.item_id, days, { signal }),
+    enabled: Boolean(selected), retry: false, refetchInterval: 120000, refetchIntervalInBackground: false,
+  })
+  const status = selected ? quoteStatus(selected) : null
+  const points = seriesQuery.data?.points || []
 
-  return (
-    <div className="page-stack market-page">
-      <PageHeader title="市场价格" subtitle="EVE Echoes 市场观测报价。数据仅供参考，请以游戏内实时盘口为准。" action={<div className="market-header-actions">
-        {isAuthenticated ? <Link className="ghost-btn" to="/market/admin">采集管理</Link> : null}
-        <button type="button" className="ghost-btn" onClick={() => query.refetch()} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新</button>
-      </div>} />
+  function selectCategory(value) {
+    setCategoryId(value)
+    setPage(1)
+    setSelectedId(null)
+  }
 
-      <Panel title="物品报价" subtitle="最低卖价与最高买价分别来自实际订单；无订单的一侧不会记为零。">
-        <div className="market-toolbar">
-          <label className="market-search">
-            <Search size={18} aria-hidden="true" />
-            <input type="search" value={search} onChange={event => setSearch(event.target.value)} aria-label="搜索物品" placeholder="搜索物品名称或 ID" />
-          </label>
-          <span className="market-count">{query.isSuccess ? `共 ${total} 件物品` : '等待报价数据'}</span>
-        </div>
-        {query.isPending ? <LoadingBar /> : null}
-        {query.isError ? <EmptyState title="价格暂时无法加载" desc="服务暂不可用，请稍后重试。已采集的报价不会在此伪造成实时价格。" /> : null}
-        {query.isSuccess && rows.length === 0 ? <EmptyState title="没有找到物品" desc={queryText ? '试试其他名称或物品 ID。' : '管理员尚未启用采集物品。'} /> : null}
-        {rows.length > 0 ? <div className="market-table-shell"><table className="market-table">
-          <thead><tr><th>物品</th><th>市场范围</th><th>最低卖价</th><th>最高买价</th><th>采集时间</th><th>历史</th></tr></thead>
-          <tbody>{rows.map(item => <MarketRow key={`${item.item_id}-${item.scope}`} item={item} onHistory={setHistoryItem} />)}</tbody>
-        </table></div> : null}
-        {query.isSuccess && (page > 1 || hasNext) ? <div className="market-pagination">
-          <button type="button" className="ghost-btn compact" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>上一页</button>
-          <span>第 {page} 页</span>
-          <button type="button" className="ghost-btn compact" disabled={!hasNext} onClick={() => setPage(value => value + 1)}>下一页</button>
-        </div> : null}
-      </Panel>
-      {historyItem ? <MarketHistory key={historyItem.item_id} item={historyItem} onClose={() => setHistoryItem(null)} /> : null}
+  function handleSearch(value) {
+    setSearch(value)
+    setCategoryId(null)
+    setSelectedId(null)
+  }
+
+  function refresh() {
+    categoriesQuery.refetch()
+    itemsQuery.refetch()
+    if (selected) seriesQuery.refetch()
+  }
+
+  return <div className="page-stack market-page market-terminal">
+    <header className="market-terminal-header">
+      <div className="market-terminal-heading"><span className="market-eyebrow"><Activity size={15} aria-hidden="true" /> EVE ECHOES / MARKET INTELLIGENCE</span><h1>市场价格</h1><p>真实盘口观测 · 历史涨跌仅供参考，交易前请核对游戏内报价。</p></div>
+      <div className="market-header-actions">{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>
+    </header>
+
+    <div className="market-terminal-layout">
+      <aside className="market-terminal-catalog" aria-label="市场物品目录">
+        <div className="market-terminal-section-head"><span>MARKET INDEX</span><strong>物品导航</strong></div>
+        <label className="market-search market-terminal-search"><Search size={17} aria-hidden="true" /><input type="search" value={search} onChange={event => handleSearch(event.target.value)} aria-label="搜索物品" placeholder="搜索名称或物品 ID" /></label>
+        {categoriesQuery.isError ? <p className="market-terminal-hint">分类暂不可用，仍可搜索物品。</p> : <CategoryNav categories={categoriesQuery.data || []} active={categoryId} onSelect={selectCategory} />}
+        <div className="market-catalog-title"><span>物品列表</span><span>{itemsQuery.isSuccess ? `${total} 件` : '—'}</span></div>
+        {itemsQuery.isPending ? <LoadingBar /> : null}
+        {itemsQuery.isError ? <div className="market-terminal-empty"><strong>价格暂时无法加载</strong><p>服务暂不可用，请稍后重试。历史报价不会伪装为实时行情。</p></div> : null}
+        {itemsQuery.isSuccess && !rows.length ? <div className="market-terminal-empty"><strong>{queryText ? '没有找到物品' : '尚无已启用物品'}</strong><p>{queryText ? '试试其他名称或物品 ID。' : '管理员启用采集物品后，才会出现在这里。'}</p></div> : null}
+        {rows.length ? <ItemNav rows={rows} selectedId={selected?.item_id} onSelect={setSelectedId} /> : null}
+        {itemsQuery.isSuccess && (page > 1 || page * 50 < total) ? <div className="market-terminal-pager"><button type="button" aria-label="上一页物品" disabled={page <= 1} onClick={() => { setPage(value => value - 1); setSelectedId(null) }}><ChevronLeft size={16} /></button><span>第 {page} 页</span><button type="button" aria-label="下一页物品" disabled={page * 50 >= total} onClick={() => { setPage(value => value + 1); setSelectedId(null) }}><ChevronRight size={16} /></button></div> : null}
+      </aside>
+
+      <main className="market-terminal-main">
+        {selected ? <>
+          <div className="market-instrument-head"><div><span className="market-eyebrow">SELECTED INSTRUMENT / ID {selected.item_id}</span><h2>{selected.name}</h2><p>{selected.category || '未分类'} <span aria-hidden="true">/</span> {marketScopeLabel(selected.scope)}</p></div><span className={`market-instrument-status ${status.tone}`}>{status.label}</span></div>
+          <div className="market-trend-heading"><div><span className="market-eyebrow">PRICE HISTORY</span><h3>价格走势</h3></div><div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div></div>
+          <div className="market-legend" role="group" aria-label="走势图图例"><button type="button" className={!showSell ? 'muted' : ''} aria-pressed={showSell} aria-label={`${showSell ? '隐藏' : '显示'}卖价曲线`} onClick={() => setShowSell(value => !value)}><i className="market-legend-swatch sell" />最低卖价</button><button type="button" className={!showBuy ? 'muted' : ''} aria-pressed={showBuy} aria-label={`${showBuy ? '隐藏' : '显示'}买价曲线`} onClick={() => setShowBuy(value => !value)}><i className="market-legend-swatch buy" />最高买价</button><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}</span></div>
+          {seriesQuery.isPending ? <div className="market-chart-message"><LoadingBar /><span>正在读取真实历史报价…</span></div> : null}
+          {seriesQuery.isError ? <div className="market-chart-message">走势图暂时无法加载；当前报价与历史走势可能不一致，请稍后刷新。</div> : null}
+          {seriesQuery.isSuccess ? <MarketTrendChart key={`${selected.item_id}-${days}`} points={points} showBuy={showBuy} showSell={showSell} formatPrice={formatMarketPrice} formatTime={formatMarketTime} /> : null}
+          <div className="market-chart-footnote">走势为采集时可见盘口，并非成交价。无挂单的一侧留空；超过两小时的报价标记为过期。</div>
+        </> : <div className="market-terminal-blank"><Activity size={42} aria-hidden="true" /><h2>选择物品，查看价格轨迹</h2><p>左侧列表只展示已启用的市场物品。</p></div>}
+      </main>
+
+      <aside className="market-terminal-summary" aria-label="当前物品报价摘要">
+        <div className="market-terminal-section-head"><span>QUOTE SUMMARY</span><strong>报价概览</strong></div>
+        {selected ? <><div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div><div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at)}</small> : null}</div><div className="market-summary-note">涨跌以所选区间内首末有效报价计算。样本不足时不显示虚构涨幅。</div></> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
+      </aside>
     </div>
-  )
+  </div>
 }

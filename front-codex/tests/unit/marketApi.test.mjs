@@ -47,6 +47,30 @@ test('public search is anonymous and encodes the query', async () => {
   assert.equal(calls[0].options?.headers?.Authorization, undefined)
 })
 
+test('public category navigation filters enabled items without an auth header', async () => {
+  const calls = []
+  const api = fixture((url, options) => {
+    calls.push({ url, options })
+    return Promise.resolve(response([]))
+  })
+  await api.listMarketCategories({ signal: new AbortController().signal })
+  await api.listMarketItems({ categoryId: 'other', q: '  舰  ', page: 2 })
+  assert.equal(calls[0].url, 'http://local-test/api/market/categories/')
+  assert.equal(calls[0].options?.headers?.Authorization, undefined)
+  assert.equal(calls[1].url, 'http://local-test/api/market/items/?q=%E8%88%B0&page=2&category_id=other')
+})
+
+test('public trend requests only the supported ranges and preserves the item ID', async () => {
+  const calls = []
+  const api = fixture((url, options) => {
+    calls.push({ url, options })
+    return Promise.resolve(response({ count: 0, points: [] }))
+  })
+  await api.getMarketSeries('1001', 7, { signal: new AbortController().signal })
+  assert.equal(calls[0].url, 'http://local-test/api/market/items/1001/series/?days=7')
+  assert.throws(() => api.getMarketSeries('1001', 365), /历史范围必须是/)
+})
+
 test('admin mutations send bearer auth and JSON to the market endpoint', async () => {
   const calls = []
   const api = fixture((url, options) => {

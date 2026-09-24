@@ -34,6 +34,7 @@ class PublicMarketItemsTests(TestCase):
             'count': 1,
             'results': [{
                 'item_id': '123456789012', 'name': 'Tritanium', 'category': 'Mineral',
+                'category_id': None, 'subcategory_id': None,
                 'scope': 'global', 'best_buy': '9.25', 'best_sell': '10.50',
                 'observed_at': datetime.fromtimestamp(observed_at_ms / 1000, timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'status': 'fresh',

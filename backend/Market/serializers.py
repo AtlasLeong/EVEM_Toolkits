@@ -34,6 +34,8 @@ def item_payload(item, now_ms=None):
         'item_id': str(item.pk),
         'name': item.name,
         'category': item.category,
+        'category_id': item.category_id,
+        'subcategory_id': item.subcategory_id,
         'scope': item.scope,
         'best_buy': str(snapshot.best_buy) if snapshot and snapshot.best_buy is not None else None,
         'best_sell': str(snapshot.best_sell) if snapshot and snapshot.best_sell is not None else None,

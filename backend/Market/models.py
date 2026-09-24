@@ -14,6 +14,8 @@ class MarketItem(models.Model):
     id = models.BigIntegerField(primary_key=True)
     name = models.CharField(max_length=255)
     category = models.CharField(max_length=120, blank=True, default='')
+    category_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    subcategory_id = models.BigIntegerField(null=True, blank=True)
     scope = models.CharField(max_length=80, default='global')
     enabled = models.BooleanField(default=True)
     last_attempt_at_ms = models.BigIntegerField(null=True, blank=True)

@@ -1,7 +1,9 @@
 import time
+from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, F, Q, Window
+from django.db.models.functions import RowNumber
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
@@ -17,6 +19,25 @@ from .serializers import (
     item_payload, run_payload, utc_iso,
 )
 from .worker import MAX_ITEMS_PER_RUN
+
+
+CATEGORY_LABELS = {
+    100: '技能与采集',
+    1000: '舰船',
+    1010: '武器',
+    1020: '装备',
+    1030: '战术装备',
+    1040: '战斗改装件',
+    1050: '工程改装件',
+    1100: '建筑',
+    1200: '旗舰组件',
+    1700: '蓝图',
+    2000: '植入体',
+    3950: '数据核心',
+    4000: '涂装',
+    5000: '弹药',
+}
+KNOWN_CATEGORY_IDS = frozenset(CATEGORY_LABELS)
 
 
 def page_parameters(request):
@@ -58,6 +79,49 @@ def filter_items_by_query(items, raw_query, *, include_scope=False):
     return items.filter(predicate)
 
 
+def filter_items_by_category(items, raw_category_id):
+    if raw_category_id is None:
+        return items
+    if raw_category_id == 'other':
+        return items.filter(
+            Q(category_id__isnull=True) | Q(category_id=0) | ~Q(category_id__in=KNOWN_CATEGORY_IDS)
+        )
+    if not raw_category_id.isdecimal() or len(raw_category_id) > 19:
+        raise ValidationError({'category_id': 'Choose a non-negative category ID or other.'})
+    category_id = int(raw_category_id)
+    if category_id > 2**63 - 1:
+        raise ValidationError({'category_id': 'Category ID exceeds signed 64-bit range.'})
+    if category_id == 0:
+        return items.filter(Q(category_id__isnull=True) | Q(category_id=0))
+    return items.filter(category_id=category_id)
+
+
+class PublicCategoriesView(APIView):
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'market_public'
+
+    def get(self, request):
+        totals = MarketItem.objects.filter(enabled=True).values('category_id').annotate(count=Count('pk'))
+        categories = []
+        other_count = 0
+        for row in totals:
+            category_id = row['category_id']
+            if category_id in (None, 0) or category_id not in KNOWN_CATEGORY_IDS:
+                other_count += row['count']
+            else:
+                categories.append({
+                    'id': category_id,
+                    'label': CATEGORY_LABELS.get(category_id, '其他'),
+                    'count': row['count'],
+                })
+        categories.sort(key=lambda category: category['id'])
+        if other_count:
+            categories.append({'id': 'other', 'label': '其他', 'count': other_count})
+        return Response(categories)
+
+
 class PublicItemsView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -66,6 +130,7 @@ class PublicItemsView(APIView):
 
     def get(self, request):
         items = MarketItem.objects.filter(enabled=True).select_related('latest_price__snapshot')
+        items = filter_items_by_category(items, request.query_params.get('category_id'))
         items = filter_items_by_query(items, request.query_params.get('q', ''), include_scope=True)
         return paged_response(items, request, item_payload)
 
@@ -88,6 +153,70 @@ class PublicHistoryView(APIView):
             'observed_at': utc_iso(snapshot.observed_at_ms),
             'best_buy': str(snapshot.best_buy) if snapshot.best_buy is not None else None,
             'best_sell': str(snapshot.best_sell) if snapshot.best_sell is not None else None,
+        })
+
+
+def series_change(first, last):
+    if first is None or last is None or first == last:
+        if first is None or last is None:
+            return {'absolute': None, 'percent': None}
+        return {'absolute': '0.00', 'percent': '0.00'}
+    if first == 0:
+        return {'absolute': None, 'percent': None}
+    change = last - first
+    precision = Decimal('0.01')
+    return {
+        'absolute': str(change.quantize(precision)),
+        'percent': str(((change / first) * 100).quantize(precision)),
+    }
+
+
+class PublicSeriesView(APIView):
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'market_public'
+
+    def get(self, request, item_id):
+        require_item_id_range(item_id)
+        item = get_object_or_404(MarketItem, pk=item_id, enabled=True)
+        days = request.query_params.get('days', '1')
+        if days not in {'1', '7', '30'}:
+            raise ValidationError({'days': 'Choose 1, 7, or 30 days.'})
+        cutoff_ms = int(time.time() * 1000) - int(days) * 24 * 60 * 60 * 1000
+        snapshots = PriceSnapshot.objects.filter(
+            item=item, observed_at_ms__gte=cutoff_ms,
+        ).order_by('observed_at_ms', 'id').values('observed_at_ms', 'best_buy', 'best_sell')
+        count = snapshots.count()
+        def first_and_last(field):
+            field_values = snapshots.filter(**{f'{field}__isnull': False})
+            first_value = field_values.values_list(field, flat=True).first()
+            last_value = field_values.order_by('-observed_at_ms', '-id').values_list(field, flat=True).first()
+            return first_value, last_value
+
+        first_buy, last_buy = first_and_last('best_buy')
+        first_sell, last_sell = first_and_last('best_sell')
+        if count > 240:
+            sample_rows = sorted({index * (count - 1) // 239 + 1 for index in range(240)})
+            sampled = list(snapshots.annotate(
+                _sample_row=Window(
+                    expression=RowNumber(),
+                    order_by=[F('observed_at_ms').asc(), F('id').asc()],
+                ),
+            ).filter(_sample_row__in=sample_rows).order_by('observed_at_ms', 'id'))
+        else:
+            sampled = list(snapshots)
+        return Response({
+            'count': count,
+            'points': [{
+                'observed_at': utc_iso(snapshot['observed_at_ms']),
+                'best_buy': str(snapshot['best_buy']) if snapshot['best_buy'] is not None else None,
+                'best_sell': str(snapshot['best_sell']) if snapshot['best_sell'] is not None else None,
+            } for snapshot in sampled],
+            'change': {
+                'best_buy': series_change(first_buy, last_buy) if first_buy is not None and last_buy is not None else {'absolute': None, 'percent': None},
+                'best_sell': series_change(first_sell, last_sell) if first_sell is not None and last_sell is not None else {'absolute': None, 'percent': None},
+            },
         })
 
 
