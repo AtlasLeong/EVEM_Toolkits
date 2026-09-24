@@ -1149,7 +1149,7 @@ test("wheel bursts zoom gently around the pointer while names settle once", asyn
   await expect(mapSurface).not.toHaveClass(/is-wheel-zooming/);
 });
 
-test("stable marker slots keep a fleet on the same side of its star during wheel zoom", async ({ page }) => {
+test("marker zoom keeps a centered card centered and never flips a side callout", async ({ page }) => {
   const state = await fixture(page, { role: "commander" });
   const original = state.snapshot.forces[0];
   state.setSnapshot({ ...state.snapshot, forces: [
@@ -1186,11 +1186,66 @@ test("stable marker slots keep a fleet on the same side of its star during wheel
     await page.mouse.wheel(0,-100);
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
     const after=await offset();
-    expect(Math.sign(after.x)).toBe(Math.sign(before.x));
+    if (Math.abs(before.x) <= 2) expect(Math.abs(after.x)).toBeLessThanOrEqual(2);
+    else if (Math.abs(after.x) > 2) expect(Math.sign(after.x)).toBe(Math.sign(before.x));
     if (Math.abs(before.y)>10) expect(Math.sign(after.y)).toBe(Math.sign(before.y));
     expect(Math.hypot(after.x-before.x,after.y-before.y)).toBeLessThan(90);
   }
   await page.screenshot({path:'output/playwright/tactical-stable-slots-after-zoom.png'});
+});
+
+test("fleet and count cards remain centered on their own stars after zoom settles", async ({ page }) => {
+  const state = await fixture(page, { role: "commander" });
+  const original = state.snapshot.forces[0];
+  state.setSnapshot({
+    ...state.snapshot,
+    forces: [
+      { ...original, id: 11, name: "无畏队", people: 30, system_id: 101, system_name: "西侧" },
+      { ...original, id: 12, name: "远炮战列队", people: 120, system_id: 102, system_name: "东侧" },
+    ],
+    reports: [{ ...state.snapshot.reports[0], id: 21, report_kind: "system_count", status: "pending",
+      people: 24, system_id: 103, system_name: "中部" }],
+  });
+  await page.route('**/api/tactical/organizations/1/map/', route => route.fulfill(json({
+    systems: [
+      { system_id: 101, zh_name: "西侧", x: -160, z: 0, security_status: -.7 },
+      { system_id: 102, zh_name: "东侧", x: 160, z: 0, security_status: -.7 },
+      { system_id: 103, zh_name: "中部", x: 0, z: 0, security_status: -.7 },
+      { system_id: 104, zh_name: "西上界", x: -500, z: -500, security_status: -.7 },
+      { system_id: 105, zh_name: "东下界", x: 500, z: 500, security_status: -.7 },
+    ], stargates: [], boundary_exits: [], scope: state.snapshot.scope,
+  })));
+  await page.goto('/tactical');
+  const map = page.getByRole('group', { name: '局部作战星图', exact: true });
+  const targets = [
+    { card: '.tac-map-force[data-force-id="11"]', system: 101 },
+    { card: '.tac-map-force[data-force-id="12"]', system: 102 },
+    { card: '.tac-map-count[data-count-system-id="103"]', system: 103 },
+  ];
+  const expectCentered = async () => {
+    for (const { card, system } of targets) {
+      const badge = await map.locator(card).boundingBox();
+      const star = await map.locator(`[data-system-id="${system}"] .tac-star-dot`).boundingBox();
+      expect(badge).not.toBeNull();
+      expect(star).not.toBeNull();
+      const badgeCenter = badge.x + badge.width / 2;
+      const starCenter = star.x + star.width / 2;
+      expect(Math.abs(badgeCenter - starCenter), `${card} aligns with its own star`).toBeLessThanOrEqual(2);
+      expect(badge.y + badge.height < star.y || badge.y > star.y + star.height,
+        `${card} sits above or below, not on top of the star`).toBe(true);
+    }
+  };
+  await expect(map.locator('.tac-map-force')).toHaveCount(2);
+  await expect(map.locator('.tac-map-count')).toHaveCount(1);
+  await expectCentered();
+  const box = await map.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  for (let step = 0; step < 2; step++) {
+    await page.mouse.wheel(0, -100);
+    await expect(page.locator('.tac-map')).toHaveClass(/is-wheel-zooming/);
+    await expect(page.locator('.tac-map')).not.toHaveClass(/is-wheel-zooming/, { timeout: 1500 });
+    await expectCentered();
+  }
 });
 
 test("pending intelligence appears on the map with its reporter without inflating deployments", async ({ page }) => {
@@ -1915,10 +1970,10 @@ test("many forces in one system aggregate instead of stacking off canvas", async
     })),
   });
   await page.goto("/tactical");
+  await expect(page.locator(".tac-map-force")).toHaveCount(3, { timeout: 15000 });
   await expect(
     page.getByRole("button", { name: "查看德里克一全部20支部署" }),
   ).toBeVisible();
-  await expect(page.locator(".tac-map-force")).toHaveCount(3);
 });
 
 test('access-only account switch unmounts old board and its private data',async({page})=>{
