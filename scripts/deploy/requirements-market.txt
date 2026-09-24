@@ -1,0 +1,3 @@
+# Isolated site-packages for the market collector service.
+# Never install into the shared, rollback-capable production backend venv.
+msgpack==1.2.2

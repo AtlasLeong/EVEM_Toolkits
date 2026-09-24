@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     'Community',
     'TacticalCollaboration',
     'Starsea',
+    'Market',
 ]
 
 MIDDLEWARE = [
@@ -209,6 +210,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'minute': '1/minute',
         'custom': '5/day',
+        'market_public': '120/hour',
     }
 }
 

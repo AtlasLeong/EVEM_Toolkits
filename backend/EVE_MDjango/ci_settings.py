@@ -9,6 +9,7 @@ ALLOWED_HOSTS = ['testserver', 'localhost']
 INSTALLED_APPS = [
     'django.contrib.auth', 'django.contrib.contenttypes', 'rest_framework',
     'ActivationCode', 'License', 'Feedback', 'TacticalBoard', 'Community', 'TacticalCollaboration', 'Starsea',
+    'Market',
 ]
 DATABASES = {alias: {'ENGINE': 'django.db.backends.sqlite3', 'NAME': ':memory:'}
              for alias in ('default', 'license')}
@@ -25,4 +26,5 @@ CHANNEL_LAYERS = {
 }
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
+    'DEFAULT_THROTTLE_RATES': {'market_public': '120/hour'},
 }

@@ -116,7 +116,7 @@ class LinuxPublishTests(unittest.TestCase):
     def json(self, name, value):
         (self.root / name).write_text(json.dumps(value))
 
-    def bundle(self, backend='c', community=False):
+    def bundle(self, backend='c', community=False, market=False):
         sha = 'a' * 40
         files = {'backend/manage.py': self.manage, 'backend/requirements.txt': self.requirements,
                  'backend/.release-sha': sha.encode(),
@@ -125,6 +125,13 @@ class LinuxPublishTests(unittest.TestCase):
                  'frontend/deploy-version.json': json.dumps({'sha': sha}).encode()}
         if community:
             files['backend/Community/health.py'] = b'# readiness capability\n'
+        if market:
+            files.update({
+                'backend/Market/__init__.py': b'',
+                'backend/Market/management/commands/market_tick.py': b'# market capability\n',
+                'backend/Market/session_bundle.py': b'def load_session(): pass\n',
+                'backend/Market/collector_protocol.py': b'class MarketSession: pass\n',
+            })
         manifest = {'format': 1, 'sha': sha, 'sources': {'frontend': 'b' * 40, 'backend': backend * 40},
                     'dependencies': hashlib.sha256(self.requirements).hexdigest(),
                     'files': {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
@@ -215,3 +222,60 @@ class LinuxPublishTests(unittest.TestCase):
         result = self.run_cli('rollback')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
+
+    def provision_market(self, version='1.2.2'):
+        private = self.root / 'shared/market'
+        private.mkdir()
+        lock = private / 'collector.lock'
+        lock.touch()
+        runtime = self.root / 'shared/market-python'
+        runtime.mkdir()
+        (runtime / 'msgpack.py').write_text(f'__version__ = {version!r}\n')
+        return lock
+
+    def test_market_busy_real_flock_blocks_publish_before_switch(self):
+        import fcntl
+        lock = self.provision_market()
+        archive = self.bundle(market=True)
+        with lock.open('r+') as held:
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.run_cli('publish', archive)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('collector is busy', result.stderr)
+        self.assertFalse((self.root / 'service-events').exists())
+        self.assertFalse((self.root / 'manage-events').exists())
+        self.assertFalse((self.root / 'transaction.json').exists())
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
+
+    def test_market_publish_then_busy_rollback_then_legacy_rollback(self):
+        import fcntl
+        lock = self.provision_market()
+        result = self.run_cli('publish', self.bundle(market=True))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        market_state = json.loads((self.root / 'state.json').read_text())
+        self.assertIs(market_state['backend']['market_collector'], True)
+        with lock.open('r+') as held:
+            fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            result = self.run_cli('rollback')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('collector is busy', result.stderr)
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), market_state)
+        result = self.run_cli('rollback')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
+
+    def test_market_wrong_dependency_blocks_switch(self):
+        self.provision_market(version='0.0.0')
+        result = self.run_cli('publish', self.bundle(market=True))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('market runtime preflight failed', result.stderr)
+        self.assertFalse((self.root / 'service-events').exists())
+        self.assertFalse((self.root / 'transaction.json').exists())
+        self.assertEqual(json.loads((self.root / 'state.json').read_text()), self.old)
+
+    def test_market_missing_lock_is_not_created_by_release(self):
+        result = self.run_cli('publish', self.bundle(market=True))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('collector lock unavailable', result.stderr)
+        self.assertFalse((self.root / 'shared/market/collector.lock').exists())
+        self.assertFalse((self.root / 'service-events').exists())

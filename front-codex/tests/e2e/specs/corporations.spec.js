@@ -115,7 +115,7 @@ test("军团目录搜索提示和输入边界保持可读", async ({ page }) => 
   expect(metrics.inputBackground).toBe("rgba(0, 0, 0, 0)");
 });
 
-test("分享军团复制干净链接，失败时提供可选择的地址", async ({ page }) => {
+test("分享军团复制干净链接，失败时提供可选择的地址", async ({ page }, testInfo) => {
   await communityFixture(page);
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -130,7 +130,7 @@ test("分享军团复制干净链接，失败时提供可选择的地址", async
   await page.goto("/corporations/1?previewRole=user#private");
   await page.getByRole("button", { name: "分享军团", exact: true }).click();
   await expect(page.getByLabel("军团分享链接", { exact: true })).toHaveValue(
-    "http://127.0.0.1:4173/corporations/1",
+    new URL("/corporations/1", testInfo.project.use.baseURL).href,
   );
   await expect(page.getByText(/自动复制未成功/)).toBeVisible();
 });
@@ -339,7 +339,7 @@ test("审核中的驻地字段不可编辑，未上架军团不提供公开分�
 
 test("公开详情展示星域星座星系及安等，复制链接不包含预览参数", async ({
   page,
-}) => {
+}, testInfo) => {
   await communityFixture(page);
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -378,7 +378,7 @@ test("公开详情展示星域星座星系及安等，复制链接不包含预�
   await page.getByRole("button", { name: "分享军团", exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => window.copiedCorporationLink))
-    .toBe("http://127.0.0.1:4173/corporations/1");
+    .toBe(new URL("/corporations/1", testInfo.project.use.baseURL).href);
   await expect(page.getByRole("status")).toContainText("本地链接仅本机可访问");
 });
 

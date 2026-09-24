@@ -440,7 +440,7 @@ test("账号同名切换不会呈现旧账号的迟到草稿", async ({ page }) 
 
 test("公开详情使用服务端汇总、纯文本和匿名安全图片，分享只含公开路径", async ({
   page,
-}) => {
+}, testInfo) => {
   const f = await fixture(page, false),
     entry = f.getEntry();
   entry.revision.content.title = "公开战报";
@@ -480,7 +480,7 @@ test("公开详情使用服务端汇总、纯文本和匿名安全图片，分�
   expect(imageHeaders.every((headers) => !headers.authorization)).toBeTruthy();
   await page.getByRole("button", { name: "分享见闻", exact: true }).click();
   await expect(page.getByLabel("见闻分享链接")).toHaveValue(
-    "http://127.0.0.1:4173/starsea/1",
+    new URL("/starsea/1", testInfo.project.use.baseURL).href,
   );
 });
 

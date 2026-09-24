@@ -1,0 +1,23 @@
+[Unit]
+Description=EVEM market price collection tick
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/EVEMTK/deploy/current/backend/Market/management/commands/market_tick.py
+
+[Service]
+Type=oneshot
+User=evem-market
+Group=evem-market
+WorkingDirectory=/EVEMTK/deploy/current/backend
+EnvironmentFile=/EVEMTK/deploy/shared/market/database.env
+Environment=MARKET_SESSION_FILE=/EVEMTK/deploy/shared/market/session.json
+Environment=MARKET_DEPLOY_ROOT=/EVEMTK/deploy
+Environment=PYTHONPATH=/EVEMTK/deploy/shared/market-python
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/EVEMTK/deploy/current/backend/.venv/bin/python manage.py market_tick --settings=EVE_MDjango.market_worker_settings
+TimeoutStartSec=10min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyDirectories=/EVEMTK

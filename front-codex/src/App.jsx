@@ -23,6 +23,8 @@ const StarseaDetailPage = lazy(() => import('./pages/StarseaDetail'))
 const StarseaMinePage = lazy(() => import('./pages/StarseaMine'))
 const StarseaEditorPage = lazy(() => import('./pages/StarseaEditor'))
 const StarseaReviewPage = lazy(() => import('./pages/StarseaReview'))
+const MarketPricesPage = lazy(() => import('./pages/MarketPrices'))
+const MarketAdminPage = lazy(() => import('./pages/MarketAdmin'))
 const pageFallback = label => <div className="loading-bar" aria-label={label}><span /></div>
 const starseaRoute = page => <Suspense fallback={pageFallback('加载星海见闻')}>{page}</Suspense>
 const corporationRoute = page => <Suspense fallback={pageFallback('加载军团页面')}>{page}</Suspense>
@@ -55,6 +57,8 @@ export default function App() {
             <Route path="/infocenter" element={appRoute(<InfoCenterPage />)} />
             <Route path="/fraudlist" element={appRoute(<FraudListPage />)} />
             <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
+            <Route path="/market" element={appRoute(<MarketPricesPage />)} />
+            <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
             <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
             <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
             <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />

@@ -2,6 +2,7 @@ from django.urls import include, path
 from .deployment import deployment_version
 
 urlpatterns = [
+    path('api/market/', include('Market.urls')),
     path('api/starsea/', include('Starsea.urls')),
     path('api/tactical/', include('TacticalCollaboration.urls')),
     path('api/community/', include('Community.urls')),
