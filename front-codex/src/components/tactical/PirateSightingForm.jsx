@@ -48,6 +48,11 @@ export default function PirateSightingForm({ organizationId, boardId, initialLoc
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const attempt = useRef(null)
+  useEffect(() => {
+    if (!initialLocation) return
+    setLocationKind('system')
+    setLocation(initialLocation)
+  }, [initialLocation])
   const submit = async event => {
     event.preventDefault()
     if (busy) return

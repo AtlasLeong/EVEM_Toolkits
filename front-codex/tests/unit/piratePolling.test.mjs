@@ -59,4 +59,7 @@ test('sighting form accepts and displays an initial exact location', () => {
   const form = readFileSync(fileURLToPath(new URL('components/tactical/PirateSightingForm.jsx', root)), 'utf8')
   assert.match(form, /initialLocation = null/)
   assert.match(form, /useState\(initialLocation\)/)
+  assert.match(form, /setLocationKind\('system'\)/)
+  assert.match(form, /setLocation\(initialLocation\)/)
+  assert.match(form, /\}, \[initialLocation\]\)/)
 })
