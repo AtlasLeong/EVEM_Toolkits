@@ -327,6 +327,10 @@
 .market-page--immersive .market-terminal-catalog,
 .market-page--immersive .market-terminal-summary {
   padding: 16px 14px;
+  overflow: auto;
+}
+
+.market-page--immersive .market-terminal-catalog {
   overflow: hidden;
 }
 
@@ -426,9 +430,41 @@
   }
 }
 
+@media (max-width: 1100px) {
+  .market-page--immersive .market-terminal-layout {
+    grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+  }
+
+  .market-page--immersive .market-terminal-summary {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 16px 24px;
+    align-items: start;
+  }
+
+  .market-page--immersive .market-terminal-summary .market-terminal-section-head {
+    margin: 0;
+  }
+
+  .market-page--immersive .market-terminal-summary .market-quote-stack {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .market-page--immersive .market-terminal-summary .market-snapshot-meta {
+    margin-top: 0;
+  }
+}
+
 @media (max-width: 767px) {
   .market-page--immersive .market-terminal-layout {
+    display: block;
     min-height: 0;
+  }
+
+  .market-page--immersive .market-terminal-summary {
+    display: block;
   }
 
   .market-page--immersive .market-terminal-main {

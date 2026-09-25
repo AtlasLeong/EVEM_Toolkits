@@ -133,6 +133,31 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
   expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1)
 })
 
+test('market terminal remains available and stacks the summary at tablet width', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '1001', name: '测试舰船', category: '巡洋舰', best_sell: '130', best_buy: '100', observed_at: freshSample, status: 'fresh', scope: 'global', sell_prices: ['130'], buy_prices: ['100'] }] })
+    if (url.pathname.endsWith('/series/')) return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '130', best_buy: '100' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
+  await expect(page.locator('.desktop-only-mask')).toBeHidden()
+
+  const boxes = await page.evaluate(() => {
+    const layout = document.querySelector('.market-terminal-layout').getBoundingClientRect()
+    const main = document.querySelector('.market-terminal-main').getBoundingClientRect()
+    const summary = document.querySelector('.market-terminal-summary').getBoundingClientRect()
+    return { layout, main, summary, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth }
+  })
+  expect(Math.abs(boxes.summary.x - boxes.layout.x)).toBeLessThanOrEqual(2)
+  expect(Math.abs(boxes.summary.width - boxes.layout.width)).toBeLessThanOrEqual(2)
+  expect(boxes.summary.y).toBeGreaterThanOrEqual(boxes.main.bottom - 1)
+  expect(boxes.scrollWidth).toBeLessThanOrEqual(boxes.viewportWidth)
+})
+
 test('trend supports ranges, independent legends, keyboard detail and breaks missing price segments', async ({ page }) => {
   const requests = []
   await installApiMock(page, ({ url }) => {
