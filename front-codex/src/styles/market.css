@@ -152,6 +152,17 @@
 .market-snapshot-meta strong { color: var(--text); font-size: 12px; font-weight: 600; }
 .market-snapshot-meta small { font-size: 11px; }
 .market-summary-note { margin-top: 22px; color: var(--text-soft); font-size: 11px; line-height: 1.6; }
+.market-price-ladders { display: grid; gap: 10px; margin-top: 14px; }
+.market-price-ladder { padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--console-raised) 72%, var(--panel)); }
+.market-price-ladder--sell { border-left: 3px solid var(--market-amber); }
+.market-price-ladder--buy { border-left: 3px solid var(--market-cyan); }
+.market-price-ladder-head { display: flex; justify-content: space-between; gap: 8px; color: var(--text); font-size: 11px; font-weight: 650; }
+.market-price-ladder-head small { color: var(--text-soft); font-size: 10px; font-weight: 500; }
+.market-price-ladder ol { display: grid; gap: 4px; margin: 9px 0 0; padding: 0; list-style: none; }
+.market-price-ladder li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 6px; align-items: baseline; color: var(--text-soft); font-size: 10px; }
+.market-price-ladder li strong { color: var(--text); overflow-wrap: anywhere; font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.market-price-ladder--sell li strong { color: var(--market-amber-soft); }
+.market-price-ladder--buy li strong { color: var(--market-cyan-soft); }
 .market-terminal-blank { display: grid; min-height: 620px; place-content: center; justify-items: center; gap: 12px; color: var(--text-soft); text-align: center; }
 .market-terminal-blank svg { color: var(--accent); }
 .market-terminal-blank h2 { margin: 0; color: var(--text); font-size: 20px; }

@@ -85,6 +85,16 @@ function QuoteCard({ title, value, change, tone }) {
   </div>
 }
 
+function PriceLadder({ title, values, tone }) {
+  if (!Array.isArray(values) || values.length === 0) return null
+  return <div className={`market-price-ladder market-price-ladder--${tone}`}>
+    <div className="market-price-ladder-head"><span>{title}</span><small>前 {Math.min(values.length, 5)} 档</small></div>
+    <ol>
+      {values.slice(0, 5).map((value, index) => <li key={`${value}-${index}`}><span>{index + 1}</span><strong>{formatMarketPrice(value)}</strong></li>)}
+    </ol>
+  </div>
+}
+
 export default function MarketPricesPage() {
   const { isAuthenticated } = useContext(AuthContext)
   const [search, setSearch] = useState('')
@@ -169,7 +179,7 @@ export default function MarketPricesPage() {
 
       <aside className="market-terminal-summary" aria-label="当前物品报价摘要">
         <div className="market-terminal-section-head"><span>QUOTE SUMMARY</span><strong>报价概览</strong></div>
-        {selected ? <><div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div><div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at)}</small> : null}</div><div className="market-summary-note">涨跌以所选区间内首末有效报价计算。样本不足时不显示虚构涨幅。</div></> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
+        {selected ? <><div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div><div className="market-price-ladders"><PriceLadder title="卖价盘口" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价盘口" values={selected.buy_prices} tone="buy" /></div><div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at)}</small> : null}</div><div className="market-summary-note">涨跌以所选区间内首末有效报价计算。样本不足时不显示虚构涨幅。</div></> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
       </aside>
     </div>
   </div>
