@@ -35,6 +35,23 @@ test('five thousand systems with no targets also keep labels bounded', async ({ 
   expect(counts.total).toBeLessThan(9000)
 })
 
+test('zooming a dense real map culls offscreen topology without removing the selected location', async ({ page }) => {
+  await page.evaluate(() => window.__pirateDensitySelect(4999))
+  const selected = page.locator('[data-pirate-marker="system:5000"]')
+  await expect(selected).toHaveCount(1)
+  for (let index = 0; index < 5; index += 1) {
+    await page.getByRole('button', { name: '放大星图' }).click()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  }
+  const counts = await page.evaluate(() => ({
+    stars: document.querySelectorAll('.pirate-map__star').length,
+    gates: document.querySelectorAll('.pirate-map__gate').length,
+  }))
+  expect(counts.stars).toBeLessThan(5000)
+  expect(counts.gates).toBeLessThan(5950)
+  await expect(selected).toHaveCount(1)
+})
+
 test('records real-browser zoom cost and DOM size for dense and empty target scenes', async ({ page }) => {
   for (const mode of ['dense', 'empty']) {
     if (mode === 'empty') await page.goto('/tests/tactical-e2e/pirate-density-harness.html?empty=1')
