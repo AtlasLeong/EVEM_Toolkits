@@ -74,6 +74,7 @@ test('real systems expose selectable accessible hit areas', async () => {
   assert.match(html, /role="button"[^>]*aria-label="Alpha \(101\)，安等 -0\.76"/)
   assert.match(html, /data-pirate-system="101"/)
   assert.match(html, /pirate-map__system-hit--selected/)
+  assert.doesNotMatch(html, /class="pirate-map__labels" aria-hidden="true"[^>]*>.*data-pirate-system="101"/)
 })
 
 test('scene uses real system coordinates, deduplicates gates, and centers both kinds of intelligence marker', async () => {

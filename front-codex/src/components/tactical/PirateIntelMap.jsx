@@ -627,7 +627,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
         <StaticGeometry geometry={geometry} scale={camera.scale} />
         {markerLayer}
       </g>
-      <g ref={labelLayerRef} className="pirate-map__labels" aria-hidden="true">
+      <g ref={labelLayerRef} className="pirate-map__labels">
         <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={id => {
           if (suppressClickRef.current) { suppressClickRef.current = false; return }
           onSelectSystem?.(id)
