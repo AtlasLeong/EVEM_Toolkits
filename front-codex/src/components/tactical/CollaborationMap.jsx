@@ -6,7 +6,7 @@ import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMa
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
-import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, markerLeaderSegments, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
+import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, markerLeaderSegments, normalizeWheelDelta, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
 import { BoardGateLine, BoardStarGlyph, BoardSystemLabel, securityColor, securityLabel } from './BoardMapPrimitives';
 import '../../styles/tacticalMapIntel.css';
 
@@ -22,9 +22,57 @@ const relativeCameraTransform = (base = INITIAL_VIEW, next = INITIAL_VIEW) => {
   return `translate(${next.x - ratio * base.x} ${next.y - ratio * base.y}) scale(${ratio})`;
 };
 
+/** Keep screen-sized glyphs and annotations stable while their parent layer previews a zoom. */
+function syncCollaborationPreviewGeometry(root, base = INITIAL_VIEW, next = INITIAL_VIEW) {
+  if (!root) return;
+  const scale = Math.max(.0001, Number(next.scale) || 1);
+  root.querySelectorAll('[data-fixed-size="true"][data-fixed-kind]').forEach(node => {
+    const role = node.getAttribute('data-fixed-kind');
+    if (role !== 'ring' && !(role === 'dot' && node.getAttribute('data-fixed-emphasis') === 'true')) return;
+    const radius = Number(node.getAttribute('data-base-radius'));
+    if (Number.isFinite(radius)) node.setAttribute('r', String(radius / scale));
+    const stroke = Number(node.getAttribute('data-base-stroke'));
+    if (role === 'ring' && Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke / scale));
+  });
+  const ratio = scale / Math.max(.0001, Number(base.scale) || 1);
+  const inverseRatio = 1 / Math.max(.0001, ratio);
+  root.querySelectorAll('[data-tac-fixed-overlay-group]').forEach(node => {
+    const baseTransform = node.getAttribute('data-tac-base-transform');
+    if (!baseTransform) return;
+    node.setAttribute('transform', ratio === 1 ? baseTransform : `${baseTransform} scale(${inverseRatio})`);
+  });
+  root.querySelectorAll('[data-tac-fixed-overlay-label]').forEach(node => {
+    const cx = Number(node.getAttribute('data-tac-label-cx'));
+    const cy = Number(node.getAttribute('data-tac-label-cy'));
+    if (![cx, cy].every(Number.isFinite)) return;
+    node.setAttribute('transform', ratio === 1 ? ''
+      : `translate(${cx} ${cy}) scale(${inverseRatio}) translate(${-cx} ${-cy})`);
+  });
+}
+
+function visibleBoardWorld(nodes, stargates, viewport, view, preferredIds = new Set(), margin = 96) {
+  const point = node => ({x: node.px * view.scale + view.x, y: node.py * view.scale + view.y});
+  const inside = value => value.x >= -margin && value.x <= viewport.width + margin &&
+    value.y >= -margin && value.y <= viewport.height + margin;
+  const visibleNodes = nodes.filter(node => preferredIds.has(Number(node.system_id)) || inside(point(node)));
+  const visibleIds = new Set(visibleNodes.map(node => Number(node.system_id)));
+  const byId = new Map(nodes.map(node => [Number(node.system_id), node]));
+  const visibleGates = stargates.filter(gate => {
+    const a = byId.get(Number(gate.system_id));
+    const b = byId.get(Number(gate.destination_system_id));
+    if (!a || !b) return false;
+    if (visibleIds.has(Number(a.system_id)) || visibleIds.has(Number(b.system_id))) return true;
+    const pa = point(a), pb = point(b);
+    return Math.max(pa.x, pb.x) >= -margin && Math.min(pa.x, pb.x) <= viewport.width + margin &&
+      Math.max(pa.y, pb.y) >= -margin && Math.min(pa.y, pb.y) <= viewport.height + margin;
+  });
+  return {nodes:visibleNodes, gates:visibleGates};
+}
+
 function MarkerCloseAction({x,y,label,title,className,dataArchiveForceId,onActivate}) {
   return <g role="button" tabIndex={0} aria-label={label} data-archive-force-id={dataArchiveForceId}
-    transform={`translate(${x} ${y})`} className={`tac-marker-close ${className}`}
+    transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+    className={`tac-marker-close ${className}`}
     onPointerDown={event=>event.stopPropagation()} onPointerUp={event=>event.stopPropagation()}
     onClick={event=>{event.stopPropagation();onActivate?.();}}
     onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();event.stopPropagation();onActivate?.();}}}>
@@ -95,6 +143,10 @@ export default function CollaborationMap({
   const markerGroups = useMemo(() => markerGroupsForViewport(eligibleMarkerGroups, nodes, viewport,
     {selectedSystemId, view, showReports:showReportMarkers}), [eligibleMarkerGroups, nodes, viewport, selectedSystemId, view, showReportMarkers]);
   const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
+  const visibleWorld = useMemo(() => {
+    const preferred = new Set([...forceSystems, ...intelById.keys(), Number(selectedSystemId)].filter(Number.isFinite));
+    return visibleBoardWorld(nodes, stargates, viewport, view, preferred);
+  }, [nodes, stargates, viewport, view, forceSystems, intelById, selectedSystemId]);
   const basePreferredSlots = useMemo(() => new Map(layoutForceMarkers(eligibleMarkerGroups, nodes, 1,
     {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects})
     .map(group => [group.key, group.slot])), [eligibleMarkerGroups, nodes, viewport, reservedUiRects]);
@@ -133,6 +185,7 @@ export default function CollaborationMap({
     liveViewRef.current = view;
     worldLayerRef.current?.setAttribute('transform', cameraTransform(view));
     overlayLayerRef.current?.removeAttribute('transform');
+    syncCollaborationPreviewGeometry(ref.current, view, view);
   }, [view]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
@@ -213,10 +266,11 @@ export default function CollaborationMap({
     liveViewRef.current = next;
     worldLayerRef.current?.setAttribute('transform', cameraTransform(next));
     overlayLayerRef.current?.setAttribute('transform', relativeCameraTransform(view, next));
+    syncCollaborationPreviewGeometry(ref.current, view, next);
   };
   wheelHandler.current = event => {
     if (gesture.current) return;
-    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.height : 1);
+    const delta = normalizeWheelDelta(event, {lineHeight:16, pageHeight:viewport.height});
     if (!Number.isFinite(delta) || delta === 0 || delta < 0 && view.scale >= 16 || delta > 0 && view.scale <= .5) return;
     const queue = wheelQueue.current;
     queue.delta += delta;
@@ -413,12 +467,12 @@ export default function CollaborationMap({
       onPointerDown={event=>begin(event)} onPointerMove={move} onPointerUp={end} onPointerCancel={cancel}
       onKeyDown={event=>{if(event.key==='Escape')cancel();if(event.target===ref.current&&['+','-'].includes(event.key)){event.preventDefault();zoom(event.key==='+'?1.25:1/1.25);}}}>
       <g ref={worldLayerRef} className="tac-map-world-layer" transform={cameraTransform(view)}>
-        {stargates.map((gate,index)=>{
+        {visibleWorld.gates.map((gate,index)=>{
           const a=byId.get(Number(gate.system_id)),b=byId.get(Number(gate.destination_system_id));
           const active=Number(a?.system_id)===Number(hoveredSystemId??selectedSystemId)||Number(b?.system_id)===Number(hoveredSystemId??selectedSystemId);
           return a&&b?<BoardGateLine key={gate.id||index} a={a} b={b} scale={view.scale} active={active}/>:null;
         })}
-        {nodes.map(node=>{
+        {visibleWorld.nodes.map(node=>{
           const id=Number(node.system_id),name=systemDisplayName(node),selected=Number(selectedSystemId)===id,report=intelById.get(id);
           const related=selectedNeighbors.has(id);
           return <g key={id} role="button" tabIndex={0} aria-label={`选择星系 ${name}`} className="tac-map-system" data-system-id={id}
@@ -430,21 +484,23 @@ export default function CollaborationMap({
         })}
       </g>
       <g ref={overlayLayerRef} className="tac-map-overlay-layer">
-      {markerLeaders.map(leader=><line key={`marker-leader-${leader.key}`} className={`tac-map-marker-leader${leader.active?' is-active':''}`} x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke={leader.active?'#a9c0b4':'#718681'} strokeWidth={leader.active?1.45:.85} opacity={leader.active?.88:.46} pointerEvents="none"/>)}
-      {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} className="tac-map-focus-leader" x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" pointerEvents="none"/>)}
+      {markerLeaders.map(leader=><line key={`marker-leader-${leader.key}`} className={`tac-map-marker-leader${leader.active?' is-active':''}`} x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke={leader.active?'#a9c0b4':'#718681'} strokeWidth={leader.active?1.45:.85} opacity={leader.active?.88:.46} vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
+      {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} className="tac-map-focus-leader" x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
       {labelLayouts.map(label=>{
-        const node=byId.get(Number(label.system_id));if(!node)return null;
-        const report=label.intel,selected=Number(selectedSystemId)===Number(node.system_id);
-        const labelState=wheelLabelState(label,{zooming:isWheelZooming,selectedSystemId,forceIds:forceSystems});
-        return <g key={`label-${label.system_id}`} className={`tac-intel-label${report?' has-count':''}${report&&isStale(report.observed_at)?' is-stale':''}${labelState.dimmed?' is-wheel-secondary':''}`} role="button" tabIndex={0}
-          aria-label={`${label.name}${report?`，敌方 ${report.people??'未知'} 人`:''}`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
+         const node=byId.get(Number(label.system_id));if(!node)return null;
+         const report=label.intel,selected=Number(selectedSystemId)===Number(node.system_id);
+         const labelState=wheelLabelState(label,{zooming:isWheelZooming,selectedSystemId,forceIds:forceSystems});
+         return <g key={`label-${label.system_id}`} className={`tac-intel-label${report?' has-count':''}${report&&isStale(report.observed_at)?' is-stale':''}${labelState.dimmed?' is-wheel-secondary':''}`} role="button" tabIndex={0}
+           data-tac-fixed-overlay-label="true" data-tac-label-cx={label.x + label.width / 2} data-tac-label-cy={label.y + label.height / 2}
+           aria-label={`${label.name}${report?`，敌方 ${report.people??'未知'} 人`:''}`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
           <title>{report?`${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 安全系数 ${securityLabel(node.security_status)}`:`${label.name} · 安全系数 ${securityLabel(node.security_status)}`}</title>
           <BoardSystemLabel label={label} node={node} selected={selected}/>
         </g>;
       })}
-      {markers.map(({force,x,y,width,height})=><Fragment key={force.id}>
-        <g role="button" tabIndex={0} aria-label={`${force.side==='friendly'?'己方':'敌方'} ${force.name} ${force.people??'未知'} 人，${force.system_name}`}
-          transform={`translate(${x} ${y})`} data-force-id={force.id} className={`tac-map-force${isStale(force.observed_at)?' is-stale':''}`} onPointerDown={event=>begin(event,force)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectForce?.(force);}}}>
+        {markers.map(({force,x,y,width,height})=><Fragment key={force.id}>
+         <g role="button" tabIndex={0} aria-label={`${force.side==='friendly'?'己方':'敌方'} ${force.name} ${force.people??'未知'} 人，${force.system_name}`}
+           transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+           data-force-id={force.id} className={`tac-map-force${isStale(force.observed_at)?' is-stale':''}`} onPointerDown={event=>begin(event,force)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectForce?.(force);}}}>
           <title>{`${force.name} · ${force.system_name} · ${force.people??'未知'} 人${force.source_author_name?` · 上报：${force.source_author_name}`:''} · ${ageLabel(force.observed_at)}${canMove?' · 拖动调整部署':''}`}</title>
           <rect width={width} height={height} rx="5" fill={force.side==='friendly'?'#29443e':'#553a30'} stroke={force.id===selectedForceId?'#f2e5c8':force.side==='friendly'?'#71988b':'#ab7a65'} strokeWidth={force.id===selectedForceId?2:1}/>
           <text x={(width-(canArchiveForce?MARKER_CLOSE_SIZE:0))/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#f1e9d9" fontSize="12" fontWeight="400">{fleetMarkerLabel(force,width,canArchiveForce?MARKER_CLOSE_SIZE:0)}</text>
@@ -457,9 +513,10 @@ export default function CollaborationMap({
         const node=byId.get(Number(report.system_id));if(!node)return null;
         const withdrawable=Boolean(canWithdrawCount?.(report));
         const select=()=>{ onSelectSystem?.(node); onSelectCount?.(report); };
-        return <g key={`count-${report.system_id}`} role="button" tabIndex={0}
-          aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
-          transform={`translate(${x} ${y})`} data-count-system-id={report.system_id} data-count-report-id={report.id}
+         return <g key={`count-${report.system_id}`} role="button" tabIndex={0}
+           aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
+           transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+           data-count-system-id={report.system_id} data-count-report-id={report.id}
           className={`tac-map-count tac-map-report-marker${canMoveCount?.(report)?' is-draggable':''}${isStale(report.observed_at)?' is-stale':''}`}
           onPointerDown={event=>begin(event,null,report)} onClick={event=>{if(suppressClick.current){suppressClick.current=false;return;}select();}}
           onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();select();}}}>
@@ -475,8 +532,9 @@ export default function CollaborationMap({
         const node=byId.get(Number(report.system_id)); if(!node)return null;
         const select=()=>onSelectReport?.(report);
         const focus=()=>{onFocusReports?.(node); select();};
-        return <g key={`report-${report.id}`} role="button" tabIndex={0} aria-label={`${report.label}，${report.author_name||'未知上报者'}，${report.system_name||node.name||''}`}
-          transform={`translate(${x} ${y})`} data-report-id={report.id} className={`tac-map-report tac-map-report-marker${isStale(report.observed_at)?' is-stale':''}`}
+         return <g key={`report-${report.id}`} role="button" tabIndex={0} aria-label={`${report.label}，${report.author_name||'未知上报者'}，${report.system_name||node.name||''}`}
+           transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+           data-report-id={report.id} className={`tac-map-report tac-map-report-marker${isStale(report.observed_at)?' is-stale':''}`}
           onPointerDown={event=>event.stopPropagation()} onClick={select}
           onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
           <title>{`${report.authorLabel} · ${report.shipLabel} · ${ageLabel(report.observed_at)}`}</title>
@@ -488,7 +546,8 @@ export default function CollaborationMap({
       {positionedGroups.filter(group=>group.kind==='force'&&group.hiddenCount).map(group=>{
         const node=byId.get(Number(group.system_id)),y=group.y+group.visible.length*(group.rowHeight+group.rowGap);if(!node)return null;
         const focus=()=>{onSelectSystem?.(node);onFocusSystem?.(node);};
-        return <g key={`more-${group.key}`} role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}全部${group.total}支部署`} transform={`translate(${group.x+group.overflowOffset} ${y})`} className="tac-map-group" onPointerDown={event=>event.stopPropagation()} onClick={focus} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
+         const x=group.x+group.overflowOffset;
+         return <g key={`more-${group.key}`} role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}全部${group.total}支部署`} transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`} className="tac-map-group" onPointerDown={event=>event.stopPropagation()} onClick={focus} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
           <rect width={group.overflowWidth} height={group.rowHeight} rx="5" fill="#2d3e3b" stroke="#7d9587"/><text x={group.overflowWidth/2} y={group.rowHeight/2} textAnchor="middle" dominantBaseline="central" fill="#dfe9d7" fontSize="12" fontWeight="400">{fitMarkerText(`+ ${group.hiddenCount} 支部署`,group.overflowWidth-18)}</text>
         </g>;
       })}

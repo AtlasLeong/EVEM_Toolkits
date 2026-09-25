@@ -143,10 +143,8 @@
 .pirate-map__label {
   opacity: 1;
   pointer-events: none;
-  animation: pirate-label-reveal 190ms ease-out both;
 }
 .pirate-map--wheel-motion .pirate-map__label { animation: none; }
-@keyframes pirate-label-reveal { from { opacity: .15; } to { opacity: 1; } }
 .pirate-map__marker {
   cursor: pointer;
   outline: none;

@@ -31,11 +31,7 @@
 .tac-system-intel-map.is-wheel-zooming .tac-map-marker-leader { transition: none; }
 .tac-system-intel-map.is-label-moving .tac-intel-label,
 .tac-system-intel-map.is-label-moving .tac-map-focus-leader { transition: none; }
-.tac-system-intel-map.is-label-settling .tac-intel-label { animation: tac-label-settle-in 180ms ease-out both; }
-@keyframes tac-label-settle-in {
-  from { opacity: .68; }
-  to { opacity: 1; }
-}
+.tac-system-intel-map.is-label-settling .tac-intel-label { transition: none; }
 @media (prefers-reduced-motion: reduce) {
   .tac-system-intel-map .tac-intel-label,
   .tac-system-intel-map .tac-map-focus-leader,

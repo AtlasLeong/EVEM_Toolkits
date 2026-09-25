@@ -19,10 +19,18 @@ export function BoardStarGlyph({ node, scale = 1, selected = false, reported = f
   const dotColor = getSecurityMapColor(node.security_status)
   return <Fragment>
     {(selected || reported) && <circle className={ringClassName} cx={node.px} cy={node.py}
+      data-fixed-size="true" data-fixed-kind="ring" data-fixed-emphasis="true"
+      data-world-x={node.px} data-world-y={node.py}
+      data-base-radius={selected ? 12 : 9} data-base-stroke="1"
       r={(selected ? 12 : 9) / zoom} fill="none" stroke={emphasisColor} strokeWidth={1 / zoom} opacity={selected ? .8 : .4} />}
     <circle className={dotClassName} cx={node.px} cy={node.py}
+      data-fixed-size="true" data-fixed-kind="dot" data-fixed-emphasis={selected || reported || related ? 'true' : 'false'}
+      data-world-x={node.px} data-world-y={node.py}
+      data-base-radius={selected ? 5 : reported ? 4 : 3}
       r={(selected ? 5 : reported ? 4 : 3) / zoom} fill={dotColor} />
-    {showHit && <circle className="tac-star-hit" cx={node.px} cy={node.py} r={19 / zoom} fill="transparent" />}
+    {showHit && <circle className="tac-star-hit" cx={node.px} cy={node.py} r={19 / zoom} fill="transparent"
+      data-fixed-size="true" data-fixed-kind="hit" data-world-x={node.px} data-world-y={node.py}
+      data-base-radius="19" />}
   </Fragment>
 }
 
