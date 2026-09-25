@@ -174,6 +174,25 @@ test('wheel camera consumes one coalesced frame without mutating the settled vie
   assert.deepEqual(settled,{x:12,y:-8,scale:1});
 });
 
+test('wheel delta normalization makes pixel, line, and page events equivalent and bounded',()=>{
+  const normalize = module.normalizeWheelDelta;
+  assert.equal(typeof normalize, 'function', 'normalizeWheelDelta is not implemented');
+  const options = { lineHeight: 40, pageHeight: 600, max: 1200 };
+  assert.equal(normalize({ deltaY: 120, deltaMode: 0 }, options), 120);
+  assert.equal(normalize({ deltaY: 3, deltaMode: 1 }, options), 120);
+  assert.equal(normalize({ deltaY: .2, deltaMode: 2 }, options), 120);
+  assert.equal(normalize({ deltaY: 9999, deltaMode: 0 }, options), 1200);
+});
+
+test('live camera preview publishes its scale independently of the committed camera',()=>{
+  const create = module.createLiveCameraPreview;
+  assert.equal(typeof create, 'function', 'createLiveCameraPreview is not implemented');
+  const preview = create({ x: 4, y: -2, scale: 1 });
+  preview.set({ x: 12, y: 8, scale: 2.5 });
+  assert.equal(preview.get().scale, 2.5);
+  assert.equal(preview.committed().scale, 1);
+});
+
 test('label visibility uses hysteresis so a zoom near the threshold does not flicker',()=>{
   assert.deepEqual(use('labelVisibilityState',{visible:false,zoom:1.69}),{visible:false,changed:false});
   assert.deepEqual(use('labelVisibilityState',{visible:false,zoom:1.72}),{visible:true,changed:true});

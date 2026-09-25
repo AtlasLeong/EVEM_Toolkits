@@ -85,6 +85,17 @@ test('star selector overrides reuse identical neutral geometry', async () => {
   assert.equal(tagAttributes(markup, 'circle', 'pirate-map__ring').r, '1.125')
 })
 
+test('fixed-size star primitives expose metadata for live camera patching', async () => {
+  const { BoardStarGlyph } = await loadPrimitives()
+  const markup = render(BoardStarGlyph, { node, scale: 2, selected: true, showHit: true })
+  for (const className of ['tac-star-dot', 'tac-star-ring', 'tac-star-hit']) {
+    const attrs = tagAttributes(markup, 'circle', className)
+    assert.equal(attrs['data-fixed-size'], 'true')
+    assert.equal(attrs['data-world-x'], '80')
+    assert.equal(attrs['data-world-y'], '120')
+  }
+})
+
 test('real gate lines preserve quiet and focused topology styles without scaling thickness', async () => {
   const { BoardGateLine } = await loadPrimitives()
   const a = { px: 12, py: 34 }, b = { px: 56, py: 78 }
