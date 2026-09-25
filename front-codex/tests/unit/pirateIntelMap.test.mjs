@@ -81,10 +81,11 @@ test('real systems expose selectable accessible hit areas', async () => {
 test('dense maps cap offscreen system hit nodes without dropping the selected system', async () => {
   const { default: PirateIntelMap } = await loadMap()
   const systems = Array.from({ length: 420 }, (_, index) => ({
-    system_id: index + 1, name: `System ${index + 1}`, x: index % 42, z: Math.floor(index / 42),
+    system_id: String(index + 1), region_id: index === 419 ? 2 : 1,
+    name: `System ${index + 1}`, x: index === 419 ? 10000 : index % 42, z: index === 419 ? 10000 : Math.floor(index / 42),
   }))
   const html = renderToStaticMarkup(React.createElement(PirateIntelMap, {
-    mapData: { systems, stargates: [], scope: { region_ids: [] } }, targets: [], selectedSystemId: 420,
+    mapData: { systems, stargates: [], scope: { region_ids: [1] } }, targets: [], selectedSystemId: 420,
   }))
   const hitCount = (html.match(/data-pirate-system=/g) || []).length
   assert.ok(hitCount > 0 && hitCount <= 250)

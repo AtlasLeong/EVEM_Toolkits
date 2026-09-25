@@ -55,7 +55,8 @@ function samplePirateViewportNodes(items, viewport, camera, { limit, marker = fa
     const x = marker ? item.x : item.px
     const y = marker ? item.y : item.py
     const key = marker ? item.key : item.system_id
-    if (preferredKey != null && key === preferredKey) { preferred = item; continue }
+    const preferredMatch = marker ? key === preferredKey : String(key) === String(preferredKey)
+    if (preferredKey != null && preferredMatch) { preferred = item; continue }
     const screenX = x * camera.scale + camera.x + (marker ? item.offset_x || 0 : 0)
     const screenY = y * camera.scale + camera.y + (marker ? item.offset_y || 0 : 0)
     if (screenX < -margin || screenX > viewport.width + margin ||
