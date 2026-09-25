@@ -84,12 +84,14 @@ export default function MarketTrendChart({ points = [], showBuy, showSell, forma
     ? Math.max(8, geometry.y(activeValue) / CHART.height * 100 - 3)
     : null
   const tooltipEdge = activeX !== null && activeX < 18 ? ' edge-left' : activeX !== null && activeX > 82 ? ' edge-right' : ''
+  const tooltipVertical = activeY !== null && activeY < 30 ? ' below' : ''
 
   if (!points.length || !geometry) return <div className="market-trend-empty">这段时间暂无有效报价曲线。可切换时间范围，等待真实采集数据。</div>
 
   return <div className="market-trend-wrap">
     <div className="market-trend-svg-wrap" onMouseLeave={() => setActiveIndex(null)}>
-      <svg className="market-trend-svg" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label="买卖报价历史走势图" preserveAspectRatio="xMidYMid meet">
+      {/* Keep the SVG coordinate space aligned with the HTML hit targets and tooltip. */}
+      <svg className="market-trend-svg" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label="买卖报价历史走势图" preserveAspectRatio="none">
         {[0, 1, 2, 3, 4].map(index => {
           const y = CHART.top + index * (CHART.height - CHART.top - CHART.bottom) / 4
           const value = geometry.max - BigInt(index) * (geometry.max - geometry.min) / 4n
@@ -107,7 +109,7 @@ export default function MarketTrendChart({ points = [], showBuy, showSell, forma
       <div className="market-trend-targets">
         {points.map((point, index) => <button key={`${point.observed_at}-${index}`} type="button" tabIndex={0} className="market-point-target" aria-label={`查看第 ${index + 1} 次观测`} style={{ left: `${geometry.x(index) / CHART.width * 100}%` }} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} />)}
       </div>
-      {activeIndex !== null && active && activeX !== null && activeY !== null ? <div className={`market-trend-tooltip${tooltipEdge}`} role="tooltip" style={{ left: `${activeX}%`, top: `${activeY}%` }}>
+      {activeIndex !== null && active && activeX !== null && activeY !== null ? <div className={`market-trend-tooltip${tooltipEdge}${tooltipVertical}`} role="tooltip" style={{ left: `${activeX}%`, top: `${activeY}%` }}>
         <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>
         <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(active.best_sell)}</strong></span>
         <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(active.best_buy)}</strong></span>

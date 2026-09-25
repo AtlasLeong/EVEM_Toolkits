@@ -269,7 +269,7 @@
   min-height: 0;
   padding: 16px 24px;
   overflow: hidden;
-  background: var(--market-ink, #10242b);
+  background: var(--console-bg, #faf9f6);
 }
 
 .page-stage:has(.market-page--immersive) {
@@ -290,6 +290,12 @@
   height: 100%;
   min-height: 0;
   flex-direction: column;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
+  border-radius: 16px;
+  background: var(--market-ink, #10242b);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 22%), inset 0 0 0 1px rgb(255 255 255 / 3%);
   color: var(--text);
 }
 
@@ -490,7 +496,7 @@
 
 .market-page--immersive .market-chart-frame {
   overflow: visible;
-  min-height: 300px;
+  min-height: 0;
 }
 
 .market-page--immersive .market-chart-frame .market-trend-wrap {
@@ -502,7 +508,7 @@
 .market-page--immersive .market-chart-frame .market-trend-svg-wrap {
   position: relative;
   flex: 1 1 auto;
-  min-height: 260px;
+  min-height: 0;
   overflow: visible;
 }
 
@@ -570,6 +576,18 @@
   transform: translate(-100%, -100%);
 }
 
+.market-page--immersive .market-trend-tooltip.below {
+  transform: translate(-50%, 0);
+}
+
+.market-page--immersive .market-trend-tooltip.edge-left.below {
+  transform: translate(0, 0);
+}
+
+.market-page--immersive .market-trend-tooltip.edge-right.below {
+  transform: translate(-100%, 0);
+}
+
 .market-page--immersive .market-trend-tooltip time {
   padding-bottom: 3px;
   border-bottom: 1px solid var(--line);
@@ -627,6 +645,11 @@
     margin-inline: 0;
   }
 
+  .market-page--immersive.market-terminal {
+    padding: 8px;
+    border-radius: 12px;
+  }
+
   .market-page--immersive .market-chart-frame {
     min-height: 270px;
   }
@@ -644,5 +667,38 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 6px;
+  }
+}
+
+@media (max-height: 820px) and (min-width: 768px) {
+  .market-page--immersive.market-terminal {
+    padding: 8px;
+  }
+
+  .market-page--immersive .market-terminal-header {
+    flex-basis: 48px;
+    padding-bottom: 8px;
+  }
+
+  .market-page--immersive .market-terminal-main {
+    padding-block: 12px 10px;
+  }
+
+  .market-page--immersive .market-trend-heading {
+    margin-top: 10px;
+  }
+
+  .market-page--immersive .market-chart-frame,
+  .market-page--immersive .market-chart-frame .market-trend-svg-wrap {
+    min-height: 0;
+  }
+
+  .market-page--immersive .market-depth-panel {
+    margin-top: 8px;
+    padding: 10px;
+  }
+
+  .market-page--immersive .market-depth-grid {
+    margin-top: 6px;
   }
 }
