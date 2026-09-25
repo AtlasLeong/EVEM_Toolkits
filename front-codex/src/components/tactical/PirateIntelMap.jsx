@@ -367,7 +367,7 @@ const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId
     const security = Number.isFinite(Number(node?.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
     const name = systemDisplayName(node || label)
     const ariaLabel = `${name} (${id})，安等 ${security}`
-    const activate = event => { event.stopPropagation(); onSelectSystem?.(id) }
+    const activate = event => { event.stopPropagation(); onSelectSystem?.(node || label) }
     return <g key={label.system_id} className="pirate-map__label">
       <BoardSystemLabel label={label} node={node} selected={id === selectedSystemId} />
       <circle className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
@@ -628,9 +628,9 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
         {markerLayer}
       </g>
       <g ref={labelLayerRef} className="pirate-map__labels">
-        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={id => {
+        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={system => {
           if (suppressClickRef.current) { suppressClickRef.current = false; return }
-          onSelectSystem?.(id)
+          onSelectSystem?.(system)
         }} />
       </g>
     </svg>
