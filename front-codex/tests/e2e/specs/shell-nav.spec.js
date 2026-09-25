@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
-test('顶栏导航高亮正确且点击 Logo 返回防诈名单', async ({ page }) => {
+test('顶栏导航高亮正确且点击 Logo 返回市场价格', async ({ page }) => {
   await seedAuthenticatedSession(page, { userName: 'atlas123' })
 
   await installApiMock(page, async ({ url, method }) => {
@@ -18,8 +18,21 @@ test('顶栏导航高亮正确且点击 Logo 返回防诈名单', async ({ page 
 
   await expect(page.locator('.nav-item.active')).toContainText('行星资源')
   await page.locator('.brand').click()
-  await expect(page).toHaveURL(/\/fraudlist$/)
-  await expect(page.locator('.nav-item.active')).toContainText('防诈名单')
+  await expect(page).toHaveURL(/\/market$/)
+  await expect(page.locator('.nav-item.active')).toContainText('市场价格')
+})
+
+test('根路径默认进入市场价格', async ({ page }) => {
+  await installApiMock(page, async ({ url, method }) => {
+    if (method === 'GET' && url.pathname === '/api/market/categories/') return json([])
+    if (method === 'GET' && url.pathname === '/api/market/items/') return json({ count: 0, results: [] })
+    return undefined
+  })
+
+  await page.goto('/')
+  await expect(page).toHaveURL(/\/market$/)
+  await expect(page.getByRole('heading', { name: '市场价格' })).toBeVisible()
+  await expect(page.locator('.nav-item.active')).toContainText('市场价格')
 })
 
 test('侧栏使用实心透明罗盘与 EVEM 字标并保留冰蓝指针', async ({ page }) => {
@@ -79,7 +92,7 @@ test('侧栏使用实心透明罗盘与 EVEM 字标并保留冰蓝指针', async
   await expect(page.locator('.brand-name')).toHaveCSS('width', '1px')
   await expect(page.locator('.brand')).toHaveAccessibleName('EVEMToolkit 首页')
   await page.locator('.brand').click()
-  await expect(page).toHaveURL(/\/fraudlist$/)
+  await expect(page).toHaveURL(/\/market$/)
 })
 
 test('浏览器与触屏收藏图标统一使用可加载的罗盘 PNG', async ({ page }) => {

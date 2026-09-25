@@ -51,6 +51,49 @@ test('terminal filters categories, switches items and retains selection on refre
   await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
 })
 
+test('market terminal hides internal ids and explanatory footnotes', async ({ page }) => {
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '1001', name: '测试舰船', category: '巡洋舰', category_id: 1000, best_sell: '130', best_buy: '100', observed_at: freshSample, status: 'fresh', scope: 'global' }] })
+    if (url.pathname === '/api/market/items/1001/series/') return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '130', best_buy: '100' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
+  await expect(page.locator('.market-choice-meta')).not.toContainText('ID')
+  await expect(page.locator('.market-instrument-head')).not.toContainText('ID')
+  await expect(page.locator('.market-chart-footnote')).toHaveCount(0)
+  await expect(page.locator('.market-summary-note')).toHaveCount(0)
+})
+
+test('switching market items keeps the terminal chart mounted while the next series loads', async ({ page }) => {
+  let seriesCalls = 0
+  let releaseSecondSeries
+  const secondSeries = new Promise(resolve => { releaseSecondSeries = resolve })
+  await installApiMock(page, async ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 2 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 2, results: [
+      { item_id: '1001', name: '测试舰船', category: '巡洋舰', category_id: 1000, best_sell: '130', best_buy: '100', observed_at: freshSample, status: 'fresh', scope: 'global' },
+      { item_id: '1002', name: '另一艘舰船', category: '战列舰', category_id: 1000, best_sell: '230', best_buy: '200', observed_at: freshSample, status: 'fresh', scope: 'global' },
+    ] })
+    if (url.pathname.endsWith('/series/')) {
+      seriesCalls += 1
+      if (seriesCalls > 1) await secondSeries
+      return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '130', best_buy: '100' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+    }
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  await page.getByRole('button', { name: /另一艘舰船/ }).click()
+  await expect(page.getByRole('heading', { name: '另一艘舰船' })).toBeVisible()
+  await expect(page.locator('.market-terminal-main')).toBeVisible()
+  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  releaseSecondSeries()
+})
+
 test('trend supports ranges, independent legends, keyboard detail and breaks missing price segments', async ({ page }) => {
   const requests = []
   await installApiMock(page, ({ url }) => {

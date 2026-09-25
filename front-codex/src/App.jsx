@@ -53,7 +53,7 @@ export default function App() {
       <div className="site-content">
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<Navigate replace to="/fraudlist" />} />
+            <Route index element={<Navigate replace to="/market" />} />
             <Route path="/infocenter" element={appRoute(<InfoCenterPage />)} />
             <Route path="/fraudlist" element={appRoute(<FraudListPage />)} />
             <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
@@ -104,7 +104,7 @@ export default function App() {
           </Route>
           <Route path="/login" element={appRoute(<LoginPage />)} />
           <Route path="/fraudlogin" element={appRoute(<FraudAdminLoginPage />)} />
-          <Route path="*" element={<Navigate replace to="/fraudlist" />} />
+          <Route path="*" element={<Navigate replace to="/market" />} />
         </Routes>
       </div>
       <SiteFooter />
