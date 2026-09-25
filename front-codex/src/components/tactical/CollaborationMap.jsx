@@ -23,12 +23,20 @@ const relativeCameraTransform = (base = INITIAL_VIEW, next = INITIAL_VIEW) => {
 };
 
 /** Keep screen-sized glyphs and annotations stable while their parent layer previews a zoom. */
-function syncCollaborationPreviewGeometry(root, base = INITIAL_VIEW, next = INITIAL_VIEW) {
+function syncCollaborationPreviewGeometry(root, base = INITIAL_VIEW, next = INITIAL_VIEW, refresh = false) {
   if (!root) return;
   const scale = Math.max(.0001, Number(next.scale) || 1);
-  root.querySelectorAll('[data-fixed-size="true"][data-fixed-kind]').forEach(node => {
+  if (refresh || !root.__tacticalFixedElements) {
+    root.__tacticalFixedElements = [...root.querySelectorAll('[data-fixed-size="true"][data-fixed-kind]')];
+  }
+  root.__tacticalFixedElements.forEach(node => {
     const role = node.getAttribute('data-fixed-kind');
-    if (role !== 'ring' && !(role === 'dot' && node.getAttribute('data-fixed-emphasis') === 'true')) return;
+    if (role === 'gate') {
+      const stroke = Number(node.getAttribute('data-base-stroke'));
+      if (Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke / scale));
+      return;
+    }
+    if (role !== 'ring' && role !== 'dot' && role !== 'hit') return;
     const radius = Number(node.getAttribute('data-base-radius'));
     if (Number.isFinite(radius)) node.setAttribute('r', String(radius / scale));
     const stroke = Number(node.getAttribute('data-base-stroke'));
@@ -185,8 +193,11 @@ export default function CollaborationMap({
     liveViewRef.current = view;
     worldLayerRef.current?.setAttribute('transform', cameraTransform(view));
     overlayLayerRef.current?.removeAttribute('transform');
-    syncCollaborationPreviewGeometry(ref.current, view, view);
+    syncCollaborationPreviewGeometry(ref.current, view, view, true);
   }, [view]);
+  useLayoutEffect(() => {
+    if (ref.current) delete ref.current.__tacticalFixedElements;
+  }, [nodes.length, stargates.length]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
   const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({

@@ -37,9 +37,11 @@ export function BoardStarGlyph({ node, scale = 1, selected = false, reported = f
 export function BoardGateLine({ a, b, scale = 1, active = false, className = 'tac-map-gate' }) {
   if (!a || !b) return null
   const zoom = Math.max(.0001, scale)
+  const baseStroke = active ? 1.8 : .65
   return <line className={`${className}${active ? ' is-active' : ''}`}
     x1={a.px} y1={a.py} x2={b.px} y2={b.py}
-    stroke={active ? '#819591' : '#46565c'} strokeWidth={(active ? 1.8 : .65) / zoom}
+    data-fixed-size="true" data-fixed-kind="gate" data-base-stroke={baseStroke}
+    stroke={active ? '#819591' : '#46565c'} strokeWidth={baseStroke / zoom}
     opacity={active ? .88 : Math.max(.3, Math.min(.5, .18 + zoom * .12))} pointerEvents="none" />
 }
 

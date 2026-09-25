@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { isHistoricalSighting, pirateMapMarkers } from '../../utils/pirateIntel'
 import { projectSystemsScoped, systemDisplayName, zoomAroundPoint } from '../../utils/tacticalMapLayout'
-import { indexGateSegments, labelVisibilityState, layoutIntelLabels, normalizeWheelDelta, subscribeMapWheel } from '../../utils/tacticalMapInteraction'
+import { createLiveCameraPreview, indexGateSegments, labelVisibilityState, layoutIntelLabels, normalizeWheelDelta, subscribeMapWheel } from '../../utils/tacticalMapInteraction'
 import { BoardGateLine, BoardStarGlyph, BoardSystemLabel } from './BoardMapPrimitives'
 import '../../styles/pirateIntelMap.css'
 
@@ -288,11 +288,11 @@ export function createPirateCameraScheduler(commit, {
   clearTimer = timer => clearTimeout(timer),
   onPreview = commit,
 } = {}) {
-  let current = INITIAL_CAMERA
+  const preview = createLiveCameraPreview(INITIAL_CAMERA)
   let pendingFrame = null
   let pendingTimer = null
   let previewing = false
-  const nextCamera = update => { current = typeof update === 'function' ? update(current) : update }
+  const nextCamera = update => preview.set(update)
   const cancelPending = () => {
     if (pendingFrame !== null) cancelFrame(pendingFrame)
     if (pendingTimer !== null) clearTimer(pendingTimer)
@@ -303,12 +303,12 @@ export function createPirateCameraScheduler(commit, {
   const queueFrame = () => {
     if (pendingFrame === null) pendingFrame = requestFrame(() => {
       pendingFrame = null
-      if (previewing) onPreview(current)
-      else commit(current)
+      if (previewing) onPreview(preview.get())
+      else commit(preview.commit())
     })
   }
   return {
-    current: () => current,
+    current: () => preview.get(),
     schedule(update) {
       if (pendingTimer !== null) clearTimer(pendingTimer)
       pendingTimer = null
@@ -323,13 +323,13 @@ export function createPirateCameraScheduler(commit, {
       if (pendingTimer !== null) clearTimer(pendingTimer)
       pendingTimer = setTimer(() => {
         cancelPending()
-        commit(current)
+        commit(preview.commit())
       })
     },
     immediate(update) {
       nextCamera(update)
       cancelPending()
-      commit(current)
+      commit(preview.commit())
     },
     dispose: cancelPending,
   }
@@ -467,18 +467,37 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const visibleMarkersRef = useRef(null)
   const visibleLabelsRef = useRef(null)
   const visibleSystemHitsRef = useRef(null)
+  const fixedPreviewElementsRef = useRef(null)
   const onSelectTargetRef = useRef(onSelectTarget)
   const defaultNowRef = useRef(null)
   onSelectTargetRef.current = onSelectTarget
   if (defaultNowRef.current === null) defaultNowRef.current = now ?? Date.now()
   const sceneNow = now ?? defaultNowRef.current
-  const syncPiratePreviewGeometry = (next, base = committedCameraRef.current) => {
+  const syncPiratePreviewGeometry = (next, base = committedCameraRef.current, refresh = false) => {
     const svg = svgRef.current
     if (!svg) return
     const inverseScale = 1 / Math.max(.0001, next.scale)
     svg.querySelectorAll('[data-pirate-system]').forEach(node => {
       const radius = Number(node.getAttribute('data-base-radius') || 22)
       node.setAttribute('r', String(radius * inverseScale))
+    })
+    if (refresh || !fixedPreviewElementsRef.current) {
+      fixedPreviewElementsRef.current = [...svg.querySelectorAll('[data-fixed-size="true"][data-fixed-kind]')]
+    }
+    fixedPreviewElementsRef.current.forEach(node => {
+      const role = node.getAttribute('data-fixed-kind')
+      if (role === 'gate') {
+        const stroke = Number(node.getAttribute('data-base-stroke'))
+        if (Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke * inverseScale))
+        return
+      }
+      if (role !== 'dot' && role !== 'ring' && role !== 'hit') return
+      const radius = Number(node.getAttribute('data-base-radius'))
+      if (Number.isFinite(radius)) node.setAttribute('r', String(radius * inverseScale))
+      if (role === 'ring') {
+        const stroke = Number(node.getAttribute('data-base-stroke'))
+        if (Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke * inverseScale))
+      }
     })
     svg.querySelectorAll('[data-pirate-marker]').forEach(node => {
       const x = Number(node.getAttribute('data-pirate-marker-x'))
@@ -524,13 +543,17 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     labelLayerRef.current?.removeAttribute('transform')
     tetherLayerRef.current?.removeAttribute('transform')
     if (cardLayerRef.current) cardLayerRef.current.style.transform = ''
-    syncPiratePreviewGeometry(camera, camera)
+    fixedPreviewElementsRef.current = null
+    syncPiratePreviewGeometry(camera, camera, true)
     setWheelMotion(false)
   }, [camera])
   useEffect(() => {
     setShowZoomLabels(previous => labelVisibilityState({ visible: previous, zoom: camera.scale }).visible)
   }, [camera.scale])
   const geometry = useMemo(() => createPirateMapGeometry(mapData, viewport, { desktopOverlay }), [mapData, viewport, desktopOverlay])
+  useLayoutEffect(() => {
+    fixedPreviewElementsRef.current = null
+  }, [geometry.systems.length])
   const cardSafeArea = useMemo(() => pirateMapCardSafeArea(geometry.safeArea, Boolean(selectedKey), desktopOverlay),
     [geometry.safeArea, selectedKey, desktopOverlay])
   const scene = useMemo(() => createPirateMapScene(mapData, targets, viewport, { now: sceneNow, geometry }),
