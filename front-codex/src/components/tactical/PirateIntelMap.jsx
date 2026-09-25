@@ -54,12 +54,12 @@ function samplePirateViewportNodes(items, viewport, camera, { limit, marker = fa
   for (const item of items) {
     const x = marker ? item.x : item.px
     const y = marker ? item.y : item.py
+    const key = marker ? item.key : item.system_id
+    if (preferredKey != null && key === preferredKey) { preferred = item; continue }
     const screenX = x * camera.scale + camera.x + (marker ? item.offset_x || 0 : 0)
     const screenY = y * camera.scale + camera.y + (marker ? item.offset_y || 0 : 0)
     if (screenX < -margin || screenX > viewport.width + margin ||
       screenY < -margin || screenY > viewport.height + margin) continue
-    const key = marker ? item.key : item.system_id
-    if (preferredKey != null && key === preferredKey) { preferred = item; continue }
     const cellX = Math.floor(x / worldCellWidth), cellY = Math.floor(y / worldCellHeight)
     const bucketKey = `${cellX}:${cellY}`
     const centerX = (cellX + .5) * worldCellWidth, centerY = (cellY + .5) * worldCellHeight
@@ -379,7 +379,6 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
       return <circle key={id} className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
         data-pirate-system={id} cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
         aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
-        onPointerDown={event => event.stopPropagation()}
         onClick={event => activate(event, node)}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
     })}
@@ -435,6 +434,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const pickerRef = useRef(null)
   const visibleMarkersRef = useRef(null)
   const visibleLabelsRef = useRef(null)
+  const visibleSystemHitsRef = useRef(null)
   const onSelectTargetRef = useRef(onSelectTarget)
   const defaultNowRef = useRef(null)
   onSelectTargetRef.current = onSelectTarget
@@ -484,6 +484,12 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     [scene.labels, viewport, camera, selectedSystemId])
   const visibleLabels = stablePirateSubset(visibleLabelsRef.current, nextVisibleLabels)
   visibleLabelsRef.current = visibleLabels
+  const selectedSystemHitId = selectedSystemIdProp ?? selectedSystemId
+  const nextVisibleSystemHits = useMemo(() => samplePirateViewportNodes(geometry.systems, viewport, camera,
+    { limit: 250, preferredKey: selectedSystemHitId, margin: 40 }),
+    [geometry.systems, viewport, camera, selectedSystemHitId])
+  const visibleSystemHits = stablePirateSubset(visibleSystemHitsRef.current, nextVisibleSystemHits)
+  visibleSystemHitsRef.current = visibleSystemHits
   const cards = useMemo(() => layoutPirateTargetCards(visibleMarkers, viewport, camera, visibleLabels, cardSafeArea, selectedKey),
     [visibleMarkers, visibleLabels, viewport, camera, cardSafeArea, selectedKey])
   const bySystemId = useMemo(() => new Map(geometry.systems.map(node => [Number(node.system_id), node])), [geometry.systems])
@@ -610,14 +616,16 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     if (event.button !== 0) return
     const origin = eventPoint(event, svgRef.current, viewport)
     dragRef.current = { pointerId: event.pointerId, origin, camera: cameraScheduler.current() }
-    event.currentTarget.setPointerCapture?.(event.pointerId)
     setOpenKey(null)
   }
   const pointerMove = event => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
     const point = eventPoint(event, svgRef.current, viewport)
-    if (Math.hypot(point.x - drag.origin.x, point.y - drag.origin.y) > 6) drag.moved = true
+    if (Math.hypot(point.x - drag.origin.x, point.y - drag.origin.y) > 6) {
+      if (!drag.moved) event.currentTarget.setPointerCapture?.(event.pointerId)
+      drag.moved = true
+    }
     cameraScheduler.schedule(panPirateCamera(drag.camera, drag.origin, point))
   }
   const pointerEnd = event => {
@@ -641,8 +649,8 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
       <g ref={worldLayerRef} className="pirate-map__world" transform={`translate(${camera.x} ${camera.y}) scale(${camera.scale})`}>
         <StaticGeometry geometry={geometry} scale={camera.scale} />
-        <StaticSystemHits systems={geometry.systems} scale={camera.scale}
-          selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={activateSystem} />
+        <StaticSystemHits systems={visibleSystemHits} scale={camera.scale}
+          selectedSystemId={selectedSystemHitId} onSelectSystem={activateSystem} />
         {markerLayer}
       </g>
       <g ref={labelLayerRef} className="pirate-map__labels">
