@@ -83,6 +83,8 @@ def _save_quote(run, item, quote, observed_at_ms):
                 'best_sell': quote.best_sell,
                 'buy_order_count': quote.buy_count,
                 'sell_order_count': quote.sell_count,
+                'buy_prices': [str(value) for value in getattr(quote, 'buy_prices', ())[:5]],
+                'sell_prices': [str(value) for value in getattr(quote, 'sell_prices', ())[:5]],
                 'observed_at_ms': observed_at_ms,
             },
         )
@@ -143,8 +145,8 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
     """Collect due prices once; injected I/O lets tests exercise the DB path."""
     from .session_bundle import NeedsAuthError
     if bundle_loader is None:
-        from .session_bundle import load_session
-        bundle_loader = load_session
+        from .session_bundle import load_random_session
+        bundle_loader = load_random_session
     if session_factory is None:
         from .collector_protocol import MarketSession
         session_factory = MarketSession

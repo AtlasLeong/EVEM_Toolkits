@@ -16,6 +16,7 @@ class MarketItem(models.Model):
     category = models.CharField(max_length=120, blank=True, default='')
     category_id = models.BigIntegerField(null=True, blank=True, db_index=True)
     subcategory_id = models.BigIntegerField(null=True, blank=True)
+    market_bucket = models.CharField(max_length=16, default='other', db_index=True)
     scope = models.CharField(max_length=80, default='global')
     enabled = models.BooleanField(default=True)
     last_attempt_at_ms = models.BigIntegerField(null=True, blank=True)
@@ -125,6 +126,8 @@ class PriceSnapshot(models.Model):
     best_sell = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     buy_order_count = models.PositiveIntegerField(default=0)
     sell_order_count = models.PositiveIntegerField(default=0)
+    buy_prices = models.JSONField(default=list)
+    sell_prices = models.JSONField(default=list)
     observed_at_ms = models.BigIntegerField()
 
     class Meta:

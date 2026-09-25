@@ -33,11 +33,14 @@ class FakeSession:
 
 
 class Quote:
-    def __init__(self, *, best_buy=None, best_sell=None, buy_count=0, sell_count=0):
+    def __init__(self, *, best_buy=None, best_sell=None, buy_count=0, sell_count=0,
+                 buy_prices=(), sell_prices=()):
         self.best_buy = best_buy
         self.best_sell = best_sell
         self.buy_count = buy_count
         self.sell_count = sell_count
+        self.buy_prices = buy_prices
+        self.sell_prices = sell_prices
 
 
 class MarketWorkerTests(TestCase):
@@ -72,7 +75,11 @@ class MarketWorkerTests(TestCase):
 
         now = iter((1000, 2000, 3000, 4000))
         session = FakeSession({
-            1: Quote(best_buy=Decimal('5.50'), best_sell=Decimal('7.25'), buy_count=2, sell_count=3),
+            1: Quote(
+                best_buy=Decimal('5.50'), best_sell=Decimal('7.25'), buy_count=2, sell_count=3,
+                buy_prices=(Decimal('5.50'), Decimal('5.25')),
+                sell_prices=(Decimal('7.25'), Decimal('7.50')),
+            ),
             2: Quote(best_sell=Decimal('11.00'), sell_count=1),
         })
         opened = []
@@ -100,6 +107,8 @@ class MarketWorkerTests(TestCase):
         self.assertEqual(LatestPrice.objects.count(), 2)
         self.assertEqual(LatestPrice.objects.get(item=self.first).snapshot.best_buy, Decimal('5.50'))
         self.assertIsNone(LatestPrice.objects.get(item=self.second).snapshot.best_buy)
+        self.assertEqual(PriceSnapshot.objects.get(item=self.first).sell_prices, ['7.25', '7.50'])
+        self.assertEqual(PriceSnapshot.objects.get(item=self.first).buy_prices, ['5.50', '5.25'])
         self.config.refresh_from_db()
         self.assertEqual(self.config.next_due_at_ms, 4000 + 2100 * 1000)
 

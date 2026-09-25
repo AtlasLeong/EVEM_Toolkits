@@ -16,9 +16,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from .models import CollectionRun, MarketConfig, MarketConfigAudit, MarketItem, PriceSnapshot, epoch_ms
 from .serializers import (
     ConfigPatchSerializer, ItemCreateSerializer, ItemPatchSerializer, admin_item_payload,
-    item_payload, run_payload, utc_iso,
+    item_payload, price_levels, run_payload, utc_iso,
 )
 from .worker import MAX_ITEMS_PER_RUN
+from .taxonomy import (
+    BUCKET_LABELS, BUCKET_OTHER, PRIMARY_BUCKETS, is_primary_bucket,
+)
 
 
 CATEGORY_LABELS = {
@@ -82,7 +85,15 @@ def filter_items_by_query(items, raw_query, *, include_scope=False):
 def filter_items_by_category(items, raw_category_id):
     if raw_category_id is None:
         return items
+    if raw_category_id in PRIMARY_BUCKETS:
+        return items.filter(market_bucket=raw_category_id)
     if raw_category_id == 'other':
+        # Once the catalog has logical buckets, "other" means the explicit
+        # catch-all bucket.  The legacy branch keeps old operator-created rows
+        # filterable by their official category ids until the catalog is
+        # reseeded.
+        if items.filter(market_bucket__in=PRIMARY_BUCKETS).exists():
+            return items.filter(market_bucket=BUCKET_OTHER)
         return items.filter(
             Q(category_id__isnull=True) | Q(category_id=0) | ~Q(category_id__in=KNOWN_CATEGORY_IDS)
         )
@@ -103,6 +114,25 @@ class PublicCategoriesView(APIView):
     throttle_scope = 'market_public'
 
     def get(self, request):
+        logical_totals = MarketItem.objects.filter(enabled=True).values('market_bucket').annotate(count=Count('pk'))
+        logical_counts = {row['market_bucket']: row['count'] for row in logical_totals}
+        has_logical_catalog = MarketItem.objects.filter(market_bucket__in=PRIMARY_BUCKETS).exists()
+        if has_logical_catalog:
+            categories = [
+                {'id': bucket, 'label': BUCKET_LABELS[bucket], 'count': logical_counts.get(bucket, 0)}
+                for bucket in PRIMARY_BUCKETS
+            ]
+            if logical_counts.get(BUCKET_OTHER, 0):
+                categories.append({
+                    'id': BUCKET_OTHER,
+                    'label': BUCKET_LABELS[BUCKET_OTHER],
+                    'count': logical_counts[BUCKET_OTHER],
+                })
+            return Response(categories)
+
+        # Compatibility for rows created before the logical taxonomy existed.
+        # A normal seeded installation enters the branch above as soon as one
+        # of the three selectable buckets is enabled.
         totals = MarketItem.objects.filter(enabled=True).values('category_id').annotate(count=Count('pk'))
         categories = []
         other_count = 0
@@ -149,11 +179,20 @@ class PublicHistoryView(APIView):
             raise ValidationError({'days': 'Choose 1, 7, or 30 days.'})
         cutoff_ms = int(time.time() * 1000) - int(days) * 24 * 60 * 60 * 1000
         snapshots = PriceSnapshot.objects.filter(item=item, observed_at_ms__gte=cutoff_ms)
-        return paged_response(snapshots, request, lambda snapshot: {
-            'observed_at': utc_iso(snapshot.observed_at_ms),
-            'best_buy': str(snapshot.best_buy) if snapshot.best_buy is not None else None,
-            'best_sell': str(snapshot.best_sell) if snapshot.best_sell is not None else None,
-        })
+        def history_payload(snapshot):
+            payload = {
+                'observed_at': utc_iso(snapshot.observed_at_ms),
+                'best_buy': str(snapshot.best_buy) if snapshot.best_buy is not None else None,
+                'best_sell': str(snapshot.best_sell) if snapshot.best_sell is not None else None,
+            }
+            sell_prices = price_levels(snapshot, 'sell_prices')
+            buy_prices = price_levels(snapshot, 'buy_prices')
+            if sell_prices:
+                payload['sell_prices'] = sell_prices
+            if buy_prices:
+                payload['buy_prices'] = buy_prices
+            return payload
+        return paged_response(snapshots, request, history_payload)
 
 
 def series_change(first, last):
@@ -186,7 +225,9 @@ class PublicSeriesView(APIView):
         cutoff_ms = int(time.time() * 1000) - int(days) * 24 * 60 * 60 * 1000
         snapshots = PriceSnapshot.objects.filter(
             item=item, observed_at_ms__gte=cutoff_ms,
-        ).order_by('observed_at_ms', 'id').values('observed_at_ms', 'best_buy', 'best_sell')
+        ).order_by('observed_at_ms', 'id').values(
+            'observed_at_ms', 'best_buy', 'best_sell', 'buy_prices', 'sell_prices',
+        )
         count = snapshots.count()
         def first_and_last(field):
             field_values = snapshots.filter(**{f'{field}__isnull': False})
@@ -206,13 +247,23 @@ class PublicSeriesView(APIView):
             ).filter(_sample_row__in=sample_rows).order_by('observed_at_ms', 'id'))
         else:
             sampled = list(snapshots)
-        return Response({
-            'count': count,
-            'points': [{
+        points = []
+        for snapshot in sampled:
+            point = {
                 'observed_at': utc_iso(snapshot['observed_at_ms']),
                 'best_buy': str(snapshot['best_buy']) if snapshot['best_buy'] is not None else None,
                 'best_sell': str(snapshot['best_sell']) if snapshot['best_sell'] is not None else None,
-            } for snapshot in sampled],
+            }
+            sell_prices = [str(value) for value in (snapshot.get('sell_prices') or [])[:5]]
+            buy_prices = [str(value) for value in (snapshot.get('buy_prices') or [])[:5]]
+            if sell_prices:
+                point['sell_prices'] = sell_prices
+            if buy_prices:
+                point['buy_prices'] = buy_prices
+            points.append(point)
+        return Response({
+            'count': count,
+            'points': points,
             'change': {
                 'best_buy': series_change(first_buy, last_buy) if first_buy is not None and last_buy is not None else {'absolute': None, 'percent': None},
                 'best_sell': series_change(first_sell, last_sell) if first_sell is not None and last_sell is not None else {'absolute': None, 'percent': None},

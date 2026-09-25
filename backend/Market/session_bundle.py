@@ -16,6 +16,7 @@ import ipaddress
 import json
 import math
 import os
+import random
 from pathlib import Path
 import stat
 import tempfile
@@ -188,6 +189,48 @@ def load_session(path: str | Path | None = None) -> dict[str, Any]:
             return decode_session(stream.read(MAX_BUNDLE_SIZE + 1))
     except (OSError, ValueError, TypeError):
         raise _invalid() from None
+
+
+def _session_paths(paths=None) -> list[Path]:
+    """Resolve an explicit session pool without ever interpreting passwords.
+
+    ``MARKET_SESSION_FILES`` is an OS-path-separator-delimited list.  A single
+    ``MARKET_SESSION_FILE`` remains supported for backwards compatibility.
+    Paths are validated before any file is opened and are intentionally not
+    returned in logs or API responses.
+    """
+    if paths is None:
+        configured = os.environ.get('MARKET_SESSION_FILES', '')
+        if configured.strip():
+            paths = configured.split(os.pathsep)
+        else:
+            paths = [os.environ.get('MARKET_SESSION_FILE', '')]
+    elif isinstance(paths, (str, Path)):
+        paths = [paths]
+    resolved = []
+    seen = set()
+    for value in paths:
+        if not isinstance(value, (str, Path)) or not str(value).strip():
+            raise _invalid()
+        path = Path(value)
+        if not path.is_absolute() or path in seen:
+            raise _invalid()
+        seen.add(path)
+        resolved.append(path)
+    if not resolved or len(resolved) > 64:
+        raise _invalid()
+    return resolved
+
+
+def load_session_pool(paths=None) -> list[dict[str, Any]]:
+    """Load all configured private sessions for one collection decision."""
+    return [load_session(path) for path in _session_paths(paths)]
+
+
+def load_random_session(paths=None) -> dict[str, Any]:
+    """Select one validated private session for a collection cycle."""
+    sessions = load_session_pool(paths)
+    return random.choice(sessions)
 
 
 def save_session(bundle: dict[str, Any], path: str | Path) -> Path:

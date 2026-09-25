@@ -7,6 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import models, transaction
 
 from Market.models import MarketItem
+from Market.taxonomy import BUCKET_CHOICES, classify_item
 
 
 DEFAULT_CATALOG = Path(__file__).resolve().parents[2] / 'data' / 'market_catalog.json'
@@ -45,6 +46,13 @@ def catalog_items(path, *, include_currency):
         result.append(MarketItem(
             id=item_id, name=name.strip(), category=category,
             category_id=category_id, subcategory_id=subcategory_id,
+            market_bucket=classify_item(
+                item_id=item_id,
+                name=name,
+                category=category,
+                category_id=category_id,
+                subcategory_id=subcategory_id,
+            ),
             scope='global', enabled=False,
         ))
     return result
@@ -55,6 +63,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--catalog', type=Path, default=None)
+        parser.add_argument(
+            '--enable-buckets',
+            default='',
+            help='Enable a comma-separated list of logical buckets (currency, planetary, minerals).',
+        )
 
     def handle(self, *args, **options):
         custom = options['catalog']
@@ -63,8 +76,10 @@ class Command(BaseCommand):
             MarketItem.objects.bulk_create(items, batch_size=500, ignore_conflicts=True)
             catalog_by_id = {item.pk: item for item in items}
             missing = MarketItem.objects.filter(pk__in=catalog_by_id).filter(
-                models.Q(category_id__isnull=True) | models.Q(subcategory_id__isnull=True)
-            ).only('id', 'category_id', 'subcategory_id')
+                models.Q(category_id__isnull=True)
+                | models.Q(subcategory_id__isnull=True)
+                | models.Q(market_bucket='other')
+            ).only('id', 'category_id', 'subcategory_id', 'market_bucket')
             to_update = []
             for item in missing.iterator(chunk_size=500):
                 catalog = catalog_by_id[item.pk]
@@ -75,8 +90,24 @@ class Command(BaseCommand):
                 if item.subcategory_id is None and catalog.subcategory_id is not None:
                     item.subcategory_id = catalog.subcategory_id
                     changed = True
+                # Existing non-default buckets are operator decisions and are
+                # never overwritten by a later catalog refresh.
+                if item.market_bucket == 'other' and catalog.market_bucket != 'other':
+                    item.market_bucket = catalog.market_bucket
+                    changed = True
                 if changed:
                     to_update.append(item)
             if to_update:
-                MarketItem.objects.bulk_update(to_update, ['category_id', 'subcategory_id'], batch_size=500)
+                MarketItem.objects.bulk_update(
+                    to_update, ['category_id', 'subcategory_id', 'market_bucket'], batch_size=500,
+                )
+            requested = {value.strip() for value in options['enable_buckets'].split(',') if value.strip()}
+            valid = {bucket for bucket, _label in BUCKET_CHOICES}
+            invalid = requested - valid
+            if invalid:
+                raise CommandError('unknown market bucket')
+            if requested:
+                MarketItem.objects.filter(
+                    pk__in=catalog_by_id, market_bucket__in=requested,
+                ).update(enabled=True)
         self.stdout.write(f'catalog processed: {len(items)}')

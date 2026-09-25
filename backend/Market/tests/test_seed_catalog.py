@@ -88,3 +88,23 @@ class MarketCatalogSeedTests(TestCase):
 
         self.assertGreaterEqual(MarketItem.objects.count(), 5000)
         self.assertTrue(MarketItem.objects.filter(pk=28007000000, name='伊甸币', enabled=False).exists())
+
+    def test_seed_classifies_the_three_operator_buckets_and_can_enable_them(self):
+        with TemporaryDirectory() as temporary:
+            catalog = self._catalog(temporary, [
+                {'item_id': 28007000000, 'item_name': '伊甸币', 'market_group_name_3rd': '货币'},
+                {'item_id': 42001000000, 'item_name': '光泽合金', 'category_id': 1200,
+                 'subcategory_id': 1200020, 'market_group_name_3rd': '行星资源-复数'},
+                {'item_id': 41000000000, 'item_name': '三钛合金', 'category_id': 1200,
+                 'subcategory_id': 1200000, 'market_group_name_3rd': '矿物-复数'},
+            ])
+            call_command(
+                'market_seed_catalog', catalog=str(catalog),
+                enable_buckets='currency,planetary,minerals', stdout=StringIO(),
+            )
+
+        buckets = dict(MarketItem.objects.values_list('id', 'market_bucket'))
+        self.assertEqual(buckets, {
+            28007000000: 'currency', 42001000000: 'planetary', 41000000000: 'minerals',
+        })
+        self.assertTrue(MarketItem.objects.filter(enabled=True).count() == 3)

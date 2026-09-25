@@ -10,6 +10,27 @@ from Market.models import CollectionRun, MarketItem, PriceSnapshot
 
 
 class MarketCategoryApiTests(TestCase):
+    def test_logical_categories_are_stable_and_filterable(self):
+        MarketItem.objects.create(id=101, name='伊甸币', market_bucket='currency')
+        MarketItem.objects.create(id=102, name='光泽合金', market_bucket='planetary')
+        MarketItem.objects.create(id=103, name='三钛合金', market_bucket='minerals')
+        MarketItem.objects.create(id=104, name='未分类', market_bucket='other')
+        MarketItem.objects.create(id=105, name='隐藏行星资源', market_bucket='planetary', enabled=False)
+
+        response = self.client.get('/api/market/categories/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [
+            {'id': 'currency', 'label': '货币 · 伊甸币', 'count': 1},
+            {'id': 'planetary', 'label': '行星资源', 'count': 1},
+            {'id': 'minerals', 'label': '矿物', 'count': 1},
+            {'id': 'other', 'label': '其他', 'count': 1},
+        ])
+        for bucket, expected in [('currency', '101'), ('planetary', '102'), ('minerals', '103')]:
+            with self.subTest(bucket=bucket):
+                result = self.client.get('/api/market/items/', {'category_id': bucket}).json()
+                self.assertEqual([row['item_id'] for row in result['results']], [expected])
+
     def test_categories_count_only_enabled_items_and_fold_missing_ids(self):
         MarketItem.objects.create(id=1, name='Ship A', category_id=1000)
         MarketItem.objects.create(id=2, name='Ship B', category_id=1000)

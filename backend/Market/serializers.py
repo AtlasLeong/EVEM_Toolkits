@@ -14,6 +14,14 @@ def utc_iso(epoch_millis):
     return datetime.fromtimestamp(epoch_millis / 1000, timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
+def price_levels(snapshot, field):
+    """Expose bounded top-five levels without changing legacy empty payloads."""
+    values = getattr(snapshot, field, None) if snapshot is not None else None
+    if not isinstance(values, (list, tuple)):
+        return []
+    return [str(value) for value in values[:5]]
+
+
 def item_payload(item, now_ms=None):
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     try:
@@ -30,7 +38,7 @@ def item_payload(item, now_ms=None):
         status = 'empty'
     else:
         status = 'fresh'
-    return {
+    payload = {
         'item_id': str(item.pk),
         'name': item.name,
         'category': item.category,
@@ -42,6 +50,15 @@ def item_payload(item, now_ms=None):
         'observed_at': utc_iso(observed_at_ms),
         'status': status,
     }
+    sell_prices = price_levels(snapshot, 'sell_prices')
+    buy_prices = price_levels(snapshot, 'buy_prices')
+    # Keep the pre-top-five response shape for old snapshots while making new
+    # collected snapshots immediately consumable by the terminal.
+    if sell_prices:
+        payload['sell_prices'] = sell_prices
+    if buy_prices:
+        payload['buy_prices'] = buy_prices
+    return payload
 
 
 class StrictSerializer(serializers.Serializer):
