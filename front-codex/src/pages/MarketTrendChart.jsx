@@ -25,6 +25,18 @@ function axisNumber(value) {
   return number.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
+function axisTime(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 function pathSegments(points, field, coordinates) {
   const paths = []
   let segment = []
@@ -64,25 +76,42 @@ export default function MarketTrendChart({ points = [], showBuy, showSell, forma
     return { min, max, x, y, paths: Object.fromEntries(SERIES.map(series => [series.key, pathSegments(points, series.key, coordinates)])) }
   }, [points])
   const active = activeIndex !== null && points[activeIndex] ? points[activeIndex] : points.at(-1)
+  const activeValue = activeIndex !== null
+    ? priceInteger(points[activeIndex]?.best_sell) ?? priceInteger(points[activeIndex]?.best_buy)
+    : null
+  const activeX = activeIndex !== null && geometry ? geometry.x(activeIndex) / CHART.width * 100 : null
+  const activeY = activeValue !== null && geometry
+    ? Math.max(8, geometry.y(activeValue) / CHART.height * 100 - 3)
+    : null
+  const tooltipEdge = activeX !== null && activeX < 18 ? ' edge-left' : activeX !== null && activeX > 82 ? ' edge-right' : ''
 
   if (!points.length || !geometry) return <div className="market-trend-empty">这段时间暂无有效报价曲线。可切换时间范围，等待真实采集数据。</div>
 
   return <div className="market-trend-wrap">
-    <div className="market-trend-svg-wrap">
+    <div className="market-trend-svg-wrap" onMouseLeave={() => setActiveIndex(null)}>
       <svg className="market-trend-svg" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label="买卖报价历史走势图" preserveAspectRatio="xMidYMid meet">
         {[0, 1, 2, 3, 4].map(index => {
           const y = CHART.top + index * (CHART.height - CHART.top - CHART.bottom) / 4
           const value = geometry.max - BigInt(index) * (geometry.max - geometry.min) / 4n
           return <g key={index}><line className="market-trend-gridline" x1={CHART.left} x2={CHART.width - CHART.right} y1={y} y2={y} /><text className="market-trend-axis" x={CHART.left - 12} y={y + 4} textAnchor="end">{axisNumber(value)}</text></g>
         })}
-        <text className="market-trend-axis" x={CHART.left} y={CHART.height - 10}>{formatTime(points[0].observed_at)}</text>
-        <text className="market-trend-axis" x={CHART.width - CHART.right} y={CHART.height - 10} textAnchor="end">{formatTime(points.at(-1).observed_at)}</text>
+        <text className="market-trend-axis" x={CHART.left} y={CHART.height - 10}>{axisTime(points[0].observed_at)}</text>
+        <text className="market-trend-axis" x={CHART.width - CHART.right} y={CHART.height - 10} textAnchor="end">{axisTime(points.at(-1).observed_at)}</text>
         {SERIES.filter(series => series.key === 'best_sell' ? showSell : showBuy).flatMap(series => geometry.paths[series.key].map((path, index) => <path key={`${series.key}-${index}`} className={`market-trend-path market-trend-path--${series.className}`} d={path} />))}
         {activeIndex !== null && points[activeIndex] ? <line className="market-trend-cursor" x1={geometry.x(activeIndex)} x2={geometry.x(activeIndex)} y1={CHART.top} y2={CHART.height - CHART.bottom} /> : null}
+        {activeIndex !== null && points[activeIndex] ? SERIES.filter(series => series.key === 'best_sell' ? showSell : showBuy).map(series => {
+          const value = priceInteger(points[activeIndex][series.key])
+          return value === null ? null : <circle key={`active-${series.key}`} className={`market-trend-point market-trend-point--${series.className}`} cx={geometry.x(activeIndex)} cy={geometry.y(value)} r="5" />
+        }) : null}
       </svg>
       <div className="market-trend-targets">
-        {points.map((point, index) => <button key={`${point.observed_at}-${index}`} type="button" tabIndex="-1" className="market-point-target" aria-label={`查看第 ${index + 1} 次观测`} style={{ left: `${geometry.x(index) / CHART.width * 100}%` }} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} />)}
+        {points.map((point, index) => <button key={`${point.observed_at}-${index}`} type="button" tabIndex={0} className="market-point-target" aria-label={`查看第 ${index + 1} 次观测`} style={{ left: `${geometry.x(index) / CHART.width * 100}%` }} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} />)}
       </div>
+      {activeIndex !== null && active && activeX !== null && activeY !== null ? <div className={`market-trend-tooltip${tooltipEdge}`} role="tooltip" style={{ left: `${activeX}%`, top: `${activeY}%` }}>
+        <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>
+        <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(active.best_sell)}</strong></span>
+        <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(active.best_buy)}</strong></span>
+      </div> : null}
     </div>
     {active ? <div className="market-trend-readout" role="status" aria-label="当前观测报价">
       <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>

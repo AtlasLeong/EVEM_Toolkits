@@ -191,6 +191,35 @@ test('trend supports ranges, independent legends, keyboard detail and breaks mis
   await expect(page.getByRole('table', { name: '走势图数据' })).toContainText('暂无报价')
 })
 
+test('chart hover details stay readable and keyboard reachable inside the framed terminal', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '1001', name: '测试舰船', category: '巡洋舰', category_id: 1000, best_sell: '130', best_buy: '100', observed_at: freshSample, status: 'fresh', scope: 'global' }] })
+    if (url.pathname === '/api/market/items/1001/series/') return json({ count: 2, points: [
+      { observed_at: oldSample, best_sell: '120', best_buy: '90' },
+      { observed_at: freshSample, best_sell: '130', best_buy: '100' },
+    ], change: { best_sell: { absolute: '10', percent: '8.3' }, best_buy: { absolute: '10', percent: '11.1' } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  const target = page.getByRole('button', { name: '查看第 2 次观测' })
+  await expect(target).toHaveAttribute('tabindex', '0')
+  await target.hover()
+  await expect(page.locator('.market-trend-tooltip')).toBeVisible()
+  await target.focus()
+  await expect(page.locator('.market-trend-tooltip')).toBeVisible()
+  await expect(page.locator('.market-trend-tooltip')).toContainText('最低卖价')
+  await expect(page.locator('.market-trend-tooltip')).toContainText('最高买价')
+  await expect(page.getByRole('status', { name: '当前观测报价' })).toBeVisible()
+
+  const frame = await page.locator('.market-terminal-layout').boundingBox()
+  expect(frame.x).toBeGreaterThan(0)
+  expect(frame.width).toBeLessThan(1920)
+})
+
 test('a single observed sample shows insufficient change without inventing a trend', async ({ page }) => {
   await installApiMock(page, ({ url }) => {
     if (url.pathname === '/api/market/categories/') return json([{ id: 'other', label: '其他', count: 1 }])
