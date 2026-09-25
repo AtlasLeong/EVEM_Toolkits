@@ -384,7 +384,9 @@ test('strength overview uses system totals once, updates live and shows membersh
   await expect(panel.getByRole('button',{name:'成员',exact:true})).toHaveCount(0);
   await expect(panel.locator('.tac-count-row')).toContainText(['德里克一']);
   fx.setSnapshot({...fx.snapshot,member_count:9,online_count:4,reports:[{...fx.snapshot.reports[0],version:2,people:90}]});
-  await expect(enemy.locator('.tac-strength-number')).toHaveText('90');
+  // HTTP fallback polls at a minimum five-second cadence; allow one full
+  // refresh window plus runner/network jitter before asserting the update.
+  await expect(enemy.locator('.tac-strength-number')).toHaveText('90', { timeout: 15000 });
   await expect(members).toContainText('成员 9');
   await expect(members).toContainText('在线 4');
   await members.click();
@@ -416,8 +418,10 @@ test('strength overview selection links list and map without moving camera on li
   await expect(page.getByRole('button',{name:'返回上一视野'})).toBeVisible();
   const camera=await mapView.getAttribute('transform');
   fx.setSnapshot({...fx.snapshot, forces:[{...fx.snapshot.forces[0],version:2,people:43,system_id:102,system_name:'德里克二'}]});
-  await expect(row).toContainText('德里克二');
-  await expect(page.getByRole('region',{name:'敌方兵力估计'}).locator('.tac-strength-number')).toHaveText('43');
+  // HTTP fallback polls at a minimum five-second cadence; allow one full
+  // refresh window plus runner/network jitter before asserting the update.
+  await expect(row).toContainText('德里克二', { timeout: 15000 });
+  await expect(page.getByRole('region',{name:'敌方兵力估计'}).locator('.tac-strength-number')).toHaveText('43', { timeout: 15000 });
   expect(await mapView.getAttribute('transform')).toBe(camera);
   await page.getByRole('button',{name:'收起兵力总览'}).click();
   await expect(page.getByRole('region',{name:'星系敌情详情'}).getByRole('heading')).toHaveText('德里克二');
