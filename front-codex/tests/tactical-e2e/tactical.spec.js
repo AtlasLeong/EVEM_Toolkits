@@ -953,7 +953,7 @@ test("search focuses the selected system without replacing real map with constel
   await fixture(page, { role: "commander", overview: true });
   await page.goto("/tactical");
   await page.getByLabel("搜索当前星图").fill("德里克一");
-  await page.locator('.tac-map-search-results').getByRole("button", { name: /德里克一/ }).click();
+  await page.locator('.tac-map-search-results').getByRole("option", { name: /德里克一/ }).click();
   await expect(page.getByRole("group", { name: "局部作战星图", exact: true })).toBeVisible();
   await expect(page.getByText("德里克一", { exact: true }).first()).toBeVisible();
 });
