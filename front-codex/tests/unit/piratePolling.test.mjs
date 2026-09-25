@@ -45,3 +45,17 @@ test('pirate scope editor speaks in intelligence coverage terms', () => {
   assert.match(source, /<ScopeEditor[^>]*variant="pirate"/)
   assert.match(controls, /variant === 'pirate' \? '设置情报覆盖星域'/)
 })
+
+test('system map selection opens a prefilled report without changing target selection', () => {
+  assert.match(source, /const \[reportLocation, setReportLocation\] = useState\(null\)/)
+  assert.match(source, /selectedSystemId=\{reportLocation\?\.id\}/)
+  assert.match(source, /onSelectSystem=\{system => \{ const location = \{ \.\.\.system, id: system\.id \?\? system\.system_id/)
+  assert.match(source, /initialLocation=\{reportLocation\}/)
+  assert.match(source, /setFormOpen\(false\); setReportLocation\(null\)/)
+})
+
+test('sighting form accepts and displays an initial exact location', () => {
+  const form = readFileSync(fileURLToPath(new URL('components/tactical/PirateSightingForm.jsx', root)), 'utf8')
+  assert.match(form, /initialLocation = null/)
+  assert.match(form, /useState\(initialLocation\)/)
+})

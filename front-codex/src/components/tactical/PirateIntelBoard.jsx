@@ -53,6 +53,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   const [clockNow, setClockNow] = useState(() => Date.now())
   const [serverClockOffset, setServerClockOffset] = useState(0)
   const [formOpen, setFormOpen] = useState(false)
+  const [reportLocation, setReportLocation] = useState(null)
   const [scopeOpen, setScopeOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
   const [withdrawRow, setWithdrawRow] = useState(null)
@@ -247,7 +248,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
         {canManage && <button type="button" className="tac-btn is-small" onClick={() => setMembersOpen(true)}><Users size={16} /> 成员管理</button>}
         <button type="button" className="tac-icon-btn" aria-label="创建或加入组织" title="创建或加入组织" onClick={onOpenOrganization}><Plus size={18} /></button>
         <button type="button" className="tac-icon-btn" aria-label="刷新目标线索" title="刷新目标线索" onClick={() => refresh()}><RefreshCw size={17} /></button>
-        <button type="button" className="tac-btn is-primary" onClick={() => setFormOpen(true)}><Plus size={16} /> 上报目标线索</button>
+        <button type="button" className="tac-btn is-primary" onClick={() => { setReportLocation(null); setFormOpen(true) }}><Plus size={16} /> 上报目标线索</button>
       </div>
     </header>
     <div className="pirate-board-summary" aria-label="情报概况">
@@ -329,13 +330,15 @@ export default function PirateIntelBoard({ organization, board, organizationCont
           {canManage && <button type="button" className="tac-btn is-primary" onClick={() => setScopeOpen(true)}>选择覆盖星域</button>}</div> :
           mapError ? <div className="pirate-map-empty" role="alert"><strong>星图暂时无法读取</strong><p>{mapError}</p>
             <button type="button" className="tac-btn" onClick={() => setMapRetry(value => value + 1)}>重试加载星图</button></div> :
-          mapData && !(mobileViewport && !mapOpen) ? <PirateIntelMap mapData={mapData} targets={targets} selectedKey={selectedKey} now={serverNow}
+          mapData && !(mobileViewport && !mapOpen) ? <PirateIntelMap mapData={mapData} targets={targets} selectedKey={selectedKey} now={serverNow} selectedSystemId={reportLocation?.id}
             focusTargetKey={selectedKey} focusRequestId={focusRequestId}
-            onSelectTarget={target => { selectTarget(target.key); setMapOpen(true) }} /> :
+            onSelectTarget={target => { selectTarget(target.key); setMapOpen(true) }}
+            onSelectSystem={system => { const location = { ...system, id: system.id ?? system.system_id, name: system.name ?? system.system_name }; setReportLocation(location); setFormOpen(true); setMapOpen(true) }} /> :
             <div className="pirate-map-empty">正在加载真实星图…</div>}
       </div>
     </div>
-    {formOpen && <PirateSightingForm organizationId={organization.id} boardId={board.id} onClose={() => setFormOpen(false)}
+    {formOpen && <PirateSightingForm organizationId={organization.id} boardId={board.id} initialLocation={reportLocation}
+      onClose={() => { setFormOpen(false); setReportLocation(null) }}
       onSaved={async () => { await refresh({ quiet: true }); setNotice('目标线索已记录。') }} />}
     {scopeOpen && snapshot && <ScopeEditor variant="pirate" organizationId={organization.id} scope={snapshot.scope} execute={runPirate} onClose={() => setScopeOpen(false)} />}
     {membersOpen && <TacticalMembers organizationId={organization.id} role={snapshot?.role || organization.role} execute={runAdmin}

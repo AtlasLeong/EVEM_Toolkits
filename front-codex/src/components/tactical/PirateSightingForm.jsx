@@ -36,11 +36,11 @@ function LocationPicker({ organizationId, kind, selected, onSelect }) {
   </div>
 }
 
-export default function PirateSightingForm({ organizationId, boardId, onClose, onSaved }) {
+export default function PirateSightingForm({ organizationId, boardId, initialLocation = null, onClose, onSaved }) {
   const [characterName, setCharacterName] = useState('')
   const [shipType, setShipType] = useState('')
   const [locationKind, setLocationKind] = useState('system')
-  const [location, setLocation] = useState(null)
+  const [location, setLocation] = useState(initialLocation)
   const [observedAt, setObservedAt] = useState(() => localDateTime())
   const [activityStart, setActivityStart] = useState('')
   const [activityEnd, setActivityEnd] = useState('')
