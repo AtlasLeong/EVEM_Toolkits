@@ -143,6 +143,7 @@ test('security formatting and bands match the tactical board including unknown v
     [undefined, '安等未知', '#a6adb1'], [null, '安等未知', '#a6adb1'],
     [1, '1.00', '#96b8a5'], [.5, '0.50', '#96b8a5'],
     ['0.49', '0.49', '#cfb288'], [0, '0.00', '#d19b91'], [-.76, '-0.76', '#d19b91'],
+    [Number.NaN, '安等未知', '#a6adb1'], [Number.POSITIVE_INFINITY, '安等未知', '#a6adb1'],
   ]) {
     assert.equal(securityLabel(value), text)
     assert.equal(securityColor(value), color)

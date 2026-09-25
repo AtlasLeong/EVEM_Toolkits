@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getSecurityMapColor } from '../../src/utils/securityColor.js'
+import { formatSecurityLabel, getSecurityMapColor, getSecurityTextColor } from '../../src/utils/securityColor.js'
 
 test('navigation map security palette keeps five bands and a neutral unknown color', () => {
   const cases = [
@@ -21,7 +21,16 @@ test('navigation map security palette keeps five bands and a neutral unknown col
 })
 
 test('navigation map security palette does not treat missing or non-finite values as zero security', () => {
-  for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+  for (const value of [null, undefined, '', '   ', false, true, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
     assert.equal(getSecurityMapColor(value), '#94a3b8', `security ${String(value)}`)
   }
+})
+
+test('security labels and light text colors use a neutral unknown state', () => {
+  for (const value of [null, undefined, '', '   ', false, true, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.equal(formatSecurityLabel(value), '安等未知', `label ${String(value)}`)
+    assert.equal(getSecurityTextColor(value), '#6c6a63', `text ${String(value)}`)
+  }
+  assert.equal(formatSecurityLabel('0.87'), '0.87')
+  assert.equal(formatSecurityLabel(-0.76, 1), '-0.8')
 })

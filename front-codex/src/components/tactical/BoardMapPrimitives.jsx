@@ -1,8 +1,14 @@
 import { Fragment } from 'react'
-import { getSecurityMapColor } from '../../utils/securityColor.js'
+import { formatSecurityLabel, getSecurityMapColor } from '../../utils/securityColor.js'
 
-export const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91'
-export const securityLabel = value => value == null ? '安等未知' : Number(value).toFixed(2)
+// Muted text colors remain distinct from the bright dot palette for dark maps.
+export const securityColor = value => {
+  if (value == null || value === '' || typeof value === 'boolean') return '#a6adb1'
+  const level = Number(value)
+  if (!Number.isFinite(level)) return '#a6adb1'
+  return level >= .5 ? '#96b8a5' : level > 0 ? '#cfb288' : '#d19b91'
+}
+export const securityLabel = value => formatSecurityLabel(value, 2)
 
 /** Neutral map ink used by both board types. Interaction belongs to each board. */
 export function BoardStarGlyph({ node, scale = 1, selected = false, reported = false, related = false,

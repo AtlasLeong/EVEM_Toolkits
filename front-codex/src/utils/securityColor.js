@@ -1,8 +1,14 @@
 // Light UI foregrounds; the star-map canvas keeps its separate bright palette.
-export function getSecurityMapColor(value) {
-  if (value == null || value === '') return '#94a3b8'
+function normalizedSecurityValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value !== 'string' || value.trim() === '') return null
   const level = Number(value)
-  if (!Number.isFinite(level)) return '#94a3b8'
+  return Number.isFinite(level) ? level : null
+}
+
+export function getSecurityMapColor(value) {
+  const level = normalizedSecurityValue(value)
+  if (level === null) return '#94a3b8'
   if (level <= 0) return '#ef4444'
   if (level < 0.2) return '#f97316'
   if (level < 0.5) return '#f59e0b'
@@ -10,9 +16,14 @@ export function getSecurityMapColor(value) {
   return '#60a5fa'
 }
 
+export function formatSecurityLabel(value, digits = 2) {
+  const level = normalizedSecurityValue(value)
+  return level === null ? '安等未知' : level.toFixed(digits)
+}
+
 export function getSecurityTextColor(value) {
-  const level = Number(value)
-  if (Number.isNaN(level)) return '#6c6a63'
+  const level = normalizedSecurityValue(value)
+  if (level === null) return '#6c6a63'
   if (level <= 0) return '#a13737'
   if (level < 0.2) return '#9a451a'
   if (level < 0.5) return '#80551c'

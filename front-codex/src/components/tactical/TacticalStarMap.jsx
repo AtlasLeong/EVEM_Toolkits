@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, RefreshCw, X } from 'lucide-react'
-import { getSecurityMapColor, getSecurityTextColor } from '../../utils/securityColor'
+import { formatSecurityLabel, getSecurityMapColor, getSecurityTextColor } from '../../utils/securityColor'
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1600
@@ -74,7 +74,7 @@ function createMapModel(systems, stargates, constellations, regions) {
     ...item,
     px: normalizeX(item.x),
     py: normalizeY(item.z),
-    securityLabel: Number(item.security_status).toFixed(1),
+    securityLabel: formatSecurityLabel(item.security_status, 1),
     color: getSecurityMapColor(item.security_status),
   }))
 
