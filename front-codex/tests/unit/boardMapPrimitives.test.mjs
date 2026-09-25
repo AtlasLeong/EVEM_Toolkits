@@ -38,7 +38,7 @@ test('ordinary star radius stays three screen pixels at every committed zoom', a
     const markup = render(BoardStarGlyph, { node, scale })
     const dot = tagAttributes(markup, 'circle', 'tac-star-dot')
     assert.equal(Number(dot.r) * scale, 3)
-    assert.equal(dot.fill, '#8ca0a3')
+    assert.equal(dot.fill, '#ef4444')
     assert.equal(dot.cx, '80')
     assert.equal(dot.cy, '120')
     assert.doesNotMatch(markup, /tac-star-ring|tac-star-hit/)
@@ -57,7 +57,7 @@ test('reported and selected stars preserve the war board emphasis and color prio
     const dot = tagAttributes(markup, 'circle', 'tac-star-dot')
     const ring = tagAttributes(markup, 'circle', 'tac-star-ring')
     assert.equal(Number(dot.r) * scale, radius)
-    assert.equal(dot.fill, color)
+    assert.equal(dot.fill, '#ef4444')
     assert.equal(Number(ring.r) * scale, ringRadius)
     assert.equal(Number(ring['stroke-width']) * scale, 1)
     assert.equal(Number(ring.opacity), opacity)
@@ -68,7 +68,7 @@ test('reported and selected stars preserve the war board emphasis and color prio
 test('related star highlighting and an optional transparent hit target stay independent', async () => {
   const { BoardStarGlyph } = await loadPrimitives()
   const markup = render(BoardStarGlyph, { node, scale: 2, related: true, showHit: true })
-  assert.equal(tagAttributes(markup, 'circle', 'tac-star-dot').fill, '#bbc9c4')
+  assert.equal(tagAttributes(markup, 'circle', 'tac-star-dot').fill, '#ef4444')
   const hit = tagAttributes(markup, 'circle', 'tac-star-hit')
   assert.equal(hit.r, '9.5')
   assert.equal(hit.fill, 'transparent')
@@ -81,6 +81,7 @@ test('star selector overrides reuse identical neutral geometry', async () => {
     node, scale: 8, reported: true, dotClassName: 'pirate-map__star', ringClassName: 'pirate-map__ring',
   })
   assert.equal(tagAttributes(markup, 'circle', 'pirate-map__star').r, '0.5')
+  assert.equal(tagAttributes(markup, 'circle', 'pirate-map__star').fill, '#ef4444')
   assert.equal(tagAttributes(markup, 'circle', 'pirate-map__ring').r, '1.125')
 })
 
@@ -146,4 +147,12 @@ test('security formatting and bands match the tactical board including unknown v
     assert.equal(securityLabel(value), text)
     assert.equal(securityColor(value), color)
   }
+})
+
+test('star fill follows the shared security palette for safe and unknown systems', async () => {
+  const { BoardStarGlyph } = await loadPrimitives()
+  const safe = tagAttributes(render(BoardStarGlyph, { node: { ...node, security_status: 0.87 } }), 'circle', 'tac-star-dot')
+  const unknown = tagAttributes(render(BoardStarGlyph, { node: { ...node, security_status: null } }), 'circle', 'tac-star-dot')
+  assert.equal(safe.fill, '#60a5fa')
+  assert.equal(unknown.fill, '#94a3b8')
 })

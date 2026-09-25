@@ -1,4 +1,5 @@
 import { Fragment } from 'react'
+import { getSecurityMapColor } from '../../utils/securityColor.js'
 
 export const securityColor = value => value == null ? '#a6adb1' : Number(value) >= .5 ? '#96b8a5' : Number(value) > 0 ? '#cfb288' : '#d19b91'
 export const securityLabel = value => value == null ? '安等未知' : Number(value).toFixed(2)
@@ -8,12 +9,13 @@ export function BoardStarGlyph({ node, scale = 1, selected = false, reported = f
   dotClassName = 'tac-star-dot', ringClassName = 'tac-star-ring', showHit = false }) {
   if (!node) return null
   const zoom = Math.max(.0001, scale)
-  const color = reported ? '#d49a7e' : selected ? '#f0e5c5' : related ? '#bbc9c4' : '#8ca0a3'
+  const emphasisColor = reported ? '#d49a7e' : selected ? '#f0e5c5' : related ? '#bbc9c4' : '#8ca0a3'
+  const dotColor = getSecurityMapColor(node.security_status)
   return <Fragment>
     {(selected || reported) && <circle className={ringClassName} cx={node.px} cy={node.py}
-      r={(selected ? 12 : 9) / zoom} fill="none" stroke={color} strokeWidth={1 / zoom} opacity={selected ? .8 : .4} />}
+      r={(selected ? 12 : 9) / zoom} fill="none" stroke={emphasisColor} strokeWidth={1 / zoom} opacity={selected ? .8 : .4} />}
     <circle className={dotClassName} cx={node.px} cy={node.py}
-      r={(selected ? 5 : reported ? 4 : 3) / zoom} fill={color} />
+      r={(selected ? 5 : reported ? 4 : 3) / zoom} fill={dotColor} />
     {showHit && <circle className="tac-star-hit" cx={node.px} cy={node.py} r={19 / zoom} fill="transparent" />}
   </Fragment>
 }

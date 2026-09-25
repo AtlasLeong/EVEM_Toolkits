@@ -1,6 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, RefreshCw, X } from 'lucide-react'
-import { getSecurityTextColor } from '../../utils/securityColor'
+import { getSecurityMapColor, getSecurityTextColor } from '../../utils/securityColor'
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1600
@@ -10,16 +10,6 @@ const LOCATE_ZOOM = 7.56
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value))
-}
-
-function getSecurityColor(value) {
-  const level = Number(value)
-  if (Number.isNaN(level)) return '#94a3b8'
-  if (level <= 0) return '#ef4444'
-  if (level < 0.2) return '#f97316'
-  if (level < 0.5) return '#f59e0b'
-  if (level < 0.8) return '#10b981'
-  return '#60a5fa'
 }
 
 function getRouteTypeKind(moveType) {
@@ -85,7 +75,7 @@ function createMapModel(systems, stargates, constellations, regions) {
     px: normalizeX(item.x),
     py: normalizeY(item.z),
     securityLabel: Number(item.security_status).toFixed(1),
-    color: getSecurityColor(item.security_status),
+    color: getSecurityMapColor(item.security_status),
   }))
 
   const systemMap = new Map(normalizedSystems.map((item) => [item.system_id, item]))
