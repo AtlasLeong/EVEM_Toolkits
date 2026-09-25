@@ -58,6 +58,31 @@ test('pirate board shows target identity and opens an independent sighting form'
   await expect(form.getByRole('button', { name: '星座范围' })).toBeVisible()
 })
 
+test('pirate map system hit opens a prefilled report while target cards still open details', async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 })
+  await seedAuthenticatedSession(page, { user_id: 23 })
+  await installApiMock(page, ({ url, method }) => {
+    if (url.pathname.endsWith('/organizations/') && method === 'GET') return json({ organizations: [
+      { id: 7, name: '巡猎小队', role: 'founder', status: 'active', boards: [{ id: 71, name: '夜巡', kind: 'pirate' }] },
+    ] })
+    if (url.pathname.endsWith('/boards/71/pirate/')) return json(pirateSnapshot(71, [sighting(4)]))
+    if (url.pathname.endsWith('/boards/71/map/')) return json(pirateMap())
+    return json({})
+  })
+  await page.goto('/tactical?organization=7&board=71')
+  const workspace = page.locator('.pirate-immersive')
+  await expect(workspace.locator('[data-pirate-system="101"]')).toBeVisible()
+  await workspace.locator('[data-pirate-system="101"]').click()
+  const form = page.getByRole('dialog', { name: '上报目标线索' })
+  await expect(form).toContainText('已选：德里克一')
+  await expect(form.getByLabel('目标角色名')).toHaveValue('')
+  await expect(form.getByLabel('精确船型')).toHaveValue('')
+  await expect(form.getByRole('button', { name: '提交线索' })).toBeDisabled()
+  await form.getByRole('button', { name: '取消' }).click()
+  await workspace.locator('[data-pirate-card="system:101"]').click()
+  await expect(workspace.getByRole('region', { name: '目标详情' })).toContainText('夜航员')
+})
+
 test('pirate workspace keeps the map full-size with floating search, target and current-time hint', async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 })
   await seedAuthenticatedSession(page, { user_id: 23 })
