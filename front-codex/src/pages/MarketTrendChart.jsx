@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 const CHART = { width: 760, height: 320, left: 76, right: 24, top: 22, bottom: 42 }
 const SERIES = [
@@ -55,6 +55,11 @@ function pathSegments(points, field, coordinates) {
 
 export default function MarketTrendChart({ points = [], showBuy, showSell, formatPrice, formatTime }) {
   const [activeIndex, setActiveIndex] = useState(null)
+  const plotRef = useRef(null)
+  const tooltipRef = useRef(null)
+  const [size, setSize] = useState({ width: CHART.width, height: CHART.height })
+  const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 })
+  const chart = useMemo(() => ({ ...CHART, ...size, left: size.width < 400 ? 56 : 72, right: 14, top: 18, bottom: 32 }), [size])
   const geometry = useMemo(() => {
     const valid = points.flatMap(point => [priceInteger(point.best_buy), priceInteger(point.best_sell)]).filter(value => value !== null)
     if (!valid.length) return null
@@ -67,49 +72,70 @@ export default function MarketTrendChart({ points = [], showBuy, showSell, forma
     const times = points.map(point => new Date(point.observed_at).getTime())
     const minTime = Math.min(...times)
     const maxTime = Math.max(...times)
-    const plotWidth = CHART.width - CHART.left - CHART.right
-    const plotHeight = CHART.height - CHART.top - CHART.bottom
-    const x = index => CHART.left + (maxTime > minTime && Number.isFinite(times[index])
+    const plotWidth = chart.width - chart.left - chart.right
+    const plotHeight = chart.height - chart.top - chart.bottom
+    const x = index => chart.left + (maxTime > minTime && Number.isFinite(times[index])
       ? (times[index] - minTime) / (maxTime - minTime) : points.length > 1 ? index / (points.length - 1) : 0.5) * plotWidth
-    const y = value => CHART.top + Number(max - value) / Number(max - min) * plotHeight
+    const y = value => chart.top + Number(max - value) / Number(max - min) * plotHeight
     const coordinates = (index, value) => [x(index), y(value)]
     return { min, max, x, y, paths: Object.fromEntries(SERIES.map(series => [series.key, pathSegments(points, series.key, coordinates)])) }
-  }, [points])
+  }, [points, chart])
   const active = activeIndex !== null && points[activeIndex] ? points[activeIndex] : points.at(-1)
   const activeValue = activeIndex !== null
     ? priceInteger(points[activeIndex]?.best_sell) ?? priceInteger(points[activeIndex]?.best_buy)
     : null
-  const activeX = activeIndex !== null && geometry ? geometry.x(activeIndex) / CHART.width * 100 : null
+  const activeX = activeIndex !== null && points[activeIndex] && geometry ? geometry.x(activeIndex) : null
   const activeY = activeValue !== null && geometry
-    ? Math.max(8, geometry.y(activeValue) / CHART.height * 100 - 3)
+    ? geometry.y(activeValue)
     : null
-  const tooltipEdge = activeX !== null && activeX < 18 ? ' edge-left' : activeX !== null && activeX > 82 ? ' edge-right' : ''
-  const tooltipVertical = activeY !== null && activeY < 30 ? ' below' : ''
+  const hasGeometry = Boolean(geometry)
+
+  useLayoutEffect(() => {
+    const plot = plotRef.current
+    if (!plot) return undefined
+    // Native pixel coordinates keep labels and markers readable without stretching.
+    const measure = () => {
+      const { width, height } = plot.getBoundingClientRect()
+      if (width > 0 && height > 0) setSize(previous => previous.width === width && previous.height === height ? previous : { width, height })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(plot)
+    return () => observer.disconnect()
+  }, [hasGeometry])
+
+  useLayoutEffect(() => {
+    if (activeX === null || activeY === null || !tooltipRef.current) return
+    const { width, height } = tooltipRef.current.getBoundingClientRect()
+    const above = activeY - height - 12
+    const left = Math.max(4, Math.min(activeX - width / 2, chart.width - width - 4))
+    const top = Math.max(4, Math.min(above >= 4 ? above : activeY + 12, chart.height - height - 4))
+    setTooltipPosition(previous => previous.left === left && previous.top === top ? previous : { left, top })
+  }, [activeX, activeY, active, chart])
 
   if (!points.length || !geometry) return <div className="market-trend-empty">这段时间暂无有效报价曲线。可切换时间范围，等待真实采集数据。</div>
 
   return <div className="market-trend-wrap">
-    <div className="market-trend-svg-wrap" onMouseLeave={() => setActiveIndex(null)}>
-      {/* Keep the SVG coordinate space aligned with the HTML hit targets and tooltip. */}
-      <svg className="market-trend-svg" viewBox={`0 0 ${CHART.width} ${CHART.height}`} role="img" aria-label="买卖报价历史走势图" preserveAspectRatio="none">
+    <div ref={plotRef} className="market-trend-svg-wrap" onMouseLeave={() => setActiveIndex(null)}>
+      <svg className="market-trend-svg" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="买卖报价历史走势图">
         {[0, 1, 2, 3, 4].map(index => {
-          const y = CHART.top + index * (CHART.height - CHART.top - CHART.bottom) / 4
+          const y = chart.top + index * (chart.height - chart.top - chart.bottom) / 4
           const value = geometry.max - BigInt(index) * (geometry.max - geometry.min) / 4n
-          return <g key={index}><line className="market-trend-gridline" x1={CHART.left} x2={CHART.width - CHART.right} y1={y} y2={y} /><text className="market-trend-axis" x={CHART.left - 12} y={y + 4} textAnchor="end">{axisNumber(value)}</text></g>
+          return <g key={index}><line className="market-trend-gridline" x1={chart.left} x2={chart.width - chart.right} y1={y} y2={y} /><text className="market-trend-axis" x={chart.left - 10} y={y + 4} textAnchor="end">{axisNumber(value)}</text></g>
         })}
-        <text className="market-trend-axis" x={CHART.left} y={CHART.height - 10}>{axisTime(points[0].observed_at)}</text>
-        <text className="market-trend-axis" x={CHART.width - CHART.right} y={CHART.height - 10} textAnchor="end">{axisTime(points.at(-1).observed_at)}</text>
+        <text className="market-trend-axis" x={chart.left} y={chart.height - 8}>{axisTime(points[0].observed_at)}</text>
+        <text className="market-trend-axis" x={chart.width - chart.right} y={chart.height - 8} textAnchor="end">{axisTime(points.at(-1).observed_at)}</text>
         {SERIES.filter(series => series.key === 'best_sell' ? showSell : showBuy).flatMap(series => geometry.paths[series.key].map((path, index) => <path key={`${series.key}-${index}`} className={`market-trend-path market-trend-path--${series.className}`} d={path} />))}
-        {activeIndex !== null && points[activeIndex] ? <line className="market-trend-cursor" x1={geometry.x(activeIndex)} x2={geometry.x(activeIndex)} y1={CHART.top} y2={CHART.height - CHART.bottom} /> : null}
+        {activeIndex !== null && points[activeIndex] ? <line className="market-trend-cursor" x1={geometry.x(activeIndex)} x2={geometry.x(activeIndex)} y1={chart.top} y2={chart.height - chart.bottom} /> : null}
         {activeIndex !== null && points[activeIndex] ? SERIES.filter(series => series.key === 'best_sell' ? showSell : showBuy).map(series => {
           const value = priceInteger(points[activeIndex][series.key])
           return value === null ? null : <circle key={`active-${series.key}`} className={`market-trend-point market-trend-point--${series.className}`} cx={geometry.x(activeIndex)} cy={geometry.y(value)} r="5" />
         }) : null}
       </svg>
       <div className="market-trend-targets">
-        {points.map((point, index) => <button key={`${point.observed_at}-${index}`} type="button" tabIndex={0} className="market-point-target" aria-label={`查看第 ${index + 1} 次观测`} style={{ left: `${geometry.x(index) / CHART.width * 100}%` }} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} />)}
+        {points.map((point, index) => <button key={`${point.observed_at}-${index}`} type="button" tabIndex={0} className="market-point-target" aria-label={`查看第 ${index + 1} 次观测`} style={{ left: `${geometry.x(index) / chart.width * 100}%` }} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} />)}
       </div>
-      {activeIndex !== null && active && activeX !== null && activeY !== null ? <div className={`market-trend-tooltip${tooltipEdge}${tooltipVertical}`} role="tooltip" style={{ left: `${activeX}%`, top: `${activeY}%` }}>
+      {activeIndex !== null && active && activeX !== null && activeY !== null ? <div ref={tooltipRef} className="market-trend-tooltip" role="tooltip" style={tooltipPosition}>
         <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>
         <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(active.best_sell)}</strong></span>
         <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(active.best_buy)}</strong></span>

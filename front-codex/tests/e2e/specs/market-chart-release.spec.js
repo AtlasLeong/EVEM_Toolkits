@@ -15,8 +15,8 @@ async function market(page) {
   await expect(page.locator('.market-trend-path--sell')).toBeVisible()
 }
 
-for (const viewport of [{ width: 1920, height: 720 }, { width: 1366, height: 768 }, { width: 390, height: 844 }]) {
-  test(`release chart pointer aligns with actual curve at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+for (const viewport of [{ width: 1920, height: 1080 }, { width: 1440, height: 900 }, { width: 1920, height: 720 }, { width: 1366, height: 768 }, { width: 1200, height: 768 }, { width: 390, height: 844 }]) {
+  test(`release chart pointer aligns with actual curve at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport)
     await market(page)
     await page.locator('.market-trend-svg').scrollIntoViewIfNeeded()
@@ -28,14 +28,17 @@ for (const viewport of [{ width: 1920, height: 720 }, { width: 1366, height: 768
     await expect(page.getByRole('status', { name: '当前观测报价' }).locator('time')).toHaveAttribute('datetime', '2026-09-26T01:00:00Z')
     await expect(page.getByRole('tooltip')).toBeVisible()
     const tip = await page.getByRole('tooltip').boundingBox()
-    const chart = await page.locator('.market-chart-frame').boundingBox()
+    const chart = await page.locator('.market-trend-svg-wrap').boundingBox()
     const cursor = await page.locator('.market-trend-cursor').boundingBox()
+    const axis = await page.locator('.market-trend-axis').first().boundingBox()
+    expect(chart.height).toBeGreaterThanOrEqual(180)
+    expect(axis.height).toBeGreaterThanOrEqual(11)
     expect(tip.x).toBeGreaterThanOrEqual(chart.x - 1)
     expect(tip.x + tip.width).toBeLessThanOrEqual(chart.x + chart.width + 1)
     expect(tip.y).toBeGreaterThanOrEqual(chart.y - 1)
     expect(tip.y + tip.height).toBeLessThanOrEqual(chart.y + chart.height + 1)
     expect(Math.abs(cursor.x + cursor.width / 2 - point.x)).toBeLessThanOrEqual(2)
-    await page.screenshot({ path: `output/playwright/market-release-${viewport.width}.png` })
+    await page.screenshot({ path: testInfo.outputPath('market-release.png') })
   })
 }
 
