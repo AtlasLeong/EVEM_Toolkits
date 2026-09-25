@@ -333,7 +333,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
           mapData && !(mobileViewport && !mapOpen) ? <PirateIntelMap mapData={mapData} targets={targets} selectedKey={selectedKey} now={serverNow} selectedSystemId={reportLocation?.id}
             focusTargetKey={selectedKey} focusRequestId={focusRequestId}
             onSelectTarget={target => { selectTarget(target.key); setMapOpen(true) }}
-            onSelectSystem={system => { const location = { ...system, id: system.id ?? system.system_id, name: system.name ?? system.zh_name ?? system.system_name ?? system.location_name }; setReportLocation(location); setFormOpen(true); setMapOpen(true) }} /> :
+            onSelectSystem={system => { const location = { ...system, id: system.id ?? system.system_id, name: system.zh_name ?? system.name ?? system.system_name ?? system.location_name }; setReportLocation(location); setFormOpen(true); setMapOpen(true) }} /> :
             <div className="pirate-map-empty">正在加载真实星图…</div>}
       </div>
     </div>

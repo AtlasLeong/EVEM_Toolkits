@@ -360,22 +360,30 @@ const StaticGeometry = memo(function StaticGeometry({ geometry, scale }) {
   </>
 })
 
-const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId, onSelectSystem }) {
-  return labels.map(label => {
-    const node = byId.get(Number(label.system_id))
-    const id = Number(label.system_id)
-    const security = Number.isFinite(Number(node?.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
-    const name = systemDisplayName(node || label)
-    const ariaLabel = `${name} (${id})，安等 ${security}`
-    const activate = event => { event.stopPropagation(); onSelectSystem?.(node || label) }
-    return <g key={label.system_id} className="pirate-map__label">
-      <BoardSystemLabel label={label} node={node} selected={id === selectedSystemId} />
-      <circle className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
-        data-pirate-system={id} cx={label.px} cy={label.py} r="22" role="button" tabIndex={0}
-        aria-label={ariaLabel} onClick={activate}
-        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event) } }} />
-    </g>
-  })
+const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId }) {
+  return labels.map(label => <g key={label.system_id} className="pirate-map__label">
+    <BoardSystemLabel label={label} node={byId.get(Number(label.system_id))}
+      selected={Number(label.system_id) === selectedSystemId} />
+  </g>)
+})
+
+const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, selectedSystemId, onSelectSystem }) {
+  const activate = (event, node) => {
+    event.stopPropagation()
+    onSelectSystem?.(node)
+  }
+  return <g className="pirate-map__system-hits">
+    {systems.map(node => {
+      const id = Number(node.system_id)
+      const security = Number.isFinite(Number(node.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
+      return <circle key={id} className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
+        data-pirate-system={id} cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
+        aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
+        onPointerDown={event => event.stopPropagation()}
+        onClick={event => activate(event, node)}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
+    })}
+  </g>
 })
 
 const TargetMarker = memo(function TargetMarker({ marker, selected, tabbable, inverseScale, onActivate }) {
@@ -479,6 +487,12 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const cards = useMemo(() => layoutPirateTargetCards(visibleMarkers, viewport, camera, visibleLabels, cardSafeArea, selectedKey),
     [visibleMarkers, visibleLabels, viewport, camera, cardSafeArea, selectedKey])
   const bySystemId = useMemo(() => new Map(geometry.systems.map(node => [Number(node.system_id), node])), [geometry.systems])
+  const onSelectSystemRef = useRef(onSelectSystem)
+  onSelectSystemRef.current = onSelectSystem
+  const activateSystem = useCallback(system => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return }
+    onSelectSystemRef.current?.(system)
+  }, [])
   const labelLayouts = useMemo(() => {
     const screenLabels = visibleLabels.filter(node => node.primary || showZoomLabels || node.system_id === selectedSystemId)
       .map(node => ({ ...node, px: node.px * camera.scale + camera.x,
@@ -627,13 +641,12 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
       <g ref={worldLayerRef} className="pirate-map__world" transform={`translate(${camera.x} ${camera.y}) scale(${camera.scale})`}>
         <StaticGeometry geometry={geometry} scale={camera.scale} />
+        <StaticSystemHits systems={geometry.systems} scale={camera.scale}
+          selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={activateSystem} />
         {markerLayer}
       </g>
       <g ref={labelLayerRef} className="pirate-map__labels">
-        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={system => {
-          if (suppressClickRef.current) { suppressClickRef.current = false; return }
-          onSelectSystem?.(system)
-        }} />
+        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} />
       </g>
     </svg>
     <svg className="pirate-map__card-tethers" viewBox={`0 0 ${viewport.width} ${viewport.height}`}

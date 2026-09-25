@@ -68,11 +68,12 @@ test('a sighting becomes historical only after 48 hours, with invalid timestamps
 test('real systems expose selectable accessible hit areas', async () => {
   const { default: PirateIntelMap } = await loadMap()
   const html = renderToStaticMarkup(React.createElement(PirateIntelMap, {
-    mapData: { ...mapData, systems: [{ ...mapData.systems[0], security_status: -.76 }] },
+    mapData: { ...mapData, systems: mapData.systems.map((node, index) => index === 0 ? { ...node, security_status: -.76 } : node) },
     targets: [], onSelectSystem() {}, selectedSystemId: 101,
   }))
   assert.match(html, /role="button"[^>]*aria-label="Alpha \(101\)，安等 -0\.76"/)
   assert.match(html, /data-pirate-system="101"/)
+  assert.match(html, /data-pirate-system="102"/)
   assert.match(html, /pirate-map__system-hit--selected/)
   assert.doesNotMatch(html, /class="pirate-map__labels" aria-hidden="true"[^>]*>.*data-pirate-system="101"/)
 })
