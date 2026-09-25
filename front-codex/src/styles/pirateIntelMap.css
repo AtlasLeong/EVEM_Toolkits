@@ -20,6 +20,15 @@
   overscroll-behavior: contain;
 }
 .pirate-map__svg:active { cursor: grabbing; }
+/* Fixed-size map primitives inherit one preview variable instead of being
+   rewritten individually on every wheel frame. */
+.pirate-map__world [data-fixed-kind="dot"],
+.pirate-map__world [data-fixed-kind="ring"],
+.pirate-map__world [data-fixed-kind="hit"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(var(--tactical-fixed-inverse, 1));
+}
 .pirate-map__system-hit {
   fill: transparent;
   stroke: transparent;

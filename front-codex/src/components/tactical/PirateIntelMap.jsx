@@ -407,7 +407,8 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
       const id = Number(node.system_id)
       const security = Number.isFinite(Number(node.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
       return <circle key={id} className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
-        data-pirate-system={id} data-base-radius="22" cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
+        data-pirate-system={id} data-fixed-size="true" data-fixed-kind="hit" data-world-x={node.px} data-world-y={node.py}
+        data-base-radius="22" cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
         aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
         onClick={event => activate(event, node)}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
@@ -467,45 +468,27 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const visibleMarkersRef = useRef(null)
   const visibleLabelsRef = useRef(null)
   const visibleSystemHitsRef = useRef(null)
-  const fixedPreviewElementsRef = useRef(null)
   const onSelectTargetRef = useRef(onSelectTarget)
   const defaultNowRef = useRef(null)
   onSelectTargetRef.current = onSelectTarget
   if (defaultNowRef.current === null) defaultNowRef.current = now ?? Date.now()
   const sceneNow = now ?? defaultNowRef.current
-  const syncPiratePreviewGeometry = (next, base = committedCameraRef.current, refresh = false) => {
+  const syncPiratePreviewGeometry = (next, base = committedCameraRef.current) => {
     const svg = svgRef.current
     if (!svg) return
-    const inverseScale = 1 / Math.max(.0001, next.scale)
-    svg.querySelectorAll('[data-pirate-system]').forEach(node => {
-      const radius = Number(node.getAttribute('data-base-radius') || 22)
-      node.setAttribute('r', String(radius * inverseScale))
-    })
-    if (refresh || !fixedPreviewElementsRef.current) {
-      fixedPreviewElementsRef.current = [...svg.querySelectorAll('[data-fixed-size="true"][data-fixed-kind]')]
-    }
-    fixedPreviewElementsRef.current.forEach(node => {
-      const role = node.getAttribute('data-fixed-kind')
-      if (role === 'gate') {
-        const stroke = Number(node.getAttribute('data-base-stroke'))
-        if (Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke * inverseScale))
-        return
-      }
-      if (role !== 'dot' && role !== 'ring' && role !== 'hit') return
-      const radius = Number(node.getAttribute('data-base-radius'))
-      if (Number.isFinite(radius)) node.setAttribute('r', String(radius * inverseScale))
-      if (role === 'ring') {
-        const stroke = Number(node.getAttribute('data-base-stroke'))
-        if (Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke * inverseScale))
-      }
-    })
+    // All fixed-size primitives are inside the world layer. Their radii are
+    // rendered for the committed camera and one CSS variable compensates the
+    // parent preview scale, avoiding an O(N) SVG attribute pass per RAF.
+    const fixedInverse = Math.max(.0001, base.scale) / Math.max(.0001, next.scale)
+    worldLayerRef.current?.style.setProperty('--tactical-fixed-inverse', String(fixedInverse))
+    const markerInverseScale = 1 / Math.max(.0001, next.scale)
     svg.querySelectorAll('[data-pirate-marker]').forEach(node => {
       const x = Number(node.getAttribute('data-pirate-marker-x'))
       const y = Number(node.getAttribute('data-pirate-marker-y'))
       const offsetX = Number(node.getAttribute('data-pirate-marker-offset-x') || 0)
       const offsetY = Number(node.getAttribute('data-pirate-marker-offset-y') || 0)
       if (![x, y, offsetX, offsetY].every(Number.isFinite)) return
-      node.setAttribute('transform', `translate(${x + offsetX * inverseScale} ${y + offsetY * inverseScale}) scale(${inverseScale})`)
+      node.setAttribute('transform', `translate(${x + offsetX * markerInverseScale} ${y + offsetY * markerInverseScale}) scale(${markerInverseScale})`)
     })
     const ratio = next.scale / Math.max(.0001, base.scale)
     const inverseRatio = 1 / Math.max(.0001, ratio)
@@ -521,19 +504,21 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       card.style.transform = ratio === 1 ? '' : `scale(${inverseRatio})`
     })
   }
+  const applyPiratePreviewFrame = (next, base = committedCameraRef.current) => {
+    const ratio = next.scale / Math.max(.0001, base.scale)
+    const relative = `translate(${next.x - ratio * base.x} ${next.y - ratio * base.y}) scale(${ratio})`
+    worldLayerRef.current?.setAttribute('transform', `translate(${next.x} ${next.y}) scale(${next.scale})`)
+    labelLayerRef.current?.setAttribute('transform', relative)
+    tetherLayerRef.current?.setAttribute('transform', relative)
+    if (cardLayerRef.current) {
+      cardLayerRef.current.style.transformOrigin = '0 0'
+      cardLayerRef.current.style.transform = `translate(${next.x - ratio * base.x}px, ${next.y - ratio * base.y}px) scale(${ratio})`
+    }
+    syncPiratePreviewGeometry(next, base)
+  }
   if (!cameraSchedulerRef.current) cameraSchedulerRef.current = createPirateCameraScheduler(setCamera, {
     onPreview: next => {
-      const base = committedCameraRef.current
-      const ratio = next.scale / Math.max(.0001, base.scale)
-      const relative = `translate(${next.x - ratio * base.x} ${next.y - ratio * base.y}) scale(${ratio})`
-      worldLayerRef.current?.setAttribute('transform', `translate(${next.x} ${next.y}) scale(${next.scale})`)
-      labelLayerRef.current?.setAttribute('transform', relative)
-      tetherLayerRef.current?.setAttribute('transform', relative)
-      if (cardLayerRef.current) {
-        cardLayerRef.current.style.transformOrigin = '0 0'
-        cardLayerRef.current.style.transform = `translate(${next.x - ratio * base.x}px, ${next.y - ratio * base.y}px) scale(${ratio})`
-      }
-      syncPiratePreviewGeometry(next, base)
+      applyPiratePreviewFrame(next)
     },
   })
   const cameraScheduler = cameraSchedulerRef.current
@@ -543,17 +528,13 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     labelLayerRef.current?.removeAttribute('transform')
     tetherLayerRef.current?.removeAttribute('transform')
     if (cardLayerRef.current) cardLayerRef.current.style.transform = ''
-    fixedPreviewElementsRef.current = null
-    syncPiratePreviewGeometry(camera, camera, true)
+    syncPiratePreviewGeometry(camera, camera)
     setWheelMotion(false)
   }, [camera])
   useEffect(() => {
     setShowZoomLabels(previous => labelVisibilityState({ visible: previous, zoom: camera.scale }).visible)
   }, [camera.scale])
   const geometry = useMemo(() => createPirateMapGeometry(mapData, viewport, { desktopOverlay }), [mapData, viewport, desktopOverlay])
-  useLayoutEffect(() => {
-    fixedPreviewElementsRef.current = null
-  }, [geometry])
   const cardSafeArea = useMemo(() => pirateMapCardSafeArea(geometry.safeArea, Boolean(selectedKey), desktopOverlay),
     [geometry.safeArea, selectedKey, desktopOverlay])
   const scene = useMemo(() => createPirateMapScene(mapData, targets, viewport, { now: sceneNow, geometry }),
@@ -602,6 +583,18 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       occupied: cards.map(card => ({ x: card.left, y: card.top, width: card.width, height: card.height })),
       gateSegments, padding: { ...geometry.safeArea.padding, left: Math.max(14, geometry.safeArea.cardLeft) } })
   }, [visibleLabels, showZoomLabels, selectedSystemId, camera, geometry.gates, geometry.safeArea, scene.markers, cards, viewport])
+  useLayoutEffect(() => {
+    // Wheel preview transforms live outside React state so a burst can stay
+    // smooth. If a live target update causes React to replace the SVG/HTML
+    // children during that burst, the declarative camera props render the
+    // committed view again. Re-apply the current live frame after the new
+    // nodes have committed so the preview never snaps back mid-gesture.
+    if (!wheelMotion) return
+    const next = cameraSchedulerRef.current?.current?.()
+    const base = committedCameraRef.current
+    if (!next || next.x === base.x && next.y === base.y && next.scale === base.scale) return
+    applyPiratePreviewFrame(next, base)
+  }, [wheelMotion, geometry, scene, cards, labelLayouts, visibleMarkers, visibleLabels])
   const cardlessLocations = scene.markers.length - cards.length
   const openMarker = scene.markers.find(marker => marker.key === openKey && marker.targets.length > 1)
   const filteredPickerTargets = useMemo(() => {

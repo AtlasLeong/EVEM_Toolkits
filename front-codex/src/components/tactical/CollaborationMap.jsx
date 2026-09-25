@@ -23,25 +23,14 @@ const relativeCameraTransform = (base = INITIAL_VIEW, next = INITIAL_VIEW) => {
 };
 
 /** Keep screen-sized glyphs and annotations stable while their parent layer previews a zoom. */
-function syncCollaborationPreviewGeometry(root, base = INITIAL_VIEW, next = INITIAL_VIEW, refresh = false) {
+function syncCollaborationPreviewGeometry(root, base = INITIAL_VIEW, next = INITIAL_VIEW) {
   if (!root) return;
   const scale = Math.max(.0001, Number(next.scale) || 1);
-  if (refresh || !root.__tacticalFixedElements) {
-    root.__tacticalFixedElements = [...root.querySelectorAll('[data-fixed-size="true"][data-fixed-kind]')];
-  }
-  root.__tacticalFixedElements.forEach(node => {
-    const role = node.getAttribute('data-fixed-kind');
-    if (role === 'gate') {
-      const stroke = Number(node.getAttribute('data-base-stroke'));
-      if (Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke / scale));
-      return;
-    }
-    if (role !== 'ring' && role !== 'dot' && role !== 'hit') return;
-    const radius = Number(node.getAttribute('data-base-radius'));
-    if (Number.isFinite(radius)) node.setAttribute('r', String(radius / scale));
-    const stroke = Number(node.getAttribute('data-base-stroke'));
-    if (role === 'ring' && Number.isFinite(stroke)) node.setAttribute('stroke-width', String(stroke / scale));
-  });
+  // Fixed-size stars/hit areas are rendered for the committed camera. A
+  // single inherited variable compensates the live preview scale, avoiding an
+  // O(N) SVG attribute pass through dense topology on every wheel RAF.
+  const fixedInverse = Math.max(.0001, Number(base.scale) || 1) / scale;
+  root.querySelector('.tac-map-world-layer')?.style.setProperty('--tactical-fixed-inverse', String(fixedInverse));
   const ratio = scale / Math.max(.0001, Number(base.scale) || 1);
   const inverseRatio = 1 / Math.max(.0001, ratio);
   root.querySelectorAll('[data-tac-fixed-overlay-group]').forEach(node => {
@@ -63,13 +52,11 @@ function visibleBoardWorld(nodes, stargates, viewport, view, preferredIds = new 
   const inside = value => value.x >= -margin && value.x <= viewport.width + margin &&
     value.y >= -margin && value.y <= viewport.height + margin;
   const visibleNodes = nodes.filter(node => preferredIds.has(Number(node.system_id)) || inside(point(node)));
-  const visibleIds = new Set(visibleNodes.map(node => Number(node.system_id)));
   const byId = new Map(nodes.map(node => [Number(node.system_id), node]));
   const visibleGates = stargates.filter(gate => {
     const a = byId.get(Number(gate.system_id));
     const b = byId.get(Number(gate.destination_system_id));
     if (!a || !b) return false;
-    if (visibleIds.has(Number(a.system_id)) || visibleIds.has(Number(b.system_id))) return true;
     const pa = point(a), pb = point(b);
     return Math.max(pa.x, pb.x) >= -margin && Math.min(pa.x, pb.x) <= viewport.width + margin &&
       Math.max(pa.y, pb.y) >= -margin && Math.min(pa.y, pb.y) <= viewport.height + margin;
@@ -127,21 +114,6 @@ export default function CollaborationMap({
   const byId = useMemo(() => new Map(nodes.map(node => [Number(node.system_id), node])), [nodes]);
   const intel = useMemo(() => latestSystemIntel(reports), [reports]);
   const intelById = useMemo(() => new Map(intel.map(row => [Number(row.system_id), row])), [intel]);
-  const screenSystems = useMemo(() => screenNodes(nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
-    {panX:view.x, panY:view.y, zoom:view.scale}), [nodes, view]);
-  const gateSegments = useMemo(() => {
-    if (isWheelZooming && settledLabels.current?.scopeVersion === scopeVersion && settledLabels.current.gateSegments)
-      return settledLabels.current.gateSegments;
-    const screenById = new Map(screenSystems.map(node => [Number(node.system_id), node]));
-    const segments = [];
-    for (const gate of stargates) {
-      const sourceId=Number(gate.system_id), destinationId=Number(gate.destination_system_id);
-      const a=screenById.get(sourceId), b=screenById.get(destinationId);
-      if (!a || !b) continue;
-      segments.push({x1:a.px,y1:a.py,x2:b.px,y2:b.py});
-    }
-    return indexGateSegments(segments,viewport);
-  }, [stargates, screenSystems, viewport, isWheelZooming, scopeVersion]);
   const selectedNeighbors = useMemo(() => adjacentSystems(stargates, hoveredSystemId ?? selectedSystemId), [stargates, hoveredSystemId, selectedSystemId]);
   const allMarkerGroups = useMemo(() => [
     ...buildMarkerGroups(forces, reports, selectedForceId, {canArchiveForce}), ...buildSystemCountMarkerGroups(intel,{canWithdrawCount}),
@@ -152,12 +124,37 @@ export default function CollaborationMap({
     {selectedSystemId, view, showReports:showReportMarkers}), [eligibleMarkerGroups, nodes, viewport, selectedSystemId, view, showReportMarkers]);
   const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
   const visibleWorld = useMemo(() => {
-    const preferred = new Set([...forceSystems, ...intelById.keys(), Number(selectedSystemId)].filter(Number.isFinite));
+    // Preserve every currently rendered annotation anchor while culling the
+    // static topology. This prevents a selected/report/count marker from
+    // losing its star when a dense map is zoomed into a small viewport.
+    const markerIds = markerGroups.map(group => Number(group.system_id));
+    // Offscreen intel still remains in the report panel and full hit-test
+    // data, but must not pin thousands of unrelated stars into the SVG.
+    const preferred = new Set([...forceSystems, ...markerIds, Number(selectedSystemId)].filter(Number.isFinite));
     return visibleBoardWorld(nodes, stargates, viewport, view, preferred);
-  }, [nodes, stargates, viewport, view, forceSystems, intelById, selectedSystemId]);
-  const basePreferredSlots = useMemo(() => new Map(layoutForceMarkers(eligibleMarkerGroups, nodes, 1,
+  }, [nodes, stargates, viewport, view, forceSystems, markerGroups, selectedSystemId]);
+  // Keep the expensive label/marker layout input bounded to the current
+  // viewport. Hit-testing still uses the complete world `nodes` collection,
+  // while all displayed anchors (selected and marker groups) remain
+  // in `visibleWorld` even when outside the screen margin.
+  const screenSystems = useMemo(() => screenNodes(visibleWorld.nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
+    {panX:view.x, panY:view.y, zoom:view.scale}), [visibleWorld.nodes, view]);
+  const gateSegments = useMemo(() => {
+    if (isWheelZooming && settledLabels.current?.scopeVersion === scopeVersion && settledLabels.current.gateSegments)
+      return settledLabels.current.gateSegments;
+    const segments = [];
+    for (const gate of visibleWorld.gates) {
+      const sourceId=Number(gate.system_id), destinationId=Number(gate.destination_system_id);
+      const a=byId.get(sourceId), b=byId.get(destinationId);
+      if (!a || !b) continue;
+      segments.push({x1:a.px*view.scale+view.x,y1:a.py*view.scale+view.y,
+        x2:b.px*view.scale+view.x,y2:b.py*view.scale+view.y});
+    }
+    return indexGateSegments(segments,viewport);
+  }, [visibleWorld.gates, byId, view, viewport, isWheelZooming, scopeVersion]);
+  const basePreferredSlots = useMemo(() => new Map(layoutForceMarkers(markerGroups, nodes, 1,
     {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects})
-    .map(group => [group.key, group.slot])), [eligibleMarkerGroups, nodes, viewport, reservedUiRects]);
+    .map(group => [group.key, group.slot])), [markerGroups, nodes, viewport, reservedUiRects]);
   const rememberedSlots = visibleMarkerSlots.scopeVersion === scopeVersion ? visibleMarkerSlots.slots : null;
   const preferredSlots = useMemo(() => new Map([...basePreferredSlots, ...(rememberedSlots || [])]),
     [basePreferredSlots, rememberedSlots]);
@@ -193,11 +190,8 @@ export default function CollaborationMap({
     liveViewRef.current = view;
     worldLayerRef.current?.setAttribute('transform', cameraTransform(view));
     overlayLayerRef.current?.removeAttribute('transform');
-    syncCollaborationPreviewGeometry(ref.current, view, view, true);
+    syncCollaborationPreviewGeometry(ref.current, view, view);
   }, [view]);
-  useLayoutEffect(() => {
-    if (ref.current) delete ref.current.__tacticalFixedElements;
-  }, [nodes, stargates]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
   const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({
@@ -221,6 +215,21 @@ export default function CollaborationMap({
   useLayoutEffect(() => {
     if (!isWheelZooming) settledLabels.current = {labels:labelLayouts, nodes:screenSystems, gateSegments, scopeVersion};
   }, [isWheelZooming, labelLayouts, screenSystems, gateSegments, scopeVersion]);
+  const applyCollaborationPreviewFrame = (next, base = view) => {
+    worldLayerRef.current?.setAttribute('transform', cameraTransform(next));
+    overlayLayerRef.current?.setAttribute('transform', relativeCameraTransform(base, next));
+    syncCollaborationPreviewGeometry(ref.current, base, next);
+  };
+  useLayoutEffect(() => {
+    // The live wheel camera is held in a ref so React does not re-render the
+    // whole map for every native wheel event. A concurrent snapshot update can
+    // still replace map children while that preview is active; restore the
+    // affine preview and fixed-size overlays after the replacement commits.
+    if (!isWheelZooming) return;
+    const next = liveViewRef.current;
+    if (next.x === view.x && next.y === view.y && next.scale === view.scale) return;
+    applyCollaborationPreviewFrame(next, view);
+  }, [isWheelZooming, view, nodes, visibleWorld, positionedGroups, labelLayouts, gateSegments, markers, countMarkers, reportMarkers]);
   const markerLeaders = useMemo(() => markerLeaderSegments(positionedGroups,
     {selectedSystemId, hoveredSystemId, selectedForceId}),
     [positionedGroups, selectedSystemId, hoveredSystemId, selectedForceId]);
@@ -275,9 +284,7 @@ export default function CollaborationMap({
     const next = wheelCameraFrame({view:current, delta:accumulated, anchor, limits:{min:.5,max:16}}).view;
     if (next.scale === current.scale && next.x === current.x && next.y === current.y) return;
     liveViewRef.current = next;
-    worldLayerRef.current?.setAttribute('transform', cameraTransform(next));
-    overlayLayerRef.current?.setAttribute('transform', relativeCameraTransform(view, next));
-    syncCollaborationPreviewGeometry(ref.current, view, next);
+    applyCollaborationPreviewFrame(next, view);
   };
   wheelHandler.current = event => {
     if (gesture.current) return;

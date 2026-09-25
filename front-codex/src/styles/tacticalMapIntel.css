@@ -1,6 +1,13 @@
 .tac-map.tac-system-intel-map { background: #19252b; }
 .tac-system-intel-map .tac-map-world-layer,
 .tac-system-intel-map .tac-map-overlay-layer { will-change: transform; }
+.tac-system-intel-map .tac-map-world-layer [data-fixed-kind="dot"],
+.tac-system-intel-map .tac-map-world-layer [data-fixed-kind="ring"],
+.tac-system-intel-map .tac-map-world-layer [data-fixed-kind="hit"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(var(--tactical-fixed-inverse, 1));
+}
 .tac-system-intel-map .tac-intel-toolbar.tac-map-toolbar {
   position: absolute; inset: auto auto 18px 18px; z-index: 4;
   display: flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: 10px;

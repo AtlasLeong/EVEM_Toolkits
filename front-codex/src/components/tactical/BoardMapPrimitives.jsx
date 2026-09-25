@@ -41,7 +41,8 @@ export function BoardGateLine({ a, b, scale = 1, active = false, className = 'ta
   return <line className={`${className}${active ? ' is-active' : ''}`}
     x1={a.px} y1={a.py} x2={b.px} y2={b.py}
     data-fixed-size="true" data-fixed-kind="gate" data-base-stroke={baseStroke}
-    stroke={active ? '#819591' : '#46565c'} strokeWidth={baseStroke / zoom}
+    stroke={active ? '#819591' : '#46565c'} strokeWidth={baseStroke}
+    vectorEffect="non-scaling-stroke"
     opacity={active ? .88 : Math.max(.3, Math.min(.5, .18 + zoom * .12))} pointerEvents="none" />
 }
 

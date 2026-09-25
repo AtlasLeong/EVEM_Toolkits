@@ -14,6 +14,27 @@ test('wheel preview keeps fixed-size hit rings synchronized before React settles
   expect(Math.abs(preview.width - before.width)).toBeLessThanOrEqual(1)
 })
 
+test('pirate wheel preview survives a target snapshot rerender', async ({ page }) => {
+  await page.goto('/tests/tactical-e2e/marker-render-harness.html')
+  await expect(page.locator('.pirate-map__svg')).toBeVisible()
+  await page.evaluate(() => window.__pirateSetSelectedKey('target:1'))
+  const world = page.locator('.pirate-map__world')
+  const before = await world.getAttribute('transform')
+  await page.locator('.pirate-map__svg').dispatchEvent('wheel', { deltaY: -120, deltaMode: 0, clientX: 600, clientY: 350 })
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  const preview = await world.getAttribute('transform')
+  expect(preview).not.toBe(before)
+  await page.evaluate(() => window.__pirateTriggerRerender())
+  await expect(page.locator('[data-harness-revision="1"]')).toHaveCount(1)
+  expect(await world.getAttribute('transform')).toBe(preview)
+  const existingHalo = await page.locator('[data-pirate-marker="system:2"] .pirate-map__marker-halo').boundingBox()
+  const incomingHalo = await page.locator('[data-pirate-marker="system:101"] .pirate-map__marker-halo').boundingBox()
+  expect(incomingHalo).not.toBeNull()
+  // Fractional SVG transforms can round a newly inserted marker by a pixel;
+  // the invariant is that it stays within the fixed-size halo tolerance.
+  expect(Math.abs(incomingHalo.width - existingHalo.width)).toBeLessThanOrEqual(2)
+})
+
 test('war board keeps the selected star ring and gate stroke stable during preview', async ({ page }) => {
   await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html')
   const map = page.getByRole('group', { name: '局部作战星图' })
@@ -29,5 +50,41 @@ test('war board keeps the selected star ring and gate stroke stable during previ
   const preview = { ring: await ring.boundingBox(), gate: await gate.getAttribute('stroke-width'), scale: await readScale() }
   expect(preview.ring).not.toBeNull()
   expect(Math.abs(preview.ring.width - before.ring.width)).toBeLessThanOrEqual(1)
-  expect(Number(preview.gate) * preview.scale).toBeCloseTo(Number(before.gate) * before.scale, 5)
+  expect(Number(preview.gate)).toBeCloseTo(Number(before.gate), 5)
+  await expect(gate).toHaveAttribute('vector-effect', 'non-scaling-stroke')
+})
+
+test('war board bounds dense topology and preserves the selected system while zooming', async ({ page }) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?dense=1&intel=1')
+  const map = page.getByRole('group', { name: '局部作战星图' })
+  await expect(map).toBeVisible()
+  await expect(map.locator('[data-system-id]')).toHaveCount(900)
+
+  for (let index = 0; index < 6; index += 1) {
+    await page.getByRole('button', { name: '放大地图' }).click()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  }
+
+  const visibleCount = await map.locator('[data-system-id]').count()
+  expect(visibleCount).toBeGreaterThan(0)
+  expect(visibleCount).toBeLessThan(900)
+  await expect(map.locator('[data-system-id="1"]')).toHaveCount(1)
+})
+
+test('war board wheel preview survives a systems snapshot rerender', async ({ page }) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html')
+  const map = page.getByRole('group', { name: '局部作战星图' })
+  await expect(map).toBeVisible()
+  const world = map.locator('.tac-map-world-layer')
+  await map.dispatchEvent('wheel', { deltaY: -120, deltaMode: 0, clientX: 600, clientY: 350 })
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+  const preview = await world.getAttribute('transform')
+  expect(preview).not.toBe('translate(0 0) scale(1)')
+  await page.evaluate(() => window.__collabTriggerRerender())
+  await expect(page.locator('[data-harness-revision="1"]')).toHaveCount(1)
+  expect(await world.getAttribute('transform')).toBe(preview)
+  const existingDot = await map.locator('[data-system-id="2"] [data-fixed-kind="dot"]').boundingBox()
+  const incomingDot = await map.locator('[data-system-id="4"] [data-fixed-kind="dot"]').boundingBox()
+  expect(incomingDot).not.toBeNull()
+  expect(Math.abs(incomingDot.width - existingDot.width)).toBeLessThanOrEqual(1)
 })
