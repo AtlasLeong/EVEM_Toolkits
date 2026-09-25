@@ -50,6 +50,7 @@ test('system map selection opens a prefilled report without changing target sele
   assert.match(source, /const \[reportLocation, setReportLocation\] = useState\(null\)/)
   assert.match(source, /selectedSystemId=\{reportLocation\?\.id\}/)
   assert.match(source, /onSelectSystem=\{system => \{ const location = \{ \.\.\.system, id: system\.id \?\? system\.system_id/)
+  assert.match(source, /name: system\.name \?\? system\.zh_name \?\? system\.system_name/)
   assert.match(source, /initialLocation=\{reportLocation\}/)
   assert.match(source, /setFormOpen\(false\); setReportLocation\(null\)/)
 })
