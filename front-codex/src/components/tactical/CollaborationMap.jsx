@@ -197,7 +197,7 @@ export default function CollaborationMap({
   }, [view]);
   useLayoutEffect(() => {
     if (ref.current) delete ref.current.__tacticalFixedElements;
-  }, [nodes.length, stargates.length]);
+  }, [nodes, stargates]);
   const markers = useMemo(() => positionedGroups.filter(group=>group.kind==='force').flatMap(group => group.visible.map((force,index) => ({force,
     x:group.x+group.rowOffsets[index],y:group.y+index*(group.rowHeight+group.rowGap),width:group.rowWidths[index],height:group.rowHeight}))), [positionedGroups]);
   const countMarkers = useMemo(() => positionedGroups.filter(group=>group.kind==='system_count').map(group=>({

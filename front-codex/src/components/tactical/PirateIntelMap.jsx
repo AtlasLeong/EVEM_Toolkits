@@ -553,7 +553,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const geometry = useMemo(() => createPirateMapGeometry(mapData, viewport, { desktopOverlay }), [mapData, viewport, desktopOverlay])
   useLayoutEffect(() => {
     fixedPreviewElementsRef.current = null
-  }, [geometry.systems.length])
+  }, [geometry])
   const cardSafeArea = useMemo(() => pirateMapCardSafeArea(geometry.safeArea, Boolean(selectedKey), desktopOverlay),
     [geometry.safeArea, selectedKey, desktopOverlay])
   const scene = useMemo(() => createPirateMapScene(mapData, targets, viewport, { now: sceneNow, geometry }),
