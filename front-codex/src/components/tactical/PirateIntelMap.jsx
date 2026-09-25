@@ -612,6 +612,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     finishPirateDrag(cameraScheduler, dragRef.current,
       eventPoint(event, svgRef.current, viewport), event.type === 'pointercancel')
     dragRef.current = null
+    if (suppressClickRef.current) setTimeout(() => { suppressClickRef.current = false }, 0)
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
   const openMarkerSelected = openMarker && openMarker.targets.some(target => target.key === selectedKey)
