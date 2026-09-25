@@ -65,6 +65,17 @@ test('a sighting becomes historical only after 48 hours, with invalid timestamps
   assert.equal(pirateIntel.isHistoricalSighting({ observed_at: 'not-a-date' }, now), true)
 })
 
+test('real systems expose selectable accessible hit areas', async () => {
+  const { default: PirateIntelMap } = await loadMap()
+  const html = renderToStaticMarkup(React.createElement(PirateIntelMap, {
+    mapData: { ...mapData, systems: [{ ...mapData.systems[0], security_status: -.76 }] },
+    targets: [], onSelectSystem() {}, selectedSystemId: 101,
+  }))
+  assert.match(html, /role="button"[^>]*aria-label="Alpha \(101\)，安等 -0\.76"/)
+  assert.match(html, /data-pirate-system="101"/)
+  assert.match(html, /pirate-map__system-hit--selected/)
+})
+
 test('scene uses real system coordinates, deduplicates gates, and centers both kinds of intelligence marker', async () => {
   const { createPirateMapScene } = await loadMap()
   const scene = createPirateMapScene(mapData, targets, { width: 400, height: 240 })

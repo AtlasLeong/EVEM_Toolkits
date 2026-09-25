@@ -20,6 +20,20 @@
   overscroll-behavior: contain;
 }
 .pirate-map__svg:active { cursor: grabbing; }
+.pirate-map__system-hit {
+  fill: transparent;
+  stroke: transparent;
+  cursor: pointer;
+  pointer-events: all;
+}
+.pirate-map__system-hit:hover,
+.pirate-map__system-hit:focus-visible,
+.pirate-map__system-hit--selected {
+  stroke: #fff1c6;
+  stroke-width: 2;
+  fill: #fff1c622;
+  outline: none;
+}
 .pirate-map__card-tethers {
   position: absolute;
   inset: 0;

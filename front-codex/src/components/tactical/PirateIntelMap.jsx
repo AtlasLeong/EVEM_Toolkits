@@ -360,11 +360,22 @@ const StaticGeometry = memo(function StaticGeometry({ geometry, scale }) {
   </>
 })
 
-const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId }) {
-  return labels.map(label => <g key={label.system_id} className="pirate-map__label">
-    <BoardSystemLabel label={label} node={byId.get(Number(label.system_id))}
-      selected={Number(label.system_id) === selectedSystemId} />
-  </g>)
+const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId, onSelectSystem }) {
+  return labels.map(label => {
+    const node = byId.get(Number(label.system_id))
+    const id = Number(label.system_id)
+    const security = Number.isFinite(Number(node?.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
+    const name = systemDisplayName(node || label)
+    const ariaLabel = `${name} (${id})，安等 ${security}`
+    const activate = event => { event.stopPropagation(); onSelectSystem?.(id) }
+    return <g key={label.system_id} className="pirate-map__label">
+      <BoardSystemLabel label={label} node={node} selected={id === selectedSystemId} />
+      <circle className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
+        data-pirate-system={id} cx={label.px} cy={label.py} r="22" role="button" tabIndex={0}
+        aria-label={ariaLabel} onClick={activate}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event) } }} />
+    </g>
+  })
 })
 
 const TargetMarker = memo(function TargetMarker({ marker, selected, tabbable, inverseScale, onActivate }) {
@@ -393,7 +404,7 @@ const TargetMarker = memo(function TargetMarker({ marker, selected, tabbable, in
   </g>
 })
 
-export default function PirateIntelMap({ mapData, targets = [], selectedKey, focusTargetKey, focusRequestId = 0, onSelectTarget, now }) {
+export default function PirateIntelMap({ mapData, targets = [], selectedKey, focusTargetKey, focusRequestId = 0, onSelectTarget, onSelectSystem, selectedSystemId: selectedSystemIdProp, now }) {
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT)
   const [desktopOverlay, setDesktopOverlay] = useState(() => typeof window === 'undefined' ? INITIAL_VIEWPORT.width >= 1100
     : window.matchMedia?.('(min-width: 1100px)')?.matches ?? window.innerWidth >= 1100)
@@ -409,6 +420,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const cardLayerRef = useRef(null)
   const committedCameraRef = useRef(INITIAL_CAMERA)
   const dragRef = useRef(null)
+  const suppressClickRef = useRef(false)
   const wheelHandlerRef = useRef(null)
   const focusedTargetRef = useRef(null)
   const cameraSchedulerRef = useRef(null)
@@ -589,10 +601,13 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   const pointerMove = event => {
     const drag = dragRef.current
     if (!drag || drag.pointerId !== event.pointerId) return
-    cameraScheduler.schedule(panPirateCamera(drag.camera, drag.origin, eventPoint(event, svgRef.current, viewport)))
+    const point = eventPoint(event, svgRef.current, viewport)
+    if (Math.hypot(point.x - drag.origin.x, point.y - drag.origin.y) > 6) drag.moved = true
+    cameraScheduler.schedule(panPirateCamera(drag.camera, drag.origin, point))
   }
   const pointerEnd = event => {
     if (dragRef.current?.pointerId !== event.pointerId) return
+    suppressClickRef.current = Boolean(dragRef.current.moved)
     finishPirateDrag(cameraScheduler, dragRef.current,
       eventPoint(event, svgRef.current, viewport), event.type === 'pointercancel')
     dragRef.current = null
@@ -613,7 +628,10 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
         {markerLayer}
       </g>
       <g ref={labelLayerRef} className="pirate-map__labels" aria-hidden="true">
-        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemId} />
+        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} onSelectSystem={id => {
+          if (suppressClickRef.current) { suppressClickRef.current = false; return }
+          onSelectSystem?.(id)
+        }} />
       </g>
     </svg>
     <svg className="pirate-map__card-tethers" viewBox={`0 0 ${viewport.width} ${viewport.height}`}
