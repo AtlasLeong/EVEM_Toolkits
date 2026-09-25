@@ -43,6 +43,8 @@ class Quote:
     best_buy: Decimal | None
     sell_count: int
     buy_count: int
+    sell_prices: tuple[Decimal, ...] = ()
+    buy_prices: tuple[Decimal, ...] = ()
 
 
 def _unpack(data):
@@ -152,7 +154,16 @@ def summarize_orders(result: Any) -> Quote:
         # Remote error strings can contain identifiers/session data.
         raise ProtocolError('Market RPC was rejected.')
     sells, buys = extract_prices(result[0]), extract_prices(result[1])
-    return Quote(min(sells) if sells else None, max(buys) if buys else None, len(sells), len(buys))
+    sell_prices = tuple(sorted(sells)[:5])
+    buy_prices = tuple(sorted(buys, reverse=True)[:5])
+    return Quote(
+        sell_prices[0] if sell_prices else None,
+        buy_prices[0] if buy_prices else None,
+        len(sells),
+        len(buys),
+        sell_prices,
+        buy_prices,
+    )
 
 
 def _pack(kind, body):

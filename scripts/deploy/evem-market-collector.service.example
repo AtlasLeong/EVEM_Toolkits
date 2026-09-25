@@ -10,7 +10,7 @@ User=evem-market
 Group=evem-market
 WorkingDirectory=/EVEMTK/deploy/current/backend
 EnvironmentFile=/EVEMTK/deploy/shared/market/database.env
-Environment=MARKET_SESSION_FILE=/EVEMTK/deploy/shared/market/session.json
+Environment=MARKET_SESSION_FILES=/EVEMTK/deploy/shared/market/session-01.json:/EVEMTK/deploy/shared/market/session-02.json
 Environment=MARKET_DEPLOY_ROOT=/EVEMTK/deploy
 Environment=PYTHONPATH=/EVEMTK/deploy/shared/market-python
 Environment=PYTHONDONTWRITEBYTECODE=1

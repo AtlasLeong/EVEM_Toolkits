@@ -18,9 +18,9 @@ class ReadOnlyMarketAdmin(admin.ModelAdmin):
 
 @admin.register(MarketItem)
 class MarketItemAdmin(ReadOnlyMarketAdmin):
-    list_display = ('id', 'name', 'category', 'scope', 'enabled')
+    list_display = ('id', 'name', 'market_bucket', 'category', 'scope', 'enabled')
     search_fields = ('id', 'name')
-    list_filter = ('enabled', 'scope')
+    list_filter = ('market_bucket', 'enabled', 'scope')
 
 
 @admin.register(MarketConfig)

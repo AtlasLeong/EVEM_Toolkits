@@ -174,6 +174,18 @@ class SessionBundleTests(Modules):
 
 
 class QuoteTests(Modules):
+    def test_summary_keeps_best_prices_and_bounded_sorted_top_five_levels(self):
+        sell_prices = [11, 4, 9, 3, 8, 7, 5]
+        buy_prices = [2, 12, 6, 10, 1, 14, 13]
+        quote = self.protocol.summarize_orders([
+            [{'price': price} for price in sell_prices],
+            [{'price': price} for price in buy_prices],
+        ])
+        self.assertEqual(quote.sell_prices, tuple(Decimal(str(price)) for price in [3, 4, 5, 7, 8]))
+        self.assertEqual(quote.buy_prices, tuple(Decimal(str(price)) for price in [14, 13, 12, 10, 6]))
+        self.assertEqual((quote.best_sell, quote.best_buy, quote.sell_count, quote.buy_count),
+                         (Decimal('3'), Decimal('14'), 7, 7))
+
     def test_dictionary_orders_and_absent_side(self):
         quote = self.protocol.summarize_orders([[{'price': 12.3}, {'price': 9}], []])
         self.assertEqual(quote.best_sell, Decimal('9'))
@@ -225,6 +237,22 @@ class QuoteTests(Modules):
                 {'nested': {'price': 22430000.25}}]
         self.assertEqual(self.protocol.extract_prices(rows),
                          [Decimal('22427620.03'), Decimal('22450000.0'), Decimal('22430000.25')])
+
+
+class SessionPoolTests(Modules):
+    def test_random_session_pool_uses_private_files_without_passwords(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            first = Path(temporary) / 'session-a.json'
+            second = Path(temporary) / 'session-b.json'
+            self.session.save_session(bundle(), first)
+            self.session.save_session(bundle(), second)
+            with patch.dict(os.environ, {'MARKET_SESSION_FILES': os.pathsep.join((str(first), str(second)))}, clear=False):
+                loaded = self.session.load_session_pool()
+                with patch.object(self.session.random, 'choice', return_value=loaded[1]) as choose:
+                    selected = self.session.load_random_session()
+            self.assertEqual(len(loaded), 2)
+            self.assertEqual(selected, loaded[1])
+            choose.assert_called_once()
 
 
 class TransportTests(Modules):

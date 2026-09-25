@@ -16,6 +16,21 @@ class PublicMarketRoutingTests(TestCase):
 
 
 class PublicMarketItemsTests(TestCase):
+    def test_top_five_levels_are_exposed_when_a_snapshot_contains_them(self):
+        item = MarketItem.objects.create(id=123, name='Levelled item')
+        run = CollectionRun.objects.create(trigger='scheduled', status='succeeded')
+        snapshot = PriceSnapshot.objects.create(
+            item=item, run=run, best_buy=Decimal('9.00'), best_sell=Decimal('10.00'),
+            buy_prices=['9.00', '8.00'], sell_prices=['10.00', '11.00'],
+            observed_at_ms=int(time.time() * 1000),
+        )
+        LatestPrice.objects.create(item=item, snapshot=snapshot)
+
+        row = self.client.get('/api/market/items/').json()['results'][0]
+
+        self.assertEqual(row['buy_prices'], ['9.00', '8.00'])
+        self.assertEqual(row['sell_prices'], ['10.00', '11.00'])
+
     def test_search_projects_latest_quote_with_string_prices_and_utc_time(self):
         item = MarketItem.objects.create(id=123456789012, name='Tritanium', category='Mineral', scope='global')
         MarketItem.objects.create(id=9, name='Tritanium hidden', enabled=False)
@@ -34,6 +49,7 @@ class PublicMarketItemsTests(TestCase):
             'count': 1,
             'results': [{
                 'item_id': '123456789012', 'name': 'Tritanium', 'category': 'Mineral',
+                'category_id': None, 'subcategory_id': None,
                 'scope': 'global', 'best_buy': '9.25', 'best_sell': '10.50',
                 'observed_at': datetime.fromtimestamp(observed_at_ms / 1000, timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'status': 'fresh',

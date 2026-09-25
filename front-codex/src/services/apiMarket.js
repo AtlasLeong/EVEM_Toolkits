@@ -21,9 +21,17 @@ async function request(path, { admin = false, ...options } = {}) {
   return response.json()
 }
 
-export function listMarketItems({ q = '', page = 1, signal } = {}) {
+export const listMarketCategories = ({ signal } = {}) => request('categories/', { signal })
+
+export function listMarketItems({ q = '', page = 1, categoryId, signal } = {}) {
   const params = new URLSearchParams({ q: q.trim(), page: String(page) })
+  if (categoryId !== undefined && categoryId !== null && categoryId !== '') params.set('category_id', String(categoryId))
   return request(`items/?${params}`, { signal })
+}
+
+export function getMarketSeries(itemId, days, { signal } = {}) {
+  if (![1, 7, 30].includes(days)) throw new Error('历史范围必须是 1、7 或 30 天')
+  return request(`items/${encodeURIComponent(itemId)}/series/?days=${days}`, { signal })
 }
 
 export function getMarketHistory(itemId, days, { page = 1, signal } = {}) {
