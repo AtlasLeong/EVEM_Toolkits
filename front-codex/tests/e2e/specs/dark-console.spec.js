@@ -40,7 +40,7 @@ test('品牌链接支持键盘并保持当前导航和备案链接', async ({ pa
   await expect(brand).toHaveCSS('outline-style', 'solid')
   await expect(brand).toHaveCSS('outline-width', '2px')
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(/\/fraudlist$/)
+  await expect(page).toHaveURL(/\/market$/)
   await expect(page.getByRole('link', { name: '粤ICP备2024264329号' })).toHaveAttribute('href', 'https://beian.miit.gov.cn/')
 })
 
