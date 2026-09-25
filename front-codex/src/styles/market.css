@@ -240,3 +240,243 @@
   .market-chart-message, .market-trend-empty { min-height: 230px; }
   .market-terminal-blank { min-height: 280px; }
 }
+
+/* Fixed viewport terminal overrides. The normal market page styles above are
+   intentionally content-oriented; this route needs a bounded trading desk so
+   the chart cannot push the order book below the fold. */
+.site-frame:has(.market-page--immersive) {
+  overflow: hidden;
+}
+
+.site-frame:has(.market-page--immersive) .site-content {
+  height: 100vh;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.site-frame:has(.market-page--immersive) .site-footer {
+  display: none;
+}
+
+.app-shell:has(.market-page--immersive) {
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.shell-main:has(.market-page--immersive) {
+  height: 100%;
+  min-height: 0;
+  padding: 16px 24px;
+  overflow: hidden;
+  background: var(--market-ink, #10242b);
+}
+
+.page-stage:has(.market-page--immersive) {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+}
+
+.page-wrapper:has(.market-page--immersive) {
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+}
+
+.market-page--immersive.market-terminal {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  color: var(--text);
+}
+
+.market-page--immersive .market-terminal-header {
+  flex: 0 0 54px;
+  align-items: center;
+  padding: 0 2px 12px;
+}
+
+.market-page--immersive .market-terminal-heading h1 {
+  margin: 3px 0 0;
+  font-size: 24px;
+}
+
+.market-page--immersive .market-terminal-heading p {
+  display: none;
+}
+
+.market-page--immersive .market-terminal-layout {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  grid-template-columns: 248px minmax(0, 1fr) 276px;
+}
+
+.market-page--immersive .market-item-nav {
+  align-content: start;
+  grid-auto-rows: max-content;
+}
+
+.market-page--immersive .market-item-choice {
+  min-height: 56px;
+}
+
+.market-page--immersive .market-terminal-catalog,
+.market-page--immersive .market-terminal-summary {
+  padding: 16px 14px;
+  overflow: auto;
+}
+
+.market-page--immersive .market-terminal-catalog {
+  overflow: hidden;
+}
+
+.market-page--immersive .market-terminal-main {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+  padding: 18px clamp(20px, 2.6vw, 40px) 14px;
+  overflow: hidden;
+}
+
+.market-page--immersive .market-instrument-head h2 {
+  margin-top: 4px;
+  font-size: clamp(22px, 2.4vw, 30px);
+}
+
+.market-page--immersive .market-trend-heading {
+  margin-top: 14px;
+}
+
+.market-page--immersive .market-legend {
+  margin: 10px 0 6px;
+}
+
+.market-page--immersive .market-chart-frame {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.market-page--immersive .market-chart-frame .market-trend-wrap,
+.market-page--immersive .market-chart-frame .market-trend-svg-wrap {
+  min-height: 0;
+}
+
+.market-page--immersive .market-chart-frame .market-trend-svg-wrap {
+  flex: 1 1 auto;
+}
+
+.market-page--immersive .market-trend-svg {
+  height: 100%;
+  min-height: 0;
+}
+
+.market-page--immersive .market-chart-message,
+.market-page--immersive .market-trend-empty {
+  height: 100%;
+  min-height: 0;
+}
+
+.market-page--immersive .market-depth-panel {
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.market-page--immersive .market-depth-grid {
+  margin-top: 8px;
+}
+
+@media (max-width: 1179px) {
+  .site-frame:has(.market-page--immersive) {
+    overflow: auto;
+  }
+
+  .site-frame:has(.market-page--immersive) .site-content {
+    height: auto;
+    min-height: 0;
+  }
+
+  .site-frame:has(.market-page--immersive) .site-footer {
+    display: flex;
+  }
+
+  .app-shell:has(.market-page--immersive),
+  .shell-main:has(.market-page--immersive),
+  .page-stage:has(.market-page--immersive),
+  .page-wrapper:has(.market-page--immersive) {
+    height: auto;
+    min-height: 0;
+  }
+
+  .shell-main:has(.market-page--immersive) {
+    overflow: visible;
+  }
+
+  .market-page--immersive.market-terminal {
+    height: auto;
+  }
+
+  .market-page--immersive .market-terminal-header {
+    flex: 0 0 auto;
+  }
+
+  .market-page--immersive .market-terminal-layout {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 640px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .market-page--immersive .market-terminal-layout {
+    grid-template-columns: minmax(190px, 230px) minmax(0, 1fr);
+  }
+
+  .market-page--immersive .market-terminal-summary {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 16px 24px;
+    align-items: start;
+  }
+
+  .market-page--immersive .market-terminal-summary .market-terminal-section-head {
+    margin: 0;
+  }
+
+  .market-page--immersive .market-terminal-summary .market-quote-stack {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .market-page--immersive .market-terminal-summary .market-snapshot-meta {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .market-page--immersive .market-terminal-layout {
+    display: block;
+    min-height: 0;
+  }
+
+  .market-page--immersive .market-terminal-summary {
+    display: block;
+  }
+
+  .market-page--immersive .market-terminal-main {
+    display: flex;
+    overflow: visible;
+  }
+
+  .market-page--immersive .market-chart-frame {
+    min-height: 230px;
+  }
+
+  .market-page--immersive .market-chart-frame .market-trend-svg-wrap {
+    min-height: 230px;
+  }
+}

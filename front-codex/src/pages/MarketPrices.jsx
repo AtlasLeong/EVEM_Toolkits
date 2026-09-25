@@ -147,7 +147,7 @@ export default function MarketPricesPage() {
     if (selected) seriesQuery.refetch()
   }
 
-  return <div className="page-stack market-page market-terminal">
+  return <div className="page-stack market-page market-page--immersive market-terminal">
     <header className="market-terminal-header">
       <div className="market-terminal-heading"><span className="market-eyebrow"><Activity size={15} aria-hidden="true" /> EVE ECHOES / MARKET INTELLIGENCE</span><h1>市场价格</h1><p>真实盘口观测 · 历史涨跌仅供参考，交易前请核对游戏内报价。</p></div>
       <div className="market-header-actions">{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>

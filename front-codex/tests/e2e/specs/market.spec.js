@@ -94,6 +94,70 @@ test('switching market items keeps the terminal chart mounted while the next ser
   releaseSecondSeries()
 })
 
+test('market terminal fills the desktop viewport and keeps chart and order book in view', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 })
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '1001', name: '测试舰船', category: '巡洋舰', category_id: 1000, best_sell: '130', best_buy: '100', observed_at: freshSample, status: 'fresh', scope: 'global', sell_prices: ['130', '131'], buy_prices: ['100', '99'] }] })
+    if (url.pathname === '/api/market/items/1001/series/') return json({ count: 2, points: [{ observed_at: oldSample, best_sell: '120', best_buy: '90' }, { observed_at: freshSample, best_sell: '130', best_buy: '100' }], change: { best_sell: { absolute: '10', percent: '8.3' }, best_buy: { absolute: '10', percent: '11.1' } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.locator('.market-terminal')).toBeVisible()
+  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  await expect(page.getByRole('region', { name: '盘口深度' })).toBeVisible()
+
+  const metrics = await page.evaluate(() => {
+    const terminal = document.querySelector('.market-terminal').getBoundingClientRect()
+    const layout = document.querySelector('.market-terminal-layout').getBoundingClientRect()
+    const chart = document.querySelector('.market-chart-frame').getBoundingClientRect()
+    const depth = document.querySelector('.market-depth-panel').getBoundingClientRect()
+    return {
+      terminalWidth: terminal.width,
+      viewportWidth: window.innerWidth,
+      layoutHeight: layout.height,
+      viewportHeight: window.innerHeight,
+      chartBottom: chart.bottom,
+      depthTop: depth.top,
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }
+  })
+
+  expect(metrics.terminalWidth).toBeGreaterThan(1400)
+  expect(metrics.layoutHeight).toBeGreaterThan(700)
+  expect(metrics.layoutHeight).toBeLessThan(metrics.viewportHeight)
+  expect(metrics.depthTop).toBeLessThan(metrics.viewportHeight)
+  expect(metrics.chartBottom).toBeLessThanOrEqual(metrics.depthTop + 1)
+  expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1)
+})
+
+test('market terminal remains available and stacks the summary at tablet width', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 })
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '1001', name: '测试舰船', category: '巡洋舰', best_sell: '130', best_buy: '100', observed_at: freshSample, status: 'fresh', scope: 'global', sell_prices: ['130'], buy_prices: ['100'] }] })
+    if (url.pathname.endsWith('/series/')) return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '130', best_buy: '100' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
+  await expect(page.locator('.desktop-only-mask')).toBeHidden()
+
+  const boxes = await page.evaluate(() => {
+    const layout = document.querySelector('.market-terminal-layout').getBoundingClientRect()
+    const main = document.querySelector('.market-terminal-main').getBoundingClientRect()
+    const summary = document.querySelector('.market-terminal-summary').getBoundingClientRect()
+    return { layout, main, summary, scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth }
+  })
+  expect(Math.abs(boxes.summary.x - boxes.layout.x)).toBeLessThanOrEqual(2)
+  expect(Math.abs(boxes.summary.width - boxes.layout.width)).toBeLessThanOrEqual(2)
+  expect(boxes.summary.y).toBeGreaterThanOrEqual(boxes.main.bottom - 1)
+  expect(boxes.scrollWidth).toBeLessThanOrEqual(boxes.viewportWidth)
+})
+
 test('trend supports ranges, independent legends, keyboard detail and breaks missing price segments', async ({ page }) => {
   const requests = []
   await installApiMock(page, ({ url }) => {
