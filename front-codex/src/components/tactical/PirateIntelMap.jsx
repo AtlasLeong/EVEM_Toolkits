@@ -566,6 +566,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     : undefined, [])
 
   const activateMarker = useCallback(marker => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return }
     if (marker.targets.length === 1) {
       setOpenKey(null)
       onSelectTargetRef.current?.(marker.targets[0])
