@@ -1520,9 +1520,13 @@
 .tac-map-controls .tac-side-filter button { padding: 8px 4px; border-color: #6c7772; color: #d2d9d5; background: #252c2cf2; font-size: 11px; }
 .tac-map-controls .tac-side-filter button[aria-pressed="true"] { color: #273932; background: #dce6dd; border-color: #dce6dd; }
 .tac-map-search-results { position: absolute; z-index: 6; bottom: calc(100% + 8px); max-height: 280px; overflow-y: auto; overscroll-behavior: contain; width: 100%; border: 1px solid #d0d4cc; border-radius: 8px; background: #fafaf5; box-shadow: 0 10px 32px #0005; padding: 5px; }
-.tac-map-search-results button { width: 100%; border: 0; border-radius: 4px; padding: 10px; display: flex; justify-content: space-between; background: transparent; font: inherit; font-size: 12px; color: #35473e; cursor: pointer; }
+.tac-map-search-results button { width: 100%; border: 0; border-radius: 4px; padding: 10px; display: flex; align-items: center; gap: 12px; text-align: left; justify-content: space-between; background: transparent; font: inherit; font-size: 12px; color: #35473e; cursor: pointer; }
 .tac-map-search-results button:hover { background: #e5ece4; }
-.tac-map-search-results small { color: #687b6e; }
+.tac-map-search-results button:focus-visible { outline: 2px solid #46715b; outline-offset: -2px; background: #e5ece4; }
+.tac-map-search-results button > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.tac-map-search-results button strong { font-size: 13px; }
+.tac-map-search-results small { color: #687b6e; white-space: nowrap; }
+.tac-map-search-empty { margin: 0; padding: 12px 10px; color: #687b6e; font-size: 12px; }
 .tac-panel-reopen { position: absolute; z-index: 4; right: 18px; top: 162px; }
 .tac-panel-reopen span { font-size: 11px; background: #e6ebe2; border-radius: 4px; padding: 0 5px; }
 .tac-panel-tabs .tac-panel-collapse { margin-left: auto; padding: 0; border: 0; align-self: center; width: 28px; height: 32px; }

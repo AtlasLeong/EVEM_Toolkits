@@ -14,7 +14,7 @@ async function scopeFixture(page) {
     if(url.pathname.endsWith('/presence/'))return json({connection_id:body?.connection_id,online_count:1,capacity:100,lease_seconds:60});
     if(url.pathname.endsWith('/snapshot/'))return json(snapshot);
     if(url.pathname.endsWith('/map/')){return json({scope:snapshot.scope,stargates:[],boundary_exits:[],systems:[
-      {system_id:101,name:snapshot.scope.version===1?'起点':'新范围起点',x:400,z:400},{system_id:102,name:'重叠甲',x:600,z:600},{system_id:103,name:'重叠乙',x:600,z:600},
+      {system_id:101,name:snapshot.scope.version===1?'起点':'新范围起点',security_status:0.9,x:400,z:400},{system_id:102,name:'重叠甲',x:600,z:600},{system_id:103,name:'重叠乙',x:600,z:600},
       {system_id:104,name:'远端甲',x:0,z:0},{system_id:105,name:'远端乙',x:1000,z:1000},
     ]});}
     if(url.pathname.endsWith('/members/'))return json({members:[],applications:[],online:[],online_count:1,capacity:100});
@@ -48,6 +48,22 @@ test('a new scope version fits the real map while unchanged polling preserves ca
   await waitForReplacedScope(page);
   await expect(transform(page)).toHaveAttribute('transform','translate(0 0) scale(1)');
   await expect(page.getByRole('button',{name:'返回上一视野'})).toHaveCount(0);
+});
+
+test('map search uses localized names and ids, exposes scope metadata, and clears on escape', async ({ page }) => {
+  await scopeFixture(page);
+  await page.goto('/tactical');
+  const search = page.getByRole('textbox', { name: '搜索当前星图' });
+  await search.fill('101');
+  const result = page.locator('.tac-map-search-results');
+  await expect(result).toContainText('起点');
+  await expect(result).toContainText('1');
+  await expect(result).toContainText('当前高安');
+  await search.fill('不存在的星系');
+  await expect(result).toContainText('当前范围没有匹配的星系');
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(result).toHaveCount(0);
 });
 
 test('scope replacement discards a pending ambiguous drop without sending a movement',async({page})=>{

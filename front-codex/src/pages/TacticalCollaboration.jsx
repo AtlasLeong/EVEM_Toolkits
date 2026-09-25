@@ -41,6 +41,7 @@ import TacticalStrengthSummary from "../components/tactical/TacticalStrengthSumm
 import CollaborationMap from "../components/tactical/CollaborationMap";
 import { systemDisplayName, visibleGateExits } from "../utils/tacticalMapLayout";
 import { latestSystemIntel } from "../utils/tacticalSystemIntel";
+import { searchTacticalSystems } from "../utils/tacticalSystemSearch";
 import {
   discardReportOutbox,
   paginateTacticalRows,
@@ -648,6 +649,20 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
   const [moving, setMoving] = useState(false);
   const [systemQuery, setSystemQuery] = useState("");
   const [focusSystem, setFocusSystem] = useState(null);
+  const mapSearchResults = useMemo(
+    () => searchTacticalSystems(mapData?.systems || [], systemQuery),
+    [mapData?.systems, systemQuery],
+  );
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape' && systemQuery) {
+        event.preventDefault();
+        setSystemQuery('');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [systemQuery]);
   const [selectedReportId, setSelectedReportId] = useState(null);
   const outboxScope = useMemo(() => ({
     userId: snapshot.user_id,
@@ -995,8 +1010,11 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
             >
               <div className="tac-map-controls" aria-label="星图工具">
                 <label className="tac-search"><Search size={16} /><input aria-label="搜索当前星图" placeholder="查找当前星图的星系" value={systemQuery} onChange={(event) => setSystemQuery(event.target.value)} /></label>
-                {systemQuery.trim() && <div className="tac-map-search-results">
-                  {(mapData?.systems || []).filter((node) => `${node.zh_name || ""} ${node.name || ""}`.toLowerCase().includes(systemQuery.trim().toLowerCase())).slice(0, 8).map((node) => <button key={node.system_id} type="button" onClick={() => focusMapSystem(node)}><span>{node.zh_name || node.name}</span><small>{node.security_status == null ? "安等未知" : Number(node.security_status).toFixed(2)}</small></button>)}
+                {systemQuery.trim() && <div className="tac-map-search-results" role="listbox" aria-label="当前范围搜索结果">
+                  {mapSearchResults.length ? mapSearchResults.map((node) => <button key={node.systemId} type="button" role="option" onClick={() => focusMapSystem(node)}>
+                    <span><strong>{node.name}</strong><small>{node.englishName && node.englishName !== node.name ? `${node.englishName} · ` : ''}ID {node.systemId}</small></span>
+                    <small>{node.securityLabel} · {node.currentRange}</small>
+                  </button>) : <p className="tac-map-search-empty">当前范围没有匹配的星系</p>}
                 </div>}
                 {can.manageForces && <div className="tac-side-filter" aria-label="部署阵营筛选">{[["all", "全部阵营"], ["enemy", "仅敌方"], ["friendly", "仅己方"]].map(([value, label]) => <button type="button" key={value} aria-pressed={sideFilter === value} onClick={() => setSideFilter(value)}>{label}</button>)}</div>}
               </div>
