@@ -89,12 +89,12 @@ function QuoteCard({ title, value, change, tone }) {
 }
 
 function PriceLadder({ title, values, tone }) {
-  if (!Array.isArray(values) || values.length === 0) return null
+  const levels = Array.isArray(values) ? values.slice(0, 5) : []
   return <div className={`market-price-ladder market-price-ladder--${tone}`}>
-    <div className="market-price-ladder-head"><span>{title}</span><small>前 {Math.min(values.length, 5)} 档</small></div>
-    <ol>
-      {values.slice(0, 5).map((value, index) => <li key={`${value}-${index}`}><span>{index + 1}</span><strong>{formatMarketPrice(value)}</strong></li>)}
-    </ol>
+    <div className="market-price-ladder-head"><span>{title}</span>{levels.length ? <small>前 {levels.length} 档</small> : null}</div>
+    {levels.length ? <ol>
+      {levels.map((value, index) => <li key={`${value}-${index}`}><span>{index + 1}</span><strong>{formatMarketPrice(value)}</strong></li>)}
+    </ol> : <p className="market-book-empty">暂无挂单</p>}
   </div>
 }
 
@@ -192,13 +192,19 @@ export default function MarketPricesPage() {
             {seriesQuery.isError && !seriesQuery.data ? <div className="market-chart-message">走势图暂时无法加载；当前报价与历史走势可能不一致，请稍后刷新。</div> : null}
             {seriesQuery.data ? <MarketTrendChart points={points} stats={seriesQuery.data.stats} showBuy={showBuy} showSell={showSell} formatPrice={formatMarketPrice} formatTime={formatMarketTime} /> : null}
           </div>
-          <section className="market-depth-panel" aria-label="盘口深度"><div className="market-depth-head"><div><span className="market-eyebrow">ORDER BOOK</span><h3>盘口深度</h3></div><span>前 5 档</span></div><div className="market-depth-grid"><PriceLadder title="卖价盘口" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价盘口" values={selected.buy_prices} tone="buy" /></div></section>
         </> : <div className="market-terminal-blank"><Activity size={42} aria-hidden="true" /><h2>选择物品，查看价格轨迹</h2><p>左侧列表只展示已启用的市场物品。</p></div>}
       </main>
 
       <aside className="market-terminal-summary" aria-label="当前物品报价摘要">
-        <div className="market-terminal-section-head"><span>QUOTE SUMMARY</span><strong>报价概览</strong></div>
-        {selected ? <><div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div><div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at, clock)}</small> : null}</div></> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
+        <div className="market-terminal-section-head"><span>QUOTE / ORDER BOOK</span><strong>报价与盘口</strong></div>
+        {selected ? <>
+          <div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div>
+          <section className="market-depth-panel" aria-label="盘口深度">
+            <div className="market-depth-head"><h3>盘口深度</h3><span>前 5 档</span></div>
+            <div className="market-depth-grid"><PriceLadder title="卖价盘口" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价盘口" values={selected.buy_prices} tone="buy" /></div>
+          </section>
+          <div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at, clock)}</small> : null}</div>
+        </> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
       </aside>
     </div>
   </div>

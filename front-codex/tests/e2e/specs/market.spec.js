@@ -121,8 +121,11 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
       layoutHeight: layout.height,
       viewportHeight: window.innerHeight,
       chartBottom: chart.bottom,
+      chartRight: chart.right,
       depthTop: depth.top,
+      depthLeft: depth.left,
       depthBottom: depth.bottom,
+      layoutBottom: layout.bottom,
       footerTop: footer.top,
       footerBottom: footer.bottom,
       scrollHeight: document.documentElement.scrollHeight,
@@ -134,7 +137,9 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
   expect(metrics.layoutHeight).toBeGreaterThan(700)
   expect(metrics.layoutHeight).toBeLessThan(metrics.viewportHeight)
   expect(metrics.depthTop).toBeLessThan(metrics.viewportHeight)
-  expect(metrics.chartBottom).toBeLessThanOrEqual(metrics.depthTop + 1)
+  expect(metrics.chartRight).toBeLessThanOrEqual(metrics.depthLeft)
+  expect(metrics.chartBottom).toBeLessThanOrEqual(metrics.layoutBottom)
+  expect(metrics.depthBottom).toBeLessThanOrEqual(metrics.layoutBottom)
   expect(metrics.depthBottom).toBeLessThanOrEqual(metrics.footerTop + 1)
   expect(metrics.footerBottom).toBeLessThanOrEqual(metrics.viewportHeight + 1)
   expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1)
