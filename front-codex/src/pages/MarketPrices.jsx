@@ -106,8 +106,7 @@ export default function MarketPricesPage() {
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState(null)
   const [days, setDays] = useState(1)
-  const [showBuy, setShowBuy] = useState(true)
-  const [showSell, setShowSell] = useState(true)
+  const [viewMode, setViewMode] = useState('both')
   const [clock, setClock] = useState(() => Date.now())
 
   useEffect(() => {
@@ -141,8 +140,9 @@ export default function MarketPricesPage() {
     queryFn: ({ signal }) => getMarketSeries(selected.item_id, days, { signal }),
     enabled: Boolean(selected), ...queryOptions,
   })
-  const status = selected ? quoteStatus(selected, clock) : null
   const points = seriesQuery.data?.points || []
+  const showBuy = viewMode !== 'sell'
+  const showSell = viewMode !== 'buy'
 
   function selectCategory(value) {
     setCategoryId(value)
@@ -184,9 +184,9 @@ export default function MarketPricesPage() {
 
       <main className="market-terminal-main">
         {selected ? <>
-          <div className="market-instrument-head"><div><span className="market-eyebrow">MARKET QUOTE / 实时盘口</span><h2>{selected.name}</h2><p>{selected.category || '未分类'} <span aria-hidden="true">/</span> {marketScopeLabel(selected.scope)}</p></div><span className={`market-instrument-status ${status.tone}`}>{status.label}</span></div>
+          <div className="market-instrument-head"><div><span className="market-eyebrow">MARKET QUOTE / 实时盘口</span><h2>{selected.name}</h2><p>{selected.category || '未分类'} <span aria-hidden="true">/</span> {marketScopeLabel(selected.scope)}</p></div></div>
           <div className="market-trend-heading"><div><span className="market-eyebrow">PRICE HISTORY</span><h3>价格走势</h3></div><div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div></div>
-          <div className="market-legend" role="group" aria-label="走势图图例"><button type="button" className={!showSell ? 'muted' : ''} aria-pressed={showSell} aria-label={`${showSell ? '隐藏' : '显示'}卖价曲线`} onClick={() => setShowSell(value => !value)}><i className="market-legend-swatch sell" />最低卖价</button><button type="button" className={!showBuy ? 'muted' : ''} aria-pressed={showBuy} aria-label={`${showBuy ? '隐藏' : '显示'}买价曲线`} onClick={() => setShowBuy(value => !value)}><i className="market-legend-swatch buy" />最高买价</button><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}{seriesQuery.isFetching && seriesQuery.data ? <small className="market-fetching-label">更新中</small> : null}</span></div>
+          <div className="market-legend"><div className="market-view-modes" role="group" aria-label="走势显示方式">{[['both', '双边走势'], ['sell', '只看卖价'], ['buy', '只看买价']].map(([mode, label]) => <button type="button" key={mode} className={viewMode === mode ? 'active' : ''} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>{label}</button>)}</div><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}{seriesQuery.isFetching && seriesQuery.data ? <small className="market-fetching-label">更新中</small> : null}</span></div>
           <div className="market-chart-frame">
             {seriesQuery.isPending && !seriesQuery.data ? <div className="market-chart-message"><LoadingBar /><span>正在读取真实历史报价…</span></div> : null}
             {seriesQuery.isError && !seriesQuery.data ? <div className="market-chart-message">走势图暂时无法加载；当前报价与历史走势可能不一致，请稍后刷新。</div> : null}

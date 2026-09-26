@@ -171,7 +171,7 @@ test('market terminal remains available and stacks the summary at tablet width',
   expect(boxes.scrollWidth).toBeLessThanOrEqual(boxes.viewportWidth)
 })
 
-test('trend supports ranges, independent legends, keyboard detail and breaks missing price segments', async ({ page }) => {
+test('trend supports ranges, side views, keyboard detail and breaks missing price segments', async ({ page }) => {
   const requests = []
   await installApiMock(page, ({ url }) => {
     requests.push(`${url.pathname}${url.search}`)
@@ -189,10 +189,10 @@ test('trend supports ranges, independent legends, keyboard detail and breaks mis
   await page.goto('/market')
   await expect(page.locator('.market-trend-path--sell')).toHaveCount(2)
   await expect(page.locator('.market-trend-path--buy')).toHaveCount(1)
-  await page.getByRole('button', { name: '隐藏卖价曲线' }).click()
+  await page.getByRole('button', { name: '只看买价', exact: true }).click()
   await expect(page.locator('.market-trend-path--sell')).toHaveCount(0)
   await expect(page.locator('.market-trend-path--buy')).toHaveCount(1)
-  await page.getByRole('button', { name: '显示卖价曲线' }).click()
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
   await page.getByRole('button', { name: '7 天' }).click()
   await expect.poll(() => requests.some(value => value.includes('/series/?days=7'))).toBeTruthy()
   await page.getByRole('button', { name: '30 天' }).click()
