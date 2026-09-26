@@ -74,7 +74,8 @@ for (const viewport of [
       expect(metrics.depth.x).toBeGreaterThanOrEqual(metrics.main.x + metrics.main.width)
       expect(metrics.depth.y + metrics.depth.height).toBeLessThanOrEqual(metrics.layout.y + metrics.layout.height)
       expect(metrics.meta.y + metrics.meta.height).toBeLessThanOrEqual(metrics.layout.y + metrics.layout.height)
-      expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.height + 1)
+      // Upstream keeps the filing footer reachable by allowing document scroll on short desktop viewports.
+      if (viewport.height > 860) expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.height + 1)
     } else {
       expect(metrics.summary.y).toBeGreaterThanOrEqual(metrics.main.y + metrics.main.height - 1)
       if (viewport.width < 768) {

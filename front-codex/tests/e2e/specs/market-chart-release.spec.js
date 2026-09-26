@@ -46,6 +46,61 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1440, height: 90
   })
 }
 
+for (const height of [720, 860]) {
+  test(`short desktop ${height}px keeps chart labels readable and the filing footer reachable`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height })
+    await market(page)
+    const filingLink = page.getByRole('contentinfo').getByRole('link', { name: '粤ICP备2024264329号' })
+    await expect(filingLink).toBeVisible()
+    const metrics = await page.evaluate(() => {
+      const timeLabels = [...document.querySelectorAll('.market-trend-panel--sell .market-trend-axis')].slice(-2)
+      const readout = document.querySelector('[role="status"][aria-label="当前观测报价"]').getBoundingClientRect()
+      const chart = document.querySelector('.market-chart-frame').getBoundingClientRect()
+      const footer = document.querySelector('.site-footer').getBoundingClientRect()
+      return {
+        axisBottom: Math.max(...timeLabels.map(label => label.getBoundingClientRect().bottom)),
+        readoutTop: readout.top,
+        chartHeight: chart.height,
+        footerTop: footer.top,
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: document.documentElement.clientHeight,
+      }
+    })
+    expect(metrics.readoutTop - metrics.axisBottom).toBeGreaterThanOrEqual(8)
+    expect(metrics.chartHeight).toBeGreaterThanOrEqual(300)
+    expect(metrics.footerTop).toBeGreaterThanOrEqual(height)
+    expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight)
+    await filingLink.scrollIntoViewIfNeeded()
+    const footerBox = await page.getByRole('contentinfo').boundingBox()
+    expect(footerBox.y + footerBox.height).toBeLessThanOrEqual(height + 1)
+  })
+}
+
+for (const width of [1280, 1440]) {
+  test(`desktop ${width}x861 keeps chart labels clear with the footer in view`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 861 })
+    await market(page)
+    const metrics = await page.evaluate(() => {
+      const timeLabels = [...document.querySelectorAll('.market-trend-panel--sell .market-trend-axis')].slice(-2)
+      const readout = document.querySelector('[role="status"][aria-label="当前观测报价"]').getBoundingClientRect()
+      const chart = document.querySelector('.market-chart-frame').getBoundingClientRect()
+      const footer = document.querySelector('.site-footer').getBoundingClientRect()
+      return {
+        axisBottom: Math.max(...timeLabels.map(label => label.getBoundingClientRect().bottom)),
+        readoutTop: readout.top,
+        chartHeight: chart.height,
+        footerBottom: footer.bottom,
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: document.documentElement.clientHeight,
+      }
+    })
+    expect(metrics.readoutTop - metrics.axisBottom).toBeGreaterThanOrEqual(8)
+    expect(metrics.chartHeight).toBeGreaterThanOrEqual(300)
+    expect(metrics.footerBottom).toBeLessThanOrEqual(862)
+    expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1)
+  })
+}
+
 test('release desktop keeps all five levels inside the inset terminal on laptop screens', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await market(page)

@@ -107,12 +107,14 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
   await expect(page.locator('.market-terminal')).toBeVisible()
   await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
   await expect(page.getByRole('region', { name: '盘口深度' })).toBeVisible()
+  await expect(page.getByRole('contentinfo').getByRole('link', { name: '粤ICP备2024264329号' })).toBeVisible()
 
   const metrics = await page.evaluate(() => {
     const terminal = document.querySelector('.market-terminal').getBoundingClientRect()
     const layout = document.querySelector('.market-terminal-layout').getBoundingClientRect()
     const chart = document.querySelector('.market-chart-frame').getBoundingClientRect()
     const depth = document.querySelector('.market-depth-panel').getBoundingClientRect()
+    const footer = document.querySelector('.site-footer').getBoundingClientRect()
     return {
       terminalWidth: terminal.width,
       viewportWidth: window.innerWidth,
@@ -124,6 +126,8 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
       depthLeft: depth.left,
       depthBottom: depth.bottom,
       layoutBottom: layout.bottom,
+      footerTop: footer.top,
+      footerBottom: footer.bottom,
       scrollHeight: document.documentElement.scrollHeight,
       clientHeight: document.documentElement.clientHeight,
     }
@@ -136,6 +140,8 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
   expect(metrics.chartRight).toBeLessThanOrEqual(metrics.depthLeft)
   expect(metrics.chartBottom).toBeLessThanOrEqual(metrics.layoutBottom)
   expect(metrics.depthBottom).toBeLessThanOrEqual(metrics.layoutBottom)
+  expect(metrics.depthBottom).toBeLessThanOrEqual(metrics.footerTop + 1)
+  expect(metrics.footerBottom).toBeLessThanOrEqual(metrics.viewportHeight + 1)
   expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.clientHeight + 1)
 })
 
@@ -151,6 +157,7 @@ test('market terminal remains available and stacks the summary at tablet width',
   await page.goto('/market')
   await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
   await expect(page.locator('.desktop-only-mask')).toBeHidden()
+  await expect(page.getByRole('contentinfo').getByRole('link', { name: '粤ICP备2024264329号' })).toBeVisible()
 
   const boxes = await page.evaluate(() => {
     const layout = document.querySelector('.market-terminal-layout').getBoundingClientRect()
