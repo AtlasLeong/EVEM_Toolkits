@@ -34,6 +34,9 @@
   stroke: transparent;
   cursor: pointer;
   pointer-events: all;
+  /* Native SVG outlines scale with the world after dialog focus restoration.
+     The separate fixed-size ring supplies the visible focus indicator. */
+  outline: none;
 }
 .pirate-map__system-hit:hover,
 .pirate-map__system-hit:focus-visible,
@@ -41,9 +44,9 @@
   stroke: transparent;
   stroke-width: 0;
   fill: transparent;
-  outline: none;
 }
-.pirate-map__system-selection-ring {
+.pirate-map__system-selection-ring,
+.pirate-map__system-focus-ring {
   fill: none;
   stroke: #f4e4b0;
   opacity: .88;

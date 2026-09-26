@@ -398,6 +398,12 @@ const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId
 })
 
 const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, selectedSystemId, onSelectSystem }) {
+  const [focusedSystemId, setFocusedSystemId] = useState(null)
+  useEffect(() => {
+    if (focusedSystemId !== null && !systems.some(node => Number(node.system_id) === focusedSystemId)) {
+      setFocusedSystemId(null)
+    }
+  }, [systems, focusedSystemId])
   const activate = (event, node) => {
     event.stopPropagation()
     onSelectSystem?.(node)
@@ -409,7 +415,8 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
       const zoom = Math.max(.0001, scale)
       const selected = id === selectedSystemId
       return <Fragment key={id}>
-        {selected && <circle className="pirate-map__system-selection-ring"
+        {(selected || focusedSystemId === id) && <circle
+          className={selected ? 'pirate-map__system-selection-ring' : 'pirate-map__system-focus-ring'}
           data-fixed-size="true" data-fixed-kind="ring" data-world-x={node.px} data-world-y={node.py}
           data-base-radius="12" data-base-stroke="1"
           cx={node.px} cy={node.py} r={12 / zoom} fill="none" stroke="#f4e4b0" strokeWidth={1 / zoom}
@@ -418,6 +425,7 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
           data-pirate-system={id} data-fixed-size="true" data-fixed-kind="hit" data-world-x={node.px} data-world-y={node.py}
           data-base-radius="22" cx={node.px} cy={node.py} r={22 / zoom} fill="transparent" role="button" tabIndex={0}
           aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
+          onFocus={() => setFocusedSystemId(id)} onBlur={() => setFocusedSystemId(null)}
           onClick={event => activate(event, node)}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
       </Fragment>
