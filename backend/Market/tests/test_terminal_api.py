@@ -100,6 +100,41 @@ class MarketSeriesApiTests(TestCase):
             (self.now_ms - 3 * 60 * 60 * 1000) / 1000, timezone.utc,
         ).isoformat().replace('+00:00', 'Z'))
 
+    def test_series_exposes_current_range_and_one_month_extrema(self):
+        self.add_snapshot(-29 * 24 * 60 * 60 * 1000, buy='8.00', sell='40.00')
+        self.add_snapshot(-6 * 60 * 60 * 1000, buy='12.00', sell='30.00')
+        self.add_snapshot(-1 * 60 * 60 * 1000, buy='10.00', sell='25.00')
+
+        body = self.client.get('/api/market/items/77/series/', {'days': 1}).json()
+
+        self.assertEqual(body['stats']['buy']['current'], {
+            'value': '10.00', 'observed_at': body['points'][-1]['observed_at'],
+        })
+        self.assertEqual(body['stats']['buy']['range'], {
+            'high': {'value': '12.00', 'observed_at': body['points'][0]['observed_at']},
+            'low': {'value': '10.00', 'observed_at': body['points'][1]['observed_at']},
+        })
+        self.assertEqual(body['stats']['sell']['range']['high']['value'], '30.00')
+        self.assertEqual(body['stats']['sell']['range']['low']['value'], '25.00')
+        self.assertEqual(body['stats']['buy']['month']['low']['value'], '8.00')
+        self.assertEqual(body['stats']['sell']['month']['high']['value'], '40.00')
+
+    def test_series_stats_keep_null_sides_and_single_observation(self):
+        self.add_snapshot(-1 * 60 * 60 * 1000)
+        body = self.client.get('/api/market/items/77/series/').json()
+        self.assertEqual(body['stats'], {
+            'buy': {'current': None, 'range': {'high': None, 'low': None}, 'month': {'high': None, 'low': None}},
+            'sell': {'current': None, 'range': {'high': None, 'low': None}, 'month': {'high': None, 'low': None}},
+        })
+
+    def test_series_stats_for_one_observation_use_that_observation_for_all_extrema(self):
+        snapshot = self.add_snapshot(-1 * 60 * 60 * 1000, buy='12.34', sell='56.78')
+        body = self.client.get('/api/market/items/77/series/').json()
+        observed_at = datetime.fromtimestamp(snapshot.observed_at_ms / 1000, timezone.utc).isoformat().replace('+00:00', 'Z')
+        expected = {'value': '12.34', 'observed_at': observed_at}
+        self.assertEqual(body['stats']['buy'], {'current': expected, 'range': {'high': expected, 'low': expected}, 'month': {'high': expected, 'low': expected}})
+        self.assertEqual(body['stats']['sell']['current'], {'value': '56.78', 'observed_at': observed_at})
+
     def test_series_limits_actual_points_and_keeps_first_and_last(self):
         for index in range(260):
             self.add_snapshot(-260 * 60 * 1000 + index * 60 * 1000, buy=str(index + 1))
@@ -114,11 +149,35 @@ class MarketSeriesApiTests(TestCase):
         self.assertEqual(len({point['observed_at'] for point in body['points']}), 240)
         self.assertLessEqual(len(queries), 7)
 
+    def test_series_sampling_preserves_each_side_extrema(self):
+        for index in range(260):
+            buy = '9999.00' if index == 97 else str(index + 10)
+            sell = '1.00' if index == 163 else str(index + 100)
+            self.add_snapshot(-260 * 60 * 1000 + index * 60 * 1000, buy=buy, sell=sell)
+
+        body = self.client.get('/api/market/items/77/series/', {'days': 1}).json()
+        self.assertLessEqual(len(body['points']), 240)
+        self.assertIn('9999.00', [point['best_buy'] for point in body['points']])
+        self.assertIn('1.00', [point['best_sell'] for point in body['points']])
+
+    def test_series_sampling_stays_bounded_when_every_row_is_an_extreme(self):
+        for index in range(500):
+            self.add_snapshot(-500 * 60 * 1000 + index * 60 * 1000, buy=str(index + 1))
+
+        body = self.client.get('/api/market/items/77/series/', {'days': 1}).json()
+        self.assertEqual(len(body['points']), 240)
+        self.assertEqual(body['points'][0]['best_buy'], '1.00')
+        self.assertEqual(body['points'][-1]['best_buy'], '500.00')
+
     def test_series_handles_no_data_and_rejects_invalid_window_or_hidden_item(self):
         self.assertEqual(self.client.get('/api/market/items/77/series/').json(), {
             'count': 0, 'points': [],
             'change': {'best_buy': {'absolute': None, 'percent': None},
                        'best_sell': {'absolute': None, 'percent': None}},
+            'stats': {
+                'buy': {'current': None, 'range': {'high': None, 'low': None}, 'month': {'high': None, 'low': None}},
+                'sell': {'current': None, 'range': {'high': None, 'low': None}, 'month': {'high': None, 'low': None}},
+            },
         })
         self.assertEqual(self.client.get('/api/market/items/77/series/', {'days': 2}).status_code, 400)
         self.assertEqual(self.client.get('/api/market/items/78/series/').status_code, 404)

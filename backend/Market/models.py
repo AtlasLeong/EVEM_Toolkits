@@ -143,7 +143,13 @@ class PriceSnapshot(models.Model):
                 name='market_snapshot_sell_positive',
             ),
         ]
-        indexes = [models.Index(fields=['item', '-observed_at_ms'], name='market_snapshot_item_time')]
+        indexes = [
+            models.Index(fields=['item', '-observed_at_ms'], name='market_snapshot_item_time'),
+            models.Index(
+                fields=['item', 'observed_at_ms', 'id'],
+                name='market_snap_item_obs_id',
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if self.pk is not None and type(self).objects.filter(pk=self.pk).exists():

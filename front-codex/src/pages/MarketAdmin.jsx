@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 import { createMarketItem, enqueueMarketRun, getMarketConfig, listMarketAdminItems, listMarketRuns, updateMarketConfig, updateMarketItem } from '../services/apiMarket'
 import { formatMarketTime, marketScopeLabel } from './MarketPrices'
+import { marketRefetchInterval } from '../utils/marketPolling'
 import '../styles/market.css'
 
 const EMPTY_ITEM = { item_id: '', name: '', category: '', scope: 'global', enabled: true }
@@ -158,9 +159,9 @@ export default function MarketAdminPage() {
     const timer = window.setTimeout(() => { setItemQuery(itemSearch.trim()); setItemPage(1) }, 300)
     return () => window.clearTimeout(timer)
   }, [itemSearch])
-  const configQuery = useQuery({ queryKey: ['market-admin-config'], queryFn: getMarketConfig, retry: false, refetchInterval: 120000, refetchIntervalInBackground: false })
+  const configQuery = useQuery({ queryKey: ['market-admin-config'], queryFn: getMarketConfig, retry: false, refetchInterval: marketRefetchInterval, refetchIntervalInBackground: false })
   const itemsQuery = useQuery({ queryKey: ['market-admin-items', itemQuery, itemPage], queryFn: () => listMarketAdminItems({ q: itemQuery, page: itemPage }), enabled: configQuery.isSuccess, retry: false })
-  const runsQuery = useQuery({ queryKey: ['market-admin-runs'], queryFn: listMarketRuns, enabled: configQuery.isSuccess, retry: false, refetchInterval: 120000, refetchIntervalInBackground: false })
+  const runsQuery = useQuery({ queryKey: ['market-admin-runs'], queryFn: listMarketRuns, enabled: configQuery.isSuccess, retry: false, refetchInterval: marketRefetchInterval, refetchIntervalInBackground: false })
   const denied = [configQuery.error, itemsQuery.error, runsQuery.error].some(error => error?.status === 403)
   const invalidate = key => queryClient.invalidateQueries({ queryKey: [key] })
   const mutationOptions = (message, keys) => ({

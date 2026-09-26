@@ -224,13 +224,31 @@ def _session_paths(paths=None) -> list[Path]:
 
 def load_session_pool(paths=None) -> list[dict[str, Any]]:
     """Load all configured private sessions for one collection decision."""
-    return [load_session(path) for path in _session_paths(paths)]
+    sessions = []
+    for path in _session_paths(paths):
+        try:
+            sessions.append(load_session(path))
+        except NeedsAuthError:
+            # A single expired or malformed bundle must not prevent a healthy
+            # bundle from being used.  Keep the error deliberately opaque so
+            # private paths and session contents never reach logs/API output.
+            continue
+    if not sessions:
+        raise _invalid()
+    return sessions
 
 
 def load_random_session(paths=None) -> dict[str, Any]:
     """Select one validated private session for a collection cycle."""
     sessions = load_session_pool(paths)
     return random.choice(sessions)
+
+
+def load_random_session_pool(paths=None) -> list[dict[str, Any]]:
+    """Return a shuffled usable pool for one collection with auth fallback."""
+    sessions = load_session_pool(paths)
+    random.shuffle(sessions)
+    return sessions
 
 
 def save_session(bundle: dict[str, Any], path: str | Path) -> Path:

@@ -42,6 +42,8 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   const [mapError, setMapError] = useState('')
   const [mapRetry, setMapRetry] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
@@ -64,6 +66,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   const snapshotRef = useRef(null)
   const mounted = useRef(true)
   const activeReads = useRef(new Set())
+  const manualRefreshSequence = useRef(0)
   const lastPermission = useRef(null)
   const detailRef = useRef(null)
   const loadedMapKey = useRef(null)
@@ -74,7 +77,11 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   }, [])
   const refresh = useCallback(async ({ quiet = false } = {}) => {
     const sequence = ++readSequence.current
-    if (!quiet) setLoading(true)
+    if (!quiet) {
+      setLoading(true)
+      setRefreshing(true)
+      manualRefreshSequence.current = sequence
+    }
     const controller = new AbortController()
     activeReads.current.add(controller)
     const deadline = setTimeout(() => controller.abort(), 10000)
@@ -87,6 +94,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
           throw new Error('情报修订号已变化，请重新读取。')
         const serverTime = Date.parse(data.server_time || '')
         setServerClockOffset(Number.isFinite(serverTime) ? serverTime - Date.now() : 0)
+        setLastSyncAt(Number.isFinite(serverTime) ? serverTime : Date.now())
         if (!data.unchanged) {
           snapshotRef.current = data
           setSnapshot(data)
@@ -108,6 +116,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
       clearTimeout(deadline)
       activeReads.current.delete(controller)
       if (mounted.current && sequence === readSequence.current) setLoading(false)
+      if (mounted.current && !quiet && sequence === manualRefreshSequence.current) setRefreshing(false)
     }
   }, [organization.id, board.id])
   useEffect(() => {
@@ -235,7 +244,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
     <div className="pirate-organization-controls">{organizationControls}</div>
     <div className="pirate-access-denied" role="alert"><strong>无法读取这块情报板</strong>
       <p>组织权限或战术板状态已变化。可以切换组织，或刷新后重试。</p>
-      <button type="button" className="tac-btn" onClick={() => refresh()}>重新读取</button></div>
+      <button type="button" className="tac-btn" disabled={refreshing} aria-busy={refreshing} onClick={() => refresh()}>{refreshing ? '读取中…' : '重新读取'}</button></div>
   </section>
   return <section className={`pirate-board pirate-immersive${mobileViewport ? '' : ' tac-immersive'}`} aria-label="海盗情报板工作区">
     <header className="pirate-board-head tac-command-bar">
@@ -247,14 +256,14 @@ export default function PirateIntelBoard({ organization, board, organizationCont
       <div className="pirate-board-actions tac-command-links">
         {canManage && <button type="button" className="tac-btn is-small" onClick={() => setMembersOpen(true)}><Users size={16} /> 成员管理</button>}
         <button type="button" className="tac-icon-btn" aria-label="创建或加入组织" title="创建或加入组织" onClick={onOpenOrganization}><Plus size={18} /></button>
-        <button type="button" className="tac-icon-btn" aria-label="刷新目标线索" title="刷新目标线索" onClick={() => refresh()}><RefreshCw size={17} /></button>
+        <button type="button" className="tac-icon-btn" aria-label={refreshing ? '正在刷新目标线索' : '刷新目标线索'} title={refreshing ? '正在刷新目标线索' : '刷新目标线索'} aria-busy={refreshing} disabled={refreshing} onClick={() => refresh()}><RefreshCw size={17} className={refreshing ? 'is-spinning' : ''} /></button>
         <button type="button" className="tac-btn is-primary" onClick={() => { setReportLocation(null); setFormOpen(true) }}><Plus size={16} /> 上报目标线索</button>
       </div>
     </header>
     <div className="pirate-board-summary" aria-label="情报概况">
       <span><strong>{snapshot?.target_count ?? '—'}</strong> 未撤下目标</span>
       <span><strong>{currentTargets.length}</strong> 当前时段可能活跃</span>
-      <small>{snapshot?.role === 'scout' ? '仅统计你上报的线索' : '组织可见线索'} · 非实时定位</small>
+      <small>{snapshot?.role === 'scout' ? '仅统计你上报的线索' : '组织可见线索'} · 非实时定位 · {lastSyncAt ? `上次同步 ${ageLabel(new Date(lastSyncAt).toISOString(), clockNow)}` : '尚未同步'}</small>
     </div>
     <div className="pirate-board-messages" aria-live="polite">
       {error && <p role="alert" className="tac-error">{error}</p>}

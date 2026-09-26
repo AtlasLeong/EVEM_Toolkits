@@ -209,6 +209,32 @@ test("tactical pagination bounds rendering and clamps page after filtering", () 
   assert.deepEqual(paginateTacticalRows(rows, 2, 20), { items: rows.slice(20, 40), page: 2, pageCount: 3, total: 55 });
   assert.equal(paginateTacticalRows(rows.slice(0, 3), 3, 20).page, 1);
 });
+
+test('map marker close controls are siblings, not nested buttons', () => {
+  const source = readFileSync(resolve(here, '../../src/components/tactical/CollaborationMap.jsx'), 'utf8');
+  const countBlock = source.slice(source.indexOf('<Fragment key={`count-${report.system_id}`}'), source.indexOf('reportMarkers.map'));
+  const countGroup = countBlock.slice(countBlock.indexOf('<g role="button"'), countBlock.indexOf('</g>') + 4);
+  assert.match(countBlock, /<Fragment key=\{`count-\$\{report\.system_id\}`\}>/);
+  assert.match(countBlock, /<\/g>\s*\{withdrawable&&<MarkerCloseAction/);
+  assert.doesNotMatch(countGroup, /<MarkerCloseAction/);
+});
+
+test('tactical select and picker dialogs expose native listbox/modal semantics', () => {
+  const controls = readFileSync(resolve(here, '../../src/components/tactical/TacticalControls.jsx'), 'utf8');
+  const map = readFileSync(resolve(here, '../../src/components/tactical/CollaborationMap.jsx'), 'utf8');
+  assert.match(controls, /aria-haspopup="listbox"/);
+  assert.match(controls, /role="listbox"/);
+  assert.match(controls, /role="option"/);
+  assert.match(controls, /aria-selected=/);
+  assert.match(controls, /aria-modal="true"/);
+  assert.match(map, /className="tac-map-target-picker" role="dialog" aria-modal="true"/);
+});
+
+test('route changes reset scroll without smooth animation', () => {
+  const source = readFileSync(resolve(here, '../../src/App.jsx'), 'utf8');
+  assert.match(source, /window\.scrollTo\(\{ top: 0, behavior: 'auto' \}\)/);
+  assert.doesNotMatch(source, /behavior: 'smooth'/);
+});
 test("staleness uses observation instead of modification time", () => {
   assert.match(
     ageLabel("2026-09-21T10:00:00Z", Date.parse("2026-09-21T10:08:00Z")),

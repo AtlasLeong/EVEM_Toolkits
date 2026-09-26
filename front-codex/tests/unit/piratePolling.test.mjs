@@ -41,6 +41,16 @@ test('star map failure has its own retry instead of a permanent loading message'
   assert.match(source, /mapError \? <div className="pirate-map-empty"/)
 })
 
+test('manual pirate refresh exposes busy state and last successful sync time', () => {
+  assert.match(source, /const \[refreshing, setRefreshing\] = useState\(false\)/)
+  assert.match(source, /const \[lastSyncAt, setLastSyncAt\] = useState\(null\)/)
+  assert.match(source, /setRefreshing\(true\)/)
+  assert.match(source, /setLastSyncAt\(/)
+  assert.match(source, /aria-busy=\{refreshing\}/)
+  assert.match(source, /disabled=\{refreshing\}/)
+  assert.match(source, /上次同步/)
+})
+
 test('pirate scope editor speaks in intelligence coverage terms', () => {
   assert.match(source, /<ScopeEditor[^>]*variant="pirate"/)
   assert.match(controls, /variant === 'pirate' \? '设置情报覆盖星域'/)

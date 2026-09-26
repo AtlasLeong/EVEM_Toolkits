@@ -296,6 +296,37 @@ class SessionExportTests(unittest.TestCase):
         for forbidden in ('private-source-marker', 'private-output-marker'):
             self.assertNotIn(forbidden, stdout.getvalue() + stderr.getvalue())
 
+    def test_session_pool_skips_one_malformed_file_and_keeps_valid_session(self):
+        from Market.session_bundle import load_session_pool
+
+        valid = synthetic_bundle()
+        with TemporaryDirectory() as temporary:
+            bad_path = Path(temporary) / 'malformed.json'
+            good_path = Path(temporary) / 'valid.json'
+            bad_path.write_text('{"not": "a session"}', encoding='utf-8')
+            from Market.session_bundle import save_session
+            save_session(valid, good_path)
+
+            sessions = load_session_pool([bad_path, good_path])
+
+        self.assertEqual(sessions, [valid])
+
+    def test_random_session_pool_shuffles_each_collection_candidates(self):
+        from Market.session_bundle import load_random_session_pool
+
+        valid = synthetic_bundle()
+        with TemporaryDirectory() as temporary:
+            first = Path(temporary) / 'first.json'
+            second = Path(temporary) / 'second.json'
+            from Market.session_bundle import save_session
+            save_session(valid, first)
+            save_session(valid, second)
+            with patch('Market.session_bundle.random.shuffle') as shuffle:
+                result = load_random_session_pool([first, second])
+
+        self.assertEqual(len(result), 2)
+        shuffle.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()
