@@ -2,6 +2,24 @@ import { test, expect } from '@playwright/test'
 import { seedAuthenticatedSession } from '../e2e/helpers/auth.js'
 import { installApiMock, json } from '../e2e/helpers/api.js'
 
+test('pirate scoped star search locates a system without sightings or creating a report', async ({ page }) => {
+  await seedAuthenticatedSession(page, { user_id: 23 })
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname.endsWith('/organizations/')) return json({ organizations: [
+      { id: 7, name: '巡猎小队', role: 'founder', status: 'active', boards: [{ id: 71, name: '夜巡', kind: 'pirate' }] },
+    ] })
+    if (url.pathname.endsWith('/boards/71/pirate/')) return json(pirateSnapshot(71, []))
+    if (url.pathname.endsWith('/boards/71/map/')) return json(pirateMap())
+    return json({})
+  })
+  await page.goto('/tactical?organization=7&board=71')
+  await page.getByRole('searchbox', { name: '搜索当前星图' }).fill('Derelik II')
+  await page.getByRole('option').filter({ hasText: '德里克二' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.locator('[data-pirate-system="102"]')).toHaveClass(/selected/)
+  await expect(page.getByRole('searchbox', { name: '搜索目标线索' })).toHaveValue('')
+});
+
 test('organization creation offers both board types and submits the chosen type', async ({ page }) => {
   await seedAuthenticatedSession(page, { user_id: 23 })
   let created = null
@@ -332,8 +350,8 @@ for (const [kind, location, catalogKind] of [
   await expect(detail).toContainText('已撤下')
 })
 
-for (const width of [390, 900]) {
-  test(`${width}px layout keeps the target list first, opens details before the map, and defers map traffic`, async ({ page }) => {
+for (const width of [390, 768, 900]) {
+  test(`${width}px layout keeps a list/map switch and defers map traffic`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 844 })
     await seedAuthenticatedSession(page, { user_id: 23 })
     let mapRequests = 0
@@ -360,13 +378,43 @@ for (const width of [390, 900]) {
     await expect(detail).toBeVisible()
     const detailBox = await detail.boundingBox()
     const toggleBox = await page.getByRole('button', { name: '查看星图' }).boundingBox()
-    expect(detailBox.y).toBeLessThan(toggleBox.y)
+    expect(toggleBox.y).toBeLessThan(detailBox.y)
     expect(mapRequests).toBe(0)
     await page.getByRole('button', { name: '查看星图' }).click()
     await expect(map).toBeVisible()
+    await expect(list).toBeHidden()
     await expect.poll(() => mapRequests).toBe(1)
+    await page.getByRole('searchbox', { name: '搜索当前星图' }).fill('德里克二')
+    await page.getByRole('option').filter({ hasText: '德里克二' }).click()
+    await expect(page.locator('[data-pirate-system="102"]')).toHaveClass(/selected/)
+    await page.getByRole('button', { name: '放大星图', exact: true }).click({ trial: true, timeout: 2000 })
+    await page.getByRole('button', { name: '缩小星图', exact: true }).click({ trial: true, timeout: 2000 })
+    await page.getByRole('button', { name: '重置星图视角', exact: true }).click({ trial: true, timeout: 2000 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath(`pirate-${width}-map.png`), fullPage: true })
   })
 }
+
+for (const width of [1100, 1440]) test(`pirate desktop search and target panels stay usable at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 900 })
+  await seedAuthenticatedSession(page, { user_id: 23 })
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname.endsWith('/organizations/')) return json({ organizations: [
+      { id: 7, name: '巡猎小队', role: 'scout', status: 'active', boards: [{ id: 71, name: '夜巡', kind: 'pirate' }] },
+    ] })
+    if (url.pathname.endsWith('/boards/71/pirate/')) return json(pirateSnapshot(71, [sighting(4)], 'scout'))
+    if (url.pathname.endsWith('/boards/71/map/')) return json(pirateMap())
+    return json({})
+  })
+  await page.goto('/tactical?organization=7&board=71')
+  await page.getByRole('searchbox', { name: '搜索当前星图' }).fill('Derelik II')
+  await page.getByRole('option').filter({ hasText: '德里克二' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.getByRole('complementary', { name: '目标线索列表' }).getByRole('button', { name: /夜航员 · 夜神级/ }).click()
+  await expect(page.getByRole('region', { name: '目标详情' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: testInfo.outputPath(`pirate-${width}-overview.png`) })
+})
 
 test('unchanged pirate refresh keeps selected details while revocation clears private data', async ({ page }) => {
   await seedAuthenticatedSession(page, { user_id: 23 })

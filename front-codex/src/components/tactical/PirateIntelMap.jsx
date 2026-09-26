@@ -1,8 +1,9 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { isHistoricalSighting, pirateMapMarkers } from '../../utils/pirateIntel'
 import { projectSystemsScoped, systemDisplayName, zoomAroundPoint } from '../../utils/tacticalMapLayout'
-import { createLiveCameraPreview, indexGateSegments, labelVisibilityState, layoutIntelLabels, normalizeWheelDelta, subscribeMapWheel } from '../../utils/tacticalMapInteraction'
+import { createLiveCameraPreview, indexGateSegments, labelVisibilityState, layoutIntelLabels, normalizeWheelDelta, subscribeMapWheel, wheelCameraFrame } from '../../utils/tacticalMapInteraction'
 import { BoardGateLine, BoardStarGlyph, BoardSystemLabel } from './BoardMapPrimitives'
+import { indexPirateSystems, pickPirateSystems } from '../../utils/pirateSystemPicking'
 import '../../styles/pirateIntelMap.css'
 
 const INITIAL_CAMERA = { x: 0, y: 0, scale: 1 }
@@ -14,6 +15,8 @@ const CARD_EDGE = 8
 const CARD_TOP = 56
 const CARD_BOTTOM_CLEARANCE = 60
 const PICKER_TARGET_LIMIT = 40
+const TOPOLOGY_PREVIEW_INTERVAL = 80
+const ZOOM_LIMITS = { min: .5, max: 16 }
 const useViewportEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 const clamp = (value, lower, upper) => Math.max(lower, Math.min(upper, value))
@@ -270,10 +273,7 @@ export function createPirateMapScene(mapData = {}, targets = [], viewport = INIT
 }
 
 export function zoomPirateCamera(camera, anchor, deltaY) {
-  const factor = Math.exp(-Math.max(-1200, Math.min(1200, deltaY)) * 0.0012)
-  const next = zoomAroundPoint({ zoom: camera.scale, panX: camera.x, panY: camera.y }, anchor, factor,
-    { min: 0.55, max: 8 })
-  return { x: next.panX, y: next.panY, scale: next.zoom }
+  return wheelCameraFrame({ view: camera, anchor, delta: deltaY, limits: ZOOM_LIMITS }).view
 }
 
 export function panPirateCamera(camera, origin, current) {
@@ -292,19 +292,36 @@ export function createPirateCameraScheduler(commit, {
   let pendingFrame = null
   let pendingTimer = null
   let previewing = false
-  const nextCamera = update => preview.set(update)
+  let pendingWheel = null
+  const flushWheel = () => {
+    if (!pendingWheel) return
+    const { anchor, delta } = pendingWheel
+    pendingWheel = null
+    preview.set(current => zoomPirateCamera(current, anchor, delta))
+  }
+  const nextCamera = update => { flushWheel(); return preview.set(update) }
   const cancelPending = () => {
     if (pendingFrame !== null) cancelFrame(pendingFrame)
     if (pendingTimer !== null) clearTimer(pendingTimer)
     pendingFrame = null
     pendingTimer = null
     previewing = false
+    pendingWheel = null
   }
   const queueFrame = () => {
     if (pendingFrame === null) pendingFrame = requestFrame(() => {
       pendingFrame = null
+      flushWheel()
       if (previewing) onPreview(preview.get())
       else commit(preview.commit())
+    })
+  }
+  const queueIdleCommit = () => {
+    if (pendingTimer !== null) clearTimer(pendingTimer)
+    pendingTimer = setTimer(() => {
+      flushWheel()
+      cancelPending()
+      commit(preview.commit())
     })
   }
   return {
@@ -320,11 +337,13 @@ export function createPirateCameraScheduler(commit, {
       nextCamera(update)
       previewing = true
       queueFrame()
-      if (pendingTimer !== null) clearTimer(pendingTimer)
-      pendingTimer = setTimer(() => {
-        cancelPending()
-        commit(preview.commit())
-      })
+      queueIdleCommit()
+    },
+    previewWheel(delta, anchor) {
+      pendingWheel = { delta: (pendingWheel?.delta || 0) + delta, anchor }
+      previewing = true
+      queueFrame()
+      queueIdleCommit()
     },
     immediate(update) {
       nextCamera(update)
@@ -387,10 +406,11 @@ const StaticGeometry = memo(function StaticGeometry({ geometry, scale, systems =
   </>
 })
 
-const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId }) {
+const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId, camera }) {
   return labels.map(label => <g key={label.system_id} className="pirate-map__label">
     <g data-pirate-label-fixed="true"
-      data-pirate-label-cx={label.x + label.width / 2} data-pirate-label-cy={label.y + label.height / 2}>
+      data-pirate-label-anchor-x={byId.get(Number(label.system_id)).px * camera.scale + camera.x}
+      data-pirate-label-anchor-y={byId.get(Number(label.system_id)).py * camera.scale + camera.y}>
       <BoardSystemLabel label={label} node={byId.get(Number(label.system_id))}
       selected={Number(label.system_id) === selectedSystemId} />
     </g>
@@ -426,7 +446,7 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
           data-base-radius="22" cx={node.px} cy={node.py} r={22 / zoom} fill="transparent" role="button" tabIndex={0}
           aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
           onFocus={() => setFocusedSystemId(id)} onBlur={() => setFocusedSystemId(null)}
-          onClick={event => activate(event, node)}
+          onClick={event => { if (event.detail === 0) activate(event, node) }}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
       </Fragment>
     })}
@@ -461,15 +481,23 @@ const TargetMarker = memo(function TargetMarker({ marker, selected, tabbable, in
   </g>
 })
 
-export default function PirateIntelMap({ mapData, targets = [], selectedKey, focusTargetKey, focusRequestId = 0, onSelectTarget, onSelectSystem, selectedSystemId: selectedSystemIdProp, now }) {
+export default function PirateIntelMap({ mapData, targets = [], selectedKey, focusTargetKey, focusRequestId = 0, focusSystem, onSelectTarget, onSelectSystem, selectedSystemId: selectedSystemIdProp, now }) {
   const [viewport, setViewport] = useState(INITIAL_VIEWPORT)
   const [desktopOverlay, setDesktopOverlay] = useState(() => typeof window === 'undefined' ? INITIAL_VIEWPORT.width >= 1100
     : window.matchMedia?.('(min-width: 1100px)')?.matches ?? window.innerWidth >= 1100)
   const [camera, setCamera] = useState(INITIAL_CAMERA)
+  const [topologyCamera, setTopologyCamera] = useState(INITIAL_CAMERA)
+  const topologyPreviewTimeRef = useRef(-Infinity)
   const [showZoomLabels, setShowZoomLabels] = useState(false)
   const [wheelMotion, setWheelMotion] = useState(false)
   const [openKey, setOpenKey] = useState(null)
   const [pickerQuery, setPickerQuery] = useState('')
+  const [systemPicker, setSystemPicker] = useState(null)
+  const [systemPickerQuery, setSystemPickerQuery] = useState('')
+  const [pointerSystemId, setPointerSystemId] = useState(null)
+  const systemPickerRef = useRef(null)
+  const pendingPointerSystemRef = useRef(null)
+  const focusedSystemRequestRef = useRef(null)
   const svgRef = useRef(null)
   const worldLayerRef = useRef(null)
   const labelLayerRef = useRef(null)
@@ -510,15 +538,23 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     const ratio = next.scale / Math.max(.0001, base.scale)
     const inverseRatio = 1 / Math.max(.0001, ratio)
     svg.querySelectorAll('[data-pirate-label-fixed]').forEach(node => {
-      const cx = Number(node.getAttribute('data-pirate-label-cx'))
-      const cy = Number(node.getAttribute('data-pirate-label-cy'))
+      const cx = Number(node.getAttribute('data-pirate-label-anchor-x'))
+      const cy = Number(node.getAttribute('data-pirate-label-anchor-y'))
       if (![cx, cy].every(Number.isFinite)) return
       node.setAttribute('transform', ratio === 1 ? ''
         : `translate(${cx} ${cy}) scale(${inverseRatio}) translate(${-cx} ${-cy})`)
     })
     cardLayerRef.current?.querySelectorAll('[data-pirate-fixed-card]').forEach(card => {
-      card.style.transformOrigin = '0 0'
+      const anchorX = Number(card.getAttribute('data-pirate-anchor-x'))
+      const anchorY = Number(card.getAttribute('data-pirate-anchor-y'))
+      card.style.transformOrigin = `${anchorX - Number.parseFloat(card.style.left)}px ${anchorY - Number.parseFloat(card.style.top)}px`
       card.style.transform = ratio === 1 ? '' : `scale(${inverseRatio})`
+    })
+    tetherLayerRef.current?.querySelectorAll('[data-pirate-tether]').forEach(tether => {
+      const x = Number(tether.getAttribute('data-pirate-anchor-x'))
+      const y = Number(tether.getAttribute('data-pirate-anchor-y'))
+      tether.setAttribute('transform', ratio === 1 ? ''
+        : `translate(${x} ${y}) scale(${inverseRatio}) translate(${-x} ${-y})`)
     })
   }
   const applyPiratePreviewFrame = (next, base = committedCameraRef.current) => {
@@ -536,6 +572,11 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   if (!cameraSchedulerRef.current) cameraSchedulerRef.current = createPirateCameraScheduler(setCamera, {
     onPreview: next => {
       applyPiratePreviewFrame(next)
+      const time = performance.now()
+      if (time - topologyPreviewTimeRef.current >= TOPOLOGY_PREVIEW_INTERVAL) {
+        topologyPreviewTimeRef.current = time
+        setTopologyCamera(next)
+      }
     },
   })
   const cameraScheduler = cameraSchedulerRef.current
@@ -546,6 +587,8 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     tetherLayerRef.current?.removeAttribute('transform')
     if (cardLayerRef.current) cardLayerRef.current.style.transform = ''
     syncPiratePreviewGeometry(camera, camera)
+    topologyPreviewTimeRef.current = -Infinity
+    setTopologyCamera(camera)
     setWheelMotion(false)
   }, [camera])
   useEffect(() => {
@@ -558,23 +601,35 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     [mapData, targets, viewport, sceneNow, geometry])
   const selectedMarker = useMemo(() => scene.markers.find(marker => marker.targets.some(target => target.key === selectedKey)),
     [scene.markers, selectedKey])
-  const selectedSystemHitId = selectedSystemIdProp ?? (selectedMarker?.location_kind === 'system' ? Number(selectedMarker.location_id) : null)
-  const visibleGeometry = useMemo(() => visiblePirateGeometry(geometry, viewport, camera, selectedSystemHitId),
-    [geometry, viewport, camera, selectedSystemHitId])
+  const selectedSystemHitId = selectedSystemIdProp != null ? Number(selectedSystemIdProp)
+    : selectedMarker?.location_kind === 'system' ? Number(selectedMarker.location_id) : null
+  // Only cheap topology culling observes the live camera. Cards/labels retain
+  // their committed layout throughout wheel previews and cannot trigger solves.
+  const geometryCamera = wheelMotion ? topologyCamera : camera
+  const visibleGeometry = useMemo(() => visiblePirateGeometry(geometry, viewport, geometryCamera, selectedSystemHitId),
+    [geometry, viewport, geometryCamera, selectedSystemHitId])
+  const systemIndex = useMemo(() => indexPirateSystems(geometry.systems), [geometry.systems])
   const nextVisibleMarkers = useMemo(() => samplePirateViewportNodes(scene.markers, viewport, camera,
     { limit: 250, marker: true, preferredKey: selectedMarker?.key }),
     [scene.markers, viewport, camera, selectedMarker])
   const visibleMarkers = stablePirateSubset(visibleMarkersRef.current, nextVisibleMarkers)
   visibleMarkersRef.current = visibleMarkers
-  const selectedSystemId = selectedMarker?.location_kind === 'system' ? Number(selectedMarker.location_id) : null
+  const selectedSystemId = selectedSystemHitId == null ? null : Number(selectedSystemHitId)
   const nextVisibleLabels = useMemo(() => samplePirateViewportNodes(scene.labels, viewport, camera,
     { limit: camera.scale >= 2.5 ? 180 : 88, preferredKey: selectedSystemId, margin: 40 }),
     [scene.labels, viewport, camera, selectedSystemId])
   const visibleLabels = stablePirateSubset(visibleLabelsRef.current, nextVisibleLabels)
   visibleLabelsRef.current = visibleLabels
-  const nextVisibleSystemHits = useMemo(() => samplePirateViewportNodes(geometry.systems, viewport, camera,
-    { limit: 250, preferredKey: selectedSystemHitId, margin: 40 }),
-    [geometry.systems, viewport, camera, selectedSystemHitId])
+  const nextVisibleSystemHits = useMemo(() => {
+    const sampled = samplePirateViewportNodes(geometry.systems, viewport, camera,
+      { limit: 249, preferredKey: selectedSystemHitId ?? pointerSystemId, margin: 40 })
+    // Preserve both the selected search result and the last pointer trigger;
+    // choosing a different unsampled star must still open and restore focus.
+    if (pointerSystemId == null || sampled.some(node => Number(node.system_id) === pointerSystemId)) return sampled
+    const pointerNode = geometry.systems.find(node => Number(node.system_id) === pointerSystemId)
+    return pointerNode ? [...sampled, pointerNode] : sampled
+  },
+    [geometry.systems, viewport, camera, selectedSystemHitId, pointerSystemId])
   const visibleSystemHits = stablePirateSubset(visibleSystemHitsRef.current, nextVisibleSystemHits)
   visibleSystemHitsRef.current = visibleSystemHits
   const cards = useMemo(() => layoutPirateTargetCards(visibleMarkers, viewport, camera, visibleLabels, cardSafeArea, selectedKey),
@@ -586,8 +641,30 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     if (suppressClickRef.current) { suppressClickRef.current = false; return }
     onSelectSystemRef.current?.(system)
   }, [])
+  const selectPointerSystem = system => {
+    setSystemPicker(null)
+    const node = svgRef.current?.querySelector(`[data-pirate-system="${Number(system.system_id)}"]`)
+    if (node) {
+      node.focus({ preventScroll: true })
+      activateSystem(system)
+    } else {
+      // Install a stable accessible trigger before opening a report, so the
+      // dialog returns focus to the correct star even if it was not sampled.
+      pendingPointerSystemRef.current = system
+      setPointerSystemId(Number(system.system_id))
+    }
+  }
+  useViewportEffect(() => {
+    const system = pendingPointerSystemRef.current
+    if (!system) return
+    const node = svgRef.current?.querySelector(`[data-pirate-system="${Number(system.system_id)}"]`)
+    if (!node) return
+    pendingPointerSystemRef.current = null
+    node.focus({ preventScroll: true })
+    activateSystem(system)
+  }, [visibleSystemHits, activateSystem])
   const labelLayouts = useMemo(() => {
-    const screenLabels = visibleLabels.filter(node => node.primary || showZoomLabels || node.system_id === selectedSystemId)
+    const screenLabels = visibleLabels.filter(node => node.primary || showZoomLabels || Number(node.system_id) === selectedSystemId)
       .map(node => ({ ...node, px: node.px * camera.scale + camera.x,
         py: node.py * camera.scale + camera.y, zh_name: systemDisplayName(node) }))
     const gateSegments = indexGateSegments(geometry.gates.map(gate => ({
@@ -611,7 +688,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     const base = committedCameraRef.current
     if (!next || next.x === base.x && next.y === base.y && next.scale === base.scale) return
     applyPiratePreviewFrame(next, base)
-  }, [wheelMotion, geometry, scene, cards, labelLayouts, visibleMarkers, visibleLabels])
+  }, [wheelMotion, geometry, visibleGeometry, scene, cards, labelLayouts, visibleMarkers, visibleLabels])
   const cardlessLocations = scene.markers.length - cards.length
   const openMarker = scene.markers.find(marker => marker.key === openKey && marker.targets.length > 1)
   const filteredPickerTargets = useMemo(() => {
@@ -622,6 +699,9 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   }, [openMarker, pickerQuery])
   const pickerTargets = filteredPickerTargets.slice(0, PICKER_TARGET_LIMIT)
   const pickerNeedsSearch = Boolean(openMarker && openMarker.targets.length > PICKER_TARGET_LIMIT)
+  const systemChoices = useMemo(() => (systemPicker?.candidates || []).filter(node =>
+    `${systemDisplayName(node)} ${node.name || ''} ${node.system_id}`.toLowerCase().includes(systemPickerQuery.trim().toLowerCase())),
+  [systemPicker, systemPickerQuery])
 
   useEffect(() => () => cameraScheduler.dispose(), [cameraScheduler])
 
@@ -657,7 +737,11 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   useEffect(() => {
     cameraScheduler.immediate(INITIAL_CAMERA)
     setOpenKey(null)
+    setSystemPicker(null)
+    setPointerSystemId(null)
+    pendingPointerSystemRef.current = null
     focusedTargetRef.current = null
+    focusedSystemRequestRef.current = null
   }, [mapData?.scope?.version, cameraScheduler])
 
   useEffect(() => {
@@ -671,14 +755,34 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   }, [focusTargetKey, focusRequestId, scene.markers, viewport, cardSafeArea, cameraScheduler])
 
   useEffect(() => {
+    if (!focusSystem?.id) { focusedSystemRequestRef.current = null; return }
+    const node = bySystemId.get(Number(focusSystem.id))
+    if (!node) return
+    const signature = `${focusSystem.id}:${focusSystem.requestId}:${viewport.width}:${viewport.height}`
+    if (focusedSystemRequestRef.current === signature) return
+    focusedSystemRequestRef.current = signature
+    cameraScheduler.immediate(current => ({ ...current,
+      x: (cardSafeArea.padding.left + viewport.width - cardSafeArea.padding.right) / 2 - node.px * current.scale,
+      y: (cardSafeArea.padding.top + viewport.height - cardSafeArea.padding.bottom) / 2 - node.py * current.scale,
+    }))
+  }, [focusSystem, bySystemId, viewport, cardSafeArea, cameraScheduler])
+
+  useEffect(() => {
+    if (systemPicker) systemPickerRef.current?.querySelector(systemPicker.candidates.length > PICKER_TARGET_LIMIT ? 'input' : 'button')?.focus()
+  }, [systemPicker])
+
+  useEffect(() => {
     if (openKey) pickerRef.current?.querySelector(pickerNeedsSearch ? 'input' : 'button')?.focus()
   }, [openKey, pickerNeedsSearch])
 
   wheelHandlerRef.current = event => {
     const delta = normalizeWheelDelta(event, { lineHeight: 16, pageHeight: viewport.height })
     if (!Number.isFinite(delta) || delta === 0) return
+    const liveScale = cameraScheduler.current().scale
+    if (delta < 0 && liveScale >= ZOOM_LIMITS.max || delta > 0 && liveScale <= ZOOM_LIMITS.min) return
     setWheelMotion(true)
-    cameraScheduler.preview(current => zoomPirateCamera(current, eventPoint(event, svgRef.current, viewport), delta))
+    setSystemPicker(null)
+    cameraScheduler.previewWheel(delta, eventPoint(event, svgRef.current, viewport))
   }
   useEffect(() => svgRef.current
     ? subscribeMapWheel(svgRef.current, event => wheelHandlerRef.current?.(event))
@@ -708,14 +812,16 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   }, [visibleMarkers, selectedKey, selectedMarker?.key, keyboardMarkerKey, camera.scale, activateMarker])
   const zoom = multiplier => cameraScheduler.immediate(current => {
     const next = zoomAroundPoint({ zoom: current.scale, panX: current.x, panY: current.y },
-      { x: viewport.width / 2, y: viewport.height / 2 }, multiplier, { min: 0.55, max: 8 })
+      { x: viewport.width / 2, y: viewport.height / 2 }, multiplier, ZOOM_LIMITS)
     return { x: next.panX, y: next.panY, scale: next.zoom }
   })
   const pointerDown = event => {
     if (event.button !== 0) return
+    cameraScheduler.immediate(current => current)
     const origin = eventPoint(event, svgRef.current, viewport)
     dragRef.current = { pointerId: event.pointerId, origin, camera: cameraScheduler.current() }
     setOpenKey(null)
+    setSystemPicker(null)
   }
   const pointerMove = event => {
     const drag = dragRef.current
@@ -736,6 +842,17 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     if (suppressClickRef.current) setTimeout(() => { suppressClickRef.current = false }, 0)
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
   }
+  const pointerClick = event => {
+    if (event.detail === 0) return
+    if (suppressClickRef.current) { suppressClickRef.current = false; return }
+    const point = eventPoint(event, svgRef.current, viewport)
+    const candidates = pickPirateSystems(systemIndex, point, cameraScheduler.current())
+    if (candidates.length === 1) selectPointerSystem(candidates[0])
+    else if (candidates.length > 1) {
+      setSystemPickerQuery('')
+      setSystemPicker({ point, candidates })
+    }
+  }
   const openMarkerSelected = openMarker && openMarker.targets.some(target => target.key === selectedKey)
   const popupX = openMarker ? Math.max(12, Math.min(viewport.width - 224, openMarker.x * camera.scale + camera.x + openMarker.offset_x + 16)) : 0
   const popupY = openMarker ? Math.max(54, Math.min(viewport.height - (pickerNeedsSearch ? 264 : 170),
@@ -745,7 +862,8 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   return <div className={`pirate-map${wheelMotion ? ' pirate-map--wheel-motion' : ''}`}>
     <svg ref={svgRef} className="pirate-map__svg" viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       preserveAspectRatio="none" role="group" aria-label="海盗情报星图"
-      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
+      onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}
+      onClick={pointerClick}>
       <g ref={worldLayerRef} className="pirate-map__world" transform={`translate(${camera.x} ${camera.y}) scale(${camera.scale})`}>
         <StaticGeometry geometry={geometry} systems={visibleGeometry.systems} gates={visibleGeometry.gates} scale={camera.scale} />
         <StaticSystemHits systems={visibleSystemHits} scale={camera.scale}
@@ -753,13 +871,15 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
         {markerLayer}
       </g>
       <g ref={labelLayerRef} className="pirate-map__labels">
-        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemIdProp ?? selectedSystemId} />
+        <StaticLabels labels={labelLayouts} byId={bySystemId} selectedSystemId={selectedSystemId} camera={camera} />
       </g>
     </svg>
     <svg className="pirate-map__card-tethers" viewBox={`0 0 ${viewport.width} ${viewport.height}`}
       preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <g ref={tetherLayerRef}>
       {cards.map(card => <line key={card.marker.key} className="pirate-map__card-tether"
+        data-pirate-tether={card.marker.key}
+        data-pirate-anchor-x={card.anchorX - (card.marker.offset_x || 0)} data-pirate-anchor-y={card.anchorY - (card.marker.offset_y || 0)}
         x1={card.anchorX} y1={card.anchorY} x2={card.tetherX} y2={card.tetherY} vectorEffect="non-scaling-stroke" />)}
       </g>
     </svg>
@@ -773,6 +893,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
         const history = marker.is_historical ? '历史线索' : marker.historical_count ? `含 ${marker.historical_count} 条历史` : ''
         const cardLabel = single ? `${single.character_name}，${single.ship_type}，${place}，${precision}` : `${place}，${marker.count} 个目标，${precision}`
         return <button key={marker.key} type="button" data-pirate-card={marker.key} data-pirate-fixed-card="true"
+          data-pirate-anchor-x={card.anchorX - (marker.offset_x || 0)} data-pirate-anchor-y={card.anchorY - (marker.offset_y || 0)}
           className={`pirate-map__target-card pirate-map__target-card--${marker.location_kind}${selected ? ' pirate-map__target-card--selected' : ''}${marker.is_historical ? ' pirate-map__target-card--historical' : ''}`}
           style={{ left: card.left, top: card.top, width: card.width }}
           aria-label={`${cardLabel}${history ? `，${history}` : ''}`}
@@ -789,11 +910,27 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       <span className="pirate-map__source">{mapData?.data_source?.label || '星系与星门'}</span>
       <span className="pirate-map__legend"><i className="pirate-map__legend-system" /> 星系 <i className="pirate-map__legend-constellation" /> 星座 <i className="pirate-map__legend-history" /> 历史</span>
       <div className="pirate-map__zoom-controls">
-        <button type="button" aria-label="放大星图" onClick={() => zoom(1.35)}>+</button>
-        <button type="button" aria-label="缩小星图" onClick={() => zoom(1 / 1.35)}>−</button>
+        <button type="button" aria-label="放大星图" onClick={() => zoom(1.25)}>+</button>
+        <button type="button" aria-label="缩小星图" onClick={() => zoom(1 / 1.25)}>−</button>
         <button type="button" aria-label="重置星图视角" onClick={() => cameraScheduler.immediate(INITIAL_CAMERA)}>适配</button>
       </div>
     </div>
+    {systemPicker && <div ref={systemPickerRef} className="pirate-map__picker" role="group" aria-label="选择上报星系"
+      style={{ left: clamp(systemPicker.point.x + 16, 12, viewport.width - 236),
+        top: clamp(systemPicker.point.y + 16, 54, Math.max(54, viewport.height - 300)) }}
+      onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setSystemPicker(null) } }}>
+      <strong>附近有多个星系，请选择上报地点</strong>
+      {systemPicker.candidates.length > PICKER_TARGET_LIMIT && <input aria-label="搜索附近星系"
+        placeholder="星系名称或 ID" value={systemPickerQuery} onChange={event => setSystemPickerQuery(event.target.value)} />}
+      <div className="pirate-map__picker-results">
+        {systemChoices.slice(0, PICKER_TARGET_LIMIT).map(node => <button key={node.system_id} type="button"
+          onClick={() => selectPointerSystem(node)}>{systemDisplayName(node)}<small>星系 {node.system_id}</small></button>)}
+        {!systemChoices.length && <span role="status">没有匹配的星系</span>}
+      </div>
+      {systemChoices.length > PICKER_TARGET_LIMIT && <span className="pirate-map__picker-summary">
+        显示 {PICKER_TARGET_LIMIT}/{systemChoices.length} 个，请搜索名称缩小范围
+      </span>}
+    </div>}
     {openMarker && <div ref={pickerRef} className={`pirate-map__picker${openMarkerSelected ? ' pirate-map__picker--selected' : ''}`}
       style={{ left: popupX, top: popupY }} role="group" aria-label={`${openMarker.location_name || '当前位置'}的目标`}
       onKeyDown={event => {

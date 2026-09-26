@@ -13,7 +13,7 @@ export default defineConfig(({ command, mode }) => ({
   } : {}),
   server: {
     port: 5180,
-    watch: { ignored: ['**/test-results-tactical/**'] },
+    watch: { ignored: ['**/test-results-tactical/**', '**/output/playwright/**'] },
   },
   build: {
     rollupOptions: {

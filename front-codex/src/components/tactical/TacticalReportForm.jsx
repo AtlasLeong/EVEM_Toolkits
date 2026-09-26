@@ -23,6 +23,7 @@ export default function TacticalReportForm({
   forces = [],
   selectedFleet = null,
   initialMode = 'system_count',
+  canReportFleet = false,
   execute,
   onClose,
   onSuccess,
@@ -43,7 +44,7 @@ export default function TacticalReportForm({
     observed_at: localDateTime(initial?.observed_at || new Date()),
   });
   const [error, setError] = useState("");
-  const [reportMode, setReportMode] = useState(selectedFleet ? 'existing' : initialMode);
+  const [reportMode, setReportMode] = useState(canReportFleet ? (selectedFleet ? 'existing' : initialMode) : 'system_count');
   // Pin the actual fleet/version reviewed by the reporter, not the latest poll.
   const [target, setTarget] = useState(selectedFleet);
   const [fleetQuery, setFleetQuery] = useState('');
@@ -73,6 +74,8 @@ export default function TacticalReportForm({
     setBusy(true);
     let payload;
     try {
+      if (!canReportFleet && (kind === 'force' || !systemCount))
+        throw new Error('当前角色仅可上报星系总人数。');
       const content = reportPayload({ ...draft, system_id: location?.id,
         ...(kind === 'report' ? { report_kind: systemCount ? 'system_count' : namedFleet ? 'fleet_intel' : 'fleet' } : {}),
         ...(namedFleet ? (!initial && reportMode === 'existing'
@@ -134,7 +137,8 @@ export default function TacticalReportForm({
   return (
     <TacticalDialog title={title} onClose={onClose} mobileSheet>
       <form className="tac-form" onSubmit={submit}>
-        {kind === 'report' && !initial && <div className="tac-report-modes" role="group" aria-label="上报方式">
+        {kind === 'report' && !canReportFleet && <p className="tac-notice">斥候仅可上报星系总人数；舰队部署由统帅或指挥维护。</p>}
+        {kind === 'report' && !initial && canReportFleet && <div className="tac-report-modes" role="group" aria-label="上报方式">
           {[['system_count','人数上报'],['new','新增舰队'],['existing','更新已有舰队']].map(([value,label]) =>
             <button type="button" key={value} aria-pressed={reportMode === value} onClick={() => { setReportMode(value); setError(''); }}>{label}</button>)}
         </div>}

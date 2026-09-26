@@ -65,13 +65,14 @@ import TacticalMembers from "../components/tactical/TacticalMembers";
 import PirateIntelBoard from "../components/tactical/PirateIntelBoard";
 import "../styles/tacticalCollaboration.css";
 import "../styles/tacticalOverview.css";
+import "../styles/tacticalWorkspace.css";
 
 function useMobile() {
   const [mobile, setMobile] = useState(
-    () => window.matchMedia("(max-width: 767px)").matches,
+    () => window.matchMedia("(max-width: 1099px)").matches,
   );
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
+    const media = window.matchMedia("(max-width: 1099px)");
     const update = () => setMobile(media.matches);
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
@@ -622,6 +623,8 @@ function ConnectedBoard({ organization, boardId, organizationControls, onOpenOrg
 
 function BoardContent({ organizationId, boardId, snapshot, execute, refresh, status, organizationControls, connectionControls, connectionError, onOpenOrganization, onOpenMembers }) {
   const mobile = useMobile();
+  const [mapOpen, setMapOpen] = useState(false);
+  const loadedMapKey = useRef(null);
   const can = permissions(snapshot.role);
   const [mapData, setMapData] = useState(null);
   const [mapError, setMapError] = useState("");
@@ -699,12 +702,14 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
   const scopeVersion = snapshot.scope?.version;
   useEffect(() => {
     let active = true;
+    if (mobile && !mapOpen) return;
+    const key = `${organizationId}:${boardId}:${scopeVersion}:${mapAttempt}`;
+    if (loadedMapKey.current === key && mapData) return;
     setMapData(null);
     setMapError("");
-    if (mobile) return;
     getTacticalMap(organizationId, boardId)
       .then((data) => {
-        if (active) setMapData(data);
+        if (active) { loadedMapKey.current = key; setMapData(data); }
       })
       .catch((failure) => {
         if (active) setMapError(failure.message);
@@ -712,7 +717,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
     return () => {
       active = false;
     };
-  }, [organizationId, boardId, scopeVersion, mobile, mapAttempt]);
+  }, [organizationId, boardId, scopeVersion, mobile, mapOpen, mapAttempt]);
   const overview = useMemo(() => buildTacticalOverview({ forces: snapshot.forces, reports: snapshot.reports, role: snapshot.role,
     scope: overviewScope, systemIds: mapData ? new Set(mapData.systems.map(node => Number(node.system_id))) : null, now: currentServerTime }),
     [snapshot.forces, snapshot.reports, snapshot.role, overviewScope, mapData, currentServerTime]);
@@ -751,7 +756,18 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
   );
   const [forcePage, setForcePage] = useState(1);
   const [reportPage, setReportPage] = useState(1);
+  const [overviewTarget, setOverviewTarget] = useState(null);
   useEffect(() => { setForcePage(1); setReportPage(1); }, [query, sideFilter, groupBy, overviewScope]);
+  const overviewTargetIndex = overviewTarget == null ? -1 : (overviewTarget.tab === 'reports' ? reports : forces)
+    .findIndex(item => Number(item.id) === Number(overviewTarget.id));
+  useEffect(() => {
+    if (!overviewTarget) return;
+    // Resolve after the new search/filter has rendered, then release the target
+    // so ordinary pagination is not pinned back to the selected item's page.
+    const page = Math.floor(Math.max(0, overviewTargetIndex) / (mobile ? 12 : 24)) + 1;
+    (overviewTarget.tab === 'reports' ? setReportPage : setForcePage)(page);
+    setOverviewTarget(null);
+  }, [overviewTarget, overviewTargetIndex, mobile]);
   const forcePageData = paginateTacticalRows(forces, forcePage, mobile ? 12 : 24);
   const reportPageData = paginateTacticalRows(reports, reportPage, mobile ? 12 : 24);
   const visibleForces = forcePageData.items;
@@ -772,12 +788,12 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
     const item = row.getBoundingClientRect(), bounds = list.getBoundingClientRect();
     if (item.top < bounds.top) list.scrollTop -= bounds.top - item.top;
     else if (item.bottom > bounds.bottom) list.scrollTop += item.bottom - bounds.bottom;
-  }, [selectedForce, selectedSystem?.id, collapsed, mobile, tab, query]);
+  }, [selectedForce, selectedSystem?.id, collapsed, mobile, mapOpen, tab, query, forcePageData.page]);
   useEffect(() => {
     if ((collapsed && !mobile) || tab !== 'reports' || selectedReportId == null) return;
     const row = panelList.current?.querySelector(`[data-report-row-id="${Number(selectedReportId)}"]`);
     row?.scrollIntoView({ block: 'nearest' });
-  }, [selectedReportId, collapsed, mobile, tab, query]);
+  }, [selectedReportId, collapsed, mobile, mapOpen, tab, query, reportPageData.page]);
   const selectedFleets = filteredForces.filter(item => Number(item.system_id) === Number(selectedSystem?.id))
     .sort((a, b) => Number(b.id === selectedForce) - Number(a.id === selectedForce) || a.id - b.id);
   const selectedExits = useMemo(() => selectedSystem ? visibleGateExits(
@@ -798,12 +814,17 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
     setFocusSystem({ ...node, _focusToken: Date.now() });
     setSystemQuery("");
   };
+  const openOverview = (nextTab = 'forces', nextQuery = '', rowId = nextTab === 'forces' && !nextQuery ? selectedForce : null) => {
+    setTab(nextTab); setQuery(nextQuery); setCollapsed(false); setSystemDetailOpen(false);
+    setOverviewTarget(rowId == null ? null : { tab: nextTab, id: rowId });
+    if (mobile) setMapOpen(false);
+  };
   const chooseForce = (item, focus = false) => {
     setSelectedForce(item.id);
     // Keep an already-open overview usable when its row or a map marker is
     // selected. The star detail takes the right context slot only on explicit
     // star selection or while the overview is collapsed.
-    setSystemDetailOpen(collapsed);
+    setSystemDetailOpen(collapsed || mobile);
     setSelectedSystem({ id: item.system_id, name: item.system_name });
     setTab("forces");
     if (!focus) setQuery('');
@@ -814,7 +835,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
   };
   const chooseCount = (row, focus = true) => {
     setSelectedForce(null);
-    setSystemDetailOpen(collapsed);
+    setSystemDetailOpen(collapsed || mobile);
     setSelectedSystem({ id: row.systemId, name: row.systemName });
     if (focus) {
       const node = mapData?.systems?.find(node => Number(node.system_id) === row.systemId);
@@ -951,10 +972,12 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
           <div className="tac-row-actions"><button type="button" className="tac-btn is-small" disabled={entry.status === 'sending' || entry.status === 'conflict' || status !== 'live'} onClick={() => retryQueuedReport(entry)}>重试</button><button type="button" className="tac-text-btn" onClick={() => discardQueuedReport(entry)}>丢弃</button></div>
         </div>)}
       </section>}
+      {mobile && <button type="button" className="tac-btn tac-mobile-map-toggle" aria-pressed={mapOpen}
+        onClick={() => setMapOpen(open => !open)}>{mapOpen ? '查看列表' : '查看星图'}</button>}
       <div
         className={`tac-board-layout${collapsed && !mobile ? " is-panel-collapsed" : ""}${selectedSystem && (collapsed || systemDetailOpen) && !mobile ? " has-system-detail" : ""}`}
       >
-        {!mobile && (
+        {(!mobile || mapOpen) && (
           <section className="tac-map-section">
             <CollaborationMap
               systems={mapData?.systems || []}
@@ -973,15 +996,11 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
               focusSystem={focusSystem}
               onFocusSystem={(node) => {
                 focusMapSystem(node);
-                setQuery(node.zh_name || node.name);
-                setCollapsed(false);
-                setTab("forces");
+                openOverview('forces', node.zh_name || node.name);
               }}
               onSelectReport={(report) => {
                 setSelectedReportId(report.id);
-                setTab("reports");
-                setQuery(report.author_name || report.system_name || "");
-                setCollapsed(false);
+                openOverview('reports', report.author_name || report.system_name || '', report.id);
               }}
               onSelectCount={(report) => {
                 // Resolve against the unfiltered source: a map selection must
@@ -994,9 +1013,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
                 setTab("forces");
               }}
               onFocusReports={(node) => {
-                setTab("reports");
-                setQuery(systemDisplayName(node));
-                setCollapsed(false);
+                openOverview('reports', systemDisplayName(node));
               }}
               onMoveRejected={(reason) => setError(reason)}
               canMove={can.manageForces && status === "live" && !moving}
@@ -1020,18 +1037,18 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
               </div>
               {selectedSystem && (collapsed || systemDetailOpen) && (
                 <section className="tac-system-detail" aria-label="星系敌情详情">
-                  <header><div><small>星系敌情</small><h2>{selectedSystem.name}</h2></div><div className="tac-system-detail-actions">{collapsed && <button type="button" className="tac-system-back" aria-label="展开兵力总览" onClick={() => { setSystemDetailOpen(false); setCollapsed(false); }}><ChevronLeft size={14} />总览</button>}<button type="button" className="tac-icon-btn" aria-label="关闭星系详情" onClick={() => { setSelectedSystem(null); setSystemDetailOpen(false); }}><X size={17} /></button></div></header>
+                  <header><div><small>星系敌情</small><h2>{selectedSystem.name}</h2></div><div className="tac-system-detail-actions">{collapsed && !mobile && <button type="button" className="tac-system-back" aria-label="展开兵力总览" onClick={() => openOverview()}><ChevronLeft size={14} />总览</button>}<button type="button" className="tac-icon-btn" aria-label="关闭星系详情" onClick={() => { setSelectedSystem(null); setSystemDetailOpen(false); }}><X size={17} /></button></div></header>
                   <div className="tac-system-fleets">
                     {selectedFleets.slice(0, 6).map(item => <div className={`tac-system-fleet-row is-${item.side}`} key={item.id}>
                       <button type="button" onClick={() => chooseForce(item)}><span>{item.name}</span><span>{item.people ?? '未知'}{item.people == null ? '' : '人'}</span></button>
                       <small>{item.source_author_name ? `${item.source_author_name} 上报` : '指挥录入'} · {ageLabel(item.observed_at, currentServerTime)}</small>
-                      {item.side === 'enemy' && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({kind:'report',selectedFleet:item})}>更新这支舰队</button>}
-                      {item.id === selectedForce && <button type="button" className="tac-text-btn" onClick={() => { setCollapsed(false); setSystemDetailOpen(false); setTab('forces'); setQuery(''); }}>查看部署详情</button>}
+                      {can.manageForces && item.side === 'enemy' && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({kind:'report',selectedFleet:item})}>更新这支舰队</button>}
+                      {item.id === selectedForce && <button type="button" className="tac-text-btn" onClick={() => openOverview()}>查看部署详情</button>}
                     </div>)}
-                    {selectedFleets.length > 6 && <button type="button" className="tac-text-btn" onClick={() => { setCollapsed(false); setTab('forces'); setQuery(selectedSystem.name); }}>查看全部 {selectedFleets.length} 支舰队</button>}
+                    {selectedFleets.length > 6 && <button type="button" className="tac-text-btn" onClick={() => openOverview('forces', selectedSystem.name)}>查看全部 {selectedFleets.length} 支舰队</button>}
                   </div>
                   {!selectedFleets.length && <p className="tac-muted">此星系暂无已标注舰队</p>}
-                    <button className="tac-btn is-primary" type="button" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report', initialMode: 'new' })}><Plus size={16} />上报敌方舰队</button>
+                    {can.manageForces && <button className="tac-btn is-primary" type="button" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report', initialMode: 'new' })}><Plus size={16} />上报敌方舰队</button>}
                   <div className="tac-system-count"><span>星系总人数</span><strong>{selectedIntel ? selectedIntel.people ?? '未知' : '未上报'}</strong>{selectedIntel?.people != null && <small>人</small>}
                     <span className="tac-system-security">安等 {selectedNode?.security_status == null ? '未知' : Number(selectedNode.security_status).toFixed(2)}</span>
                   </div>
@@ -1041,7 +1058,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
                     <ShipComposition ships={selectedIntel.ships} />
                   </div>}
                   <button className="tac-text-btn" type="button" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report',initialMode:'system_count' })}>更新星系总人数</button>
-                  {selectedHistory.length > 0 && <details className="tac-system-history"><summary>上报记录 · {selectedHistory.length}</summary>{selectedHistory.map(row => <div key={row.id}><span>{row.author_name} · {row.people ?? '未知'}{row.people == null ? '' : ' 人'}{row.status==='withdrawn'?' · 已撤下':''}<small>{new Date(row.observed_at).toLocaleString()}</small></span>{row.author_id === snapshot.user_id && row.status!=='withdrawn' && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report', initial: row })}>修订</button>}</div>)}</details>}
+                  {selectedHistory.length > 0 && <details className="tac-system-history"><summary>上报记录 · {selectedHistory.length}</summary>{selectedHistory.map(row => <div key={row.id}><span>{row.author_name} · {row.people ?? '未知'}{row.people == null ? '' : ' 人'}{row.status==='withdrawn'?' · 已撤下':''}<small>{new Date(row.observed_at).toLocaleString()}</small></span>{row.author_id === snapshot.user_id && row.status!=='withdrawn' && (can.manageForces || row.report_kind === 'system_count') && <button type="button" className="tac-text-btn" disabled={status !== 'live'} onClick={() => setDialog({ kind: 'report', initial: row })}>修订</button>}</div>)}</details>}
                   {selectedExits.length > 0 && <details className="tac-system-exits"><summary>相邻星门 · {selectedExits.length}</summary>
                   <div className="tac-boundary-list">
                     <strong>{selectedSystem.name} · 相邻星门 <button type="button" className="tac-text-btn" aria-label="收起相邻星门" onClick={() => { setSelectedSystem(null); setSystemDetailOpen(false); }}>收起</button></strong>
@@ -1073,10 +1090,10 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
                 </section>
                 )}
             </CollaborationMap>
-            {collapsed && <button className="tac-panel-reopen tac-btn" type="button" aria-label="展开兵力总览" onClick={() => { setSystemDetailOpen(false); setCollapsed(false); }}><ChevronLeft size={16} />兵力总览</button>}
+            {collapsed && !mobile && <button className="tac-panel-reopen tac-btn" type="button" aria-label="展开兵力总览" onClick={() => { setSystemDetailOpen(false); setCollapsed(false); }}><ChevronLeft size={16} />兵力总览</button>}
           </section>
         )}
-        {(!collapsed || mobile) && (
+        {(mobile ? !mapOpen : !collapsed) && (
           <aside className="tac-side-panel" aria-label="兵力总览与上报记录">
             {mobile && can.manageForces && (
               <div className="tac-side-filter" aria-label="部署阵营筛选">
@@ -1203,7 +1220,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
                               最后编辑：
                               {new Date(item.updated_at).toLocaleString()}
                             </small>
-                            {item.side === 'enemy' && <button type="button" className="tac-btn is-small" disabled={status !== 'live'} onClick={() => setDialog({kind:'report',selectedFleet:item})}>更新这支舰队</button>}
+                            {can.manageForces && item.side === 'enemy' && <button type="button" className="tac-btn is-small" disabled={status !== 'live'} onClick={() => setDialog({kind:'report',selectedFleet:item})}>更新这支舰队</button>}
                             {can.manageForces && (
                               <div className="tac-row-actions">
                                 <button
@@ -1280,7 +1297,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
                       {ageLabel(item.observed_at, currentServerTime)}
                     </small>
                     <div className="tac-row-actions">
-                      {item.author_id === snapshot.user_id && (
+                      {item.author_id === snapshot.user_id && (can.manageForces || item.report_kind === 'system_count') && (
                         <button
                           type="button"
                           className="tac-btn is-small"
@@ -1334,7 +1351,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
       </div>
       {mobile && (
         <p className="tac-mobile-note">
-          手机端提供上报记录查看与快速上报，不加载星图。
+          地图支持搜索定位、点选星系与上报；拖动空白处平移。
           <Link to="/starmap">打开路径规划</Link>
         </p>
       )}
@@ -1350,6 +1367,7 @@ function BoardContent({ organizationId, boardId, snapshot, execute, refresh, sta
         <TacticalReportForm
           organizationId={organizationId}
           kind={dialog.kind}
+          canReportFleet={can.manageForces}
           initial={dialog.initial}
           side={dialog.side}
           forces={snapshot.forces}

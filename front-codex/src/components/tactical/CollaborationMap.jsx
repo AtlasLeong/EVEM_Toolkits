@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Crosshair, Eye, EyeOff, Minus, Plus, Type, X } from 'lucide-react';
-import { layoutForceMarkers, rememberVisibleMarkerSlots, translateMarkerGroups } from '../../utils/tacticalMarkerLayout';
+import { budgetMarkerGroups, layoutForceMarkers, rememberVisibleMarkerSlots, translateMarkerGroups } from '../../utils/tacticalMarkerLayout';
 import { adjacentSystems, isStale, ageLabel } from '../../utils/tacticalCollaboration';
 import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMarkerLabel, MARKER_CLOSE_SIZE, markerGroupsForViewport } from '../../utils/tacticalMapPresentation';
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
@@ -36,14 +36,23 @@ function syncCollaborationPreviewGeometry(root, base = INITIAL_VIEW, next = INIT
   root.querySelectorAll('[data-tac-fixed-overlay-group]').forEach(node => {
     const baseTransform = node.getAttribute('data-tac-base-transform');
     if (!baseTransform) return;
-    node.setAttribute('transform', ratio === 1 ? baseTransform : `${baseTransform} scale(${inverseRatio})`);
+    const ax = Number(node.getAttribute('data-tac-anchor-x'));
+    const ay = Number(node.getAttribute('data-tac-anchor-y'));
+    const x = Number(node.getAttribute('data-tac-base-x'));
+    const y = Number(node.getAttribute('data-tac-base-y'));
+    if (![ax, ay, x, y].every(Number.isFinite)) return;
+    // Keep the entire screen-pixel offset from its owning star, not merely
+    // the card size. The card and its independently focusable close control
+    // share this anchor, so both remain attached during the live affine zoom.
+    node.setAttribute('transform', ratio === 1 ? baseTransform
+      : `translate(${ax + (x - ax) * inverseRatio} ${ay + (y - ay) * inverseRatio}) scale(${inverseRatio})`);
   });
-  root.querySelectorAll('[data-tac-fixed-overlay-label]').forEach(node => {
-    const cx = Number(node.getAttribute('data-tac-label-cx'));
-    const cy = Number(node.getAttribute('data-tac-label-cy'));
-    if (![cx, cy].every(Number.isFinite)) return;
+  root.querySelectorAll('[data-tac-fixed-overlay-absolute]').forEach(node => {
+    const ax = Number(node.getAttribute('data-tac-anchor-x'));
+    const ay = Number(node.getAttribute('data-tac-anchor-y'));
+    if (![ax, ay].every(Number.isFinite)) return;
     node.setAttribute('transform', ratio === 1 ? ''
-      : `translate(${cx} ${cy}) scale(${inverseRatio}) translate(${-cx} ${-cy})`);
+      : `translate(${ax} ${ay}) scale(${inverseRatio}) translate(${-ax} ${-ay})`);
   });
 }
 
@@ -64,9 +73,10 @@ function visibleBoardWorld(nodes, stargates, viewport, view, preferredIds = new 
   return {nodes:visibleNodes, gates:visibleGates};
 }
 
-function MarkerCloseAction({x,y,label,title,className,dataArchiveForceId,onActivate}) {
+function MarkerCloseAction({x,y,anchorAttributes,label,title,className,dataArchiveForceId,onActivate}) {
   return <g role="button" tabIndex={0} aria-label={label} data-archive-force-id={dataArchiveForceId}
     transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+    data-tac-base-x={x} data-tac-base-y={y} {...anchorAttributes}
     className={`tac-marker-close ${className}`}
     onPointerDown={event=>event.stopPropagation()} onPointerUp={event=>event.stopPropagation()}
     onClick={event=>{event.stopPropagation();onActivate?.();}}
@@ -94,6 +104,9 @@ export default function CollaborationMap({
   const [showReportMarkers, setShowReportMarkers] = useState(false);
   const [hoveredSystemId, setHoveredSystemId] = useState(null);
   const [isWheelZooming, setIsWheelZooming] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [topologyView, setTopologyView] = useState(null);
+  const topologyRefreshAt = useRef(-Infinity);
   const [isSettlingLabels, setIsSettlingLabels] = useState(false);
   const [showZoomLabels, setShowZoomLabels] = useState(false);
   const [visibleMarkerSlots, setVisibleMarkerSlots] = useState({scopeVersion:scope?.version ?? null, slots:new Map()});
@@ -122,30 +135,40 @@ export default function CollaborationMap({
   ].filter(group => byId.has(Number(group.system_id))), [forces, reports, selectedForceId, canArchiveForce, intel, canWithdrawCount, byId]);
   const eligibleMarkerGroups = useMemo(() => allMarkerGroups.filter(group => group.kind !== 'report' ||
     showReportMarkers || Number(group.system_id) === Number(selectedSystemId)), [allMarkerGroups, showReportMarkers, selectedSystemId]);
-  const markerGroups = useMemo(() => markerGroupsForViewport(eligibleMarkerGroups, nodes, viewport,
-    {selectedSystemId, view, showReports:showReportMarkers}), [eligibleMarkerGroups, nodes, viewport, selectedSystemId, view, showReportMarkers]);
+  const annotationBudget = useMemo(() => budgetMarkerGroups(markerGroupsForViewport(eligibleMarkerGroups, nodes, viewport,
+    {selectedSystemId, view, showReports:showReportMarkers}), {selectedSystemId, selectedForceId}),
+    [eligibleMarkerGroups, nodes, viewport, selectedSystemId, selectedForceId, view, showReportMarkers]);
+  const markerGroups = annotationBudget.groups;
   const forceSystems = useMemo(() => new Set(markerGroups.filter(group=>group.kind==='force').map(group => Number(group.system_id))), [markerGroups]);
-  const visibleWorld = useMemo(() => {
+  const isCameraMoving = isWheelZooming || isPanning;
+  const topologyCamera = isCameraMoving && topologyView ? topologyView : view;
+  const preferredTopologyIds = useMemo(() => {
     // Preserve every currently rendered annotation anchor while culling the
     // static topology. This prevents a selected/report/count marker from
     // losing its star when a dense map is zoomed into a small viewport.
     const markerIds = markerGroups.map(group => Number(group.system_id));
     // Offscreen intel still remains in the report panel and full hit-test
     // data, but must not pin thousands of unrelated stars into the SVG.
-    const preferred = new Set([...forceSystems, ...markerIds, Number(selectedSystemId)].filter(Number.isFinite));
-    return visibleBoardWorld(nodes, stargates, viewport, view, preferred);
-  }, [nodes, stargates, viewport, view, forceSystems, markerGroups, selectedSystemId]);
+    return new Set([...forceSystems, ...markerIds, Number(selectedSystemId)].filter(Number.isFinite));
+  }, [forceSystems, markerGroups, selectedSystemId]);
+  const visibleWorld = useMemo(() => visibleBoardWorld(nodes, stargates, viewport, topologyCamera, preferredTopologyIds),
+    [nodes, stargates, viewport, topologyCamera, preferredTopologyIds]);
+  // Preview topology is replenished during a gesture, but annotations retain
+  // their settled camera and slots until it ends. New stars must not invalidate
+  // the collision solver on every preview refresh.
+  const overlayWorld = useMemo(() => visibleBoardWorld(nodes, stargates, viewport, view, preferredTopologyIds),
+    [nodes, stargates, viewport, view, preferredTopologyIds]);
   // Keep the expensive label/marker layout input bounded to the current
   // viewport. Hit-testing still uses the complete world `nodes` collection,
   // while all displayed anchors (selected and marker groups) remain
   // in `visibleWorld` even when outside the screen margin.
-  const screenSystems = useMemo(() => screenNodes(visibleWorld.nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
-    {panX:view.x, panY:view.y, zoom:view.scale}), [visibleWorld.nodes, view]);
+  const screenSystems = useMemo(() => screenNodes(overlayWorld.nodes.map(node => ({...node, zh_name:systemDisplayName(node)})),
+    {panX:view.x, panY:view.y, zoom:view.scale}), [overlayWorld.nodes, view]);
   const gateSegments = useMemo(() => {
     if (isWheelZooming && settledLabels.current?.scopeVersion === scopeVersion && settledLabels.current.gateSegments)
       return settledLabels.current.gateSegments;
     const segments = [];
-    for (const gate of visibleWorld.gates) {
+    for (const gate of overlayWorld.gates) {
       const sourceId=Number(gate.system_id), destinationId=Number(gate.destination_system_id);
       const a=byId.get(sourceId), b=byId.get(destinationId);
       if (!a || !b) continue;
@@ -153,13 +176,9 @@ export default function CollaborationMap({
         x2:b.px*view.scale+view.x,y2:b.py*view.scale+view.y});
     }
     return indexGateSegments(segments,viewport);
-  }, [visibleWorld.gates, byId, view, viewport, isWheelZooming, scopeVersion]);
-  const basePreferredSlots = useMemo(() => new Map(layoutForceMarkers(markerGroups, nodes, 1,
-    {...viewport, padding:{left:16, right:16, top:175, bottom:60}, reservedRects:reservedUiRects})
-    .map(group => [group.key, group.slot])), [markerGroups, nodes, viewport, reservedUiRects]);
+  }, [overlayWorld.gates, byId, view, viewport, isWheelZooming, scopeVersion]);
   const rememberedSlots = visibleMarkerSlots.scopeVersion === scopeVersion ? visibleMarkerSlots.slots : null;
-  const preferredSlots = useMemo(() => new Map([...basePreferredSlots, ...(rememberedSlots || [])]),
-    [basePreferredSlots, rememberedSlots]);
+  const preferredSlots = useMemo(() => rememberedSlots || new Map(), [rememberedSlots]);
   const positionedGroups = useMemo(() => {
     const settled = settledMarkerLayout.current;
     if (isWheelZooming && settled?.scopeVersion === scopeVersion) {
@@ -227,11 +246,11 @@ export default function CollaborationMap({
     // whole map for every native wheel event. A concurrent snapshot update can
     // still replace map children while that preview is active; restore the
     // affine preview and fixed-size overlays after the replacement commits.
-    if (!isWheelZooming) return;
+    if (!isCameraMoving) return;
     const next = liveViewRef.current;
     if (next.x === view.x && next.y === view.y && next.scale === view.scale) return;
     applyCollaborationPreviewFrame(next, view);
-  }, [isWheelZooming, view, nodes, visibleWorld, positionedGroups, labelLayouts, gateSegments, markers, countMarkers, reportMarkers]);
+  }, [isCameraMoving, view, nodes, visibleWorld, positionedGroups, labelLayouts, gateSegments, markers, countMarkers, reportMarkers]);
   const markerLeaders = useMemo(() => markerLeaderSegments(positionedGroups,
     {selectedSystemId, hoveredSystemId, selectedForceId}),
     [positionedGroups, selectedSystemId, hoveredSystemId, selectedForceId]);
@@ -260,12 +279,20 @@ export default function CollaborationMap({
       setIsSettlingLabels(false);
     }, 320);
   };
+  const refreshPreviewTopology = next => {
+    const now = performance.now();
+    if (now - topologyRefreshAt.current < 80) return;
+    topologyRefreshAt.current = now;
+    setTopologyView(next);
+  };
   const stopWheelZoom = () => {
     const queue = wheelQueue.current;
     if (queue.frame !== null) cancelAnimationFrame(queue.frame);
     if (queue.idle !== null) clearTimeout(queue.idle);
     queue.delta = 0; queue.anchor = null; queue.frame = null; queue.idle = null;
     setIsWheelZooming(false);
+    setTopologyView(null);
+    topologyRefreshAt.current = -Infinity;
     const settled = liveViewRef.current;
     setView(current => current.x === settled.x && current.y === settled.y && current.scale === settled.scale ? current : settled);
     settleLabels();
@@ -287,11 +314,13 @@ export default function CollaborationMap({
     if (next.scale === current.scale && next.x === current.x && next.y === current.y) return;
     liveViewRef.current = next;
     applyCollaborationPreviewFrame(next, view);
+    refreshPreviewTopology(next);
   };
   wheelHandler.current = event => {
     if (gesture.current) return;
     const delta = normalizeWheelDelta(event, {lineHeight:16, pageHeight:viewport.height});
-    if (!Number.isFinite(delta) || delta === 0 || delta < 0 && view.scale >= 16 || delta > 0 && view.scale <= .5) return;
+    const liveScale = liveViewRef.current.scale;
+    if (!Number.isFinite(delta) || delta === 0 || delta < 0 && liveScale >= 16 || delta > 0 && liveScale <= .5) return;
     const queue = wheelQueue.current;
     queue.delta += delta;
     queue.anchor = point(event);
@@ -311,6 +340,8 @@ export default function CollaborationMap({
       }
       const settled = liveViewRef.current;
       setIsWheelZooming(false);
+      setTopologyView(null);
+      topologyRefreshAt.current = -Infinity;
       setView(current => current.x === settled.x && current.y === settled.y && current.scale === settled.scale ? current : settled);
       settleLabels();
     }, 220);
@@ -374,6 +405,7 @@ export default function CollaborationMap({
       stopWheelZoom();
       const pointerId = gesture.current?.pointerId;
       gesture.current = null;
+      setIsPanning(false);
       if (pointerId != null && ref.current?.hasPointerCapture(pointerId)) ref.current.releasePointerCapture(pointerId);
       suppressClick.current = false;
       setDrag(null);
@@ -409,11 +441,16 @@ export default function CollaborationMap({
   const applyDragFrame = frame => {
     if (frame?.view) {
       liveViewRef.current = frame.view;
-      setView(frame.view);
+      applyCollaborationPreviewFrame(frame.view, view);
+      refreshPreviewTopology(frame.view);
     }
     if (Object.prototype.hasOwnProperty.call(frame || {}, 'drag')) setDrag(frame.drag);
   };
-  const cancel = () => {dragFrame.current?.cancel();gesture.current=null;setDrag(null);setPicker(null);};
+  const cancel = () => {
+    dragFrame.current?.cancel();gesture.current=null;setDrag(null);setPicker(null);
+    setIsPanning(false);setTopologyView(null);topologyRefreshAt.current=-Infinity;
+    setView(liveViewRef.current);
+  };
   const submitMove = (snapshot,destination) => {
     const result=validateDirectMove(snapshot,forces,destination,nodes,canMove);
     if(result.ok) onMoveForce?.(snapshot,result.destination_system_id);
@@ -453,6 +490,7 @@ export default function CollaborationMap({
     if(current.force||current.report) {
       dragFrame.current.enqueue({drag:{point:p,...resolveSystemHit(nodes,p,liveViewRef.current,viewport)}}, applyDragFrame);
     } else {
+      setIsPanning(true);
       const next={...current.view,x:current.view.x+p.x-current.start.x,y:current.view.y+p.y-current.start.y};
       dragFrame.current.enqueue({view:next}, applyDragFrame);
     }
@@ -464,6 +502,10 @@ export default function CollaborationMap({
     // This keeps pointer-up authoritative even when React is one render behind.
     dragFrame.current.flush(applyDragFrame);
     gesture.current=null;
+    if (!current.force && !current.report && current.started) {
+      setView(liveViewRef.current);setIsPanning(false);setTopologyView(null);
+      topologyRefreshAt.current=-Infinity;settleLabels();
+    }
     if(ref.current?.hasPointerCapture(event.pointerId))ref.current.releasePointerCapture(event.pointerId);
     suppressClick.current=current.started;
     if((current.force||current.report)&&current.started) {
@@ -485,6 +527,11 @@ export default function CollaborationMap({
     setPicker(null);ref.current?.focus();
   };
   const pickerPosition=picker?{left:Math.max(12,Math.min(picker.point.x+16,viewport.width-274)),top:Math.max(175,Math.min(picker.point.y+16,viewport.height-300))}:null;
+  const annotationAnchorAttributes = systemId => {
+    const node = byId.get(Number(systemId));
+    return {'data-tac-anchor-x':view.x+(node?.px || 0)*view.scale,
+      'data-tac-anchor-y':view.y+(node?.py || 0)*view.scale};
+  };
 
   const motionPhase = labelMotionPhase({zooming:isWheelZooming, settling:isSettlingLabels});
   return <div className={`tac-map tac-map-mode-spatial tac-system-intel-map${isWheelZooming?' is-wheel-zooming':''}${isSettlingLabels?' is-label-settling':''} is-label-${motionPhase} ${className}`}>
@@ -496,6 +543,7 @@ export default function CollaborationMap({
         <button type="button" aria-label={showReportMarkers ? '隐藏上报标记' : '显示上报标记'} aria-pressed={showReportMarkers} onClick={()=>setShowReportMarkers(value=>!value)}><span aria-hidden="true">{showReportMarkers ? <EyeOff size={14}/> : <Eye size={14}/>}</span> 上报</button>
       </div>
       <span className="tac-map-legend"><i className="tac-enemy-dot"/> 敌方{forces.some(force=>force.side==='friendly')&&<><i className="tac-friendly-dot"/> 己方</>}</span>
+      {annotationBudget.omittedCount>0&&<span className="tac-map-legend" role="status" aria-label="地图标记密度">其余 {annotationBudget.omittedCount} 条标记可缩放或在总览查看</span>}
       <div><button type="button" aria-label="缩小地图" onClick={()=>zoom(1/1.25)}><Minus size={16}/></button><button type="button" aria-label="放大地图" onClick={()=>zoom(1.25)}><Plus size={16}/></button><button type="button" aria-label="适应作战范围" onClick={fitView}><Crosshair size={16}/></button></div>
     </div>
     <svg ref={ref} viewBox={`0 0 ${viewport.width} ${viewport.height}`} role="group" aria-label="局部作战星图" tabIndex={0}
@@ -519,14 +567,15 @@ export default function CollaborationMap({
         })}
       </g>
       <g ref={overlayLayerRef} className="tac-map-overlay-layer">
-      {markerLeaders.map(leader=><line key={`marker-leader-${leader.key}`} className={`tac-map-marker-leader${leader.active?' is-active':''}`} x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke={leader.active?'#a9c0b4':'#718681'} strokeWidth={leader.active?1.45:.85} opacity={leader.active?.88:.46} vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
-      {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} className="tac-map-focus-leader" x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
+      {markerLeaders.map(leader=><line key={`marker-leader-${leader.key}`} data-tac-marker-key={leader.key} data-tac-fixed-overlay-absolute="true" {...annotationAnchorAttributes(leader.system_id)} className={`tac-map-marker-leader${leader.active?' is-active':''}`} x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke={leader.active?'#a9c0b4':'#718681'} strokeWidth={leader.active?1.45:.85} opacity={leader.active?.88:.46} vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
+      {focusLeaders.map(leader=><line key={`focus-leader-${leader.system_id}`} data-tac-fixed-overlay-absolute="true" {...annotationAnchorAttributes(leader.system_id)} className="tac-map-focus-leader" x1={leader.from.x} y1={leader.from.y} x2={leader.to.x} y2={leader.to.y} stroke="#8ca79d" strokeWidth=".8" opacity=".45" vectorEffect="non-scaling-stroke" pointerEvents="none"/>)}
       {labelLayouts.map(label=>{
          const node=byId.get(Number(label.system_id));if(!node)return null;
          const report=label.intel,selected=Number(selectedSystemId)===Number(node.system_id);
          const labelState=wheelLabelState(label,{zooming:isWheelZooming,selectedSystemId,forceIds:forceSystems});
          return <g key={`label-${label.system_id}`} className={`tac-intel-label${report?' has-count':''}${report&&isStale(report.observed_at)?' is-stale':''}${labelState.dimmed?' is-wheel-secondary':''}`} role="button" tabIndex={0}
            data-tac-fixed-overlay-label="true" data-tac-label-cx={label.x + label.width / 2} data-tac-label-cy={label.y + label.height / 2}
+           data-tac-fixed-overlay-absolute="true" {...annotationAnchorAttributes(label.system_id)}
            aria-label={`${label.name}${report?`，敌方 ${report.people??'未知'} 人`:''}`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
           <title>{report?`${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 安全系数 ${securityLabel(node.security_status)}`:`${label.name} · 安全系数 ${securityLabel(node.security_status)}`}</title>
           <BoardSystemLabel label={label} node={node} selected={selected}/>
@@ -535,12 +584,13 @@ export default function CollaborationMap({
         {markers.map(({force,x,y,width,height})=><Fragment key={force.id}>
          <g role="button" tabIndex={0} aria-label={`${force.side==='friendly'?'己方':'敌方'} ${force.name} ${force.people??'未知'} 人，${force.system_name}`}
            transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+           data-tac-base-x={x} data-tac-base-y={y} {...annotationAnchorAttributes(force.system_id)}
            data-force-id={force.id} className={`tac-map-force${isStale(force.observed_at)?' is-stale':''}`} onPointerDown={event=>begin(event,force)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectForce?.(force);}}}>
           <title>{`${force.name} · ${force.system_name} · ${force.people??'未知'} 人${force.source_author_name?` · 上报：${force.source_author_name}`:''} · ${ageLabel(force.observed_at)}${canMove?' · 拖动调整部署':''}`}</title>
           <rect width={width} height={height} rx="5" fill={force.side==='friendly'?'#29443e':'#553a30'} stroke={force.id===selectedForceId?'#f2e5c8':force.side==='friendly'?'#71988b':'#ab7a65'} strokeWidth={force.id===selectedForceId?2:1}/>
           <text x={(width-(canArchiveForce?MARKER_CLOSE_SIZE:0))/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#f1e9d9" fontSize="12" fontWeight="400">{fleetMarkerLabel(force,width,canArchiveForce?MARKER_CLOSE_SIZE:0)}</text>
         </g>
-        {canArchiveForce&&<MarkerCloseAction x={x+width-MARKER_CLOSE_SIZE} y={y+(height-MARKER_CLOSE_SIZE)/2}
+        {canArchiveForce&&<MarkerCloseAction x={x+width-MARKER_CLOSE_SIZE} y={y+(height-MARKER_CLOSE_SIZE)/2} anchorAttributes={annotationAnchorAttributes(force.system_id)}
           label={`归档${force.name}`} title={`归档${force.name}（需确认）`} className="tac-force-close"
           dataArchiveForceId={force.id} onActivate={()=>onArchiveForce?.(force)}/>}
       </Fragment>)}
@@ -552,6 +602,7 @@ export default function CollaborationMap({
           <g role="button" tabIndex={0}
           aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
           transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+          data-tac-base-x={x} data-tac-base-y={y} {...annotationAnchorAttributes(report.system_id)}
           data-count-system-id={report.system_id} data-count-report-id={report.id}
           className={`tac-map-count tac-map-report-marker${canMoveCount?.(report)?' is-draggable':''}${isStale(report.observed_at)?' is-stale':''}`}
           onPointerDown={event=>begin(event,null,report)} onClick={event=>{if(suppressClick.current){suppressClick.current=false;return;}select();}}
@@ -560,7 +611,7 @@ export default function CollaborationMap({
           <rect width={width} height={height} rx="5" fill="#293638" stroke="#a39577" strokeDasharray="3 2" strokeWidth="1"/>
           <text x={(width-(withdrawable?MARKER_CLOSE_SIZE:0))/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#e8d9bb" fontSize="12" fontWeight="400">{report.label}</text>
           </g>
-          {withdrawable&&<MarkerCloseAction x={x+width-MARKER_CLOSE_SIZE} y={y+(height-MARKER_CLOSE_SIZE)/2}
+          {withdrawable&&<MarkerCloseAction x={x+width-MARKER_CLOSE_SIZE} y={y+(height-MARKER_CLOSE_SIZE)/2} anchorAttributes={annotationAnchorAttributes(report.system_id)}
             label={`撤下${systemDisplayName(node)}人数上报`} title={`撤下${systemDisplayName(node)}人数上报（需确认）`}
             className="tac-count-close" onActivate={()=>onWithdrawCount?.(report)}/>}
         </Fragment>;
@@ -571,6 +622,7 @@ export default function CollaborationMap({
         const focus=()=>{onFocusReports?.(node); select();};
          return <g key={`report-${report.id}`} role="button" tabIndex={0} aria-label={`${report.label}，${report.author_name||'未知上报者'}，${report.system_name||node.name||''}`}
            transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+           data-tac-base-x={x} data-tac-base-y={y} {...annotationAnchorAttributes(report.system_id)}
            data-report-id={report.id} className={`tac-map-report tac-map-report-marker${isStale(report.observed_at)?' is-stale':''}`}
           onPointerDown={event=>event.stopPropagation()} onClick={select}
           onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
@@ -584,13 +636,14 @@ export default function CollaborationMap({
         const node=byId.get(Number(group.system_id)),y=group.y+group.visible.length*(group.rowHeight+group.rowGap);if(!node)return null;
         const focus=()=>{onSelectSystem?.(node);onFocusSystem?.(node);};
          const x=group.x+group.overflowOffset;
-         return <g key={`more-${group.key}`} role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}全部${group.total}支部署`} transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`} className="tac-map-group" onPointerDown={event=>event.stopPropagation()} onClick={focus} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
+         return <g key={`more-${group.key}`} role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}全部${group.total}支部署`} transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`} data-tac-base-x={x} data-tac-base-y={y} {...annotationAnchorAttributes(group.system_id)} className="tac-map-group" onPointerDown={event=>event.stopPropagation()} onClick={focus} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();focus();}}}>
           <rect width={group.overflowWidth} height={group.rowHeight} rx="5" fill="#2d3e3b" stroke="#7d9587"/><text x={group.overflowWidth/2} y={group.rowHeight/2} textAnchor="middle" dominantBaseline="central" fill="#dfe9d7" fontSize="12" fontWeight="400">{fitMarkerText(`+ ${group.hiddenCount} 支部署`,group.overflowWidth-18)}</text>
         </g>;
       })}
       {portals.map(portal=>{
         const node=byId.get(portal.system_id);if(!node)return null;
         return <g key={`portal-${portal.system_id}`} className="tac-map-portal" role="button" tabIndex={0} aria-label={`查看${systemDisplayName(node)}的边界星门`}
+          data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${view.x+node.px*view.scale} ${view.y+node.py*view.scale})`} data-tac-base-x={view.x+node.px*view.scale} data-tac-base-y={view.y+node.py*view.scale} {...annotationAnchorAttributes(portal.system_id)}
           transform={`translate(${view.x+node.px*view.scale} ${view.y+node.py*view.scale})`} onPointerDown={event=>event.stopPropagation()} onClick={()=>onSelectSystem?.(node)} onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();onSelectSystem?.(node);}}}>
           <title>{portal.exits.map(exit=>exit.destination_name).join('、')}</title><text x="20" y="4" fill="#c9b388" fontSize="10">↗ {portal.exits.length}</text>
         </g>;

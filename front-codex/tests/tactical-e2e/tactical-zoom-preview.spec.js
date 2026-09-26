@@ -92,13 +92,14 @@ test('focused war-board selection ring keeps a hairline stroke at high zoom', as
 })
 
 test('war board bounds dense topology and preserves the selected system while zooming', async ({ page }) => {
-  // This 900-card correctness stress case performs six settled layouts. The
-  // pre-change baseline also takes ~41s locally; keep every assertion intact.
-  test.setTimeout(60000)
+  const started = Date.now()
   await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?dense=1&intel=1')
   const map = page.getByRole('group', { name: '局部作战星图' })
   await expect(map).toBeVisible()
   await expect(map.locator('[data-system-id]')).toHaveCount(900)
+  expect(await map.locator('[data-count-system-id]').count()).toBeLessThanOrEqual(24)
+  await expect(page.getByRole('status', {name:'地图标记密度'})).toContainText('其余')
+  expect(await map.locator('.tac-intel-label').count()).toBeGreaterThan(0)
 
   for (let index = 0; index < 6; index += 1) {
     await page.getByRole('button', { name: '放大地图' }).click()
@@ -109,6 +110,58 @@ test('war board bounds dense topology and preserves the selected system while zo
   expect(visibleCount).toBeGreaterThan(0)
   expect(visibleCount).toBeLessThan(900)
   await expect(map.locator('[data-system-id="1"]')).toHaveCount(1)
+  expect(Date.now()-started).toBeLessThan(12000)
+})
+
+test('war board replenishes topology before a continuous zoom-out gesture settles', async ({page}) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?dense=1')
+  const map=page.getByRole('group',{name:'局部作战星图'})
+  for(let index=0;index<9;index++) await page.getByRole('button',{name:'放大地图'}).click()
+  const before=await map.locator('[data-system-id]').count()
+  const during=await map.evaluate(async svg=>{
+    const rect=svg.getBoundingClientRect()
+    for(let index=0;index<12;index++) {
+      svg.dispatchEvent(new WheelEvent('wheel',{deltaY:120,clientX:rect.x+rect.width/2,clientY:rect.y+rect.height/2,bubbles:true}))
+      await new Promise(resolve=>setTimeout(resolve,35))
+    }
+    return {count:svg.querySelectorAll('[data-system-id]').length,zooming:svg.parentElement.classList.contains('is-wheel-zooming')}
+  })
+  expect(during.zooming).toBe(true)
+  expect(during.count).toBeGreaterThan(before*2)
+})
+
+test('war board pan keeps settled annotation positions until pointer-up', async ({page}) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?dense=1&intel=1')
+  const map=page.getByRole('group',{name:'局部作战星图'})
+  const marker=map.locator('[data-count-system-id="1"]')
+  const before=await marker.getAttribute('data-tac-base-transform')
+  const box=await map.boundingBox()
+  await page.mouse.move(box.x+box.width/2,box.y+80)
+  await page.mouse.down()
+  await page.mouse.move(box.x+box.width/2+70,box.y+130,{steps:8})
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+  expect(await marker.getAttribute('data-tac-base-transform')).toBe(before)
+  expect(await map.locator('.tac-map-overlay-layer').getAttribute('transform')).toContain('translate(70 50)')
+  await page.mouse.up()
+  await expect(map.locator('.tac-map-overlay-layer')).not.toHaveAttribute('transform')
+})
+
+test('war board reverses wheel direction at the zoom limit without waiting for idle', async ({page}) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html')
+  const map=page.getByRole('group',{name:'局部作战星图'})
+  for(let index=0;index<20;index++) await page.getByRole('button',{name:'放大地图'}).click()
+  const scales=await map.evaluate(async svg=>{
+    const read=()=>Number(svg.querySelector('.tac-map-world-layer').getAttribute('transform').match(/scale\(([-\d.e]+)\)/)[1])
+    const before=read(),rect=svg.getBoundingClientRect()
+    const wheel=async delta=>{
+      svg.dispatchEvent(new WheelEvent('wheel',{deltaY:delta,clientX:rect.x+rect.width/2,clientY:rect.y+rect.height/2,bubbles:true}))
+      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))
+      return read()
+    }
+    return {before,out:await wheel(120),back:await wheel(-120)}
+  })
+  expect(scales.out).toBeLessThan(scales.before)
+  expect(scales.back).toBeCloseTo(scales.before,4)
 })
 
 test('war board wheel preview survives a systems snapshot rerender', async ({ page }) => {

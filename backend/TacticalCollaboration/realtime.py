@@ -32,6 +32,14 @@ def snapshot_fingerprint(value):
     return hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def api_close_code(error):
+    # 4403 remains terminal (membership revoked / socket superseded). A tab
+    # suspended past its lease can authenticate and re-admit after 4408.
+    if error.get_codes() == 'lease_expired':
+        return 4408
+    return 4409 if error.status_code in (409, 429) else 4403
+
+
 class TacticalConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.actor = None
@@ -118,7 +126,7 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                     self.expiry_task = asyncio.create_task(self.expiry_watch())
                     await self.publish_state()
                 except APIException as error:
-                    await self.shutdown(4409 if error.status_code in (409, 429) else 4403)
+                    await self.shutdown(api_close_code(error))
                     return
                 except Exception:
                     logger.exception('Tactical channel admission failed')
@@ -136,8 +144,8 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                     return
                 try:
                     await self.admit()
-                except APIException:
-                    await self.shutdown(4403)
+                except APIException as error:
+                    await self.shutdown(api_close_code(error))
                 except Exception:
                     logger.exception('Tactical heartbeat failed')
                     await self.shutdown(1011)
@@ -180,8 +188,8 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
                         await self.publish_state()
         except asyncio.CancelledError:
             return
-        except APIException:
-            await self.shutdown(4403)
+        except APIException as error:
+            await self.shutdown(api_close_code(error))
         except Exception:
             logger.exception('Tactical state delivery failed')
             await self.shutdown(1011)
@@ -198,8 +206,8 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
         try:
             async with self.io_lock:
                 await self.publish_state()
-        except APIException:
-            await self.shutdown(4403)
+        except APIException as error:
+            await self.shutdown(api_close_code(error))
         except Exception:
             logger.exception('Tactical state event delivery failed')
             await self.shutdown(1011)

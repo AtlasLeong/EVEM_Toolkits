@@ -21,6 +21,7 @@ export default function useTacticalSession(organizationId, boardId = null) {
   const generation = useRef(0);
   const refreshRef = useRef(async () => {});
   const invalidateRef = useRef(() => {});
+  const recoverLeaseRef = useRef(() => {});
   const requestRef = useRef(async operation => operation());
   useEffect(() => {
     let cancelled = false;
@@ -57,6 +58,20 @@ export default function useTacticalSession(organizationId, boardId = null) {
       setError("访问权限已变化，请重新选择组织或登录。");
     };
     invalidateRef.current = invalidate;
+    const recoverLease = () => {
+      if (cancelled) return;
+      heartbeatAt = 0;
+      streamLive = false;
+      stopStream?.();
+      stopStream = null;
+      retryStreamAt = 0;
+      // Retain the last authorized view, but disable writes until re-admission.
+      setStatus("connecting");
+      setError("连接租约已过期，正在重新进入战术板。");
+      clearPoll();
+      schedulePoll(0);
+    };
+    recoverLeaseRef.current = recoverLease;
     const connectStream = () => {
       if (cancelled || stopStream || Date.now() < retryStreamAt) return;
       try {
@@ -78,6 +93,11 @@ export default function useTacticalSession(organizationId, boardId = null) {
             retryStreamAt = Date.now() + backoff * (0.75 + Math.random() * 0.5);
             heartbeatAt = 0;
             if (code === 4403) invalidate();
+            else if (code === 4408) {
+              // A suspended tab lost its transport lease, not its membership.
+              recoverLease();
+              return;
+            }
             else if (lastAccepted) {
               // HTTP snapshot polling remains an authenticated write-capable
               // fallback; a proxy without WebSocket support must not disable
@@ -163,7 +183,9 @@ export default function useTacticalSession(organizationId, boardId = null) {
         return true;
       } catch (failure) {
         if (cancelled) return null;
-        if (
+        if (failure.code === "lease_expired") {
+          recoverLease();
+        } else if (
           [401, 403, 404].includes(failure.status) ||
           failure.name === "AuthSessionChangedError"
         ) {
@@ -220,13 +242,23 @@ export default function useTacticalSession(organizationId, boardId = null) {
       const epoch = generation.current;
       if (requireLease && (status !== "live" || !connection.current))
         throw new Error("当前未连接到战术板，请恢复连接后手动提交。");
-      const result = await requestRef.current((signal) => sendTacticalCommand(organizationId, {
+      let result;
+      try {
+        result = await requestRef.current((signal) => sendTacticalCommand(organizationId, {
           action,
           ...payload,
           request_id: requestId,
           ...(requireLease ? { connection_id: connection.current } : {}),
           ...(requireLease && boardId != null ? { board_id: boardId } : {}),
         }, { signal }));
+      } catch (failure) {
+        if (epoch === generation.current && requireLease && failure.code === "lease_expired") {
+          recoverLeaseRef.current();
+        }
+        // Never retry a write implicitly. The form/outbox retains this requestId
+        // and exact business content for an explicit, idempotent user retry.
+        throw failure;
+      }
       if (epoch !== generation.current)
         throw new Error("已切换战术板，旧请求结果已忽略。");
       if (requireLease) await refreshRef.current();

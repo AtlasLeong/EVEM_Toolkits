@@ -293,3 +293,23 @@ test('wheel marker translation keeps card dimensions and follows each owning sta
   assert.equal(moved[0].y, settled[0].y + 35);
   assert.deepEqual(moved[0].leader.to, { x: 370, y: 295 });
 });
+
+test('dense war annotations have a finite row budget and keep the selected system first', () => {
+  assert.equal(typeof markerLayout.budgetMarkerGroups, 'function');
+  const groups = Array.from({length:900}, (_, index) => ({...group(index + 1), key:`count-${index+1}`, total:1}));
+  const result = markerLayout.budgetMarkerGroups(groups, {selectedSystemId:899});
+  assert.ok(result.groups.length <= 24);
+  assert.equal(result.groups[0].system_id,899);
+  assert.equal(result.omittedCount,900-result.groups.length);
+  assert.equal(groups.length,900, 'budgeting must not mutate the complete list');
+});
+
+test('war annotation budget counts rows and prioritizes the selected force', () => {
+  assert.equal(typeof markerLayout.budgetMarkerGroups, 'function');
+  const groups = Array.from({length:40}, (_, index) => ({...group(index+1,3), key:`force-${index+1}`,total:8,hiddenCount:5}));
+  const result = markerLayout.budgetMarkerGroups(groups, {selectedForceId:'40-2'});
+  assert.equal(result.groups[0].system_id,40);
+  assert.ok(result.groups.reduce((sum,item)=>sum+item.visible.length+(item.hiddenCount?1:0),0)<=24);
+  assert.equal(result.omittedCount,320-result.groups.reduce((sum,item)=>sum+item.total,0));
+  assert.deepEqual(markerLayout.budgetMarkerGroups(groups, {selectedForceId:'40-2'}),result);
+});

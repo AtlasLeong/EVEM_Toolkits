@@ -354,7 +354,7 @@ test('strength overview count-only report is the default and needs no fleet name
   await page.goto('/tactical');
   await page.getByRole('button',{name:'快速上报',exact:true}).click();
   const dialog=page.getByRole('dialog');
-  await expect(dialog.getByRole('button',{name:'人数上报',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(dialog).toContainText('斥候仅可上报星系总人数');
   await expect(dialog.getByRole('textbox',{name:'舰队名称',exact:true})).toHaveCount(0);
   await dialog.getByLabel('搜索上报星系').fill('德里克');
   await dialog.getByRole('button',{name:/德里克一/}).click();
@@ -612,7 +612,7 @@ test("system-intel quick report publishes a system enemy snapshot without confir
   await page.goto('/tactical');
   await page.getByRole('button', { name: '快速上报', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('button', {name:'人数上报', exact:true}).click();
+  await expect(dialog).toContainText('斥候仅可上报星系总人数');
   await dialog.getByRole('textbox', { name: '搜索上报星系' }).fill('德里克');
   await dialog.getByRole('button', { name: /德里克一/ }).click();
   await dialog.getByRole('spinbutton', { name: '敌方人数', exact: true }).fill('68');
@@ -622,7 +622,7 @@ test("system-intel quick report publishes a system enemy snapshot without confir
 });
 
 test('named fleet quick report supports preset and custom names without a confirmation step', async ({page}) => {
-  const fx = await fixture(page);
+  const fx = await fixture(page, { role: 'commander' });
   await page.goto('/tactical');
   await page.getByRole('button',{name:'快速上报',exact:true}).click();
   const dialog=page.getByRole('dialog');
@@ -722,16 +722,108 @@ test('read-only count cards center their text without a phantom close slot', asy
   await expect(count.locator('.tac-count-close')).toHaveCount(0);
 });
 
-test('named fleet source and observation update are visible to scouts without force management',async({page})=>{
+test('scouts see fleet sources but only backend-permitted count report actions',async({page})=>{
   const fx=await fixture(page);
   fx.snapshot.forces[0]={...fx.snapshot.forces[0],name:'大航队',source_report_id:22,source_author_id:24,source_author_name:'斥候乙'};
   await page.goto('/tactical');
   await page.locator('.tac-map-force').click();
   const detail=page.getByRole('region',{name:'星系敌情详情'});
   await expect(detail).toContainText('斥候乙');
-  await detail.getByRole('button',{name:'更新这支舰队',exact:true}).click();
-  await expect(page.getByRole('dialog')).toContainText('大航队');
+  await expect(detail.getByRole('button',{name:'更新这支舰队',exact:true})).toHaveCount(0);
+  await expect(detail.getByRole('button',{name:'上报敌方舰队',exact:true})).toHaveCount(0);
+  await detail.getByRole('button',{name:'更新星系总人数',exact:true}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('斥候仅可上报星系总人数');
+  await expect(dialog.getByRole('button',{name:'新增舰队',exact:true})).toHaveCount(0);
+  await expect(dialog.getByRole('button',{name:'更新已有舰队',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'编辑部署',exact:true})).toHaveCount(0);
+});
+
+for (const width of [390, 768]) test(`war board mobile map and scoped search remain usable at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 900 });
+  await fixture(page);
+  await page.goto('/tactical');
+  await page.getByRole('button', { name: '查看星图', exact: true }).click();
+  await expect(page.getByRole('group', { name: '局部作战星图', exact: true })).toBeVisible();
+  await page.getByRole('textbox', { name: '搜索当前星图' }).fill('德里克一');
+  await page.getByRole('option').filter({ hasText: '德里克一' }).click();
+  await expect(page.getByRole('region', { name: '星系敌情详情' })).toContainText('德里克一');
+  const mapBox = await page.getByRole('group', { name: '局部作战星图', exact: true }).boundingBox();
+  const detailBox = await page.getByRole('region', { name: '星系敌情详情' }).boundingBox();
+  expect(detailBox.y).toBeGreaterThanOrEqual(mapBox.y + mapBox.height);
+  await page.screenshot({ path: testInfo.outputPath(`war-${width}-map.png`), fullPage: true });
+  await page.getByRole('button', { name: '更新星系总人数', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('已选：德里克一');
+  await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
+  await page.getByRole('button', { name: '查看列表', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: '兵力总览与上报记录' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+for (const width of [1100, 1440]) test(`dark overview text keeps readable contrast at ${width}px`, async ({ page }, testInfo) => {
+  await page.setViewportSize({ width, height: 900 });
+  await fixture(page, { role: 'commander' });
+  await page.goto('/tactical');
+  await page.getByRole('button', { name: '展开兵力总览', exact: true }).click();
+  const panel = page.getByRole('complementary', { name: '兵力总览与上报记录' });
+  await panel.locator('.tac-force-main').first().click();
+  const ratios = await panel.evaluate(root => {
+    const rgb = value => (value.match(/[\d.]+/g) || []).map(Number);
+    const luminance = c => c.slice(0, 3).map(v => v / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+      .reduce((sum, v, i) => sum + v * [.2126, .7152, .0722][i], 0);
+    return [...root.querySelectorAll('.tac-panel-tabs button[aria-pressed="true"], .tac-force-location, .tac-age, .tac-fleet-group-title, .tac-overview-method, .tac-ship-summary span')]
+      .filter(node => node.textContent.trim() && node.getBoundingClientRect().height).map(node => {
+        let bg = [255, 255, 255], ancestor = node;
+        while (ancestor) { const value = rgb(getComputedStyle(ancestor).backgroundColor); if (value.length === 3 || value[3] === 1) { bg = value; break; } ancestor = ancestor.parentElement; }
+        const a = luminance(rgb(getComputedStyle(node).color)), b = luminance(bg);
+        return { text: node.textContent.trim(), contrast: (Math.max(a, b) + .05) / (Math.min(a, b) + .05) };
+      });
+  });
+  expect(ratios.filter(item => item.contrast < 4.5)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath(`war-${width}-overview.png`) });
+});
+
+test('mobile map fleet details switch to the visible overview', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await fixture(page);
+  await page.goto('/tactical');
+  await page.getByRole('button', { name: '查看星图', exact: true }).click();
+  await page.locator('.tac-map-force').click();
+  await page.getByRole('button', { name: '查看部署详情', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: '兵力总览与上报记录' })).toBeVisible();
+  await expect(page.locator('.tac-force-details')).toBeVisible();
+});
+
+test('an expanded desktop overview does not suppress mobile map selection details', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page);
+  await page.goto('/tactical');
+  await page.getByRole('button', { name: '展开兵力总览', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.getByRole('button', { name: '查看星图', exact: true }).click();
+  await page.locator('.tac-map-force').click();
+  await expect(page.getByRole('region', { name: '星系敌情详情' })).toBeVisible();
+  await page.getByRole('button', { name: '查看部署详情', exact: true }).click();
+  await expect(page.locator('.tac-force-details')).toBeVisible();
+});
+
+for (const width of [390, 1440]) test(`map deployment details follow the selected identity across list pages at ${width}px`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 900 });
+  const fx = await fixture(page);
+  const pageSize = width < 1100 ? 12 : 24;
+  const forces = Array.from({ length: pageSize + 1 }, (_, i) => ({ ...fx.snapshot.forces[0], id: 100 + i,
+    name: `部署-${i + 1}`, system_id: i === pageSize ? 102 : 101,
+    system_name: i === pageSize ? '德里克二' : '德里克一', notes: `详情-${i + 1}` }));
+  fx.setSnapshot({ ...fx.snapshot, forces });
+  await page.goto('/tactical');
+  if (width < 1100) await page.getByRole('button', { name: '查看星图', exact: true }).click();
+  await page.locator('.tac-map-force').filter({ hasText: `部署-${pageSize + 1} ` }).click();
+  await page.getByRole('button', { name: '查看部署详情', exact: true }).click();
+  await expect(page.locator(`.tac-force-card[data-force-row-id="${100 + pageSize}"] .tac-force-details`)).toContainText(`详情-${pageSize + 1}`);
+  await expect(page.getByRole('navigation', { name: '列表分页' })).toContainText('第 2 / 2 页');
+  // Manual paging must remain possible after the explicit identity jump.
+  await page.getByRole('button', { name: '上一页', exact: true }).click();
+  await expect(page.getByRole('navigation', { name: '列表分页' })).toContainText('第 1 / 2 页');
 });
 
 test('named fleet own revision retains linked identity and never exposes legacy adoption',async({page})=>{
@@ -753,7 +845,7 @@ test('named fleet own revision retains linked identity and never exposes legacy 
 });
 
 test('named fleet long custom names keep counts and selections within narrow containers',async({page})=>{
-  const fx=await fixture(page);
+  const fx=await fixture(page,{role:'commander'});
   const name='A'.repeat(80);
   fx.snapshot.forces[0].name=name;
   await page.goto('/tactical');
@@ -1373,7 +1465,7 @@ test("tablet floating controls remain inside the viewport", async ({ page }) => 
 test("confirmed report edit preserves text after version conflict", async ({
   page,
 }) => {
-  const { commands } = await fixture(page, { conflict: true });
+  const { commands } = await fixture(page, { conflict: true, role: 'commander' });
   await page.goto("/tactical");
   await page.getByRole("button", { name: "展开兵力总览" }).click();
   await page.getByRole("button", { name: "上报记录", exact: true }).click();
@@ -1582,7 +1674,7 @@ test('non-adjacent direct drag is allowed and pointer-up uses final coordinates,
 
 test('shared system counts are visible to a scout but other authors remain read-only',async({page})=>{
   const state=await fixture(page);
-  state.setSnapshot({...state.snapshot,reports:[...state.snapshot.reports,{...state.snapshot.reports[0],report_kind:'system_count',people:80,id:22,author_id:24,author_name:'前线斥候乙',status:'pending'}]});
+  state.setSnapshot({...state.snapshot,reports:[{...state.snapshot.reports[0],report_kind:'system_count'},{...state.snapshot.reports[0],report_kind:'system_count',people:80,id:22,author_id:24,author_name:'前线斥候乙',status:'pending'}]});
   await page.goto('/tactical');
   await page.getByRole('button', {name:'选择星系 德里克一', exact:true}).click();
   await expect(page.locator('.tac-system-source')).toContainText('前线斥候乙');
@@ -1591,7 +1683,7 @@ test('shared system counts are visible to a scout but other authors remain read-
   await expect(page.locator('.tac-report-card')).toHaveCount(2);
   await expect(page.locator('.tac-report-card').filter({hasText:'前线斥候乙'}).getByRole('button')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'修改我的上报',exact:true})).toHaveCount(1);
-  await expect(page.getByText('星系人数',{exact:true})).toBeVisible();
+  await expect(page.locator('.tac-report-card[data-report-row-id="22"]').getByText('星系人数',{exact:true})).toBeVisible();
 });
 
 test('system counts respect side filter and cannot be adopted as a fleet',async({page})=>{

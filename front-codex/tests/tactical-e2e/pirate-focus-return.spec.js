@@ -36,11 +36,11 @@ async function openPirateBoard(page) {
 async function zoomAtSystem(page, hit) {
   const box = await hit.boundingBox()
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-  // Two normal wheel gestures reach the supported maximum while keeping the
-  // target anchored under the pointer, unlike toolbar zoom around map center.
-  for (let step = 0; step < 2; step += 1) {
-    await page.mouse.wheel(0, -1200)
-    const expected = step === 0 ? Math.exp(1.44) : 8
+  // One capped wheel frame is exp(.12), identical to the war board. Reach
+  // maximum using distinct frames while preserving the pointer's star anchor.
+  for (let step = 0; step < 24; step += 1) {
+    await page.mouse.wheel(0, -120)
+    const expected = Math.min(16, Math.exp(.12 * (step + 1)))
     await expect.poll(() => page.locator('.pirate-map__world').evaluate(node =>
       Number(node.getAttribute('transform').match(/scale\(([-\d.e]+)\)/)[1])),
     ).toBeCloseTo(expected, 3)

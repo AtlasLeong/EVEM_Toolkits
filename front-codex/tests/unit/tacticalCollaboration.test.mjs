@@ -31,6 +31,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} must be close to ${expected}`);
 
+test('only an explicitly expired lease makes an authorization response retryable', () => {
+  assert.equal(isRetryableReportFailure({ status: 403, code: 'lease_expired' }), true);
+  assert.equal(isRetryableReportFailure({ status: 403, code: 'permission_denied' }), false);
+});
+
 test("unknown counts stay null, explicit zero is valid, fractions and negatives reject", () => {
   assert.equal(parseCount(""), null);
   assert.equal(parseCount("0"), 0);
@@ -80,6 +85,12 @@ test("system count payload is explicit while force-compatible content remains un
   assert.equal(reportPayload({ ...draft, report_kind: 'fleet' }).report_kind, 'fleet');
   assert.equal('report_kind' in reportPayload(draft), false);
   assert.throws(() => reportPayload({ ...draft, report_kind: 'total_local' }));
+});
+
+test('switching to system count never submits hidden ship composition', () => {
+  const payload = reportPayload({ system_id: 12, people: '40', observed_at: '2026-09-21T10:00',
+    report_kind: 'system_count', ships: { cruiser: 7, titan: 1 } });
+  assert.ok(Object.values(payload.ships).every(value => value === null));
 });
 test("enemy summaries never sum overlapping reports or include friendly numbers", () => {
   assert.deepEqual(

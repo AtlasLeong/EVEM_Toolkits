@@ -40,6 +40,12 @@ class Conflict(APIException):
     default_code = 'conflict'
 
 
+class LeaseExpired(PermissionDenied):
+    """Transport admission expired; current membership must still be checked."""
+    default_detail = '连接租约已过期，请重新连接。'
+    default_code = 'lease_expired'
+
+
 def bad(message):
     raise ValidationError({'detail': message})
 
@@ -98,11 +104,18 @@ def digest(data):
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def receipt(user, scope, data):
+def receipt(user, scope, data, *, legacy_data=None):
     request_id = uuid(data.get('request_id'))
     row = CommandReceipt.objects.filter(actor=user, scope=scope, request_id=request_id).first()
-    if row and row.payload_hash != digest(data):
-        raise Conflict('同一请求标识不能用于不同内容。')
+    payload_hash = digest(data)
+    if row and row.payload_hash != payload_hash:
+        # Old war receipts included connection_id. Upgrade only after an exact
+        # match of that old payload; an irreversible hash cannot establish that
+        # a retry on an unknown old connection has identical business content.
+        if legacy_data is None or row.payload_hash != digest(legacy_data):
+            raise Conflict('同一请求标识不能用于不同内容。')
+        row.payload_hash = payload_hash
+        row.save(update_fields=['payload_hash'])
     return row
 
 
@@ -335,8 +348,11 @@ def command(user, organization_id, data):
         if target.role != 'scout':
             raise PermissionDenied('指挥只能移除斥候。')
     scope = f'org:{org.pk}' if not tactical or board.is_default else f'board:{board.pk}'
-    receipt_data = {key: value for key, value in data.items() if key != 'board_id'} if tactical and board.is_default else data
-    cached = receipt(user, scope, receipt_data)
+    legacy_data = {key: value for key, value in data.items() if key != 'board_id'} if tactical and board.is_default else data
+    # Lease identity belongs to admission, not the business operation. The
+    # current lease and board have already been authorized above on EVERY replay.
+    receipt_data = {key: value for key, value in legacy_data.items() if key != 'connection_id'} if tactical else data
+    cached = receipt(user, scope, receipt_data, legacy_data=legacy_data if tactical else None)
     if cached:
         return cached.result
     rate_limit(user, scope)
@@ -739,7 +755,7 @@ def presence_data(org, include_roster=False):
 
 def require_lease(user, org, connection_id):
     if not ConnectionLease.objects.filter(organization=org, user=user, connection_id=uuid(connection_id), expires_at__gt=timezone.now()).exists():
-        raise PermissionDenied('尚未进入战术板或连接已过期，请重新连接。')
+        raise LeaseExpired()
 
 
 @transaction.atomic
@@ -834,10 +850,11 @@ def snapshot(user, organization_id, connection_id, board_id=None, *, socket_gene
 
 def require_socket(user, org, connection_id, generation):
     """Validate the transport generation while holding the organization lock."""
-    lease = ConnectionLease.objects.filter(organization=org, user=user, connection_id=uuid(connection_id),
-                                           expires_at__gt=timezone.now()).first()
-    if lease is None or lease.socket_generation != uuid(generation):
-        raise PermissionDenied('此连接已过期或被新的连接替代。', code='socket_superseded')
+    lease = ConnectionLease.objects.filter(organization=org, user=user, connection_id=uuid(connection_id)).first()
+    if lease is not None and lease.socket_generation != uuid(generation):
+        raise PermissionDenied('此连接已被新的连接替代。', code='socket_superseded')
+    if lease is None or lease.expires_at <= timezone.now():
+        raise LeaseExpired()
     return lease
 
 
@@ -886,7 +903,13 @@ def socket_state_version(user, organization_id, connection_id, generation, board
         organization__connectionlease__expires_at__gt=timezone.now(),
     ).values_list('organization__state_version', flat=True).first())
     if version is None:
-        raise PermissionDenied('此连接已过期或访问权限已变化。')
+        # Keep the healthy polling path at one query. On failure distinguish
+        # lost authority from a recoverable lease only AFTER checking membership.
+        org = Organization(pk=organization_id)
+        membership(user, org)
+        require_socket(user, org, connection_id, generation)
+        # Admission can race this read; a now-valid lease can use the next poll.
+        return Organization.objects.values_list('state_version', flat=True).get(pk=organization_id)
     return version
 
 

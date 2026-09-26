@@ -5,6 +5,7 @@ import { ageLabel } from '../../utils/tacticalCollaboration'
 import { activityWindowLabel, currentPirateTargets, groupPirateSightings, isHistoricalSighting } from '../../utils/pirateIntel'
 import { buildPirateCoverage, isLocationInPirateMap } from '../../utils/pirateCoverage'
 import { pirateRefreshDelay } from '../../utils/piratePolling'
+import { searchTacticalSystems } from '../../utils/tacticalSystemSearch'
 import { ScopeEditor, TacticalDialog } from './TacticalControls'
 import TacticalMembers from './TacticalMembers'
 import PirateSightingForm from './PirateSightingForm'
@@ -47,6 +48,8 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
+  const [systemQuery, setSystemQuery] = useState('')
+  const [focusSystem, setFocusSystem] = useState(null)
   const [selectedKey, setSelectedKey] = useState(null)
   const [targetPage, setTargetPage] = useState(0)
   const [historyPage, setHistoryPage] = useState(0)
@@ -71,6 +74,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   const detailRef = useRef(null)
   const loadedMapKey = useRef(null)
   const selectTarget = useCallback(key => {
+    setFocusSystem(null)
     setSelectedKey(key)
     setHistoryPage(0)
     setFocusRequestId(previous => previous + 1)
@@ -205,6 +209,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
   const serverNow = clockNow + serverClockOffset
   const currentTargets = useMemo(() => currentPirateTargets(targets, serverNow), [targets, serverNow])
   const coverage = useMemo(() => buildPirateCoverage(mapData), [mapData])
+  const systemResults = useMemo(() => searchTacticalSystems(mapData?.systems, systemQuery), [mapData?.systems, systemQuery])
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
     return search ? targets.filter(target =>
@@ -246,7 +251,7 @@ export default function PirateIntelBoard({ organization, board, organizationCont
       <p>组织权限或战术板状态已变化。可以切换组织，或刷新后重试。</p>
       <button type="button" className="tac-btn" disabled={refreshing} aria-busy={refreshing} onClick={() => refresh()}>{refreshing ? '读取中…' : '重新读取'}</button></div>
   </section>
-  return <section className={`pirate-board pirate-immersive${mobileViewport ? '' : ' tac-immersive'}`} aria-label="海盗情报板工作区">
+  return <section className={`pirate-board pirate-immersive${mobileViewport ? '' : ' tac-immersive'}${mobileViewport && mapOpen ? ' is-map-view' : ''}`} aria-label="海盗情报板工作区">
     <header className="pirate-board-head tac-command-bar">
       <div className="pirate-board-identity tac-command-identity">
         <div className="pirate-board-title tac-command-title"><Radar size={20} /><h1>海盗情报板</h1></div>
@@ -332,17 +337,28 @@ export default function PirateIntelBoard({ organization, board, organizationCont
         </section>}
       <div className="pirate-map-toolbar"><span><MapPinned size={16} /> {snapshot?.scope?.region_ids?.length || 0} 个星域</span>
         {canManage && <button type="button" onClick={() => setScopeOpen(true)}>调整范围</button>}</div>
-      <button type="button" className="pirate-mobile-map-toggle" onClick={() => setMapOpen(current => !current)}>{mapOpen ? '收起星图' : '查看星图'}</button>
+      <button type="button" className="pirate-mobile-map-toggle" aria-pressed={mapOpen} onClick={() => setMapOpen(current => !current)}>{mapOpen ? '查看列表' : '查看星图'}</button>
       <div className={`pirate-map-frame ${mapOpen ? 'is-mobile-open' : ''}`}>
+        {mapData && <div className="pirate-system-search" aria-label="星图工具">
+          <label className="tac-search"><Search size={16} /><input type="search" aria-label="搜索当前星图"
+            placeholder="查找当前星图的星系" value={systemQuery} onChange={event => setSystemQuery(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setSystemQuery('') } }} /></label>
+          {systemQuery.trim() && <div className="tac-map-search-results" role="listbox" aria-label="当前范围搜索结果">
+            {systemResults.length ? systemResults.map(node => <button type="button" role="option" key={node.systemId} onClick={() => {
+              setSelectedKey(null); setFocusSystem({ id: node.systemId, requestId: Date.now() }); setSystemQuery(''); setMapOpen(true)
+            }}><span><strong>{node.name}</strong><small>{node.englishName} · ID {node.systemId}</small></span><small>{node.securityLabel}</small></button>) :
+              <p className="tac-map-search-empty">当前范围没有匹配的星系</p>}
+          </div>}
+        </div>}
         {!hasScope ? <div className="pirate-map-empty"><MapPinned size={28} />
           <strong>尚未选择情报覆盖星域</strong><p>先选星域，目标位置会依照真实星系与星门呈现。</p>
           {canManage && <button type="button" className="tac-btn is-primary" onClick={() => setScopeOpen(true)}>选择覆盖星域</button>}</div> :
           mapError ? <div className="pirate-map-empty" role="alert"><strong>星图暂时无法读取</strong><p>{mapError}</p>
             <button type="button" className="tac-btn" onClick={() => setMapRetry(value => value + 1)}>重试加载星图</button></div> :
-          mapData && !(mobileViewport && !mapOpen) ? <PirateIntelMap mapData={mapData} targets={targets} selectedKey={selectedKey} now={serverNow} selectedSystemId={reportLocation?.id}
+          mapData && !(mobileViewport && !mapOpen) ? <PirateIntelMap mapData={mapData} targets={targets} selectedKey={selectedKey} now={serverNow} selectedSystemId={reportLocation?.id ?? focusSystem?.id} focusSystem={focusSystem}
             focusTargetKey={selectedKey} focusRequestId={focusRequestId}
             onSelectTarget={target => { selectTarget(target.key); setMapOpen(true) }}
-            onSelectSystem={system => { const location = { ...system, id: system.id ?? system.system_id, name: system.zh_name ?? system.name ?? system.system_name ?? system.location_name }; setReportLocation(location); setFormOpen(true); setMapOpen(true) }} /> :
+            onSelectSystem={system => { const location = { ...system, id: system.id ?? system.system_id, name: system.zh_name ?? system.name ?? system.system_name ?? system.location_name }; setFocusSystem(null); setReportLocation(location); setFormOpen(true); setMapOpen(true) }} /> :
             <div className="pirate-map-empty">正在加载真实星图…</div>}
       </div>
     </div>

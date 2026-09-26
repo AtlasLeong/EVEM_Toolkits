@@ -1,0 +1,101 @@
+/* Shared board-workspace layer. Site navigation and forms retain the light theme. */
+.tac-page {
+  --board-surface: #202e35;
+  --board-raised: #293a42;
+  --board-border: #526670;
+  --board-text: #ecf0ef;
+  --board-muted: #b9c7cc;
+}
+.pirate-system-search { position: absolute; z-index: 6; top: 162px; left: 18px; width: 318px; max-width: calc(100% - 36px); }
+.pirate-system-search .tac-search { margin: 0; border-color: var(--board-border); background: var(--board-surface); color: var(--board-muted); }
+.pirate-system-search input { min-height: 42px; color: var(--board-text); background: transparent; }
+.pirate-system-search input::placeholder { color: var(--board-muted); }
+.pirate-system-search .tac-map-search-results { top: calc(100% + 6px); bottom: auto; }
+.pirate-board .pirate-target-search input::placeholder { color: #53695e; }
+.pirate-board :is(.pirate-target-identity small, .pirate-target-meta, .pirate-active-list small,
+  .pirate-history-row small, .pirate-history-row p, .pirate-active-targets p, .pirate-list-pager) { font-size: 12px; }
+.tac-system-fleet-row > small, .tac-system-source time, .tac-system-history small { font-size: 12px; }
+.tac-strength-heading small, .tac-strength-notes, .tac-members-card small { font-size: 12px; }
+.tac-page :is(.tac-map-toolbar, .pirate-map__zoom-controls) button { min-width: 36px; min-height: 36px; }
+
+@media (min-width: 1100px) {
+  /* Do not trap the search results below the sibling target panel. */
+  .pirate-immersive .pirate-map-frame { z-index: auto; }
+  .pirate-immersive .pirate-target-panel { top: 222px; max-height: calc(100% - 240px); }
+  .tac-immersive :is(.tac-side-panel, .pirate-target-panel, .pirate-detail) {
+    background: var(--board-surface); color: var(--board-text); border-color: var(--board-border); backdrop-filter: none;
+  }
+  .tac-immersive .tac-side-panel {
+    --tac-side-ink: var(--board-text);
+    --tac-side-muted: var(--board-muted);
+    --tac-side-quiet: #afc2c8;
+    --tac-side-line: var(--board-border);
+    --tac-side-surface: var(--board-surface);
+    --tac-side-selected: var(--board-raised);
+    --tac-side-stale: #e4c28c;
+    --tac-muted: var(--board-muted);
+  }
+  .tac-immersive .tac-side-panel :is(.tac-panel-tabs, .tac-panel-foot, .tac-force-details, .tac-count-list) { border-color: #43565e; }
+  .tac-immersive .tac-side-panel :is(.tac-btn, .tac-add-force, .tac-count-row, .tac-overview-scope, .tac-panel-tabs span) {
+    color: var(--board-text); background: var(--board-raised); border-color: var(--board-border);
+  }
+  .tac-immersive .tac-side-panel :is(.tac-count-row:hover, .tac-count-row.is-selected, .tac-overview-scope button[aria-pressed="true"]) { background: #3b554e; color: #edf5f1; }
+  .tac-immersive .tac-side-panel .tac-search { background: #18272e; border-color: var(--board-border); color: var(--board-muted); }
+  .tac-immersive .tac-side-panel .tac-search input { color: var(--board-text); }
+  .tac-immersive .tac-side-panel .tac-search input::placeholder { color: var(--board-muted); }
+  .tac-immersive .tac-side-panel :is(.tac-ship-summary b, .tac-empty strong) { color: var(--board-text); }
+  .tac-immersive .tac-side-panel :is(.tac-empty, .tac-report-card p, .tac-text-btn, .tac-pager) { color: var(--board-muted); }
+  .tac-immersive .tac-side-panel :is(.tac-count-row > span:last-child, .tac-count-row.is-stale small, .tac-count-row em) { color: #e4c28c; }
+  .tac-immersive :is(.tac-panel-tabs, .tac-panel-tabs button, .tac-panel-foot, .tac-force-main,
+    .tac-force-count, .tac-overview-hint, .tac-fleet-source, .tac-pager, .tac-force-details small,
+    .pirate-target-row, .pirate-empty strong, .pirate-detail-head h2, .pirate-history h3) { color: var(--board-text); }
+  .tac-immersive :is(.tac-panel-foot, .tac-overview-hint) { font-size: 12px; }
+  .tac-immersive :is(.tac-panel-foot, .tac-fleet-source, .tac-force-main small,
+    .pirate-target-identity small, .pirate-target-meta, .pirate-empty, .pirate-detail-facts,
+    .pirate-detail-head small, .pirate-history-row small, .pirate-history-row p) { color: var(--board-muted); }
+  .tac-immersive :is(.tac-force-card, .tac-report-card, .pirate-target-row, .pirate-history, .pirate-history-row) { border-color: #43565e; }
+  .tac-immersive :is(.tac-force-card.is-selected, .pirate-target-row.is-selected, .pirate-target-row:hover) { background: var(--board-raised); }
+  .tac-immersive .pirate-target-search { background: #18272e; border-color: var(--board-border); color: var(--board-muted); }
+  .tac-immersive .pirate-target-search input { color: var(--board-text); }
+  .tac-immersive .pirate-target-search input::placeholder { color: var(--board-muted); }
+  .tac-immersive :is(.pirate-active-targets, .pirate-active-list button, .pirate-list-pager) { background: #253a3e; border-color: #4f6b66; }
+  .tac-immersive :is(.pirate-active-head, .pirate-active-list button, .pirate-target-list-head,
+    .pirate-target-list-head strong, .pirate-target-list-head button, .pirate-detail-head button) { color: #e1eee7; }
+  .tac-immersive :is(.pirate-active-targets p, .pirate-active-list small, .pirate-active-empty, .pirate-active-more, .pirate-list-pager) { color: #b8cec4; }
+}
+@media (min-width: 1100px) and (max-width: 1300px) { .pirate-system-search { width: 278px; } }
+
+@media (max-width: 1099px) {
+  .tac-board-mobile .tac-board-layout { display: block; }
+  .tac-board-mobile .tac-command-bar { flex-wrap: wrap; }
+  .tac-board-mobile .tac-command-identity { flex-wrap: wrap; width: 100%; }
+  .tac-board-mobile .tac-command-links { flex-wrap: wrap; width: 100%; }
+  .tac-board-mobile .tac-side-panel { height: auto; max-height: none; }
+  .tac-board-mobile .tac-map { overflow: visible; display: flex; flex-direction: column; }
+  .tac-board-mobile .tac-map > svg { width: 100%; height: 58dvh; min-height: 350px; max-height: 680px; }
+  .tac-board-mobile .tac-map-dock { display: contents; }
+  .tac-board-mobile .tac-map-controls { position: absolute; z-index: 5; top: 12px; left: 12px; width: calc(100% - 24px); pointer-events: auto; }
+  .tac-board-mobile .tac-map-search-results { top: calc(100% + 6px); bottom: auto; }
+  .tac-board-mobile .tac-map-controls .tac-search { background: var(--board-surface); border-color: var(--board-border); color: var(--board-muted); }
+  .tac-board-mobile .tac-map-controls input { font-size: 14px; color: var(--board-text); }
+  .tac-board-mobile .tac-map-controls input::placeholder { color: var(--board-muted); }
+  .tac-board-mobile .tac-system-detail { order: 2; position: relative; inset: auto; width: 100%; max-height: 45dvh; overflow-y: auto; padding: 16px; box-sizing: border-box; background: var(--board-surface); color: var(--board-text); border-top: 1px solid var(--board-border); border-radius: 0; }
+  .tac-board-mobile .tac-system-detail > header { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+  .tac-board-mobile .tac-system-detail h2 { margin: 5px 0 12px; font-size: 20px; }
+  .tac-board-mobile .tac-system-detail :is(.tac-text-btn, .tac-icon-btn, small) { color: var(--board-muted); }
+  .tac-board-mobile .tac-system-detail .tac-icon-btn { background: transparent; border: 0; width: 44px; }
+  .tac-board-mobile .tac-system-count { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0; }
+  .tac-board-mobile :is(.tac-btn, .tac-icon-btn, .tac-text-btn, .tac-side-filter button, .tac-panel-tabs button,
+    .tac-map-toolbar button, .tac-map-search-results button) { min-height: 44px; }
+  .tac-board-mobile .tac-map-toolbar button { min-width: 44px; }
+  .tac-board-mobile .tac-system-intel-map .tac-intel-toolbar.tac-map-toolbar { position: relative; order: 1; inset: auto; max-width: none; margin: 0 10px 10px; flex-wrap: wrap; }
+  .tac-board-mobile .tac-map-mode-switch button { white-space: nowrap; }
+  .tac-board-mobile .tac-map-legend { max-width: 220px; white-space: normal; }
+  .pirate-system-search { top: 12px; left: 12px; width: calc(100% - 24px); max-width: none; }
+  .pirate-immersive .pirate-mobile-map-toggle { order: -3; }
+  .pirate-immersive .pirate-map-toolbar { order: -2; }
+  .pirate-immersive .pirate-map-frame { order: -1; }
+  .pirate-immersive.is-map-view .pirate-target-panel { display: none; }
+  .pirate-immersive .pirate-map__toolbar { inset: 72px 12px auto; max-width: none; flex-wrap: wrap; }
+  .pirate-immersive .pirate-map__zoom-controls button { min-width: 44px; min-height: 44px; }
+}

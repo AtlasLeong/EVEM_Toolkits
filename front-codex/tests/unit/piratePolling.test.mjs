@@ -58,7 +58,7 @@ test('pirate scope editor speaks in intelligence coverage terms', () => {
 
 test('system map selection opens a prefilled report without changing target selection', () => {
   assert.match(source, /const \[reportLocation, setReportLocation\] = useState\(null\)/)
-  assert.match(source, /selectedSystemId=\{reportLocation\?\.id\}/)
+  assert.match(source, /selectedSystemId=\{reportLocation\?\.id \?\? focusSystem\?\.id\}/)
   assert.match(source, /onSelectSystem=\{system => \{ const location = \{ \.\.\.system, id: system\.id \?\? system\.system_id/)
   assert.match(source, /name: system\.zh_name \?\? system\.name \?\? system\.system_name/)
   assert.match(source, /initialLocation=\{reportLocation\}/)

@@ -36,6 +36,7 @@ export function reportConflictDiff(local = {}, server = {}, prefix = '') {
   return changes;
 }
 export function isRetryableReportFailure(failure = {}) {
+  if (failure?.code === 'lease_expired') return true;
   if (failure?.code === 'VERSION_CONFLICT' || Number(failure?.status) === 409) return false;
   return failure?.code === 'NETWORK_ERROR' || Number(failure?.status) >= 500 || failure?.status == null;
 }
@@ -85,7 +86,7 @@ export function reportPayload(draft) {
     ships: Object.fromEntries(
       Object.keys(SHIP_TYPES).map((key) => [
         key,
-        parseCount(draft.ships?.[key]),
+        draft.report_kind === 'system_count' ? null : parseCount(draft.ships?.[key]),
       ]),
     ),
     notes: String(draft.notes || "").trim(),

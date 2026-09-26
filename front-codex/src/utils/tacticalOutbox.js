@@ -84,7 +84,7 @@ export async function retryReportOutbox(scope, entry, execute) {
     return result;
   } catch (failure) {
     const conflict = Number(failure?.status) === 409;
-    const retryable = failure?.status == null || Number(failure?.status) >= 500;
+    const retryable = failure?.code === "lease_expired" || failure?.status == null || Number(failure?.status) >= 500;
     updateReportOutbox(scope, saved.id, { status: conflict ? "conflict" : retryable ? "queued" : "blocked", error: failure?.message || "发送失败" });
     throw new Error(failure?.message || "发送失败，草稿已保留。");
   }

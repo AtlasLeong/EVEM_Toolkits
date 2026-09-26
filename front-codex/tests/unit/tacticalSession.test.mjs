@@ -28,9 +28,9 @@ const snapshot = organizationId => ({
 // Run the actual hook's effect and cleanup with controllable network promises.
 // Only React's storage/scheduling boundary is replaced; session logic is not
 // copied, and no browser, backend, credentials, or real timers are involved.
-function sessionHarness({ enter = async () => {}, read = async id => snapshot(id), leave = async () => {} } = {}) {
-  const values = [], refs = [], calls = [], streams = [];
-  let effect, stateIndex = 0, refIndex = 0, nextId = 0;
+function sessionHarness({ enter = async () => {}, read = async id => snapshot(id), leave = async () => {}, send = async () => ({ result: {} }) } = {}) {
+  const values = [], refs = [], calls = [], streams = [], timers = new Map();
+  let effect, stateIndex = 0, refIndex = 0, nextId = 0, nextTimer = 0;
   const dependencies = {
     useCallback: fn => fn,
     useEffect: fn => { effect = fn; },
@@ -54,12 +54,22 @@ function sessionHarness({ enter = async () => {}, read = async id => snapshot(id
       streams.push(stream);
       return () => { stream.stopped = true; };
     },
-    sendTacticalCommand: async (id, payload) => { calls.push({ type: 'command', id, payload }); return { result: {} }; },
-    window: { setInterval: () => 1, clearInterval: () => {}, setTimeout: () => 1, clearTimeout: () => {} },
+    sendTacticalCommand: async (id, payload) => { calls.push({ type: 'command', id, payload }); return send(id, payload); },
+    window: {
+      setTimeout: (callback, delay) => { const id = ++nextTimer; timers.set(id, { callback, delay }); return id; },
+      clearTimeout: id => timers.delete(id),
+    },
   };
   const useSession = new Function(...Object.keys(dependencies), `${source}\nreturn useTacticalSession;`)(...Object.values(dependencies));
   return {
     calls, streams,
+    async runNextTimer() {
+      const [id, timer] = [...timers].sort((a, b) => a[1].delay - b[1].delay)[0] || [];
+      assert.ok(timer, 'expected a scheduled session recovery');
+      timers.delete(id);
+      await timer.callback();
+      await settle();
+    },
     get state() { return { snapshot: values[0], status: values[1], error: values[2] }; },
     mount(id, boardId = null) {
       stateIndex = refIndex = 0;
@@ -239,6 +249,123 @@ test("HTTP snapshot fallback keeps reporting enabled after a WebSocket close", a
   harness.streams[0].onClose(1006);
   assert.equal(harness.state.status, "live");
   mounted.cleanup();
+});
+
+test('expired socket lease becomes read-only until admission and reconnect succeed', async () => {
+  const harness = sessionHarness();
+  const mounted = harness.mount(7, 31);
+  await settle();
+  harness.streams[0].onClose(4408);
+  assert.equal(harness.state.status, 'connecting');
+  assert.equal(harness.state.snapshot.organization.id, 7, 'keep last authorized view while recovering');
+  await assert.rejects(harness.render(7, 31).execute('report.create'), /恢复连接/);
+  await harness.runNextTimer();
+  assert.equal(harness.calls.filter(call => call.type === 'enter').length, 2);
+  assert.equal(harness.streams.length, 2, 'new transport should not wait for generic error backoff');
+  assert.equal(harness.state.status, 'live');
+  mounted.cleanup();
+});
+
+test('failed readmission after lease expiry still removes sensitive data', async () => {
+  let admissions = 0;
+  const harness = sessionHarness({ enter: async () => {
+    if (++admissions > 1) throw { status: 403, code: 'permission_denied' };
+  } });
+  const mounted = harness.mount(7);
+  await settle();
+  harness.streams[0].onClose(4408);
+  await harness.runNextTimer();
+  assert.equal(harness.state.status, 'revoked');
+  assert.equal(harness.state.snapshot, null);
+  const calls = harness.calls.length;
+  await mounted.api.refresh();
+  assert.equal(harness.calls.length, calls);
+  mounted.cleanup();
+});
+
+test('expired HTTP lease is re-admitted instead of permanently revoking the session', async () => {
+  let reads = 0;
+  const harness = sessionHarness({ read: async id => {
+    if (++reads === 2) throw { status: 403, code: 'lease_expired', message: '连接租约过期' };
+    return snapshot(id);
+  } });
+  const mounted = harness.mount(7);
+  await settle();
+  await mounted.api.refresh();
+  assert.notEqual(harness.state.status, 'revoked');
+  await mounted.api.refresh();
+  assert.equal(harness.calls.filter(call => call.type === 'enter').length, 2);
+  assert.equal(harness.state.status, 'live');
+  mounted.cleanup();
+});
+
+test('actual socket permission revocation remains terminal', async () => {
+  const harness = sessionHarness();
+  const mounted = harness.mount(7);
+  await settle();
+  harness.streams[0].onClose(4403);
+  assert.equal(harness.state.status, 'revoked');
+  assert.equal(harness.state.snapshot, null);
+  const calls = harness.calls.length;
+  await mounted.api.refresh();
+  assert.equal(harness.calls.length, calls);
+  mounted.cleanup();
+});
+
+test('a command rejected for lease expiry recovers transport without auto-replaying the write', async () => {
+  let commands = 0;
+  const harness = sessionHarness({ send: async () => {
+    if (++commands === 1) throw { status: 403, code: 'lease_expired', message: '连接租约过期' };
+    return { result: { id: 91 } };
+  } });
+  const mounted = harness.mount(7);
+  await settle();
+  await assert.rejects(harness.render(7).execute('report.create', { people: 80 }, { requestId: 'same-report' }),
+    failure => failure.code === 'lease_expired');
+  assert.equal(harness.state.status, 'connecting');
+  await harness.runNextTimer();
+  assert.equal(harness.state.status, 'live');
+  assert.equal(commands, 1, 'recovery may not silently issue the failed write again');
+  const result = await harness.render(7).execute('report.create', { people: 80 }, { requestId: 'same-report' });
+  assert.equal(result.id, 91);
+  assert.deepEqual(harness.calls.filter(call => call.type === 'command').map(call => call.payload.request_id),
+    ['same-report', 'same-report']);
+  mounted.cleanup();
+});
+
+test('late lease failure from an old board cannot restart the replacement board session', async () => {
+  const command = deferred();
+  const harness = sessionHarness({ send: async () => {
+    await command.promise;
+    throw { status: 403, code: 'lease_expired' };
+  } });
+  const first = harness.mount(7);
+  await settle();
+  const submitted = harness.render(7).execute('report.create');
+  const rejected = assert.rejects(submitted, failure => failure.code === 'lease_expired');
+  first.cleanup();
+  const second = harness.mount(8);
+  await settle();
+  command.resolve();
+  await rejected;
+  assert.equal(harness.state.status, 'live');
+  assert.equal(harness.state.snapshot.organization.id, 8);
+  assert.equal(harness.streams.at(-1).stopped, false);
+  second.cleanup();
+});
+
+test('the actual tactical API adapter preserves the backend lease_expired code', async () => {
+  const adapter = apiSource.replace(/^import[^;]+;\s*/gm, '').replace(/\bexport (const|class|function) /g, '$1 ');
+  const api = new Function('fetchWithAuth', 'API_URL', 'openTacticalSocket',
+    `${adapter}; return { sendTacticalCommand, getTacticalSnapshot };`)(
+    async () => new Response(JSON.stringify({ detail: '连接租约已过期，请重新连接。', code: 'lease_expired' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }),
+    '/api', () => {},
+  );
+  for (const request of [() => api.sendTacticalCommand(7, { request_id: 'same-report' }),
+    () => api.getTacticalSnapshot(7, 'connection-1')]) {
+    await assert.rejects(request, failure => failure.status === 403 && failure.code === 'lease_expired');
+  }
 });
 
 test("snapshot acceptance prefers the monotonic state version over wall clock", () => {

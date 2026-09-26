@@ -12,12 +12,14 @@
 
 ## 执行清单
 
-- [ ] 基线：`node --test tests/unit/*.test.*`；`python manage.py test TacticalCollaboration --settings=EVE_MDjango.ci_settings`（后端隔离内存数据库）。
-- [ ] Task 1：连接与幂等恢复。
-- [ ] Task 2：海盗完整命中与连续缩放补绘。
-- [ ] Task 3：战争板有预算稳定排版与补绘。
-- [ ] Task 4：角色能力入口、海盗星系搜索及移动布局。
-- [ ] Task 5：集成回归、视觉检查、构建和独立审查。
+- [x] 基线：`node --test tests/unit/*.test.*`；`python manage.py test TacticalCollaboration --settings=EVE_MDjango.ci_settings`（后端隔离内存数据库）。
+- [x] Task 1：连接与幂等恢复。
+- [x] Task 2：海盗完整命中与连续缩放补绘。
+- [x] Task 3：战争板有预算稳定排版与补绘。
+- [x] Task 4：角色能力入口、海盗星系搜索及移动布局。
+- [x] Task 5：集成回归、视觉检查、构建和独立审查。
+
+结果及保留限制见 [验收报告](2026-09-27-tactical-audit-verification.md)。浏览器完整运行的一条定位器歧义已修正并定向复测；本轮未发布。
 
 ### Task 1: 连接与幂等恢复
 

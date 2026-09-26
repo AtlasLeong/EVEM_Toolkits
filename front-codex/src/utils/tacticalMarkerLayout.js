@@ -3,6 +3,30 @@ const overlapArea = (a, b) =>
   Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)) *
     Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
 
+export const WAR_MARKER_ROW_BUDGET = 24;
+
+// Budget rendered annotations, never the underlying reports/deployments. Pick
+// selected groups first and distribute the remaining slots over stable input
+// order so an overview is not occupied by a single cluster of early rows.
+export function budgetMarkerGroups(groups = [], {selectedSystemId, selectedForceId, maxRows = WAR_MARKER_ROW_BUDGET} = {}) {
+  const priority = group => selectedForceId != null && group.visible.some(item => String(item.id) === String(selectedForceId)) ? 2
+    : selectedSystemId != null && Number(group.system_id) === Number(selectedSystemId) ? 1 : 0;
+  const selected = groups.filter(group => priority(group)).sort((a,b) => priority(b)-priority(a));
+  const remaining = groups.filter(group => !priority(group));
+  const spread = [];
+  const stride = Math.max(1, Math.ceil(remaining.length / Math.max(1,maxRows)));
+  for (let offset=0;offset<stride;offset++) for (let index=offset;index<remaining.length;index+=stride) spread.push(remaining[index]);
+  const kept = [];
+  let rows = 0, shownCount = 0;
+  for (const group of [...selected,...spread]) {
+    const cost = group.visible.length + (group.hiddenCount ? 1 : 0);
+    if (!cost || rows + cost > maxRows) continue;
+    kept.push(group); rows += cost; shownCount += group.total ?? group.visible.length;
+  }
+  const totalCount = groups.reduce((sum,group) => sum+(group.total ?? group.visible.length),0);
+  return {groups:kept, omittedCount:totalCount-shownCount, totalCount};
+}
+
 /** Approximate a marker's rendered width without requiring a DOM canvas. */
 export function markerWidth(label = "", options = {}) {
   const config = typeof options === "number" ? { unitScale: options } : options;
@@ -110,37 +134,39 @@ export function layoutForceMarkers(groups, nodes, unitScale = 1, {
       x: other.px - 20 * unitScale, y: other.py - 9 * unitScale,
       width: 40 * unitScale, height: 36 * unitScale,
     }));
-    const candidates = candidateRects.map(rect => {
-      const blockedBy = items => items.reduce((sum, obstacle) => sum + overlapArea(rect, {
+    const blockedBy = (rect, items) => items.reduce((sum, obstacle) => sum + overlapArea(rect, {
         x: obstacle.x - 3 * unitScale, y: obstacle.y - 3 * unitScale,
         width: obstacle.width + 6 * unitScale, height: obstacle.height + 6 * unitScale,
       }), 0);
-      const obstacleOverlap = blockedBy(obstacles);
+    const scoreCandidate = rect => {
+      const obstacleOverlap = blockedBy(rect, obstacles);
       return {
         ...rect,
-        reservedOverlap: blockedBy(reservedRects),
-        labelOverlap: blockedBy(placed),
+        reservedOverlap: blockedBy(rect, reservedRects),
+        labelOverlap: blockedBy(rect, placed),
         obstacleOverlap,
         score: obstacleOverlap * 100 + rect.slot,
       };
-    });
+    };
     const preferredSlot = preferredSlots instanceof Map ? preferredSlots.get(group.key) : preferredSlots?.[group.key];
     // The ordinary search uses generous *soft* clearance around stars and
     // badges. A tiny zoom can cross that margin without covering anything;
     // do not make an established callout jump to the other side for that.
-    const isClear = candidate => candidate.insideViewport && candidate.reservedOverlap === 0 &&
+    const isClear = candidate => candidate.insideViewport && blockedBy(candidate, reservedRects) === 0 &&
       !placed.some(other => overlapArea(candidate, other) > 0) &&
       !nearbyNodes.some(other => overlapArea(candidate, {
         x: other.px - 19 * unitScale, y: other.py - 19 * unitScale,
         width: 38 * unitScale, height: 38 * unitScale,
       }) > 0);
-    const preferred = candidates.find(candidate => candidate.slot === preferredSlot && isClear(candidate));
+    const preferred = candidateRects.find(candidate => candidate.slot === preferredSlot && isClear(candidate));
     // A remembered side slot is only a fallback: as soon as a collision-free
     // vertical lane exists, keep the badge centered on the actual star.
-    const centered = candidates.filter(candidate => Math.abs(candidate.x + width / 2 - node.px) < .5 && isClear(candidate));
+    const centered = candidateRects.filter(candidate => Math.abs(candidate.x + width / 2 - node.px) < .5 && isClear(candidate));
     const sameSide = preferred && centered.find(candidate =>
       (candidate.y + height / 2 < node.py) === (preferred.y + height / 2 < node.py));
-    const { x, y, slot } = sameSide || centered[0] || preferred || candidates.sort((a, b) =>
+    // The common centered/preferred case does not need all 48 expensive
+    // overlap scores. Keep the full solver only for genuinely crowded stars.
+    const { x, y, slot } = sameSide || centered[0] || preferred || candidateRects.map(scoreCandidate).sort((a, b) =>
       a.reservedOverlap - b.reservedOverlap || a.labelOverlap - b.labelOverlap || a.score - b.score)[0];
     placed.push({
       ...group, node, x, y, slot, width, rowWidths, rowOffsets, overflowWidth, overflowOffset, rowHeight, rowGap, rows, height,

@@ -52,7 +52,7 @@ test('map pan skips marker reconciliation while zoom and selection still update 
 
   const beforeZoom = await page.evaluate(() => window.__pirateMarkerCommits.length)
   await page.getByRole('button', { name: '放大星图' }).click()
-  await expect(page.locator('.pirate-map__world')).toHaveAttribute('transform', /scale\(1\.35\)/)
+  await expect(page.locator('.pirate-map__world')).toHaveAttribute('transform', /scale\(1\.25\)/)
   const zoomReconciled = await page.evaluate(start => window.__pirateMarkerCommits.slice(start)
     .reduce((sum, commit) => sum + commit.reconciled, 0), beforeZoom)
   expect(zoomReconciled).toBeGreaterThan(0)
