@@ -89,16 +89,18 @@ function TrendStats({ stats, section, formatPrice }) {
     ['月高', statEntry(stats, section, 'month')?.high],
     ['月低', statEntry(stats, section, 'month')?.low],
   ]
-  return <dl className="market-trend-stats" aria-label="价格统计（ISK）">
-    {entries.map(([label, entry]) => {
-      const compact = formatCompactMarketPrice(entry?.value)
-      const exact = compact === '样本不足' ? compact : formatPrice(String(entry.value).trim())
-      return <div key={label}>
-        <dt>{label}</dt>
-        <dd title={exact}><span aria-hidden="true">{compact}</span><span className="sr-only">{exact}</span></dd>
-      </div>
-    })}
-  </dl>
+  return <div className="market-trend-stats-viewport" role="region" aria-label={`${section === 'sell' ? '卖价' : '买价'}统计，可左右滚动`} tabIndex={0}>
+    <dl className="market-trend-stats" aria-label="价格统计（ISK）">
+      {entries.map(([label, entry]) => {
+        const compact = formatCompactMarketPrice(entry?.value)
+        const exact = compact === '样本不足' ? compact : formatPrice(String(entry.value).trim())
+        return <div key={label}>
+          <dt>{label}</dt>
+          <dd title={exact}><span aria-hidden="true">{compact}</span><span className="sr-only">{exact}</span></dd>
+        </div>
+      })}
+    </dl>
+  </div>
 }
 
 function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime, activeIndex, activePanel, onActivate, tooltipId, showBuy, showSell }) {
@@ -152,7 +154,7 @@ function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime
   }
 
   return <section className={`market-trend-panel market-trend-panel--${tone}`} aria-label={`${label}走势`}>
-    <div className="market-trend-panel-head"><div><span className="market-trend-panel-kicker">{tone === 'sell' ? 'SELL SIDE' : 'BUY SIDE'}</span><h4>{label} <small>ISK</small></h4></div><span className="market-trend-panel-count">{points.length} 次观测</span></div>
+    <div className="market-trend-panel-head"><div><span className="market-trend-panel-kicker">{tone === 'sell' ? 'SELL SIDE' : 'BUY SIDE'}</span><h4>{label} <small>ISK</small></h4></div></div>
     <TrendStats stats={stats} section={tone} formatPrice={formatPrice} />
     {!geometry ? <div className="market-trend-panel-empty">暂无有效报价曲线</div> : <div ref={plotRef} className="market-trend-svg-wrap" onMouseLeave={() => onActivate(null, tone)}>
       <svg className="market-trend-svg" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`${label}历史走势图`}>

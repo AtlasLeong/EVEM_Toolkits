@@ -26,3 +26,15 @@ Files: `front-codex/src/pages/MarketTrendChart.jsx`, `front-codex/src/styles/mar
 2. Run the five market E2E specs plus `dark-console.spec.js`, with a distinct port and bounded worker count.
 3. Run `node --test tests/unit/*.test.mjs tests/preview/*.test.mjs`, `npm run build` and `git diff --check`.
 4. Inspect desktop both/single and mobile screenshots. Record fresh results and hand off locally without pushing or deploying.
+
+## Verification record — 2026-09-27
+
+- Before production edits, existing compact/side-view suites passed: 34 tests. New regression RED reproduced three expected failures at 1440px: metric groups wrapped with a 48.5px y offset.
+- New single-row coverage passed all 26 initial tests. Independent specification review identified a missing plot-height guard; the added 27th test now checks the recorded baseline, reclaimed plot dimensions, and absence of a blank gap.
+- Same local fixture at 1920x1080: each plot grew from 472x556px to 496x605px; statistics height fell from 89px to 41px; central horizontal padding fell from 40px to 16px. Sizes are rounded CSS pixels.
+- Final regression command: `PW_TEST_PORT=4294 npx playwright test tests/e2e/specs/market.spec.js tests/e2e/specs/market-chart-release.spec.js tests/e2e/specs/market-compact-layout.spec.js tests/e2e/specs/market-side-view.spec.js tests/e2e/specs/market-stat-strip.spec.js tests/e2e/specs/dark-console.spec.js --workers=2 --reporter=list --output=../output/playwright/stat-strip-final` — **101 passed**.
+- `node --test tests/unit/*.test.mjs tests/preview/*.test.mjs` — **354 passed**; no failures/skips.
+- `npm run build` — passed, including bundle-budget checks. `git diff --check` — passed; Git reported only working-copy CRLF normalization warnings. Playwright also emitted the existing `NO_COLOR`/`FORCE_COLOR` environment warning.
+- Independently reviewed against the approved spec, then reviewed for code quality: no remaining findings.
+- Visually inspected desktop 1920x1080 dual/single, 1440x900 dual, and 390px mobile screenshots. The local screenshots use synthetic API fixtures, not live market quotes. Artifacts are under `output/playwright/stat-before-1920.png`, `stat-after-1920.png`, `stat-after-1920-single.png`, `stat-after-1440.png`, and `stat-strip-final/` (not committed).
+- Scope remains frontend layout/tests only. No API/collector/database changes, push, merge, or deployment in this iteration. Keep `codex/market-stats-single-row` and the existing worktree for follow-up.
