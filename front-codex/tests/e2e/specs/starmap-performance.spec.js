@@ -45,6 +45,28 @@ test('裁剪屏幕外星点且无向连线只画一次，保留两端都在屏�
   await expect(page.locator('.tactical-system-marker.is-selected')).toBeVisible()
 })
 
+test('选中星系强调环保持紧凑尺寸，不使用脉冲放大动画', async ({ page }) => {
+  await installMapData(page, systems, stargates)
+  await page.goto('/starmap')
+  await locateMapSystem(page, '中心')
+  const ring = page.locator('.tactical-system-marker.is-selected .tactical-system-marker-ring')
+  await expect(ring).toBeVisible()
+  const metrics = await ring.evaluate(node => {
+    const style = getComputedStyle(node)
+    const rect = node.getBoundingClientRect()
+    return {
+      width: rect.width,
+      height: rect.height,
+      animationName: style.animationName,
+      borderWidth: parseFloat(style.borderTopWidth),
+    }
+  })
+  expect(metrics.animationName).toBe('none')
+  expect(metrics.width).toBeLessThanOrEqual(24)
+  expect(metrics.height).toBeLessThanOrEqual(24)
+  expect(metrics.borderWidth).toBeLessThanOrEqual(1.5)
+})
+
 test('同一帧连续滚轮输入累积倍率并保持指针锚点', async ({ page }) => {
   await installMapData(page, systems, stargates)
   await page.goto('/starmap')

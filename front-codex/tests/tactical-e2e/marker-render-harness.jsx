@@ -21,13 +21,16 @@ const incomingTarget = {
 
 function Harness() {
   const [selectedKey, setSelectedKey] = useState(null)
+  const [selectedSystemId, setSelectedSystemId] = useState(null)
   const [revision, setRevision] = useState(0)
   window.__pirateSetSelectedKey = setSelectedKey
+  window.__pirateSetSelectedSystemId = setSelectedSystemId
   window.__pirateTriggerRerender = () => setRevision(value => value + 1)
   const renderedTargets = revision === 0 ? targets : [...targets, incomingTarget]
   const renderedMapData = revision === 0 ? mapData : { ...mapData, systems: [...systems, incomingSystem] }
   return <div style={{ width: 1200, height: 700 }}>
     <PirateIntelMap mapData={renderedMapData} targets={renderedTargets} selectedKey={selectedKey}
+      selectedSystemId={selectedSystemId} onSelectSystem={node => setSelectedSystemId(node.system_id)}
       onSelectTarget={target => setSelectedKey(target.key)} />
     <output data-harness-revision={revision} hidden>{revision}</output>
   </div>

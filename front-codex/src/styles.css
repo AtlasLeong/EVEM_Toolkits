@@ -1524,9 +1524,12 @@ a {
 .tactical-system-marker-ring {
   width: 15px;
   height: 15px;
-  border: 1.2px solid currentColor;
-  box-shadow: 0 0 14px color-mix(in srgb, currentColor 34%, transparent);
-  animation: tacticalMarkerPulse 1.8s ease-out infinite;
+  border: 1px solid currentColor;
+  /* Keep the selection cue readable without a continuously expanding halo.
+     The old pulse animation scaled this 15px ring past 2x, which made a
+     selected system look like it had a thick, moving orbit at normal zoom. */
+  box-shadow: 0 0 6px color-mix(in srgb, currentColor 22%, transparent);
+  animation: none;
 }
 
 .tactical-system-marker-label {
@@ -1573,10 +1576,10 @@ a {
 }
 
 .tactical-system-marker.is-selected .tactical-system-marker-ring {
-  width: 18px;
-  height: 18px;
-  border-width: 1.7px;
-  box-shadow: 0 0 18px rgba(103, 232, 249, 0.46);
+  width: 16px;
+  height: 16px;
+  border-width: 1.2px;
+  box-shadow: 0 0 8px rgba(103, 232, 249, 0.3);
 }
 
 .tactical-system-marker.is-selected .tactical-system-marker-label {
@@ -1649,23 +1652,6 @@ a {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
   background: var(--accent-surface);
   color: var(--accent);
-}
-
-@keyframes tacticalMarkerPulse {
-  0% {
-    opacity: 0.92;
-    transform: translate(-50%, -50%) scale(1);
-  }
-
-  70% {
-    opacity: 0.12;
-    transform: translate(-50%, -50%) scale(2.05);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(2.32);
-  }
 }
 
 .field-row {

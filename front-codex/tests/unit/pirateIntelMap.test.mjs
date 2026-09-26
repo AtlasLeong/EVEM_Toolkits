@@ -75,6 +75,8 @@ test('real systems expose selectable accessible hit areas', async () => {
   assert.match(html, /data-pirate-system="101"/)
   assert.match(html, /data-pirate-system="102"/)
   assert.match(html, /pirate-map__system-hit--selected/)
+  assert.match(html, /class="pirate-map__system-selection-ring"[^>]*data-fixed-kind="ring"[^>]*data-base-radius="12"/)
+  assert.match(html, /class="pirate-map__system-hit pirate-map__system-hit--selected"[^>]*fill="transparent"/)
   assert.doesNotMatch(html, /class="pirate-map__labels" aria-hidden="true"[^>]*>.*data-pirate-system="101"/)
 })
 

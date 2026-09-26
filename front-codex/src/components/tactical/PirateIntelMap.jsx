@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { isHistoricalSighting, pirateMapMarkers } from '../../utils/pirateIntel'
 import { projectSystemsScoped, systemDisplayName, zoomAroundPoint } from '../../utils/tacticalMapLayout'
 import { createLiveCameraPreview, indexGateSegments, labelVisibilityState, layoutIntelLabels, normalizeWheelDelta, subscribeMapWheel } from '../../utils/tacticalMapInteraction'
@@ -406,12 +406,21 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
     {systems.map(node => {
       const id = Number(node.system_id)
       const security = Number.isFinite(Number(node.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
-      return <circle key={id} className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
-        data-pirate-system={id} data-fixed-size="true" data-fixed-kind="hit" data-world-x={node.px} data-world-y={node.py}
-        data-base-radius="22" cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
-        aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
-        onClick={event => activate(event, node)}
-        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
+      const zoom = Math.max(.0001, scale)
+      const selected = id === selectedSystemId
+      return <Fragment key={id}>
+        {selected && <circle className="pirate-map__system-selection-ring"
+          data-fixed-size="true" data-fixed-kind="ring" data-world-x={node.px} data-world-y={node.py}
+          data-base-radius="12" data-base-stroke="1"
+          cx={node.px} cy={node.py} r={12 / zoom} fill="none" stroke="#f4e4b0" strokeWidth={1 / zoom}
+          pointerEvents="none" aria-hidden="true" />}
+        <circle className={`pirate-map__system-hit${selected ? ' pirate-map__system-hit--selected' : ''}`}
+          data-pirate-system={id} data-fixed-size="true" data-fixed-kind="hit" data-world-x={node.px} data-world-y={node.py}
+          data-base-radius="22" cx={node.px} cy={node.py} r={22 / zoom} fill="transparent" role="button" tabIndex={0}
+          aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
+          onClick={event => activate(event, node)}
+          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
+      </Fragment>
     })}
   </g>
 })
