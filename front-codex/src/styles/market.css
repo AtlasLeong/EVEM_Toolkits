@@ -699,7 +699,7 @@
   }
 }
 
-@media (max-height: 820px) and (min-width: 1180px) {
+@media (max-height: 860px) and (min-width: 1180px) {
   .site-frame:has(.market-page--immersive) {
     overflow-y: auto;
   }
@@ -707,7 +707,9 @@
   .site-frame:has(.market-page--immersive) .site-content {
     height: 100vh;
   }
+}
 
+@media (max-height: 820px) and (min-width: 1180px) {
   .market-page--immersive.market-terminal {
     padding: 8px;
   }
