@@ -477,7 +477,18 @@
   cursor: pointer;
   outline: none;
 }
-.tac-map-system:focus-visible circle,
+.tac-map-system:focus-visible .tac-star-ring {
+  stroke: #fff3c3;
+}
+.tac-map-system:focus-visible .tac-star-dot {
+  stroke: #fff3c3;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.tac-map-system:focus-visible .tac-star-hit {
+  stroke: transparent;
+  stroke-width: 0;
+}
 .tac-map-force:focus-visible > rect,
 .tac-force-close:focus-visible rect {
   stroke: #fff3c3;

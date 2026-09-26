@@ -82,3 +82,20 @@ test('selected pirate system uses a compact visual ring without exposing its hit
   expect(metrics.strokeWidth).toBeLessThanOrEqual(1.5)
   await expect(hit).toHaveAttribute('fill', 'transparent')
 })
+
+test('selected pirate system keeps a hairline ring after zooming', async ({ page }) => {
+  await page.goto('/tests/tactical-e2e/marker-render-harness.html')
+  for (let index = 0; index < 6; index += 1) {
+    await page.getByRole('button', { name: '放大星图' }).click()
+  }
+  await page.evaluate(() => window.__pirateSetSelectedSystemId(1))
+  const ring = page.locator('.pirate-map__system-selection-ring')
+  await expect(ring).toHaveCount(1)
+  const metrics = await ring.evaluate(node => {
+    const world = node.closest('.pirate-map__world')
+    const scale = Number(world.getAttribute('transform').match(/scale\(([-\d.e]+)\)/)[1])
+    return { scale, screenStroke: Number.parseFloat(getComputedStyle(node).strokeWidth) * scale }
+  })
+  expect(metrics.scale).toBeGreaterThan(2)
+  expect(metrics.screenStroke).toBeLessThanOrEqual(1.5)
+})
