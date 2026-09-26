@@ -280,13 +280,9 @@
 }
 
 .site-frame:has(.market-page--immersive) .site-content {
-  height: 100vh;
+  height: calc(100vh - 52px);
   min-height: 0;
   flex: 1 1 auto;
-}
-
-.site-frame:has(.market-page--immersive) .site-footer {
-  display: none;
 }
 
 .app-shell:has(.market-page--immersive) {

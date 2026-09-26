@@ -41,7 +41,10 @@ test('品牌链接支持键盘并保持当前导航和备案链接', async ({ pa
   await expect(brand).toHaveCSS('outline-width', '2px')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/\/market$/)
-  await expect(page.getByRole('link', { name: '粤ICP备2024264329号' })).toHaveAttribute('href', 'https://beian.miit.gov.cn/')
+  await expect(page.locator('.market-page--immersive')).toBeVisible()
+  const filingLink = page.getByRole('contentinfo').getByRole('link', { name: '粤ICP备2024264329号' })
+  await expect(filingLink).toBeVisible()
+  await expect(filingLink).toHaveAttribute('href', 'https://beian.miit.gov.cn/')
 })
 
 test('窄屏切换为移动导航并保留备案页脚', async ({ page }) => {
