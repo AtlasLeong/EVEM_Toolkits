@@ -41,7 +41,10 @@ test('品牌链接支持键盘并保持当前导航和备案链接', async ({ pa
   await expect(brand).toHaveCSS('outline-width', '2px')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/\/market$/)
-  await expect(page.getByRole('link', { name: '粤ICP备2024264329号' })).toHaveAttribute('href', 'https://beian.miit.gov.cn/')
+  await expect(page.locator('.market-page--immersive')).toBeVisible()
+  const filingLink = page.getByRole('contentinfo').getByRole('link', { name: '粤ICP备2024264329号' })
+  await expect(filingLink).toBeVisible()
+  await expect(filingLink).toHaveAttribute('href', 'https://beian.miit.gov.cn/')
 })
 
 test('窄屏切换为移动导航并保留备案页脚', async ({ page }) => {
@@ -52,6 +55,14 @@ test('窄屏切换为移动导航并保留备案页脚', async ({ page }) => {
   await expect(page.locator('.shell-sidebar')).not.toBeVisible()
   await expect(page.getByRole('link', { name: '粤ICP备2024264329号' })).toBeVisible()
   await expect(page.locator('.site-footer')).toHaveCSS('margin-left', '0px')
+})
+
+test('1180px 边界显示桌面界面而非宽度遮罩', async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 860 })
+  await page.goto('/infocenter')
+  await expect(page.locator('.desktop-only-mask')).toBeHidden()
+  await expect(page.locator('.app-shell')).toBeVisible()
+  await expect(page.locator('.shell-sidebar')).toBeVisible()
 })
 
 test('低高度登录态侧栏的设置和退出均可滚动访问', async ({ page }) => {

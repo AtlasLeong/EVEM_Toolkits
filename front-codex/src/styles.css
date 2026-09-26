@@ -4248,7 +4248,7 @@ a {
   background: var(--panel);
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1179px) {
   .site-frame:has(.app-shell) .site-footer {
     margin-left: 0;
   }

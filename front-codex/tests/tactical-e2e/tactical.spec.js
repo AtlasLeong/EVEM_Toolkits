@@ -1487,12 +1487,20 @@ test("role downgrade clears friendly data, open dialogs and membership controls"
   await expect(page.getByText("己方秘密集结", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "添加己方部署" }).click();
   await page.getByLabel("部队名称").fill("尚未发送的己方资料");
+  // The mocked WebSocket is closed, so the new role arrives on the next HTTP poll.
+  const downgradedSnapshot = page.waitForResponse(async (response) => {
+    if (!response.url().includes("/organizations/1/snapshot/") || !response.ok())
+      return false;
+    const snapshot = await response.json();
+    return snapshot.role === "scout" && snapshot.permission_version === 2;
+  }, { timeout: 15000 });
   state.setSnapshot({
     ...state.snapshot,
     role: "scout",
     permission_version: 2,
     online: undefined,
   });
+  await downgradedSnapshot;
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText("己方秘密集结", { exact: true })).toHaveCount(0);
   await expect(
