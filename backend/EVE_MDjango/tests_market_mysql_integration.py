@@ -110,7 +110,7 @@ class MarketMysqlIntegrationTests(unittest.TestCase):
 
         run = collect_due(
             clock_ms=lambda: NOW_MS,
-            bundle_loader=lambda: object(),
+            bundle_loader=lambda: {'fixture': True},
             session_factory=lambda bundle: session,
             randint=lambda lower, upper: lower,
             sleep=lambda _: None,
