@@ -139,6 +139,7 @@ test('market renders synchronized buy and sell panels with range stats and keybo
   })
 
   await page.goto('/market')
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
   await expect(page.locator('.market-trend-panel--sell')).toBeVisible()
   await expect(page.locator('.market-trend-panel--buy')).toBeVisible()
   await expect(page.locator('.market-trend-panel--sell .market-trend-path')).toHaveCount(1)
@@ -146,7 +147,7 @@ test('market renders synchronized buy and sell panels with range stats and keybo
   await expect(page.locator('.market-trend-panel--sell .market-trend-stats')).toContainText('当前')
   await expect(page.locator('.market-trend-panel--sell .market-trend-stats')).toContainText('130 ISK')
   await expect(page.locator('.market-trend-panel--sell .market-trend-stats')).toContainText('区间高')
-  await expect(page.locator('.market-trend-panel--sell .market-trend-stats')).toContainText('月低')
+  await expect(page.locator('.market-trend-panel--sell .market-trend-stats')).toContainText('30天低')
   await expect(page.locator('.market-trend-panel--buy .market-trend-stats')).toContainText('100 ISK')
   await expect(page.locator('.market-trend-panel--buy .market-trend-stats')).toContainText('120 ISK')
 

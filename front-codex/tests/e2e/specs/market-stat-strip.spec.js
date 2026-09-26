@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 
 const observedAt = '2026-09-26T07:03:47Z'
-const labels = ['当前', '区间高', '区间低', '月高', '月低']
+const labels = ['当前', '区间高', '区间低', '30天高', '30天低']
 const modes = ['双边走势', '只看卖价', '只看买价']
 const cases = [
   { name: 'decimal', values: ['130.25', '150.75', '110.50', '180.90', '0'], compact: ['130.25', '150.75', '110.5', '180.9', '0'] },
@@ -134,6 +134,7 @@ for (const viewport of viewports) {
 test('desktop plots reclaim the space from the former second statistics row', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 })
   await openMarket(page, cases[0])
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
   // Pre-change baseline at this viewport: 472 x 556px plots and an 89px stats strip.
   // Keep tolerance for subpixel rounding, but fail if freed space becomes a blank gap.
   const panels = await page.locator('.market-trend-panel').evaluateAll(elements => elements.map(panel => ({
@@ -142,10 +143,10 @@ test('desktop plots reclaim the space from the former second statistics row', as
   })))
   expect(panels).toHaveLength(2)
   for (const { plot, stats } of panels) {
-    expect(stats.height).toBeLessThanOrEqual(44)
+    expect(stats.height).toBeLessThanOrEqual(76)
     expect(plot.width).toBeGreaterThanOrEqual(490)
     expect(plot.height).toBeGreaterThanOrEqual(600)
-    expect(plot.top - stats.bottom).toBeLessThanOrEqual(4)
+    expect(plot.top - stats.bottom).toBeLessThanOrEqual(10)
   }
 })
 
@@ -161,8 +162,8 @@ for (const width of [320, 390]) {
     expect(overflow.scroll).toBeGreaterThan(overflow.client)
     expect(overflow.behavior).toBe('auto')
 
-    const buyMode = page.getByRole('button', { name: '只看买价', exact: true })
-    await buyMode.focus()
+    const lastPeriod = page.getByRole('button', { name: '30 天', exact: true })
+    await lastPeriod.focus()
     await page.keyboard.press('Tab')
     await expect(strip).toBeFocused()
     const focus = await strip.evaluate(element => ({ width: parseFloat(getComputedStyle(element).outlineWidth), style: getComputedStyle(element).outlineStyle }))

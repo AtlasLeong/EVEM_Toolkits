@@ -86,8 +86,8 @@ function TrendStats({ stats, section, formatPrice }) {
     ['当前', statEntry(stats, section, 'current')],
     ['区间高', statEntry(stats, section, 'range')?.high],
     ['区间低', statEntry(stats, section, 'range')?.low],
-    ['月高', statEntry(stats, section, 'month')?.high],
-    ['月低', statEntry(stats, section, 'month')?.low],
+    ['30天高', statEntry(stats, section, 'month')?.high],
+    ['30天低', statEntry(stats, section, 'month')?.low],
   ]
   return <div className="market-trend-stats-viewport" role="region" aria-label={`${section === 'sell' ? '卖价' : '买价'}统计，可左右滚动`} tabIndex={0}>
     <dl className="market-trend-stats" aria-label="价格统计（ISK）">
@@ -109,7 +109,7 @@ function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime
   const [size, setSize] = useState({ width: CHART.width, height: CHART.height })
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 })
   const [measuredIndex, setMeasuredIndex] = useState(null)
-  const chart = useMemo(() => ({ ...CHART, ...size, left: size.width < 400 ? 56 : 72, right: 16, top: 18, bottom: 34 }), [size])
+  const chart = useMemo(() => ({ ...CHART, ...size, left: size.width < 400 ? 56 : 72, right: size.width >= 600 ? 96 : 16, top: 24, bottom: 34 }), [size])
   const geometry = useMemo(() => buildGeometry(points, field, chart), [points, field, chart])
   const active = activeIndex !== null && points[activeIndex] ? points[activeIndex] : points.at(-1)
   const selected = activeIndex !== null && points[activeIndex] ? points[activeIndex] : null
@@ -118,6 +118,8 @@ function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime
   const activeX = selected && geometry ? geometry.x(activeIndex) : null
   const activeY = geometry && (activeValue !== null || fallbackValue !== null) ? geometry.y(activeValue ?? fallbackValue) : null
   const hasGeometry = Boolean(geometry)
+  const lastValue = priceInteger(points.at(-1)?.[field])
+  const lastY = geometry && lastValue !== null ? geometry.y(lastValue) : null
 
   useLayoutEffect(() => {
     const plot = plotRef.current
@@ -166,12 +168,15 @@ function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime
         <text className="market-trend-axis" x={chart.left} y={chart.height - 8}>{axisTime(points[0].observed_at)}</text>
         <text className="market-trend-axis" x={chart.width - chart.right} y={chart.height - 8} textAnchor="end">{axisTime(points.at(-1).observed_at)}</text>
         {geometry.paths.map((path, index) => <path key={`${field}-${index}`} className={`market-trend-path market-trend-path--${tone}`} d={path} />)}
+        {lastY !== null ? <circle className={`market-trend-last-point market-trend-last-point--${tone}`} cx={geometry.x(points.length - 1)} cy={lastY} r="3.5" /> : null}
+        {lastY !== null && size.width >= 600 ? <line className={`market-last-guide market-last-guide--${tone}`} x1={geometry.x(points.length - 1)} x2={chart.width - 6} y1={lastY} y2={lastY} /> : null}
         {activePanel === tone && selected ? <line className="market-trend-cursor" x1={geometry.x(activeIndex)} x2={geometry.x(activeIndex)} y1={chart.top} y2={chart.height - chart.bottom} /> : null}
         {activePanel === tone && selected ? (() => {
           const value = priceInteger(selected[field])
           return value === null ? null : <circle className={`market-trend-point market-trend-point--${tone}`} cx={geometry.x(activeIndex)} cy={geometry.y(value)} r="5" />
         })() : null}
       </svg>
+      {lastY !== null && size.width >= 600 ? <span className={`market-last-price market-last-price--${tone}`} style={{ top: lastY }} title={formatPrice(points.at(-1)[field])}>{formatCompactMarketPrice(points.at(-1)[field])}</span> : null}
       <div className="market-trend-targets">
         {points.map((point, index) => <button
           key={`${point.observed_at}-${index}`}

@@ -28,4 +28,9 @@ Inspect remote branches, repository CI/deploy workflow and current production re
 
 ## Execution record
 
-- Approved design and assets resolved; implementation pending.
+- Approved design implemented with 48 byte-verified lossless WebP assets. Scoped presentation overrides live in `market-focus.css`, leaving administration unchanged.
+- TDD: 10 icon tests observed failing before implementation and passing afterward; focus default/asset/null tests observed failing before implementation. Added precision regression failed on collapsed adjacent levels, then passed after the fix.
+- Final local verification: 364 Node unit/preview tests; 110 market/shell E2E tests in one clean run (3.7 minutes); final 10 focus E2E cases (15.3 seconds), including huge quote and image-decoded screenshots; production build plus bundle budget passed.
+- Earlier parallel runs had cold-start timeouts and shared test-server teardown interference. No retry or timeout protections were weakened; a non-overlapping two-worker final run passed. Final captures were refreshed after image decoding.
+- Independent asset specification/quality and terminal specification/quality reviews approved. Fixed mobile plot/readout overlap, exact adjacent price levels and warm-header focus contrast. Combined visual comparison passed; see root `design-qa.md`.
+- Deployment baseline: frontend/master `41f0157dbf1886b31fa7f73164d14825168f6fa1`; backend `c66fe6693e4c991d687084c4c2b907babf0ac9a0`; backend tree unchanged `221a6e8bfbdf0b0396302eff967f328706faacd8`. Existing GitHub CI/Production workflow will build, verify and publish; PR/production URLs are recorded in the task handoff.

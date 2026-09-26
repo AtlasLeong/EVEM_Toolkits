@@ -61,7 +61,8 @@ test('market terminal hides internal ids and explanatory footnotes', async ({ pa
 
   await page.goto('/market')
   await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
-  await expect(page.locator('.market-choice-meta')).not.toContainText('ID')
+  await expect(page.locator('.market-item-nav')).not.toContainText('ID')
+  await expect(page.locator('.market-item-nav')).not.toContainText('1001')
   await expect(page.locator('.market-instrument-head')).not.toContainText('ID')
   await expect(page.locator('.market-chart-footnote')).toHaveCount(0)
   await expect(page.locator('.market-summary-note')).toHaveCount(0)
@@ -106,7 +107,7 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
   await page.goto('/market')
   await expect(page.locator('.market-terminal')).toBeVisible()
   await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
-  await expect(page.getByRole('region', { name: '盘口深度' })).toBeVisible()
+  await expect(page.getByRole('region', { name: '报价档位' })).toBeVisible()
   await expect(page.getByRole('contentinfo').getByRole('link', { name: '粤ICP备2024264329号' })).toBeVisible()
 
   const metrics = await page.evaluate(() => {
@@ -187,6 +188,7 @@ test('trend supports ranges, side views, keyboard detail and breaks missing pric
     return undefined
   })
   await page.goto('/market')
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
   await expect(page.locator('.market-trend-path--sell')).toHaveCount(2)
   await expect(page.locator('.market-trend-path--buy')).toHaveCount(1)
   await page.getByRole('button', { name: '只看买价', exact: true }).click()
@@ -217,6 +219,7 @@ test('chart hover details stay readable and keyboard reachable inside the framed
   })
 
   await page.goto('/market')
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
   await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
   const target = page.locator('.market-trend-panel--sell').getByRole('button', { name: '卖价第 2 次观测' })
   await expect(target).toHaveAttribute('tabindex', '0')
@@ -242,9 +245,10 @@ test('a single observed sample shows insufficient change without inventing a tre
   })
   await page.goto('/market')
   await expect(page.getByRole('heading', { name: '孤立报价' })).toBeVisible()
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
   await expect(page.getByText('样本不足').first()).toBeVisible()
   await expect(page.locator('.market-trend-path')).toHaveCount(0)
-  await expect(page.getByText('19.25 ISK').first()).toBeVisible()
+  await expect(page.getByRole('status', { name: '当前观测报价' })).toContainText('19.25 ISK')
   await expect(page.getByText('暂无报价').first()).toBeVisible()
 })
 
