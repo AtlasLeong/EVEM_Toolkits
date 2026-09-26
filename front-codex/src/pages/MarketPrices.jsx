@@ -6,8 +6,11 @@ import { AuthContext } from '../context/AuthContext'
 import { LoadingBar } from '../components/ui/Primitives'
 import { getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
 import { marketRefetchInterval } from '../utils/marketPolling'
+import { formatCompactMarketPrice } from '../utils/marketPrice'
+import MarketItemIcon from '../components/MarketItemIcon'
 import MarketTrendChart from './MarketTrendChart'
 import '../styles/market.css'
+import '../styles/market-focus.css'
 
 const WINDOWS = [{ days: 1, label: '24 小时' }, { days: 7, label: '7 天' }, { days: 30, label: '30 天' }]
 
@@ -71,20 +74,12 @@ function ItemNav({ rows, selectedId, onSelect, now }) {
     {rows.map(item => {
       const status = quoteStatus(item, now)
       return <button type="button" key={item.item_id} aria-current={selectedId === item.item_id ? 'true' : undefined} className={`market-item-choice${selectedId === item.item_id ? ' active' : ''}`} onClick={() => onSelect(item.item_id)}>
-        <span className="market-choice-head"><strong>{item.name}</strong><span className={`market-choice-status ${status.tone}`}>{status.label}</span></span>
-        <span className="market-choice-meta">{item.category || '未分类'}</span>
-        <span className="market-choice-quote">卖 {formatMarketPrice(item.best_sell)}</span>
+        <MarketItemIcon itemId={item.item_id} />
+        <span className="market-choice-content"><span className="market-choice-head"><strong title={item.name}>{item.name}</strong><span className={`market-choice-status ${status.tone}${status.tone === 'success' ? ' sr-only' : ''}`}>{status.label}</span></span>
+          <span className="market-choice-quote" title={formatMarketPrice(item.best_sell)}>卖价 <b>{item.best_sell == null ? '暂无报价' : formatCompactMarketPrice(item.best_sell)}</b></span>
+        </span>
       </button>
     })}
-  </div>
-}
-
-function QuoteCard({ title, value, change, tone }) {
-  const displayChange = formatChange(change)
-  return <div className={`market-quote-card market-quote-card--${tone}`}>
-    <span className="market-quote-label">{title}</span>
-    <strong className="market-quote-value">{formatMarketPrice(value)}</strong>
-    <span className={`market-quote-change ${displayChange.tone}`}>{displayChange.text}</span>
   </div>
 }
 
@@ -93,7 +88,14 @@ function PriceLadder({ title, values, tone }) {
   return <div className={`market-price-ladder market-price-ladder--${tone}`}>
     <div className="market-price-ladder-head"><span>{title}</span>{levels.length ? <small>前 {levels.length} 档</small> : null}</div>
     {levels.length ? <ol>
-      {levels.map((value, index) => <li key={`${value}-${index}`}><span>{index + 1}</span><strong>{formatMarketPrice(value)}</strong></li>)}
+      {levels.map((value, index) => {
+        const exact = formatMarketPrice(value)
+        const numeric = exact.replace(/ ISK$/, '')
+        // Adjacent orders can differ by only one ISK. Keep normal prices exact;
+        // only unusually long values need the compact form in the narrow rail.
+        const visible = numeric.length <= 16 ? numeric : formatCompactMarketPrice(value)
+        return <li key={`${value}-${index}`}><span>{index + 1}</span><strong title={exact}><span aria-hidden="true">{visible}</span><span className="sr-only">{exact}</span></strong></li>
+      })}
     </ol> : <p className="market-book-empty">暂无挂单</p>}
   </div>
 }
@@ -106,7 +108,7 @@ export default function MarketPricesPage() {
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState(null)
   const [days, setDays] = useState(1)
-  const [viewMode, setViewMode] = useState('both')
+  const [viewMode, setViewMode] = useState('sell')
   const [clock, setClock] = useState(() => Date.now())
 
   useEffect(() => {
@@ -162,15 +164,15 @@ export default function MarketPricesPage() {
     if (selected) seriesQuery.refetch()
   }
 
-  return <div className="page-stack market-page market-page--immersive market-terminal">
+  return <div className="page-stack market-page market-page--immersive market-terminal market-focus">
     <header className="market-terminal-header">
-      <div className="market-terminal-heading"><span className="market-eyebrow"><Activity size={15} aria-hidden="true" /> EVE ECHOES / MARKET INTELLIGENCE</span><h1>市场价格</h1><p>真实盘口观测 · 历史涨跌仅供参考，交易前请核对游戏内报价。</p></div>
+      <div className="market-terminal-heading"><Activity size={18} aria-hidden="true" /><h1>市场价格</h1><ChevronRight className="market-header-divider" size={15} aria-hidden="true" /><span className="market-header-category">{selected?.category || '行情工作台'}</span></div>
       <div className="market-header-actions">{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>
     </header>
 
     <div className="market-terminal-layout">
       <aside className="market-terminal-catalog" aria-label="市场物品目录">
-        <div className="market-terminal-section-head"><span>MARKET INDEX</span><strong>物品导航</strong></div>
+        <div className="market-terminal-section-head"><strong>物品导航</strong></div>
         <label className="market-search market-terminal-search"><Search size={17} aria-hidden="true" /><input type="search" value={search} onChange={event => handleSearch(event.target.value)} aria-label="搜索物品" placeholder="搜索物品名称" /></label>
         {categoriesQuery.isError ? <p className="market-terminal-hint">分类暂不可用，仍可搜索物品。</p> : <CategoryNav categories={categoriesQuery.data || []} active={categoryId} onSelect={selectCategory} />}
         <div className="market-catalog-title"><span>物品列表</span><span>{itemsQuery.isSuccess ? `${total} 件` : '—'}</span></div>
@@ -184,9 +186,12 @@ export default function MarketPricesPage() {
 
       <main className="market-terminal-main">
         {selected ? <>
-          <div className="market-instrument-head"><div><span className="market-eyebrow">MARKET QUOTE / 实时盘口</span><h2>{selected.name}</h2><p>{selected.category || '未分类'} <span aria-hidden="true">/</span> {marketScopeLabel(selected.scope)}</p></div></div>
-          <div className="market-trend-heading"><div><span className="market-eyebrow">PRICE HISTORY</span><h3>价格走势</h3></div><div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div></div>
-          <div className="market-legend"><div className="market-view-modes" role="group" aria-label="走势显示方式">{[['both', '双边走势'], ['sell', '只看卖价'], ['buy', '只看买价']].map(([mode, label]) => <button type="button" key={mode} className={viewMode === mode ? 'active' : ''} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>{label}</button>)}</div><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}{seriesQuery.isFetching && seriesQuery.data ? <small className="market-fetching-label">更新中</small> : null}</span></div>
+          <div className="market-instrument-head"><div><div className="market-instrument-title"><h2>{selected.name}</h2><span className="market-instrument-category">{selected.category || '未分类'}</span></div><p>报价观测 <span aria-hidden="true">·</span> {marketScopeLabel(selected.scope)} <span aria-hidden="true">·</span> ISK</p></div></div>
+          <div className="market-focus-toolbar">
+            <div className="market-view-modes" role="group" aria-label="走势显示方式">{[['both', '双边走势'], ['sell', '只看卖价'], ['buy', '只看买价']].map(([mode, label]) => <button type="button" key={mode} className={viewMode === mode ? 'active' : ''} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>{label}</button>)}</div>
+            <div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div>
+          </div>
+          <div className="market-legend"><h3>价格走势 <small>ISK</small></h3><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}{seriesQuery.isFetching && seriesQuery.data ? <small className="market-fetching-label">更新中</small> : null}</span></div>
           <div className="market-chart-frame">
             {seriesQuery.isPending && !seriesQuery.data ? <div className="market-chart-message"><LoadingBar /><span>正在读取真实历史报价…</span></div> : null}
             {seriesQuery.isError && !seriesQuery.data ? <div className="market-chart-message">走势图暂时无法加载；当前报价与历史走势可能不一致，请稍后刷新。</div> : null}
@@ -196,13 +201,12 @@ export default function MarketPricesPage() {
       </main>
 
       <aside className="market-terminal-summary" aria-label="当前物品报价摘要">
-        <div className="market-terminal-section-head"><span>QUOTE / ORDER BOOK</span><strong>报价与盘口</strong></div>
+        <div className="market-terminal-section-head"><strong>报价档位</strong><span>ISK · 各侧前 5 档</span></div>
         {selected ? <>
-          <div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div>
-          <section className="market-depth-panel" aria-label="盘口深度">
-            <div className="market-depth-head"><h3>盘口深度</h3><span>前 5 档</span></div>
-            <div className="market-depth-grid"><PriceLadder title="卖价盘口" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价盘口" values={selected.buy_prices} tone="buy" /></div>
+          <section className="market-depth-panel" aria-label="报价档位">
+            <div className="market-depth-grid"><PriceLadder title="卖价档位" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价档位" values={selected.buy_prices} tone="buy" /></div>
           </section>
+          <div className="market-current-quotes" aria-label="当前最低卖价与最高买价">{[['best_sell', '最低卖价', 'sell'], ['best_buy', '最高买价', 'buy']].map(([field, label, tone]) => <div key={field} className={`market-current-quote market-current-quote--${tone}`}><span>{label}</span><strong className="market-quote-value" title={formatMarketPrice(selected[field])}><span aria-hidden="true">{selected[field] == null ? '暂无报价' : formatCompactMarketPrice(selected[field])}</span><span className="sr-only">{formatMarketPrice(selected[field])}</span></strong><small className={`market-quote-change ${formatChange(seriesQuery.data?.change?.[field]).tone}`} title="所选区间首末有效报价涨跌">{formatChange(seriesQuery.data?.change?.[field]).text}</small></div>)}</div>
           <div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at, clock)}</small> : null}</div>
         </> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
       </aside>

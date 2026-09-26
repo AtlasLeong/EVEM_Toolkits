@@ -1,3 +1,44 @@
+# Market focus terminal — 2026-09-27
+
+final result: passed
+
+## Target and evidence
+
+- Source visual truth: `C:/Users/22351/.codex/generated_images/01a0d2b6-27fb-7af0-b435-8ec1a318dbea/exec-3edad2b5-7e23-4556-9094-82baa3a52759.png`, the user's selected first concept.
+- Browser-rendered implementation: `output/market-focus-qa/implementation-1672.png`, from the actual `/market` React route. Source and implementation are both 1672 × 941 pixels; CSS viewport 1672 × 941, device scale factor 1, no density normalization or browser chrome.
+- Full combined comparison: `output/market-focus-qa/comparison-full.png`; focused combined comparisons: `comparison-controls.png`, `comparison-catalog.png`, `comparison-quotes.png` in the same directory. Each contains both source and implementation, not separate remembered views.
+- State: guest, expanded product sidebar, currency selected, single sell chart, 29 fixture observations. Source prices and curve are illustrative; implementation uses deterministic API fixtures for visual regression. Source selects 7 days; regression capture uses the retained 24-hour default. Both states were exercised. Live API observations were also inspected at `http://127.0.0.1:4180/market` through IAB, without production writes.
+- Responsive captures: `front-codex/test-results-market-focus-final/` includes 1920 × 1080, 1672 × 941, 1440 × 960, 1280 × 720 and 390 × 844. The viewport-sized terminal is desktop-only; phones deliberately reflow into a scrollable document.
+
+## Findings and iteration history
+
+1. Initial implementation blocked: small-screen panels inherited desktop zero flex bases, allowing 300px plots to overlap readouts. Corrected auto-height flow below 1180px. Existing 390px chart containment regression now passes; live DOM confirms both plots end within their own panels.
+2. Independent quality review blocked on two P2 issues: adjacent quote levels collapsed to the same compact value, and cyan focus rings had poor contrast on the warm toolbar. Normal-length quote levels now retain exact decimal strings (ISK is in the rail heading); only very long values compact. Header focus now uses dark `#17333d`. Added a regression that first failed on five identical `2100万` labels, then passed with distinct values, along with focus contrast and very large price coverage.
+3. First combined visual comparison identified a dark square strip behind the rounded terminal's top gap (P2). Made only the outer container transparent. Final combined capture shows the intended warm inset around the rounded terminal.
+4. An intermediate automated screenshot preceded lazy-image decoding. This was capture timing, not missing assets: live rendering and icon load tests already showed the icons. Capture now waits for onscreen image decoding. Regenerated full and focused comparisons show the actual approved game artwork.
+5. Final combined comparison: no remaining actionable P0/P1/P2 findings. Independent specification and quality reviews approved the current implementation.
+
+## Required fidelity surfaces
+
+| Surface | Result |
+| --- | --- |
+| Fonts / typography | Retains the product sans-serif stack and Lucide family; current price is the strongest metric, other metrics align on one line. Values use tabular numerals. Compact labels remain at least 12px in charts/statistics; dense peripheral metadata is smaller. Exact values remain available to hover and assistive technology. |
+| Spacing / layout rhythm | Warm compact toolbar, rounded inset, narrow 212px catalog, dominant central plot, 232px quote rail; single-row desktop controls. The existing 240px application sidebar is intentionally retained instead of the mock's approximate 210px navigation. No obscured controls or desktop horizontal overflow. |
+| Colors / tokens | Solid dark teal terminal, amber sell, cyan buy, restrained separators; warm navigation remains consistent with the site. The illustrative glow/gradient is omitted for crisp data reading. Separate high-contrast focus colors on warm/dark surfaces. |
+| Image quality | 48 approved lossless 128px WebP assets, rendered at 40px, mapped by stable IDs. Real supplied images replace the mock's generated imagery. Fixed-size lazy loading, unknown-ID and load-failure library fallback are tested. |
+| Copy / content | Real catalog names and API fields, no invented descriptions, trade volumes or LIVE claims. Uses 报价档位 and 30天高/30天低. Preserves all-items search, observation count, exact hover/readout and legal footer absent from the mock. |
+
+## Verification and boundaries
+
+- 364 Node unit / preview contract tests passed.
+- 110 market + related shell E2E tests passed in one final two-worker run. Subsequently all 10 focus-specific cases passed, including the additional very-large quote case and decoded-asset captures.
+- Production build and bundle budget passed after the final production edits.
+- Covered category/search/item switching without chart unmount, periods, sell/buy/both, tooltip alignment, keyboard navigation, null gaps, zero/huge decimal values, missing final quotes, empty/error/stale states, short desktops and mobile stacking. Manual live IAB checked single/dual views; error console contained no errors.
+- 48 icon bytes match the approved exports; no backend, database, collection schedule or account changes.
+- P3 follow-up only: optional extra intermediate time ticks / sampled extrema annotations. The current range and 30-day statistics already expose true backend extrema; no downsampled curve is mislabeled as the historical extreme.
+
+## Previous QA record (preserved)
+
 # 暖白客户界面：视觉验收
 
 final result: passed

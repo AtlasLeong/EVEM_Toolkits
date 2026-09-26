@@ -74,7 +74,7 @@ test('removes the instrument badge while retaining catalog freshness and sidebar
 test('offers one exclusive display mode and switches locally without requesting market data', async ({ page }) => {
   const requests = await openMarket(page)
   const initialRequests = [...requests]
-  await expectMode(page, '双边走势')
+  await expectMode(page, '只看卖价')
   for (const mode of ['只看卖价', '只看卖价', '只看买价', '只看买价', '双边走势']) {
     await modeGroup(page).getByRole('button', { name: mode, exact: true }).click()
     await expectMode(page, mode)
@@ -114,7 +114,7 @@ for (const side of [{ mode: '只看卖价', tone: 'sell', label: '最低卖价',
     await modeGroup(page).getByRole('button', { name: side.mode, exact: true }).click()
     const panel = page.locator(`.market-trend-panel--${side.tone}`)
     await expect(page.locator('.market-trend-panel')).toHaveCount(1)
-    await expect(panel.locator('.market-trend-stats dt')).toHaveText(['当前', '区间高', '区间低', '月高', '月低'])
+    await expect(panel.locator('.market-trend-stats dt')).toHaveText(['当前', '区间高', '区间低', '30天高', '30天低'])
     await expect(panel.locator('.market-trend-stats .sr-only')).toHaveText(side.stats)
     const readout = page.getByRole('status', { name: '当前观测报价' })
     await expect(readout).toContainText(side.label)
@@ -135,7 +135,7 @@ for (const side of [{ mode: '只看卖价', tone: 'sell', label: '最低卖价',
     await expect(readout).toContainText(side.first)
     await expect(readout.locator('time')).toHaveAttribute('datetime', FIRST_OBSERVATION)
     expect(await page.locator('.market-terminal-summary').innerText()).toBe(sidebarBefore)
-    await expect(page.locator('.market-quote-card')).toHaveCount(2)
+    await expect(page.locator('.market-current-quote')).toHaveCount(2)
     await expect(page.locator('.market-price-ladder--sell li')).toHaveCount(5)
     await expect(page.locator('.market-price-ladder--buy li')).toHaveCount(5)
   })
@@ -143,6 +143,7 @@ for (const side of [{ mode: '只看卖价', tone: 'sell', label: '最低卖价',
 
 test('mode changes clear historical interaction and both mode restores synchronized dual-side data', async ({ page }) => {
   await openMarket(page)
+  await modeGroup(page).getByRole('button', { name: '双边走势', exact: true }).click()
   const readout = page.getByRole('status', { name: '当前观测报价' })
   await page.locator('.market-trend-panel--sell [data-point-index="0"]').focus()
   await expect(readout).toContainText('120 ISK')
@@ -209,7 +210,10 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 76
   test(`single-side panels fill the chart and avoid overflow at ${viewport.width}x${viewport.height}`, async ({ page }, testInfo) => {
     await page.setViewportSize(viewport)
     await openMarket(page)
-    if (viewport.width === 1920) await page.screenshot({ path: testInfo.outputPath('market-both-desktop.png') })
+    if (viewport.width === 1920) {
+      await modeGroup(page).getByRole('button', { name: '双边走势', exact: true }).click()
+      await page.screenshot({ path: testInfo.outputPath('market-both-desktop.png') })
+    }
     for (const [mode, tone] of [['只看卖价', 'sell'], ['只看买价', 'buy']]) {
       await modeGroup(page).getByRole('button', { name: mode, exact: true }).click()
       const panel = page.locator(`.market-trend-panel--${tone}`)

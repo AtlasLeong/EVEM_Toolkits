@@ -26,6 +26,7 @@ async function market(page, { empty = false, priceStats = stats } = {}) {
   })
   await page.goto('/market')
   await expect(page.locator('.market-trend-path--sell')).toBeVisible()
+  await page.getByRole('button', { name: '双边走势', exact: true }).click()
 }
 
 test('compact statistics keep precise titles and accessible prices including zero', async ({ page }) => {

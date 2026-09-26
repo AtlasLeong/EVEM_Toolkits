@@ -129,16 +129,17 @@
 .market-trend-wrap { min-width: 0; }
 .market-trend-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; min-height: 0; }
 .market-trend-panels--single { grid-template-columns: minmax(0, 1fr); }
-.market-trend-panel { display: flex; container-type: inline-size; min-width: 0; min-height: 0; flex-direction: column; padding: 11px 12px 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--console-raised) 54%, var(--panel)); }
+.market-trend-panel { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 11px 12px 10px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--console-raised) 54%, var(--panel)); }
 .market-trend-panel--sell { border-top: 2px solid var(--market-amber); }
 .market-trend-panel--buy { border-top: 2px solid var(--market-cyan); }
 .market-trend-panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; min-width: 0; }
 .market-trend-panel-head h4 { margin: 3px 0 0; color: var(--text); font-size: 13px; }
 .market-trend-panel-head h4 small { margin-left: 4px; color: var(--text-soft); font-size: 11px; font-weight: 500; }
 .market-trend-panel-kicker { color: var(--text-soft); font-size: 9px; font-weight: 750; letter-spacing: .12em; }
-.market-trend-panel-count { flex: 0 0 auto; color: var(--text-soft); font-size: 10px; font-variant-numeric: tabular-nums; }
-.market-trend-stats { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0 3px; }
-.market-trend-stats > div { flex: 1 1 calc((100% - 24px) / 5); min-width: max-content; }
+.market-trend-stats-viewport { flex: 0 0 auto; min-width: 0; margin: 9px 0 3px; overflow-x: auto; overscroll-behavior-x: contain; border-radius: 4px; }
+.market-trend-stats-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.market-trend-stats { display: flex; flex-wrap: nowrap; gap: 8px; min-width: max-content; margin: 0; }
+.market-trend-stats > div { flex: 1 0 auto; min-width: max-content; }
 .market-trend-stats dt { color: var(--text-soft); font-size: 12px; white-space: nowrap; }
 .market-trend-stats dd { margin: 3px 0 0; color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .market-trend-stats .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
@@ -378,7 +379,7 @@
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   min-height: 0;
-  padding: 18px clamp(20px, 2.6vw, 40px) 14px;
+  padding: 18px 16px 14px;
   overflow: hidden;
 }
 
@@ -701,7 +702,7 @@
   }
 
   .market-page--immersive .market-terminal-main {
-    padding-inline: 18px;
+    padding-inline: 16px;
   }
 }
 
@@ -779,7 +780,7 @@
   .market-page--immersive .market-terminal-blank { grid-column: 1 / -1; }
   .market-page--immersive .market-trend-panels { flex: 1 1 0; }
   .market-page--immersive .market-trend-panel-head,
-  .market-page--immersive .market-trend-stats { flex: 0 0 auto; }
+  .market-page--immersive .market-trend-stats-viewport { flex: 0 0 auto; }
 }
 
 @media (min-width: 1180px) {
@@ -789,7 +790,7 @@
   .market-page--immersive .market-trend-panel { padding: 8px; }
   .market-page--immersive .market-trend-panel-kicker { display: none; }
   .market-page--immersive .market-trend-panel-head h4 { margin: 0; }
-  .market-page--immersive .market-trend-stats { margin: 4px 0 3px; }
+  .market-page--immersive .market-trend-stats-viewport { margin: 4px 0 3px; }
   .market-page--immersive .market-trend-readout { min-height: 44px; padding: 6px 12px; gap: 6px 12px; }
   .market-page--immersive .market-depth-panel { padding: 8px; }
   .market-page--immersive .market-price-ladder { padding: 8px 10px; }
@@ -802,15 +803,6 @@
     overflow-y: auto;
     grid-template-rows: auto auto minmax(340px, 1fr);
   }
-}
-
-/* Statistics reflow with each chart panel, not the overall viewport width. */
-@container (max-width: 480px) {
-  .market-trend-stats { gap: 8px; }
-  .market-trend-stats > div { flex-basis: calc((100% - 16px) / 3); }
-}
-@container (max-width: 260px) {
-  .market-trend-stats > div { flex-basis: calc((100% - 8px) / 2); }
 }
 
 /* The quote sidebar owns the order book; the center is reserved for charts. */
