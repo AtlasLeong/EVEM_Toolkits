@@ -85,6 +85,17 @@ test('star selector overrides reuse identical neutral geometry', async () => {
   assert.equal(tagAttributes(markup, 'circle', 'pirate-map__ring').r, '1.125')
 })
 
+test('fixed-size star primitives expose metadata for live camera patching', async () => {
+  const { BoardStarGlyph } = await loadPrimitives()
+  const markup = render(BoardStarGlyph, { node, scale: 2, selected: true, showHit: true })
+  for (const className of ['tac-star-dot', 'tac-star-ring', 'tac-star-hit']) {
+    const attrs = tagAttributes(markup, 'circle', className)
+    assert.equal(attrs['data-fixed-size'], 'true')
+    assert.equal(attrs['data-world-x'], '80')
+    assert.equal(attrs['data-world-y'], '120')
+  }
+})
+
 test('real gate lines preserve quiet and focused topology styles without scaling thickness', async () => {
   const { BoardGateLine } = await loadPrimitives()
   const a = { px: 12, py: 34 }, b = { px: 56, py: 78 }
@@ -92,12 +103,14 @@ test('real gate lines preserve quiet and focused topology styles without scaling
     const quiet = tagAttributes(render(BoardGateLine, { a, b, scale }), 'line', 'tac-map-gate')
     assert.deepEqual([quiet.x1, quiet.y1, quiet.x2, quiet.y2], ['12', '34', '56', '78'])
     assert.equal(quiet.stroke, '#46565c')
-    assert.equal(Number(quiet['stroke-width']) * scale, .65)
+    assert.equal(Number(quiet['stroke-width']), .65)
+    assert.equal(quiet['vector-effect'], 'non-scaling-stroke')
     assert.equal(Number(quiet.opacity), Math.max(.3, Math.min(.5, .18 + scale * .12)))
     assert.equal(quiet['pointer-events'], 'none')
     const active = tagAttributes(render(BoardGateLine, { a, b, scale, active: true }), 'line', 'tac-map-gate is-active')
     assert.equal(active.stroke, '#819591')
-    assert.equal(Number(active['stroke-width']) * scale, 1.8)
+    assert.equal(Number(active['stroke-width']), 1.8)
+    assert.equal(active['vector-effect'], 'non-scaling-stroke')
     assert.equal(active.opacity, '0.88')
   }
   assert.equal(render(BoardGateLine, { a }), '')

@@ -165,6 +165,58 @@ export function subscribeMapWheel(node, onWheel) {
   return () => node.removeEventListener('wheel', handler);
 }
 
+/**
+ * Convert browser wheel units into one stable logical delta. Browsers may
+ * report the same gesture as pixels, lines, or pages; keeping the conversion
+ * here means both tactical boards feed the camera the same numbers.
+ */
+export function normalizeWheelDelta(event = {}, {
+  lineHeight = 16,
+  pageHeight = 800,
+  max = 1200,
+} = {}) {
+  const raw = Number(event?.deltaY);
+  if (!Number.isFinite(raw) || raw === 0) return 0;
+  const mode = Number(event?.deltaMode) || 0;
+  const unit = mode === 1 ? Math.max(1, Number(lineHeight) || 16)
+    : mode === 2 ? Math.max(1, Number(pageHeight) || 800) : 1;
+  const bound = Math.max(1, Number(max) || 1200);
+  return clamp(raw * unit, -bound, bound);
+}
+
+/**
+ * Small mutable camera contract used by DOM-only wheel previews. React owns
+ * the committed snapshot; the preview can advance independently until the
+ * gesture settles without mutating that snapshot or forcing a full render.
+ */
+export function createLiveCameraPreview(initial = {}) {
+  const normalize = value => ({
+    x: Number.isFinite(Number(value?.x)) ? Number(value.x) : 0,
+    y: Number.isFinite(Number(value?.y)) ? Number(value.y) : 0,
+    scale: Number.isFinite(Number(value?.scale)) && Number(value.scale) > 0 ? Number(value.scale) : 1,
+  });
+  let settled = normalize(initial);
+  let live = {...settled};
+  return {
+    get: () => ({...live}),
+    committed: () => ({...settled}),
+    set: next => {
+      live = normalize(typeof next === 'function' ? next({...live}) : next);
+      return {...live};
+    },
+    commit: next => {
+      settled = normalize(next === undefined ? live : typeof next === 'function' ? next({...live}) : next);
+      live = {...settled};
+      return {...settled};
+    },
+    reset: next => {
+      settled = normalize(next === undefined ? settled : next);
+      live = {...settled};
+      return {...settled};
+    },
+  };
+}
+
 // Consume one accumulated wheel frame. Keeping this reducer pure lets the
 // component move a single camera layer without rebuilding label and marker
 // layouts for every native wheel event.

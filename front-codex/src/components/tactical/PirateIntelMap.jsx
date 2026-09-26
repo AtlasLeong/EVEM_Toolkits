@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { isHistoricalSighting, pirateMapMarkers } from '../../utils/pirateIntel'
 import { projectSystemsScoped, systemDisplayName, zoomAroundPoint } from '../../utils/tacticalMapLayout'
-import { indexGateSegments, labelVisibilityState, layoutIntelLabels, subscribeMapWheel } from '../../utils/tacticalMapInteraction'
+import { createLiveCameraPreview, indexGateSegments, labelVisibilityState, layoutIntelLabels, normalizeWheelDelta, subscribeMapWheel } from '../../utils/tacticalMapInteraction'
 import { BoardGateLine, BoardStarGlyph, BoardSystemLabel } from './BoardMapPrimitives'
 import '../../styles/pirateIntelMap.css'
 
@@ -288,11 +288,11 @@ export function createPirateCameraScheduler(commit, {
   clearTimer = timer => clearTimeout(timer),
   onPreview = commit,
 } = {}) {
-  let current = INITIAL_CAMERA
+  const preview = createLiveCameraPreview(INITIAL_CAMERA)
   let pendingFrame = null
   let pendingTimer = null
   let previewing = false
-  const nextCamera = update => { current = typeof update === 'function' ? update(current) : update }
+  const nextCamera = update => preview.set(update)
   const cancelPending = () => {
     if (pendingFrame !== null) cancelFrame(pendingFrame)
     if (pendingTimer !== null) clearTimer(pendingTimer)
@@ -303,12 +303,12 @@ export function createPirateCameraScheduler(commit, {
   const queueFrame = () => {
     if (pendingFrame === null) pendingFrame = requestFrame(() => {
       pendingFrame = null
-      if (previewing) onPreview(current)
-      else commit(current)
+      if (previewing) onPreview(preview.get())
+      else commit(preview.commit())
     })
   }
   return {
-    current: () => current,
+    current: () => preview.get(),
     schedule(update) {
       if (pendingTimer !== null) clearTimer(pendingTimer)
       pendingTimer = null
@@ -323,13 +323,13 @@ export function createPirateCameraScheduler(commit, {
       if (pendingTimer !== null) clearTimer(pendingTimer)
       pendingTimer = setTimer(() => {
         cancelPending()
-        commit(current)
+        commit(preview.commit())
       })
     },
     immediate(update) {
       nextCamera(update)
       cancelPending()
-      commit(current)
+      commit(preview.commit())
     },
     dispose: cancelPending,
   }
@@ -348,14 +348,40 @@ function eventPoint(event, svg, viewport) {
   }
 }
 
-const StaticGeometry = memo(function StaticGeometry({ geometry, scale }) {
+function screenPoint(node, camera) {
+  return { x: node.px * camera.scale + camera.x, y: node.py * camera.scale + camera.y }
+}
+
+function inPirateViewport(point, viewport, margin = 96) {
+  return point.x >= -margin && point.x <= viewport.width + margin &&
+    point.y >= -margin && point.y <= viewport.height + margin
+}
+
+function visiblePirateGeometry(geometry, viewport, camera, preferredSystemId = null) {
+  const systems = geometry.systems.filter(node => {
+    const point = screenPoint(node, camera)
+    return Number(node.system_id) === Number(preferredSystemId) || inPirateViewport(point, viewport)
+  })
+  const visibleIds = new Set(systems.map(node => Number(node.system_id)))
+  const bounds = { left: -96, right: viewport.width + 96, top: -96, bottom: viewport.height + 96 }
+  const gates = geometry.gates.filter(gate => {
+    if (visibleIds.has(Number(gate.source_system_id)) || visibleIds.has(Number(gate.destination_system_id))) return true
+    const a = { x: gate.x1 * camera.scale + camera.x, y: gate.y1 * camera.scale + camera.y }
+    const b = { x: gate.x2 * camera.scale + camera.x, y: gate.y2 * camera.scale + camera.y }
+    return Math.max(a.x, b.x) >= bounds.left && Math.min(a.x, b.x) <= bounds.right &&
+      Math.max(a.y, b.y) >= bounds.top && Math.min(a.y, b.y) <= bounds.bottom
+  })
+  return { systems, gates }
+}
+
+const StaticGeometry = memo(function StaticGeometry({ geometry, scale, systems = geometry.systems, gates = geometry.gates }) {
   return <>
     <g className="pirate-map__routes" aria-hidden="true">
-      {geometry.gates.map(gate => <BoardGateLine key={gate.key} className="pirate-map__gate" scale={scale}
+      {gates.map(gate => <BoardGateLine key={gate.key} className="pirate-map__gate" scale={scale}
         a={{ px: gate.x1, py: gate.y1 }} b={{ px: gate.x2, py: gate.y2 }} />)}
     </g>
     <g className="pirate-map__stars" aria-hidden="true">
-      {geometry.systems.map(node => <BoardStarGlyph key={node.system_id} node={node} scale={scale}
+      {systems.map(node => <BoardStarGlyph key={node.system_id} node={node} scale={scale}
         dotClassName="pirate-map__star" />)}
     </g>
   </>
@@ -363,8 +389,11 @@ const StaticGeometry = memo(function StaticGeometry({ geometry, scale }) {
 
 const StaticLabels = memo(function StaticLabels({ labels, byId, selectedSystemId }) {
   return labels.map(label => <g key={label.system_id} className="pirate-map__label">
-    <BoardSystemLabel label={label} node={byId.get(Number(label.system_id))}
+    <g data-pirate-label-fixed="true"
+      data-pirate-label-cx={label.x + label.width / 2} data-pirate-label-cy={label.y + label.height / 2}>
+      <BoardSystemLabel label={label} node={byId.get(Number(label.system_id))}
       selected={Number(label.system_id) === selectedSystemId} />
+    </g>
   </g>)
 })
 
@@ -378,7 +407,8 @@ const StaticSystemHits = memo(function StaticSystemHits({ systems, scale, select
       const id = Number(node.system_id)
       const security = Number.isFinite(Number(node.security_status)) ? Number(node.security_status).toFixed(2) : '未知'
       return <circle key={id} className={`pirate-map__system-hit${id === selectedSystemId ? ' pirate-map__system-hit--selected' : ''}`}
-        data-pirate-system={id} cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
+        data-pirate-system={id} data-fixed-size="true" data-fixed-kind="hit" data-world-x={node.px} data-world-y={node.py}
+        data-base-radius="22" cx={node.px} cy={node.py} r={22 / Math.max(.0001, scale)} role="button" tabIndex={0}
         aria-label={`${systemDisplayName(node)} (${id})，安等 ${security}`}
         onClick={event => activate(event, node)}
         onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate(event, node) } }} />
@@ -395,6 +425,8 @@ const TargetMarker = memo(function TargetMarker({ marker, selected, tabbable, in
   const activate = event => { event.stopPropagation(); onActivate(marker) }
   return <g className={`pirate-map__marker pirate-map__marker--${marker.location_kind}${selected ? ' pirate-map__marker--selected' : ''}${marker.is_historical ? ' pirate-map__marker--historical' : ''}`}
     data-location-kind={marker.location_kind} data-pirate-marker={marker.key}
+    data-pirate-marker-x={marker.x} data-pirate-marker-y={marker.y}
+    data-pirate-marker-offset-x={offsetX} data-pirate-marker-offset-y={offsetY}
     role="button" tabIndex={tabbable ? 0 : -1} aria-label={label}
     transform={`translate(${marker.x + offsetX * inverseScale} ${marker.y + offsetY * inverseScale}) scale(${inverseScale})`}
     onPointerDown={event => event.stopPropagation()} onClick={activate}
@@ -441,18 +473,52 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   onSelectTargetRef.current = onSelectTarget
   if (defaultNowRef.current === null) defaultNowRef.current = now ?? Date.now()
   const sceneNow = now ?? defaultNowRef.current
+  const syncPiratePreviewGeometry = (next, base = committedCameraRef.current) => {
+    const svg = svgRef.current
+    if (!svg) return
+    // All fixed-size primitives are inside the world layer. Their radii are
+    // rendered for the committed camera and one CSS variable compensates the
+    // parent preview scale, avoiding an O(N) SVG attribute pass per RAF.
+    const fixedInverse = Math.max(.0001, base.scale) / Math.max(.0001, next.scale)
+    worldLayerRef.current?.style.setProperty('--tactical-fixed-inverse', String(fixedInverse))
+    const markerInverseScale = 1 / Math.max(.0001, next.scale)
+    svg.querySelectorAll('[data-pirate-marker]').forEach(node => {
+      const x = Number(node.getAttribute('data-pirate-marker-x'))
+      const y = Number(node.getAttribute('data-pirate-marker-y'))
+      const offsetX = Number(node.getAttribute('data-pirate-marker-offset-x') || 0)
+      const offsetY = Number(node.getAttribute('data-pirate-marker-offset-y') || 0)
+      if (![x, y, offsetX, offsetY].every(Number.isFinite)) return
+      node.setAttribute('transform', `translate(${x + offsetX * markerInverseScale} ${y + offsetY * markerInverseScale}) scale(${markerInverseScale})`)
+    })
+    const ratio = next.scale / Math.max(.0001, base.scale)
+    const inverseRatio = 1 / Math.max(.0001, ratio)
+    svg.querySelectorAll('[data-pirate-label-fixed]').forEach(node => {
+      const cx = Number(node.getAttribute('data-pirate-label-cx'))
+      const cy = Number(node.getAttribute('data-pirate-label-cy'))
+      if (![cx, cy].every(Number.isFinite)) return
+      node.setAttribute('transform', ratio === 1 ? ''
+        : `translate(${cx} ${cy}) scale(${inverseRatio}) translate(${-cx} ${-cy})`)
+    })
+    cardLayerRef.current?.querySelectorAll('[data-pirate-fixed-card]').forEach(card => {
+      card.style.transformOrigin = '0 0'
+      card.style.transform = ratio === 1 ? '' : `scale(${inverseRatio})`
+    })
+  }
+  const applyPiratePreviewFrame = (next, base = committedCameraRef.current) => {
+    const ratio = next.scale / Math.max(.0001, base.scale)
+    const relative = `translate(${next.x - ratio * base.x} ${next.y - ratio * base.y}) scale(${ratio})`
+    worldLayerRef.current?.setAttribute('transform', `translate(${next.x} ${next.y}) scale(${next.scale})`)
+    labelLayerRef.current?.setAttribute('transform', relative)
+    tetherLayerRef.current?.setAttribute('transform', relative)
+    if (cardLayerRef.current) {
+      cardLayerRef.current.style.transformOrigin = '0 0'
+      cardLayerRef.current.style.transform = `translate(${next.x - ratio * base.x}px, ${next.y - ratio * base.y}px) scale(${ratio})`
+    }
+    syncPiratePreviewGeometry(next, base)
+  }
   if (!cameraSchedulerRef.current) cameraSchedulerRef.current = createPirateCameraScheduler(setCamera, {
     onPreview: next => {
-      const base = committedCameraRef.current
-      const ratio = next.scale / Math.max(.0001, base.scale)
-      const relative = `translate(${next.x - ratio * base.x} ${next.y - ratio * base.y}) scale(${ratio})`
-      worldLayerRef.current?.setAttribute('transform', `translate(${next.x} ${next.y}) scale(${next.scale})`)
-      labelLayerRef.current?.setAttribute('transform', relative)
-      tetherLayerRef.current?.setAttribute('transform', relative)
-      if (cardLayerRef.current) {
-        cardLayerRef.current.style.transformOrigin = '0 0'
-        cardLayerRef.current.style.transform = `translate(${next.x - ratio * base.x}px, ${next.y - ratio * base.y}px) scale(${ratio})`
-      }
+      applyPiratePreviewFrame(next)
     },
   })
   const cameraScheduler = cameraSchedulerRef.current
@@ -462,6 +528,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     labelLayerRef.current?.removeAttribute('transform')
     tetherLayerRef.current?.removeAttribute('transform')
     if (cardLayerRef.current) cardLayerRef.current.style.transform = ''
+    syncPiratePreviewGeometry(camera, camera)
     setWheelMotion(false)
   }, [camera])
   useEffect(() => {
@@ -474,6 +541,9 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     [mapData, targets, viewport, sceneNow, geometry])
   const selectedMarker = useMemo(() => scene.markers.find(marker => marker.targets.some(target => target.key === selectedKey)),
     [scene.markers, selectedKey])
+  const selectedSystemHitId = selectedSystemIdProp ?? (selectedMarker?.location_kind === 'system' ? Number(selectedMarker.location_id) : null)
+  const visibleGeometry = useMemo(() => visiblePirateGeometry(geometry, viewport, camera, selectedSystemHitId),
+    [geometry, viewport, camera, selectedSystemHitId])
   const nextVisibleMarkers = useMemo(() => samplePirateViewportNodes(scene.markers, viewport, camera,
     { limit: 250, marker: true, preferredKey: selectedMarker?.key }),
     [scene.markers, viewport, camera, selectedMarker])
@@ -485,7 +555,6 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
     [scene.labels, viewport, camera, selectedSystemId])
   const visibleLabels = stablePirateSubset(visibleLabelsRef.current, nextVisibleLabels)
   visibleLabelsRef.current = visibleLabels
-  const selectedSystemHitId = selectedSystemIdProp ?? selectedSystemId
   const nextVisibleSystemHits = useMemo(() => samplePirateViewportNodes(geometry.systems, viewport, camera,
     { limit: 250, preferredKey: selectedSystemHitId, margin: 40 }),
     [geometry.systems, viewport, camera, selectedSystemHitId])
@@ -514,6 +583,18 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       occupied: cards.map(card => ({ x: card.left, y: card.top, width: card.width, height: card.height })),
       gateSegments, padding: { ...geometry.safeArea.padding, left: Math.max(14, geometry.safeArea.cardLeft) } })
   }, [visibleLabels, showZoomLabels, selectedSystemId, camera, geometry.gates, geometry.safeArea, scene.markers, cards, viewport])
+  useLayoutEffect(() => {
+    // Wheel preview transforms live outside React state so a burst can stay
+    // smooth. If a live target update causes React to replace the SVG/HTML
+    // children during that burst, the declarative camera props render the
+    // committed view again. Re-apply the current live frame after the new
+    // nodes have committed so the preview never snaps back mid-gesture.
+    if (!wheelMotion) return
+    const next = cameraSchedulerRef.current?.current?.()
+    const base = committedCameraRef.current
+    if (!next || next.x === base.x && next.y === base.y && next.scale === base.scale) return
+    applyPiratePreviewFrame(next, base)
+  }, [wheelMotion, geometry, scene, cards, labelLayouts, visibleMarkers, visibleLabels])
   const cardlessLocations = scene.markers.length - cards.length
   const openMarker = scene.markers.find(marker => marker.key === openKey && marker.targets.length > 1)
   const filteredPickerTargets = useMemo(() => {
@@ -577,7 +658,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
   }, [openKey, pickerNeedsSearch])
 
   wheelHandlerRef.current = event => {
-    const delta = event.deltaY * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewport.height : 1)
+    const delta = normalizeWheelDelta(event, { lineHeight: 16, pageHeight: viewport.height })
     if (!Number.isFinite(delta) || delta === 0) return
     setWheelMotion(true)
     cameraScheduler.preview(current => zoomPirateCamera(current, eventPoint(event, svgRef.current, viewport), delta))
@@ -649,7 +730,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       preserveAspectRatio="none" role="group" aria-label="海盗情报星图"
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={pointerEnd}>
       <g ref={worldLayerRef} className="pirate-map__world" transform={`translate(${camera.x} ${camera.y}) scale(${camera.scale})`}>
-        <StaticGeometry geometry={geometry} scale={camera.scale} />
+        <StaticGeometry geometry={geometry} systems={visibleGeometry.systems} gates={visibleGeometry.gates} scale={camera.scale} />
         <StaticSystemHits systems={visibleSystemHits} scale={camera.scale}
           selectedSystemId={selectedSystemHitId} onSelectSystem={activateSystem} />
         {markerLayer}
@@ -662,7 +743,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
       preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <g ref={tetherLayerRef}>
       {cards.map(card => <line key={card.marker.key} className="pirate-map__card-tether"
-        x1={card.anchorX} y1={card.anchorY} x2={card.tetherX} y2={card.tetherY} />)}
+        x1={card.anchorX} y1={card.anchorY} x2={card.tetherX} y2={card.tetherY} vectorEffect="non-scaling-stroke" />)}
       </g>
     </svg>
     <div ref={cardLayerRef} className="pirate-map__target-layer" aria-label="地图目标卡">
@@ -674,7 +755,7 @@ export default function PirateIntelMap({ mapData, targets = [], selectedKey, foc
         const precision = marker.location_kind === 'constellation' ? '星座范围' : '星系定位'
         const history = marker.is_historical ? '历史线索' : marker.historical_count ? `含 ${marker.historical_count} 条历史` : ''
         const cardLabel = single ? `${single.character_name}，${single.ship_type}，${place}，${precision}` : `${place}，${marker.count} 个目标，${precision}`
-        return <button key={marker.key} type="button" data-pirate-card={marker.key}
+        return <button key={marker.key} type="button" data-pirate-card={marker.key} data-pirate-fixed-card="true"
           className={`pirate-map__target-card pirate-map__target-card--${marker.location_kind}${selected ? ' pirate-map__target-card--selected' : ''}${marker.is_historical ? ' pirate-map__target-card--historical' : ''}`}
           style={{ left: card.left, top: card.top, width: card.width }}
           aria-label={`${cardLabel}${history ? `，${history}` : ''}`}
