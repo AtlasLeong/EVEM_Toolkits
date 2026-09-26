@@ -28,3 +28,11 @@
 2. Point freshness clock assertions at the retained catalog status instead of removed top badge. Keep the existing 2-hour expiry contract test.
 3. Run all market specs and shared dark-console geometry tests on port 4294; run `node --test tests/unit/*.test.mjs tests/preview/*.test.mjs` and `npm run build`.
 4. After spec/quality approval, commit only scoped source/tests/docs. Leave local branch for review without push or deployment. Record test counts and screenshot evidence.
+
+## Verification record
+
+- RED baseline: the new side-view spec failed before the controls and visibility contract were implemented.
+- GREEN focused Playwright run: `53 passed` across the new side-view coverage, market regressions, release chart checks and dark-console geometry checks.
+- Frontend unit/preview run: `354 passed`, `0 failed`.
+- Production build and bundle budget check: passed (`vite build` plus `npm run check:bundle`).
+- Visual evidence: desktop dual-side, desktop sell-only and mobile sell-only screenshots are in `front-codex/output/market-side-green-2/`.

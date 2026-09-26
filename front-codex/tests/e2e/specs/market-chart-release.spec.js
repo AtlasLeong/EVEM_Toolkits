@@ -162,7 +162,7 @@ test('market renders synchronized buy and sell panels with range stats and keybo
   await expect(page.locator('.market-trend-tooltip')).toContainText('95 ISK')
 })
 
-test('market quote status clock updates stale labels while the page remains visible', async ({ page }) => {
+test('market catalog status clock updates stale labels while the page remains visible', async ({ page }) => {
   await page.clock.install()
   const observedAt = new Date(Date.now() - 2 * 60 * 60 * 1000 + 30000).toISOString()
   await installApiMock(page, ({ url }) => {
@@ -171,7 +171,7 @@ test('market quote status clock updates stale labels while the page remains visi
     if (url.pathname.endsWith('/series/')) return json({ count: 1, points: [{ observed_at: observedAt, best_sell: '130', best_buy: '100' }] })
   })
   await page.goto('/market')
-  await expect(page.locator('.market-instrument-status')).toHaveText('最新观测')
+  await expect(page.locator('.market-choice-status')).toHaveText('最新观测')
   await page.clock.fastForward(60000)
-  await expect(page.locator('.market-instrument-status')).toHaveText('已过期')
+  await expect(page.locator('.market-choice-status')).toHaveText('已过期')
 })

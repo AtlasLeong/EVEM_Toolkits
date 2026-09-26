@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { formatCompactMarketPrice } from '../utils/marketPrice'
 
 const CHART = { width: 760, height: 300, left: 72, right: 20, top: 20, bottom: 34 }
@@ -101,7 +101,7 @@ function TrendStats({ stats, section, formatPrice }) {
   </dl>
 }
 
-function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime, activeIndex, activePanel, onActivate, tooltipId }) {
+function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime, activeIndex, activePanel, onActivate, tooltipId, showBuy, showSell }) {
   const plotRef = useRef(null)
   const tooltipRef = useRef(null)
   const [size, setSize] = useState({ width: CHART.width, height: CHART.height })
@@ -192,8 +192,8 @@ function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime
       </div>
       {activePanel === tone && selected && activeX !== null && activeY !== null ? <div ref={tooltipRef} id={tooltipId} className={`market-trend-tooltip${measuredIndex === activeIndex ? ' is-measured' : ''}`} role="tooltip" style={tooltipPosition}>
         <time dateTime={selected.observed_at}>{formatTime(selected.observed_at)}</time>
-        <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(selected.best_sell)}</strong></span>
-        <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(selected.best_buy)}</strong></span>
+        {showSell ? <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(selected.best_sell)}</strong></span> : null}
+        {showBuy ? <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(selected.best_buy)}</strong></span> : null}
       </div> : null}
     </div>}
   </section>
@@ -213,18 +213,23 @@ export default function MarketTrendChart({ points = [], showBuy = true, showSell
     setActiveIndex(index)
   }
 
+  useEffect(() => {
+    setActiveIndex(null)
+    setActivePanel(showSell ? 'sell' : 'buy')
+  }, [showBuy, showSell])
+
   if (!hasPoints) return <div className="market-trend-empty">这段时间暂无有效报价曲线。可切换时间范围，等待真实采集数据。</div>
 
   return <div className="market-trend-wrap">
-    <div className="market-trend-panels">
-      {showSell ? <ChartPanel points={points} field="best_sell" label="最低卖价" tone="sell" stats={stats} formatPrice={formatPrice} formatTime={formatTime} activeIndex={activeIndex} activePanel={activePanel} onActivate={activate} tooltipId={sellTooltipId} /> : null}
-      {showBuy ? <ChartPanel points={points} field="best_buy" label="最高买价" tone="buy" stats={stats} formatPrice={formatPrice} formatTime={formatTime} activeIndex={activeIndex} activePanel={activePanel} onActivate={activate} tooltipId={buyTooltipId} /> : null}
+    <div className={`market-trend-panels${showBuy !== showSell ? ' market-trend-panels--single' : ''}`}>
+      {showSell ? <ChartPanel points={points} field="best_sell" label="最低卖价" tone="sell" stats={stats} formatPrice={formatPrice} formatTime={formatTime} activeIndex={activeIndex} activePanel={activePanel} onActivate={activate} tooltipId={sellTooltipId} showBuy={showBuy} showSell={showSell} /> : null}
+      {showBuy ? <ChartPanel points={points} field="best_buy" label="最高买价" tone="buy" stats={stats} formatPrice={formatPrice} formatTime={formatTime} activeIndex={activeIndex} activePanel={activePanel} onActivate={activate} tooltipId={buyTooltipId} showBuy={showBuy} showSell={showSell} /> : null}
     </div>
     {active ? <div className="market-trend-readout" role="status" aria-label="当前观测报价">
       <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>
-      <span>最低卖价 <strong className="market-sell-text">{formatPrice(active.best_sell)}</strong></span>
-      <span>最高买价 <strong className="market-buy-text">{formatPrice(active.best_buy)}</strong></span>
+      {showSell ? <span>最低卖价 <strong className="market-sell-text">{formatPrice(active.best_sell)}</strong></span> : null}
+      {showBuy ? <span>最高买价 <strong className="market-buy-text">{formatPrice(active.best_buy)}</strong></span> : null}
     </div> : null}
-    <table className="market-trend-data" aria-label="走势图数据"><thead><tr><th>采集时间</th><th>最低卖价</th><th>最高买价</th></tr></thead><tbody>{points.map((point, index) => <tr key={`${point.observed_at}-${index}`}><td>{formatTime(point.observed_at)}</td><td>{formatPrice(point.best_sell)}</td><td>{formatPrice(point.best_buy)}</td></tr>)}</tbody></table>
+    <table className="market-trend-data" aria-label="走势图数据"><thead><tr><th>采集时间</th>{showSell ? <th>最低卖价</th> : null}{showBuy ? <th>最高买价</th> : null}</tr></thead><tbody>{points.map((point, index) => <tr key={`${point.observed_at}-${index}`}><td>{formatTime(point.observed_at)}</td>{showSell ? <td>{formatPrice(point.best_sell)}</td> : null}{showBuy ? <td>{formatPrice(point.best_buy)}</td> : null}</tr>)}</tbody></table>
   </div>
 }
