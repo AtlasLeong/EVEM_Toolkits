@@ -54,6 +54,43 @@ test('war board keeps the selected star ring and gate stroke stable during previ
   await expect(gate).toHaveAttribute('vector-effect', 'non-scaling-stroke')
 })
 
+test('focused war-board system keeps the invisible hit circle from becoming a halo', async ({ page }) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?focus=1')
+  await page.waitForFunction(() => window.__collabFocusStylesReady === true)
+  const system = page.locator('[data-system-id="1"]')
+  const hit = system.locator('[data-fixed-kind="hit"]')
+  await system.press('Enter')
+  const metrics = await hit.evaluate(node => {
+    const style = getComputedStyle(node)
+    return {
+      focusVisible: node.parentElement?.matches(':focus-visible') ?? false,
+      stroke: style.stroke,
+      strokeWidth: Number.parseFloat(style.strokeWidth),
+    }
+  })
+  expect(metrics.focusVisible).toBe(true)
+  expect(metrics.stroke).toMatch(/transparent|rgba\(0, 0, 0, 0\)/)
+  expect(metrics.strokeWidth).toBeLessThanOrEqual(0.5)
+})
+
+test('focused war-board selection ring keeps a hairline stroke at high zoom', async ({ page }) => {
+  await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?focus=1')
+  await page.waitForFunction(() => window.__collabFocusStylesReady === true)
+  const map = page.getByRole('group', { name: '局部作战星图' })
+  for (let index = 0; index < 7; index += 1) {
+    await page.getByRole('button', { name: '放大地图' }).click()
+  }
+  const system = map.locator('[data-system-id="1"]')
+  await system.press('Enter')
+  const metrics = await system.locator('.tac-star-ring').evaluate(node => {
+    const world = node.closest('.tac-map-world-layer')
+    const scale = Number(world.getAttribute('transform').match(/scale\(([-\d.e]+)\)/)[1])
+    return { scale, screenStroke: Number.parseFloat(getComputedStyle(node).strokeWidth) * scale }
+  })
+  expect(metrics.scale).toBeGreaterThan(2)
+  expect(metrics.screenStroke).toBeLessThanOrEqual(1.5)
+})
+
 test('war board bounds dense topology and preserves the selected system while zooming', async ({ page }) => {
   // This 900-card correctness stress case performs six settled layouts. The
   // pre-change baseline also takes ~41s locally; keep every assertion intact.

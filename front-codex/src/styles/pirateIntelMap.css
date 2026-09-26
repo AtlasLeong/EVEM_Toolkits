@@ -46,7 +46,6 @@
 .pirate-map__system-selection-ring {
   fill: none;
   stroke: #f4e4b0;
-  stroke-width: 1px;
   opacity: .88;
 }
 .pirate-map__card-tethers {

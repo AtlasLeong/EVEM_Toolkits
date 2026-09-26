@@ -2,6 +2,12 @@ import { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CollaborationMap from '../../src/components/tactical/CollaborationMap'
 
+if (new URLSearchParams(window.location.search).has('focus')) {
+  import('../../src/styles/tacticalCollaboration.css').then(() => {
+    window.__collabFocusStylesReady = true
+  })
+}
+
 const previewSystems = [
   { system_id: 1, name: 'Preview-A', zh_name: '预览甲', region_id: 7, x: 0, z: 0, security_status: -0.7 },
   { system_id: 2, name: 'Preview-B', zh_name: '预览乙', region_id: 7, x: 100, z: 0, security_status: -0.2 },
