@@ -55,6 +55,9 @@ test('war board keeps the selected star ring and gate stroke stable during previ
 })
 
 test('war board bounds dense topology and preserves the selected system while zooming', async ({ page }) => {
+  // This 900-card correctness stress case performs six settled layouts. The
+  // pre-change baseline also takes ~41s locally; keep every assertion intact.
+  test.setTimeout(60000)
   await page.goto('/tests/tactical-e2e/collaboration-zoom-harness.html?dense=1&intel=1')
   const map = page.getByRole('group', { name: '局部作战星图' })
   await expect(map).toBeVisible()

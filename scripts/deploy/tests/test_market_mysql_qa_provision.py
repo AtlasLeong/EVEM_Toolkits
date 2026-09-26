@@ -166,7 +166,8 @@ class QaProvisionTests(unittest.TestCase):
                   mock.patch.object(self.provisioner.secrets, 'token_urlsafe',
                                     return_value='P' * 43),
                   mock.patch.object(self.provisioner, 'write_private_env',
-                                    side_effect=lambda *_args: written.append(len(loopback.commands)))):
+                                    side_effect=lambda *_args: written.append(
+                                        (len(loopback.commands), _args[2])))):
                 result = self.provisioner.provision_qa_account(
                     backup, {'NAME': 'eve_echoes'}, source, loopback,
                     expected_database='eve_echoes', backup_root=root,
@@ -180,9 +181,9 @@ class QaProvisionTests(unittest.TestCase):
                  (schema,)),
                 ('SELECT COUNT(*) FROM mysql.user WHERE User = %s', (schema,)),
             ])
-            self.assertEqual(written, [3])
+            self.assertEqual([command_count for command_count, _ in written], [3])
             self.assertEqual(loopback.commands[3],
-                             ("CREATE USER %s@'127.0.0.1' IDENTIFIED BY %s", (schema, 'P' * 43)))
+                             ("CREATE USER %s@'127.0.0.1' IDENTIFIED BY %s", (schema, written[0][1])))
             self.assertEqual(loopback.commands[4],
                              ("GRANT ALL PRIVILEGES ON `evem\\_market\\_qa\\_aaaaaaaaaaaa`.* "
                               "TO %s@'127.0.0.1'", (schema,)))
@@ -211,6 +212,36 @@ class QaProvisionTests(unittest.TestCase):
                         writer.assert_not_called()
                     self.assertFalse(any('CREATE USER' in sql or 'GRANT ' in sql
                                          for sql, _ in loopback.commands))
+
+    def test_generated_password_always_has_medium_policy_categories_and_is_env_safe(self):
+        tokens_missing_categories = (
+            'a1_' * 14 + '0',  # No uppercase.
+            'A1_' * 14 + 'A',  # No lowercase.
+            'Aa_' * 14 + 'A',  # No digit.
+            'Aa1' * 14 + 'A',  # No special character.
+        )
+        with TemporaryDirectory() as temporary:
+            root, backup, reader = self._backup_fixture(temporary)
+            for token in tokens_missing_categories:
+                with self.subTest(token=token):
+                    loopback = ProvisionConnection()
+                    with (mock.patch.object(self.provisioner.secrets, 'token_urlsafe',
+                                            return_value=token) as random_token,
+                          mock.patch.object(self.provisioner, 'write_private_env') as writer):
+                        self.provisioner.provision_qa_account(
+                            backup, {'NAME': 'eve_echoes'}, IdentityConnection(), loopback,
+                            expected_database='eve_echoes', backup_root=root,
+                            effective_uid=0, stat_reader=reader,
+                        )
+                    password = loopback.commands[3][1][1]
+                    self.assertEqual(writer.call_args.args[2], password)
+                    self.assertRegex(password, r'\A[A-Za-z0-9_-]+\Z')
+                    self.assertRegex(password, r'[A-Z]')
+                    self.assertRegex(password, r'[a-z]')
+                    self.assertRegex(password, r'[0-9]')
+                    self.assertRegex(password, r'[_-]')
+                    self.assertIn(token, password)
+                    random_token.assert_called_once_with(32)
 
     def test_refuses_non_private_directory_before_database_access(self):
         with TemporaryDirectory() as temporary:

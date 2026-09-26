@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import secrets
 import stat
+import string
 import sys
 import uuid
 
@@ -189,6 +190,10 @@ def provision_qa_account(destination, db_settings, source_connection, loopback_c
     if (not QA_SCHEMA_RE.fullmatch(schema) or not isinstance(password, str)
             or len(password) < 24 or not re.fullmatch(r'[A-Za-z0-9_-]+', password)):
         raise QaProvisionError('Secure QA credentials could not be generated.')
+    # MySQL MEDIUM policy requires all four classes, even if the token omits one.
+    password += ''.join(secrets.choice(alphabet) for alphabet in (
+        string.ascii_uppercase, string.ascii_lowercase, string.digits, '_-',
+    ))
     _require_absent(loopback_connection, schema)
     try:
         write_private_env(destination, schema, password, server_uuid)

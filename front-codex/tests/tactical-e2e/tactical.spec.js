@@ -642,6 +642,7 @@ test('named fleet quick report supports preset and custom names without a confir
 
 test('named fleet existing selection pins the reviewed version while live data changes', async ({page}) => {
   const fx=await fixture(page,{role:'commander'});
+  await page.clock.install();
   fx.snapshot.forces.push({...fx.snapshot.forces[0],id:12,side:'friendly',name:'保密己方'});
   await page.goto('/tactical');
   await page.getByRole('button',{name:'快速上报',exact:true}).click();
@@ -651,6 +652,9 @@ test('named fleet existing selection pins the reviewed version while live data c
   await expect(choices.getByRole('button',{name:/保密己方/})).toHaveCount(0);
   await choices.getByRole('button',{name:/敌方前锋/}).click();
   fx.setSnapshot({...fx.snapshot,forces:fx.snapshot.forces.map(f=>f.id===11?{...f,version:2,people:90}:f)});
+  // Drive the next HTTP fallback poll explicitly; its 5s cadence is not part
+  // of this test's reviewed-version assertion (and races a 5s expect timeout).
+  await page.clock.runFor(5100);
   await expect(page.locator('.tac-map-force').filter({hasText:'90'})).toBeVisible();
   await dialog.getByRole('spinbutton',{name:'敌方人数',exact:true}).fill('55');
   await dialog.getByRole('button',{name:'提交上报',exact:true}).click();
