@@ -57,6 +57,14 @@ test('窄屏切换为移动导航并保留备案页脚', async ({ page }) => {
   await expect(page.locator('.site-footer')).toHaveCSS('margin-left', '0px')
 })
 
+test('1180px 边界显示桌面界面而非宽度遮罩', async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 860 })
+  await page.goto('/infocenter')
+  await expect(page.locator('.desktop-only-mask')).toBeHidden()
+  await expect(page.locator('.app-shell')).toBeVisible()
+  await expect(page.locator('.shell-sidebar')).toBeVisible()
+})
+
 test('低高度登录态侧栏的设置和退出均可滚动访问', async ({ page }) => {
   await seedAuthenticatedSession(page, { userName: 'atlas123' })
   await page.setViewportSize({ width: 1280, height: 400 })
