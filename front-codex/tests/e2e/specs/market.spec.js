@@ -86,11 +86,11 @@ test('switching market items keeps the terminal chart mounted while the next ser
   })
 
   await page.goto('/market')
-  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
   await page.getByRole('button', { name: /另一艘舰船/ }).click()
   await expect(page.getByRole('heading', { name: '另一艘舰船' })).toBeVisible()
   await expect(page.locator('.market-terminal-main')).toBeVisible()
-  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
   releaseSecondSeries()
 })
 
@@ -105,7 +105,7 @@ test('market terminal fills the desktop viewport and keeps chart and order book 
 
   await page.goto('/market')
   await expect(page.locator('.market-terminal')).toBeVisible()
-  await expect(page.locator('.market-trend-svg')).toBeVisible()
+  await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
   await expect(page.getByRole('region', { name: '盘口深度' })).toBeVisible()
 
   const metrics = await page.evaluate(() => {
@@ -186,7 +186,7 @@ test('trend supports ranges, independent legends, keyboard detail and breaks mis
   await expect.poll(() => requests.some(value => value.includes('/series/?days=30'))).toBeTruthy()
   await page.getByRole('button', { name: '24 小时' }).click()
   await expect.poll(() => requests.some(value => value.includes('/series/?days=1'))).toBeTruthy()
-  await page.getByRole('button', { name: /查看第 3 次观测/ }).focus()
+  await page.locator('.market-trend-panel--sell').getByRole('button', { name: /卖价第 3 次观测/ }).focus()
   await expect(page.getByRole('status', { name: '当前观测报价' })).toContainText('暂无报价')
   await expect(page.getByRole('table', { name: '走势图数据' })).toContainText('暂无报价')
 })
@@ -204,8 +204,8 @@ test('chart hover details stay readable and keyboard reachable inside the framed
   })
 
   await page.goto('/market')
-  await expect(page.locator('.market-trend-svg')).toBeVisible()
-  const target = page.getByRole('button', { name: '查看第 2 次观测' })
+  await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
+  const target = page.locator('.market-trend-panel--sell').getByRole('button', { name: '卖价第 2 次观测' })
   await expect(target).toHaveAttribute('tabindex', '0')
   await target.hover()
   await expect(page.locator('.market-trend-tooltip')).toBeVisible()

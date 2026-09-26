@@ -145,8 +145,8 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
     """Collect due prices once; injected I/O lets tests exercise the DB path."""
     from .session_bundle import NeedsAuthError
     if bundle_loader is None:
-        from .session_bundle import load_random_session
-        bundle_loader = load_random_session
+        from .session_bundle import load_random_session_pool
+        bundle_loader = load_random_session_pool
     if session_factory is None:
         from .collector_protocol import MarketSession
         session_factory = MarketSession
@@ -170,8 +170,8 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         return run
 
     needs_auth = False
-    try:
-        bundle = bundle_loader()
+
+    def collect_bundle(bundle):
         with session_factory(bundle) as session:
             for index, item in enumerate(items):
                 try:
@@ -194,6 +194,31 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                         break
                 if index < len(items) - 1:
                     sleep(QUERY_PACE_SECONDS)
+
+    try:
+        loaded = bundle_loader()
+        if isinstance(loaded, dict):
+            bundles = [loaded]
+        elif isinstance(loaded, (list, tuple)):
+            bundles = list(loaded)
+        else:
+            raise NeedsAuthError('No usable market session')
+        if not bundles:
+            raise NeedsAuthError('No usable market session')
+
+        for bundle in bundles:
+            try:
+                collect_bundle(bundle)
+            except NeedsAuthError:
+                # Retry only when the session failed before any item was
+                # persisted.  Retrying after a partial collection could create
+                # duplicate snapshots or double-count run results.
+                if run.success_count or run.failure_count:
+                    raise
+                continue
+            break
+        else:
+            raise NeedsAuthError('No usable market session')
     except LeaseLost:
         return None
     except NeedsAuthError:

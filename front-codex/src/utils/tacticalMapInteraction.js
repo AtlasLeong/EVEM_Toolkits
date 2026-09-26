@@ -5,6 +5,40 @@ import { zoomAroundPoint } from './tacticalMapLayout.js';
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const inside = (point, {width, height}) => point.x >= 0 && point.y >= 0 && point.x <= width && point.y <= height;
 
+// Pointer events can arrive much faster than React can commit a render. Keep
+// only the newest drag frame and let pointer-up flush it synchronously so the
+// final drop target always uses the same camera/marker state the user saw.
+export function createFrameCoalescer(schedule = cb => requestAnimationFrame(cb), cancel = id => cancelAnimationFrame(id)) {
+  let frame = null;
+  let pending;
+  return {
+    enqueue(value, commit) {
+      pending = value;
+      if (frame !== null) return;
+      frame = schedule(() => {
+        frame = null;
+        const next = pending;
+        pending = undefined;
+        if (next !== undefined) commit(next);
+      });
+    },
+    flush(commit) {
+      if (frame === null || pending === undefined) return false;
+      cancel(frame);
+      frame = null;
+      const next = pending;
+      pending = undefined;
+      commit(next);
+      return true;
+    },
+    cancel() {
+      if (frame !== null) cancel(frame);
+      frame = null;
+      pending = undefined;
+    },
+  };
+}
+
 /**
  * Focus leaders are an aid for the selected system, not part of the map
  * topology. Tactical cards have their own quiet, always-visible leaders;

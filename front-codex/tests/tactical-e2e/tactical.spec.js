@@ -1285,7 +1285,7 @@ test("organization URL selects only active membership and selector keeps a share
   await expect(page.locator('summary[aria-label="选择组织"]')).toContainText("真实演习");
   await expect.poll(() => state.requests.some((url) => url.includes("/organizations/2/snapshot/"))).toBe(true);
   await page.locator('summary[aria-label="选择组织"]').click();
-  await page.getByRole("button", { name: "北境联合", exact: true }).click();
+  await page.getByRole("option", { name: "北境联合", exact: true }).click();
   await expect(page).toHaveURL(/organization=1/);
   await page.goto("/tactical?organization=3");
   await expect(page.locator('summary[aria-label="选择组织"]')).toContainText("北境联合");
@@ -1713,7 +1713,7 @@ test("confirming into existing force retains the version explicitly selected", a
   await page.getByRole("button", { name: "上报记录", exact: true }).click();
   await page.getByRole("button", { name: "确认 / 关联" }).click();
   await page.locator('summary[aria-label="确认方式"]').click();
-  await page.getByRole("button", { name: "关联：敌方前锋 · 德里克一" }).click();
+  await page.getByRole("option", { name: "关联：敌方前锋 · 德里克一" }).click();
   state.setSnapshot({
     ...pending,
     forces: [{ ...pending.forces[0], version: 2, people: 90 }],
@@ -1741,9 +1741,9 @@ test("corrected report requires explicit existing force selection", async ({
   await page.getByRole("button", { name: "确认 / 关联" }).click();
   await page.locator('summary[aria-label="确认方式"]').click();
   await expect(
-    page.getByRole("button", { name: "建立新敌方部署" }),
+    page.getByRole("option", { name: "建立新敌方部署" }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "关联：敌方前锋 · 德里克一" }).click();
+  await page.getByRole("option", { name: "关联：敌方前锋 · 德里克一" }).click();
   await page.getByRole("button", { name: "确认部署", exact: true }).click();
   await expect
     .poll(() =>

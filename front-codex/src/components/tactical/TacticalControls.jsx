@@ -37,6 +37,7 @@ export function TacticalDialog({ title, children, onClose, wide = false, mobileS
     <dialog
       ref={ref}
       className={`tac-dialog${wide ? " is-wide" : ""}${mobileSheet ? " tac-mobile-sheet" : ""}${confirm ? " is-confirm" : ""}`}
+      aria-modal="true"
       aria-labelledby={id}
       onCancel={(event) => {
         event.preventDefault();
@@ -62,31 +63,37 @@ export function TacticalDialog({ title, children, onClose, wide = false, mobileS
 
 export function TacticalSelect({ label, value, options, onChange }) {
   const ref = useRef(null);
+  const id = useId();
+  const [open, setOpen] = useState(false);
   return (
     <details
       className="tac-select"
       ref={ref}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           ref.current.open = false;
+          setOpen(false);
           ref.current.querySelector("summary").focus();
         }
       }}
     >
-      <summary aria-label={label}>
+      <summary aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-menu`}>
         {options.find((option) => String(option.value) === String(value))
           ?.label || "请选择"}
         <ChevronDown size={16} />
       </summary>
-      <div className="tac-select-menu" role="group" aria-label={label}>
+      <div id={`${id}-menu`} className="tac-select-menu" role="listbox" aria-label={label}>
         {options.map((option) => (
           <button
             type="button"
             key={option.value}
-            aria-pressed={String(value) === String(option.value)}
+            role="option"
+            aria-selected={String(value) === String(option.value)}
             onClick={() => {
               onChange(option.value);
               ref.current.open = false;
+              setOpen(false);
               ref.current.querySelector("summary").focus();
             }}
           >

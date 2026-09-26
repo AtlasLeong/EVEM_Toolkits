@@ -6,7 +6,7 @@ import { buildMarkerGroups, buildSystemCountMarkerGroups, fitMarkerText, fleetMa
 import { projectSystemsScoped, systemDisplayName, visibleGateExits, zoomAroundPoint } from '../../utils/tacticalMapLayout';
 import { screenNodes } from '../../utils/tacticalMapScreen';
 import { latestSystemIntel } from '../../utils/tacticalSystemIntel';
-import { focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, markerLeaderSegments, normalizeWheelDelta, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
+import { createFrameCoalescer, focusDenseArea, indexGateSegments, labelMotionPhase, labelVisibilityState, labelsForWheelFrame, leaderSegmentsForFocus, markerLeaderSegments, normalizeWheelDelta, resolveSystemHit, subscribeMapWheel, validateDirectMove, wheelCameraFrame, wheelLabelState } from '../../utils/tacticalMapInteraction';
 import { BoardGateLine, BoardStarGlyph, BoardSystemLabel, securityColor, securityLabel } from './BoardMapPrimitives';
 import '../../styles/tacticalMapIntel.css';
 
@@ -99,11 +99,13 @@ export default function CollaborationMap({
   const [visibleMarkerSlots, setVisibleMarkerSlots] = useState({scopeVersion:scope?.version ?? null, slots:new Map()});
   const ref = useRef(null), worldLayerRef = useRef(null), overlayLayerRef = useRef(null), gesture = useRef(null), suppressClick = useRef(false), wheelHandler = useRef(null), pickerRef = useRef(null);
   const wheelQueue = useRef({delta:0,anchor:null,frame:null,idle:null});
+  const dragFrame = useRef(null);
   const liveViewRef = useRef(INITIAL_VIEW);
   const settledLabels = useRef(null);
   const settledMarkerLayout = useRef(null);
   const labelSettleTimer = useRef(null);
   const scopeVersion = scope?.version ?? null;
+  if (dragFrame.current === null) dragFrame.current = createFrameCoalescer();
   const fitIds = useMemo(() => {
     const regions = new Set((scope?.region_ids || []).map(Number));
     const core = regions.size ? systems.filter(node => regions.has(Number(node.region_id))) : systems;
@@ -324,6 +326,7 @@ export default function CollaborationMap({
     const queue = wheelQueue.current;
     if (queue.frame !== null) cancelAnimationFrame(queue.frame);
     if (queue.idle !== null) clearTimeout(queue.idle);
+    dragFrame.current?.cancel();
   }, []);
   useEffect(() => {
     const node = ref.current;
@@ -403,7 +406,14 @@ export default function CollaborationMap({
     if(hit.ambiguous) {setPicker({kind:'select',candidates:neighborhood,point:p});return;}
     onSelectSystem?.(hit.target||node);
   };
-  const cancel = () => {gesture.current=null;setDrag(null);setPicker(null);};
+  const applyDragFrame = frame => {
+    if (frame?.view) {
+      liveViewRef.current = frame.view;
+      setView(frame.view);
+    }
+    if (Object.prototype.hasOwnProperty.call(frame || {}, 'drag')) setDrag(frame.drag);
+  };
+  const cancel = () => {dragFrame.current?.cancel();gesture.current=null;setDrag(null);setPicker(null);};
   const submitMove = (snapshot,destination) => {
     const result=validateDirectMove(snapshot,forces,destination,nodes,canMove);
     if(result.ok) onMoveForce?.(snapshot,result.destination_system_id);
@@ -440,12 +450,19 @@ export default function CollaborationMap({
     const p=point(event);current.last=p;
     if(!current.started&&Math.hypot(p.x-current.start.x,p.y-current.start.y)<7)return;
     current.started=true;
-    if(current.force||current.report)setDrag({point:p,...resolveSystemHit(nodes,p,liveViewRef.current,viewport)});
-    else setView({...current.view,x:current.view.x+p.x-current.start.x,y:current.view.y+p.y-current.start.y});
+    if(current.force||current.report) {
+      dragFrame.current.enqueue({drag:{point:p,...resolveSystemHit(nodes,p,liveViewRef.current,viewport)}}, applyDragFrame);
+    } else {
+      const next={...current.view,x:current.view.x+p.x-current.start.x,y:current.view.y+p.y-current.start.y};
+      dragFrame.current.enqueue({view:next}, applyDragFrame);
+    }
   };
   const end = event => {
     const current=gesture.current;
     if(!current||event.pointerId!==current.pointerId)return;
+    // Flush the last native pointer frame before resolving the drop target.
+    // This keeps pointer-up authoritative even when React is one render behind.
+    dragFrame.current.flush(applyDragFrame);
     gesture.current=null;
     if(ref.current?.hasPointerCapture(event.pointerId))ref.current.releasePointerCapture(event.pointerId);
     suppressClick.current=current.started;
@@ -531,20 +548,22 @@ export default function CollaborationMap({
         const node=byId.get(Number(report.system_id));if(!node)return null;
         const withdrawable=Boolean(canWithdrawCount?.(report));
         const select=()=>{ onSelectSystem?.(node); onSelectCount?.(report); };
-         return <g key={`count-${report.system_id}`} role="button" tabIndex={0}
-           aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
-           transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
-           data-count-system-id={report.system_id} data-count-report-id={report.id}
+        return <Fragment key={`count-${report.system_id}`}>
+          <g role="button" tabIndex={0}
+          aria-label={`${systemDisplayName(node)}，${report.label}，${report.author_name||'未知上报者'}`}
+          transform={`translate(${x} ${y})`} data-tac-fixed-overlay-group="true" data-tac-base-transform={`translate(${x} ${y})`}
+          data-count-system-id={report.system_id} data-count-report-id={report.id}
           className={`tac-map-count tac-map-report-marker${canMoveCount?.(report)?' is-draggable':''}${isStale(report.observed_at)?' is-stale':''}`}
           onPointerDown={event=>begin(event,null,report)} onClick={event=>{if(suppressClick.current){suppressClick.current=false;return;}select();}}
           onKeyDown={event=>{if(['Enter',' '].includes(event.key)){event.preventDefault();select();}}}>
           <title>{`${systemDisplayName(node)} · ${report.label} · 上报：${report.author_name||'未知上报者'} · ${ageLabel(report.observed_at)} · 星系人数独立记录，不与舰队人数相加`}</title>
           <rect width={width} height={height} rx="5" fill="#293638" stroke="#a39577" strokeDasharray="3 2" strokeWidth="1"/>
           <text x={(width-(withdrawable?MARKER_CLOSE_SIZE:0))/2} y={height/2} textAnchor="middle" dominantBaseline="central" fill="#e8d9bb" fontSize="12" fontWeight="400">{report.label}</text>
-          {withdrawable&&<MarkerCloseAction x={width-MARKER_CLOSE_SIZE} y={(height-MARKER_CLOSE_SIZE)/2}
+          </g>
+          {withdrawable&&<MarkerCloseAction x={x+width-MARKER_CLOSE_SIZE} y={y+(height-MARKER_CLOSE_SIZE)/2}
             label={`撤下${systemDisplayName(node)}人数上报`} title={`撤下${systemDisplayName(node)}人数上报（需确认）`}
             className="tac-count-close" onActivate={()=>onWithdrawCount?.(report)}/>}
-        </g>;
+        </Fragment>;
       })}
       {reportMarkers.map(({report,x,y,width,height})=>{
         const node=byId.get(Number(report.system_id)); if(!node)return null;
@@ -580,7 +599,7 @@ export default function CollaborationMap({
         <text x={Math.max(110,Math.min(viewport.width-110,drag.point.x))} y={Math.max(170,drag.point.y-28)} textAnchor="middle" fill="#f2e7cf" fontSize="13" paintOrder="stroke" stroke="#19252b" strokeWidth="5">{drag.ambiguous?'松开后选择目标星系':drag.target?systemDisplayName(drag.target):'拖到目标星系'}</text></g>}
       </g>
     </svg>
-    {picker&&<div ref={pickerRef} className="tac-map-target-picker" role="dialog" aria-label={picker.kind==='move'?'选择部署目标星系':picker.kind==='move-count'?'选择上报目标星系':'选择重叠星系'} style={pickerPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setPicker(null);ref.current?.focus();}}}>
+    {picker&&<div ref={pickerRef} className="tac-map-target-picker" role="dialog" aria-modal="true" aria-label={picker.kind==='move'?'选择部署目标星系':picker.kind==='move-count'?'选择上报目标星系':'选择重叠星系'} style={pickerPosition} onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setPicker(null);ref.current?.focus();}}}>
       <div><strong>{picker.kind.startsWith('move')?'移动到哪个星系？':'选择星系'}</strong><button type="button" aria-label="取消星系选择" onClick={()=>setPicker(null)}><X size={15}/></button></div>
       <ul>{picker.candidates.filter(node=>byId.has(Number(node.system_id))).map(node=>{
         const report=intelById.get(Number(node.system_id));

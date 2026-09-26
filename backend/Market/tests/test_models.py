@@ -9,6 +9,10 @@ from Market.models import CollectionRun, LatestPrice, MarketConfig, MarketItem, 
 
 
 class MarketSchemaTests(SimpleTestCase):
+    def test_snapshot_series_index_orders_item_time_and_id(self):
+        indexes = {index.name: tuple(index.fields) for index in PriceSnapshot._meta.indexes}
+        self.assertEqual(indexes.get('market_snap_item_obs_id'), ('item', 'observed_at_ms', 'id'))
+
     def test_market_models_have_admin_registration_module(self):
         self.assertIsNotNone(importlib.util.find_spec('Market.admin'))
 

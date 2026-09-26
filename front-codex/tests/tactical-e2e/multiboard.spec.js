@@ -420,7 +420,10 @@ test('late unchanged pirate response cannot overwrite a newer full snapshot', as
   await expect(page.locator('.pirate-target-row')).toHaveCount(1)
   await page.getByRole('button', { name: '刷新目标线索' }).click()
   await expect.poll(() => revisions.length).toBe(2)
-  await page.getByRole('button', { name: '刷新目标线索' }).click()
+  await expect(page.getByRole('button', { name: '正在刷新目标线索' })).toBeDisabled()
+  // Refocusing can start a quiet read while the manual read is in flight.
+  // Repeated manual clicks are intentionally disabled by the busy state.
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
   await expect(page.locator('.pirate-target-row')).toHaveCount(2)
   expect(revisions.slice(1)).toEqual(['rev-1', 'rev-1'])
   const lateResponse = page.waitForResponse(response => response.url().includes('revision=rev-1') &&

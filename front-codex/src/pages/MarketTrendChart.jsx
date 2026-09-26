@@ -1,9 +1,9 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
-const CHART = { width: 760, height: 320, left: 76, right: 24, top: 22, bottom: 42 }
+const CHART = { width: 760, height: 300, left: 72, right: 20, top: 20, bottom: 34 }
 const SERIES = [
-  { key: 'best_sell', label: '最低卖价', className: 'sell' },
-  { key: 'best_buy', label: '最高买价', className: 'buy' },
+  { key: 'best_sell', label: '最低卖价', tone: 'sell' },
+  { key: 'best_buy', label: '最高买价', tone: 'buy' },
 ]
 
 function priceInteger(value) {
@@ -53,47 +53,68 @@ function pathSegments(points, field, coordinates) {
   return paths
 }
 
-export default function MarketTrendChart({ points = [], showBuy, showSell, formatPrice, formatTime }) {
-  const [activeIndex, setActiveIndex] = useState(null)
+function buildGeometry(points, field, chart) {
+  const valid = points.map(point => priceInteger(point[field])).filter(value => value !== null)
+  if (!valid.length) return null
+  const rawMin = valid.reduce((minimum, value) => value < minimum ? value : minimum, valid[0])
+  const rawMax = valid.reduce((maximum, value) => value > maximum ? value : maximum, valid[0])
+  const range = rawMax - rawMin
+  const padding = [range * 12n / 100n, rawMax / 40n, 1n].reduce((largest, value) => value > largest ? value : largest, 1n)
+  const min = rawMin > padding ? rawMin - padding : 0n
+  const max = rawMax + padding
+  const times = points.map(point => new Date(point.observed_at).getTime())
+  const finiteTimes = times.filter(Number.isFinite)
+  const minTime = finiteTimes.length ? Math.min(...finiteTimes) : 0
+  const maxTime = finiteTimes.length ? Math.max(...finiteTimes) : 0
+  const plotWidth = chart.width - chart.left - chart.right
+  const plotHeight = chart.height - chart.top - chart.bottom
+  const x = index => chart.left + (maxTime > minTime && Number.isFinite(times[index])
+    ? (times[index] - minTime) / (maxTime - minTime) : points.length > 1 ? index / (points.length - 1) : 0.5) * plotWidth
+  const y = value => chart.top + Number(max - value) / Number(max - min) * plotHeight
+  const coordinates = (index, value) => [x(index), y(value)]
+  return { min, max, x, y, paths: pathSegments(points, field, coordinates) }
+}
+
+function statEntry(stats, section, key) {
+  const value = stats?.[section]?.[key]
+  return value && typeof value === 'object' ? value : null
+}
+
+function TrendStats({ stats, section, formatPrice }) {
+  const entries = [
+    ['当前', statEntry(stats, section, 'current')],
+    ['区间高', statEntry(stats, section, 'range')?.high],
+    ['区间低', statEntry(stats, section, 'range')?.low],
+    ['月高', statEntry(stats, section, 'month')?.high],
+    ['月低', statEntry(stats, section, 'month')?.low],
+  ]
+  return <dl className="market-trend-stats">
+    {entries.map(([label, entry]) => <div key={label}>
+      <dt>{label}</dt>
+      <dd title={entry?.value ? formatPrice(entry.value) : '样本不足'}>{entry?.value ? formatPrice(entry.value) : '样本不足'}</dd>
+    </div>)}
+  </dl>
+}
+
+function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime, activeIndex, activePanel, onActivate, tooltipId }) {
   const plotRef = useRef(null)
   const tooltipRef = useRef(null)
   const [size, setSize] = useState({ width: CHART.width, height: CHART.height })
   const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 })
-  const chart = useMemo(() => ({ ...CHART, ...size, left: size.width < 400 ? 56 : 72, right: 14, top: 18, bottom: 32 }), [size])
-  const geometry = useMemo(() => {
-    const valid = points.flatMap(point => [priceInteger(point.best_buy), priceInteger(point.best_sell)]).filter(value => value !== null)
-    if (!valid.length) return null
-    const rawMin = valid.reduce((minimum, value) => value < minimum ? value : minimum, valid[0])
-    const rawMax = valid.reduce((maximum, value) => value > maximum ? value : maximum, valid[0])
-    const range = rawMax - rawMin
-    const padding = [range * 12n / 100n, rawMax / 40n, 1n].reduce((largest, value) => value > largest ? value : largest, 1n)
-    const min = rawMin > padding ? rawMin - padding : 0n
-    const max = rawMax + padding
-    const times = points.map(point => new Date(point.observed_at).getTime())
-    const minTime = Math.min(...times)
-    const maxTime = Math.max(...times)
-    const plotWidth = chart.width - chart.left - chart.right
-    const plotHeight = chart.height - chart.top - chart.bottom
-    const x = index => chart.left + (maxTime > minTime && Number.isFinite(times[index])
-      ? (times[index] - minTime) / (maxTime - minTime) : points.length > 1 ? index / (points.length - 1) : 0.5) * plotWidth
-    const y = value => chart.top + Number(max - value) / Number(max - min) * plotHeight
-    const coordinates = (index, value) => [x(index), y(value)]
-    return { min, max, x, y, paths: Object.fromEntries(SERIES.map(series => [series.key, pathSegments(points, series.key, coordinates)])) }
-  }, [points, chart])
+  const [measuredIndex, setMeasuredIndex] = useState(null)
+  const chart = useMemo(() => ({ ...CHART, ...size, left: size.width < 400 ? 56 : 72, right: 16, top: 18, bottom: 34 }), [size])
+  const geometry = useMemo(() => buildGeometry(points, field, chart), [points, field, chart])
   const active = activeIndex !== null && points[activeIndex] ? points[activeIndex] : points.at(-1)
-  const activeValue = activeIndex !== null
-    ? priceInteger(points[activeIndex]?.best_sell) ?? priceInteger(points[activeIndex]?.best_buy)
-    : null
-  const activeX = activeIndex !== null && points[activeIndex] && geometry ? geometry.x(activeIndex) : null
-  const activeY = activeValue !== null && geometry
-    ? geometry.y(activeValue)
-    : null
+  const selected = activeIndex !== null && points[activeIndex] ? points[activeIndex] : null
+  const activeValue = selected ? priceInteger(selected[field]) : null
+  const fallbackValue = selected ? priceInteger(selected.best_sell) ?? priceInteger(selected.best_buy) : null
+  const activeX = selected && geometry ? geometry.x(activeIndex) : null
+  const activeY = geometry && (activeValue !== null || fallbackValue !== null) ? geometry.y(activeValue ?? fallbackValue) : null
   const hasGeometry = Boolean(geometry)
 
   useLayoutEffect(() => {
     const plot = plotRef.current
     if (!plot) return undefined
-    // Native pixel coordinates keep labels and markers readable without stretching.
     const measure = () => {
       const { width, height } = plot.getBoundingClientRect()
       if (width > 0 && height > 0) setSize(previous => previous.width === width && previous.height === height ? previous : { width, height })
@@ -105,19 +126,31 @@ export default function MarketTrendChart({ points = [], showBuy, showSell, forma
   }, [hasGeometry])
 
   useLayoutEffect(() => {
-    if (activeX === null || activeY === null || !tooltipRef.current) return
+    setMeasuredIndex(null)
+    if (activeX === null || activeY === null || activePanel !== tone || !tooltipRef.current) return undefined
     const { width, height } = tooltipRef.current.getBoundingClientRect()
     const above = activeY - height - 12
     const left = Math.max(4, Math.min(activeX - width / 2, chart.width - width - 4))
     const top = Math.max(4, Math.min(above >= 4 ? above : activeY + 12, chart.height - height - 4))
     setTooltipPosition(previous => previous.left === left && previous.top === top ? previous : { left, top })
-  }, [activeX, activeY, active, chart])
+    setMeasuredIndex(activeIndex)
+    return undefined
+  }, [activeX, activeY, activeIndex, activePanel, tone, active, chart])
 
-  if (!points.length || !geometry) return <div className="market-trend-empty">这段时间暂无有效报价曲线。可切换时间范围，等待真实采集数据。</div>
+  function moveBy(index, delta) {
+    const nextIndex = Math.min(Math.max(index + delta, 0), points.length - 1)
+    const target = plotRef.current?.querySelector(`[data-point-index="${nextIndex}"]`)
+    if (target) {
+      target.focus()
+      onActivate(nextIndex, tone)
+    }
+  }
 
-  return <div className="market-trend-wrap">
-    <div ref={plotRef} className="market-trend-svg-wrap" onMouseLeave={() => setActiveIndex(null)}>
-      <svg className="market-trend-svg" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="买卖报价历史走势图">
+  return <section className={`market-trend-panel market-trend-panel--${tone}`} aria-label={`${label}走势`}>
+    <div className="market-trend-panel-head"><div><span className="market-trend-panel-kicker">{tone === 'sell' ? 'SELL SIDE' : 'BUY SIDE'}</span><h4>{label}</h4></div><span className="market-trend-panel-count">{points.length} 次观测</span></div>
+    <TrendStats stats={stats} section={tone} formatPrice={formatPrice} />
+    {!geometry ? <div className="market-trend-panel-empty">暂无有效报价曲线</div> : <div ref={plotRef} className="market-trend-svg-wrap" onMouseLeave={() => onActivate(null, tone)}>
+      <svg className="market-trend-svg" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`${label}历史走势图`}>
         {[0, 1, 2, 3, 4].map(index => {
           const y = chart.top + index * (chart.height - chart.top - chart.bottom) / 4
           const value = geometry.max - BigInt(index) * (geometry.max - geometry.min) / 4n
@@ -125,21 +158,62 @@ export default function MarketTrendChart({ points = [], showBuy, showSell, forma
         })}
         <text className="market-trend-axis" x={chart.left} y={chart.height - 8}>{axisTime(points[0].observed_at)}</text>
         <text className="market-trend-axis" x={chart.width - chart.right} y={chart.height - 8} textAnchor="end">{axisTime(points.at(-1).observed_at)}</text>
-        {SERIES.filter(series => series.key === 'best_sell' ? showSell : showBuy).flatMap(series => geometry.paths[series.key].map((path, index) => <path key={`${series.key}-${index}`} className={`market-trend-path market-trend-path--${series.className}`} d={path} />))}
-        {activeIndex !== null && points[activeIndex] ? <line className="market-trend-cursor" x1={geometry.x(activeIndex)} x2={geometry.x(activeIndex)} y1={chart.top} y2={chart.height - chart.bottom} /> : null}
-        {activeIndex !== null && points[activeIndex] ? SERIES.filter(series => series.key === 'best_sell' ? showSell : showBuy).map(series => {
-          const value = priceInteger(points[activeIndex][series.key])
-          return value === null ? null : <circle key={`active-${series.key}`} className={`market-trend-point market-trend-point--${series.className}`} cx={geometry.x(activeIndex)} cy={geometry.y(value)} r="5" />
-        }) : null}
+        {geometry.paths.map((path, index) => <path key={`${field}-${index}`} className={`market-trend-path market-trend-path--${tone}`} d={path} />)}
+        {activePanel === tone && selected ? <line className="market-trend-cursor" x1={geometry.x(activeIndex)} x2={geometry.x(activeIndex)} y1={chart.top} y2={chart.height - chart.bottom} /> : null}
+        {activePanel === tone && selected ? (() => {
+          const value = priceInteger(selected[field])
+          return value === null ? null : <circle className={`market-trend-point market-trend-point--${tone}`} cx={geometry.x(activeIndex)} cy={geometry.y(value)} r="5" />
+        })() : null}
       </svg>
       <div className="market-trend-targets">
-        {points.map((point, index) => <button key={`${point.observed_at}-${index}`} type="button" tabIndex={0} className="market-point-target" aria-label={`查看第 ${index + 1} 次观测`} style={{ left: `${geometry.x(index) / chart.width * 100}%` }} onMouseEnter={() => setActiveIndex(index)} onFocus={() => setActiveIndex(index)} />)}
+        {points.map((point, index) => <button
+          key={`${point.observed_at}-${index}`}
+          type="button"
+          tabIndex={0}
+          data-point-index={index}
+          className="market-point-target"
+          aria-label={`${tone === 'sell' ? '卖价' : '买价'}第 ${index + 1} 次观测`}
+          aria-describedby={activePanel === tone && activeIndex === index ? tooltipId : undefined}
+          style={{ left: `${geometry.x(index) / chart.width * 100}%` }}
+          onMouseEnter={() => onActivate(index, tone)}
+          onFocus={() => onActivate(index, tone)}
+          onKeyDown={event => {
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+              event.preventDefault()
+              moveBy(index, event.key === 'ArrowRight' ? 1 : -1)
+            }
+          }}
+        />)}
       </div>
-      {activeIndex !== null && active && activeX !== null && activeY !== null ? <div ref={tooltipRef} className="market-trend-tooltip" role="tooltip" style={tooltipPosition}>
-        <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>
-        <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(active.best_sell)}</strong></span>
-        <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(active.best_buy)}</strong></span>
+      {activePanel === tone && selected && activeX !== null && activeY !== null ? <div ref={tooltipRef} id={tooltipId} className={`market-trend-tooltip${measuredIndex === activeIndex ? ' is-measured' : ''}`} role="tooltip" style={tooltipPosition}>
+        <time dateTime={selected.observed_at}>{formatTime(selected.observed_at)}</time>
+        <span><b className="market-sell-text">最低卖价</b><strong>{formatPrice(selected.best_sell)}</strong></span>
+        <span><b className="market-buy-text">最高买价</b><strong>{formatPrice(selected.best_buy)}</strong></span>
       </div> : null}
+    </div>}
+  </section>
+}
+
+export default function MarketTrendChart({ points = [], showBuy = true, showSell = true, stats, formatPrice, formatTime }) {
+  const [activeIndex, setActiveIndex] = useState(null)
+  const [activePanel, setActivePanel] = useState('sell')
+  const id = useId().replace(/:/g, '')
+  const sellTooltipId = `market-trend-tooltip-${id}-sell`
+  const buyTooltipId = `market-trend-tooltip-${id}-buy`
+  const active = activeIndex !== null && points[activeIndex] ? points[activeIndex] : points.at(-1)
+  const hasPoints = points.length > 0
+
+  function activate(index, panel) {
+    setActivePanel(panel)
+    setActiveIndex(index)
+  }
+
+  if (!hasPoints) return <div className="market-trend-empty">这段时间暂无有效报价曲线。可切换时间范围，等待真实采集数据。</div>
+
+  return <div className="market-trend-wrap">
+    <div className="market-trend-panels">
+      {showSell ? <ChartPanel points={points} field="best_sell" label="最低卖价" tone="sell" stats={stats} formatPrice={formatPrice} formatTime={formatTime} activeIndex={activeIndex} activePanel={activePanel} onActivate={activate} tooltipId={sellTooltipId} /> : null}
+      {showBuy ? <ChartPanel points={points} field="best_buy" label="最高买价" tone="buy" stats={stats} formatPrice={formatPrice} formatTime={formatTime} activeIndex={activeIndex} activePanel={activePanel} onActivate={activate} tooltipId={buyTooltipId} /> : null}
     </div>
     {active ? <div className="market-trend-readout" role="status" aria-label="当前观测报价">
       <time dateTime={active.observed_at}>{formatTime(active.observed_at)}</time>

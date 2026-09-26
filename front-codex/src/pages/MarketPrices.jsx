@@ -5,6 +5,7 @@ import { Activity, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-r
 import { AuthContext } from '../context/AuthContext'
 import { LoadingBar } from '../components/ui/Primitives'
 import { getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
+import { marketRefetchInterval } from '../utils/marketPolling'
 import MarketTrendChart from './MarketTrendChart'
 import '../styles/market.css'
 
@@ -29,19 +30,21 @@ export function marketScopeLabel(value) {
   return value === 'global' ? '市场范围 8' : value || '—'
 }
 
-function ageLabel(value) {
-  const elapsed = Date.now() - new Date(value).getTime()
+function ageLabel(value, now = Date.now()) {
+  const elapsed = now - new Date(value).getTime()
   if (!Number.isFinite(elapsed)) return ''
   if (elapsed < 60000) return '刚刚'
   if (elapsed < 3600000) return `${Math.floor(elapsed / 60000)} 分钟前`
-  if (elapsed < 86400000) return `${Math.floor(elapsed / 3600000)} 小时前`
+  // Switch to a day label slightly before the 24-hour boundary so a clock
+  // tick during rendering does not make the compact mobile label oscillate.
+  if (elapsed < 23 * 3600000) return `${Math.floor(elapsed / 3600000)} 小时前`
   return `${Math.floor(elapsed / 86400000)} 天前`
 }
 
-function quoteStatus(item) {
+function quoteStatus(item, now = Date.now()) {
   if (!item.observed_at || item.status === 'uncollected') return { label: '尚未采集', tone: 'neutral' }
   if (item.status === 'empty') return { label: '暂无挂单', tone: 'neutral' }
-  if (item.status === 'stale' || Date.now() - new Date(item.observed_at).getTime() > 2 * 3600000) return { label: '已过期', tone: 'warning' }
+  if (item.status === 'stale' || now - new Date(item.observed_at).getTime() > 2 * 3600000) return { label: '已过期', tone: 'warning' }
   return { label: '最新观测', tone: 'success' }
 }
 
@@ -63,10 +66,10 @@ function CategoryNav({ categories, active, onSelect }) {
   </nav>
 }
 
-function ItemNav({ rows, selectedId, onSelect }) {
+function ItemNav({ rows, selectedId, onSelect, now }) {
   return <div className="market-item-nav" role="group" aria-label="快速切换物品">
     {rows.map(item => {
-      const status = quoteStatus(item)
+      const status = quoteStatus(item, now)
       return <button type="button" key={item.item_id} aria-current={selectedId === item.item_id ? 'true' : undefined} className={`market-item-choice${selectedId === item.item_id ? ' active' : ''}`} onClick={() => onSelect(item.item_id)}>
         <span className="market-choice-head"><strong>{item.name}</strong><span className={`market-choice-status ${status.tone}`}>{status.label}</span></span>
         <span className="market-choice-meta">{item.category || '未分类'}</span>
@@ -105,13 +108,25 @@ export default function MarketPricesPage() {
   const [days, setDays] = useState(1)
   const [showBuy, setShowBuy] = useState(true)
   const [showSell, setShowSell] = useState(true)
+  const [clock, setClock] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setQueryText(search.trim()); setPage(1) }, 250)
     return () => window.clearTimeout(timer)
   }, [search])
 
-  const queryOptions = { retry: false, staleTime: 15000, placeholderData: previousData => previousData, refetchInterval: 120000, refetchIntervalInBackground: false }
+  const queryOptions = {
+    retry: false,
+    staleTime: 15000,
+    placeholderData: previousData => previousData,
+    refetchInterval: marketRefetchInterval,
+    refetchIntervalInBackground: false,
+  }
   const categoriesQuery = useQuery({ queryKey: ['market-categories'], queryFn: ({ signal }) => listMarketCategories({ signal }), ...queryOptions })
   const itemsQuery = useQuery({
     queryKey: ['market-items', queryText, categoryId, page],
@@ -126,7 +141,7 @@ export default function MarketPricesPage() {
     queryFn: ({ signal }) => getMarketSeries(selected.item_id, days, { signal }),
     enabled: Boolean(selected), ...queryOptions,
   })
-  const status = selected ? quoteStatus(selected) : null
+  const status = selected ? quoteStatus(selected, clock) : null
   const points = seriesQuery.data?.points || []
 
   function selectCategory(value) {
@@ -163,7 +178,7 @@ export default function MarketPricesPage() {
         {itemsQuery.isFetching && itemsQuery.data ? <span className="market-refresh-status" role="status">目录更新中</span> : null}
         {itemsQuery.isError && !itemsQuery.data ? <div className="market-terminal-empty"><strong>价格暂时无法加载</strong><p>服务暂不可用，请稍后重试。历史报价不会伪装为实时行情。</p></div> : null}
         {itemsQuery.isSuccess && !rows.length ? <div className="market-terminal-empty"><strong>{queryText ? '没有找到物品' : '尚无已启用物品'}</strong><p>{queryText ? '试试其他名称。' : '管理员启用采集物品后，才会出现在这里。'}</p></div> : null}
-        {rows.length ? <ItemNav rows={rows} selectedId={selected?.item_id} onSelect={setSelectedId} /> : null}
+        {rows.length ? <ItemNav rows={rows} selectedId={selected?.item_id} onSelect={setSelectedId} now={clock} /> : null}
         {itemsQuery.isSuccess && (page > 1 || page * 50 < total) ? <div className="market-terminal-pager"><button type="button" aria-label="上一页物品" disabled={page <= 1} onClick={() => { setPage(value => value - 1); setSelectedId(null) }}><ChevronLeft size={16} /></button><span>第 {page} 页</span><button type="button" aria-label="下一页物品" disabled={page * 50 >= total} onClick={() => { setPage(value => value + 1); setSelectedId(null) }}><ChevronRight size={16} /></button></div> : null}
       </aside>
 
@@ -175,7 +190,7 @@ export default function MarketPricesPage() {
           <div className="market-chart-frame">
             {seriesQuery.isPending && !seriesQuery.data ? <div className="market-chart-message"><LoadingBar /><span>正在读取真实历史报价…</span></div> : null}
             {seriesQuery.isError && !seriesQuery.data ? <div className="market-chart-message">走势图暂时无法加载；当前报价与历史走势可能不一致，请稍后刷新。</div> : null}
-            {seriesQuery.data ? <MarketTrendChart points={points} showBuy={showBuy} showSell={showSell} formatPrice={formatMarketPrice} formatTime={formatMarketTime} /> : null}
+            {seriesQuery.data ? <MarketTrendChart points={points} stats={seriesQuery.data.stats} showBuy={showBuy} showSell={showSell} formatPrice={formatMarketPrice} formatTime={formatMarketTime} /> : null}
           </div>
           <section className="market-depth-panel" aria-label="盘口深度"><div className="market-depth-head"><div><span className="market-eyebrow">ORDER BOOK</span><h3>盘口深度</h3></div><span>前 5 档</span></div><div className="market-depth-grid"><PriceLadder title="卖价盘口" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价盘口" values={selected.buy_prices} tone="buy" /></div></section>
         </> : <div className="market-terminal-blank"><Activity size={42} aria-hidden="true" /><h2>选择物品，查看价格轨迹</h2><p>左侧列表只展示已启用的市场物品。</p></div>}
@@ -183,7 +198,7 @@ export default function MarketPricesPage() {
 
       <aside className="market-terminal-summary" aria-label="当前物品报价摘要">
         <div className="market-terminal-section-head"><span>QUOTE SUMMARY</span><strong>报价概览</strong></div>
-        {selected ? <><div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div><div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at)}</small> : null}</div></> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
+        {selected ? <><div className="market-quote-stack"><QuoteCard title="最低卖价" value={selected.best_sell} change={seriesQuery.data?.change?.best_sell} tone="sell" /><QuoteCard title="最高买价" value={selected.best_buy} change={seriesQuery.data?.change?.best_buy} tone="buy" /></div><div className="market-snapshot-meta"><span>最近采集</span><strong>{formatMarketTime(selected.observed_at)}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at, clock)}</small> : null}</div></> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
       </aside>
     </div>
   </div>

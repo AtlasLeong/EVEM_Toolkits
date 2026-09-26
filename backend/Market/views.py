@@ -2,8 +2,7 @@ import time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Q, Window
-from django.db.models.functions import RowNumber
+from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
@@ -210,6 +209,69 @@ def series_change(first, last):
     }
 
 
+SERIES_POINT_LIMIT = 240
+MONTH_MS = 30 * 24 * 60 * 60 * 1000
+
+
+def _empty_series_state():
+    return {'first': None, 'current': None, 'last_valid': None, 'high': None, 'low': None}
+
+
+def _series_candidate(row, field, row_index):
+    value = row[field]
+    if value is None:
+        return None
+    return {
+        'value': value,
+        'observed_at_ms': row['observed_at_ms'],
+        'row_index': row_index,
+    }
+
+
+def _update_series_state(state, candidate):
+    # An empty latest observation is not a current quote. Keep the last valid
+    # quote separately for the historical change calculation.
+    state['current'] = candidate
+    if candidate is None:
+        return
+    if state['first'] is None:
+        state['first'] = candidate
+    state['last_valid'] = candidate
+    if state['high'] is None or candidate['value'] > state['high']['value']:
+        state['high'] = candidate
+    if state['low'] is None or candidate['value'] < state['low']['value']:
+        state['low'] = candidate
+
+
+def _public_series_candidate(candidate):
+    if candidate is None:
+        return None
+    return {
+        'value': str(candidate['value']),
+        'observed_at': utc_iso(candidate['observed_at_ms']),
+    }
+
+
+def _public_series_stats(states):
+    return {
+        key: {
+            'current': _public_series_candidate(state['current']),
+            'range': {
+                'high': _public_series_candidate(state['high']),
+                'low': _public_series_candidate(state['low']),
+            },
+            'month': {
+                'high': _public_series_candidate(month_state['high']),
+                'low': _public_series_candidate(month_state['low']),
+            },
+        }
+        for key, state, month_state in (
+            ('buy', states['buy'], states['month_buy']),
+            ('sell', states['sell'], states['month_sell']),
+        )
+    }
+
+
 class PublicSeriesView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -222,31 +284,76 @@ class PublicSeriesView(APIView):
         days = request.query_params.get('days', '1')
         if days not in {'1', '7', '30'}:
             raise ValidationError({'days': 'Choose 1, 7, or 30 days.'})
-        cutoff_ms = int(time.time() * 1000) - int(days) * 24 * 60 * 60 * 1000
+        now_ms = int(time.time() * 1000)
+        cutoff_ms = now_ms - int(days) * 24 * 60 * 60 * 1000
+        month_cutoff_ms = now_ms - MONTH_MS
         snapshots = PriceSnapshot.objects.filter(
-            item=item, observed_at_ms__gte=cutoff_ms,
+            item=item, observed_at_ms__gte=month_cutoff_ms,
         ).order_by('observed_at_ms', 'id').values(
-            'observed_at_ms', 'best_buy', 'best_sell', 'buy_prices', 'sell_prices',
+            'id', 'observed_at_ms', 'best_buy', 'best_sell', 'buy_prices', 'sell_prices',
         )
-        count = snapshots.count()
-        def first_and_last(field):
-            field_values = snapshots.filter(**{f'{field}__isnull': False})
-            first_value = field_values.values_list(field, flat=True).first()
-            last_value = field_values.order_by('-observed_at_ms', '-id').values_list(field, flat=True).first()
-            return first_value, last_value
-
-        first_buy, last_buy = first_and_last('best_buy')
-        first_sell, last_sell = first_and_last('best_sell')
-        if count > 240:
-            sample_rows = sorted({index * (count - 1) // 239 + 1 for index in range(240)})
-            sampled = list(snapshots.annotate(
-                _sample_row=Window(
-                    expression=RowNumber(),
-                    order_by=[F('observed_at_ms').asc(), F('id').asc()],
-                ),
-            ).filter(_sample_row__in=sample_rows).order_by('observed_at_ms', 'id'))
+        selected_count = snapshots.filter(observed_at_ms__gte=cutoff_ms).count()
+        if selected_count:
+            sample_indexes = (
+                set(range(selected_count)) if selected_count <= SERIES_POINT_LIMIT else
+                {index * (selected_count - 1) // (SERIES_POINT_LIMIT - 1)
+                 for index in range(SERIES_POINT_LIMIT)}
+            )
         else:
-            sampled = list(snapshots)
+            sample_indexes = set()
+        selected_rows = {}
+        special_rows = {}
+        states = {
+            'buy': _empty_series_state(),
+            'sell': _empty_series_state(),
+            'month_buy': _empty_series_state(),
+            'month_sell': _empty_series_state(),
+        }
+        selected_index = 0
+        for snapshot in snapshots.iterator(chunk_size=500):
+            month_buy = _series_candidate(snapshot, 'best_buy', selected_index)
+            month_sell = _series_candidate(snapshot, 'best_sell', selected_index)
+            _update_series_state(states['month_buy'], month_buy)
+            _update_series_state(states['month_sell'], month_sell)
+            if snapshot['observed_at_ms'] < cutoff_ms:
+                continue
+            row_index = selected_index
+            selected_index += 1
+            if row_index in sample_indexes:
+                selected_rows[row_index] = snapshot
+            buy = _series_candidate(snapshot, 'best_buy', row_index)
+            sell = _series_candidate(snapshot, 'best_sell', row_index)
+            before_buy_extreme = (states['buy']['high'], states['buy']['low'])
+            before_sell_extreme = (states['sell']['high'], states['sell']['low'])
+            _update_series_state(states['buy'], buy)
+            _update_series_state(states['sell'], sell)
+            if (states['buy']['high'], states['buy']['low']) != before_buy_extreme or (states['sell']['high'], states['sell']['low']) != before_sell_extreme:
+                special_rows[row_index] = snapshot
+
+        protected_indexes = {0, selected_count - 1} if selected_count else set()
+        for state_key in ('buy', 'sell'):
+            for extreme_key in ('high', 'low'):
+                candidate = states[state_key][extreme_key]
+                if candidate is not None:
+                    protected_indexes.add(candidate['row_index'])
+        candidate_indexes = set(selected_rows) | set(special_rows)
+        if len(candidate_indexes) > SERIES_POINT_LIMIT:
+            selected_indexes = {
+                row_index for row_index in protected_indexes if row_index in candidate_indexes
+            }
+            # Prefer the evenly distributed base sample, then fill any remaining
+            # slots from extrema candidates. Protected rows are always retained.
+            for row_index in list(sorted(sample_indexes)) + sorted(candidate_indexes):
+                if len(selected_indexes) >= SERIES_POINT_LIMIT:
+                    break
+                if row_index in candidate_indexes:
+                    selected_indexes.add(row_index)
+        else:
+            selected_indexes = candidate_indexes
+        sampled = [
+            {**selected_rows.get(row_index, {}), **special_rows.get(row_index, {})}
+            for row_index in sorted(selected_indexes)
+        ]
         points = []
         for snapshot in sampled:
             point = {
@@ -262,12 +369,13 @@ class PublicSeriesView(APIView):
                 point['buy_prices'] = buy_prices
             points.append(point)
         return Response({
-            'count': count,
+            'count': selected_count,
             'points': points,
             'change': {
-                'best_buy': series_change(first_buy, last_buy) if first_buy is not None and last_buy is not None else {'absolute': None, 'percent': None},
-                'best_sell': series_change(first_sell, last_sell) if first_sell is not None and last_sell is not None else {'absolute': None, 'percent': None},
+                'best_buy': series_change(states['buy']['first']['value'], states['buy']['last_valid']['value']) if states['buy']['first'] is not None and states['buy']['last_valid'] is not None else {'absolute': None, 'percent': None},
+                'best_sell': series_change(states['sell']['first']['value'], states['sell']['last_valid']['value']) if states['sell']['first'] is not None and states['sell']['last_valid'] is not None else {'absolute': None, 'percent': None},
             },
+            'stats': _public_series_stats(states),
         })
 
 

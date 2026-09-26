@@ -245,6 +245,37 @@ class MarketWorkerTests(TestCase):
         ))
         self.assertEqual(CollectionRun.objects.count(), 1)
 
+    def test_auth_failure_in_one_session_falls_back_to_another_session(self):
+        from Market.worker import collect_due
+
+        opened = []
+        usable = FakeSession({1: Quote(best_sell=Decimal('5.00')), 2: Quote(best_sell=Decimal('6.00'))})
+
+        class RejectedSession:
+            def __enter__(self):
+                raise NeedsAuthError('session rejected')
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+        def factory(bundle):
+            opened.append(bundle)
+            return RejectedSession() if bundle['name'] == 'bad' else usable
+
+        run = collect_due(
+            clock_ms=lambda: 1000,
+            bundle_loader=lambda: [{'name': 'bad'}, {'name': 'good'}],
+            session_factory=factory,
+            randint=lambda minimum, maximum: minimum,
+            sleep=lambda seconds: None,
+        )
+
+        self.assertEqual(run.status, 'succeeded')
+        self.assertEqual(opened, [{'name': 'bad'}, {'name': 'good'}])
+        self.assertEqual(run.success_count, 2)
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.session_status, 'ready')
+
     def test_expired_lease_is_marked_failed_before_new_run(self):
         from Market.worker import collect_due
 

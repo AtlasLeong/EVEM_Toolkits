@@ -193,6 +193,25 @@ test('live camera preview publishes its scale independently of the committed cam
   assert.equal(preview.committed().scale, 1);
 });
 
+test('drag frames coalesce pointer updates and flush the latest frame on pointer-up',()=>{
+  const scheduled=[];
+  const cancelled=[];
+  const coalescer=use('createFrameCoalescer', cb => { scheduled.push(cb); return scheduled.length; }, id => cancelled.push(id));
+  const committed=[];
+  coalescer.enqueue({x:1}, value => committed.push(value));
+  coalescer.enqueue({x:2}, value => committed.push(value));
+  assert.equal(scheduled.length,1,'multiple pointer moves should share one animation frame');
+  assert.deepEqual(committed,[]);
+  scheduled[0]();
+  assert.deepEqual(committed,[{x:2}]);
+  coalescer.enqueue({x:3}, value => committed.push(value));
+  const flushed=coalescer.flush(value => committed.push(value));
+  assert.equal(flushed,true);
+  assert.deepEqual(committed,[{x:2},{x:3}]);
+  assert.deepEqual(cancelled,[2]);
+  assert.equal(coalescer.flush(value => committed.push(value)),false);
+});
+
 test('label visibility uses hysteresis so a zoom near the threshold does not flicker',()=>{
   assert.deepEqual(use('labelVisibilityState',{visible:false,zoom:1.69}),{visible:false,changed:false});
   assert.deepEqual(use('labelVisibilityState',{visible:false,zoom:1.72}),{visible:true,changed:true});
