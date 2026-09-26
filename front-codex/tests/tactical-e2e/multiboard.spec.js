@@ -58,7 +58,7 @@ test('pirate board shows target identity and opens an independent sighting form'
   await expect(form.getByRole('button', { name: '星座范围' })).toBeVisible()
 })
 
-test('pirate map system hit opens a prefilled report while target cards still open details', async ({ page }) => {
+test('pirate map system hit opens a prefilled report while target cards still open details', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1200, height: 800 })
   await seedAuthenticatedSession(page, { user_id: 23 })
   await installApiMock(page, ({ url, method }) => {
@@ -80,6 +80,10 @@ test('pirate map system hit opens a prefilled report while target cards still op
   await expect(form.getByRole('button', { name: '提交线索' })).toBeEnabled()
   await form.getByRole('button', { name: '取消' }).click()
   const systemHit = workspace.locator('[data-pirate-system="102"]')
+  await expect(systemHit).toBeFocused()
+  await expect(systemHit).not.toHaveClass(/pirate-map__system-hit--selected/)
+  await page.screenshot({ path: testInfo.outputPath('report-closed.png') })
+  await expect(systemHit).toHaveCSS('outline-style', 'none')
   const beforeDrag = await systemHit.boundingBox()
   await page.mouse.move(beforeDrag.x + beforeDrag.width / 2, beforeDrag.y + beforeDrag.height / 2)
   await page.mouse.down()
