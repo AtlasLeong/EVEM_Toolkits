@@ -107,6 +107,7 @@ function SettingField({ label, children }) {
 
 function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading }) {
   const complete = summary?.complete
+  const selectedPurchase = selectedNode?.mode === 'buy'
   return (
     <aside className="manufacturing-summary" data-testid="manufacturing-summary">
       <div className="manufacturing-summary-heading"><div><span className="eyebrow">COST SUMMARY</span><h2>成本概览</h2></div><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{complete ? '可计算' : '待补报价'}</span></div>
@@ -123,12 +124,12 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
       <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>效率公式待核实</span></div>
       {summary.missing.length > 0 ? <div className="manufacturing-missing" role="status"><strong>尚未计入</strong><span>{summary.missing.slice(0, 3).map(entry => `${entry.name}（${entry.reason}）`).join('、')}{summary.missing.length > 3 ? ` 等 ${summary.missing.length} 项` : ''}</span></div> : null}
       <section className="manufacturing-price-editor" aria-label="方案价格编辑">
-        <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">PLAN OVERRIDE</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedNode ? <span className="manufacturing-route-pill is-buy">购买</span> : null}</div>
-        {selectedNode ? <>
+        <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">PLAN OVERRIDE</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedPurchase ? <span className="manufacturing-route-pill is-buy">购买</span> : selectedNode ? <span className="manufacturing-route-pill is-make">自造</span> : null}</div>
+        {selectedPurchase ? <>
           <div className="manufacturing-market-reference"><span>市场参考价</span><strong>{formatIsk(quotePrice(quote))}</strong><small>{quoteState(quote)}{quote?.observed_at ? ` · ${new Date(quote.observed_at).toLocaleString('zh-CN', { hour12: false })}` : ''}</small></div>
           <label className="manufacturing-manual-price"><span>方案手填单价 {manualPrice ? <em className="manufacturing-manual-badge">方案内手填</em> : null}</span><div><input aria-label="方案手填单价" inputMode="decimal" value={manualPrice ?? ''} onChange={event => onManualPrice(event.target.value)} placeholder="留空使用市场参考价" /><span>ISK</span></div></label>
           <p className="manufacturing-price-help">仅保存到当前方案，不会修改公共行情。</p>
-        </> : <p className="manufacturing-price-help">点击制造链中的节点，可查看市场参考价并设置本方案的购买单价。</p>}
+        </> : <p className="manufacturing-price-help">{selectedNode ? '该节点当前为自造，不需要单独购买报价。切换为购买后可设置本方案单价。' : '点击制造链中的节点，可查看市场参考价并设置本方案的购买单价。'}</p>}
       </section>
       <button className="manufacturing-refresh-button" type="button" onClick={onRefreshQuotes} disabled={quoteLoading}><RefreshCw size={15} className={quoteLoading ? 'is-spinning' : ''} />{quoteLoading ? '正在读取行情' : '刷新购买项行情'}</button>
     </aside>
