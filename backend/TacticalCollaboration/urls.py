@@ -1,7 +1,10 @@
 from django.urls import path
 from . import views
+from . import usage
 
 urlpatterns = [
+    path('usage/access/', usage.UsageAccess.as_view()),
+    path('usage/overview/', usage.UsageOverview.as_view()),
     path('organizations/', views.Organizations.as_view()),
     path('join/', views.Join.as_view()),
     path('organizations/<int:organization_id>/members/', views.Members.as_view()),

@@ -3,6 +3,7 @@ import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, Messa
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
+import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 
 const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
@@ -35,6 +36,9 @@ export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
+  const usageAccess = useTacticalUsageAccess()
+  const canViewUsage = usageAccess.allowed
+  const availableNavItems = canViewUsage ? [...navItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...navItems.slice(4)] : navItems
   const reduceMotion = useReducedMotion()
   const displayName = userInfo?.userName?.trim() || '已登录用户'
   const [collapsed, setCollapsed] = useState(() => {
@@ -87,10 +91,10 @@ export default function AppShell() {
       </header>
       <nav id="mobile-navigation" className={`mobile-nav${mobileNavOpen ? ' is-open' : ''}`} aria-label="移动主导航" aria-hidden={!mobileNavOpen}>
         <div className="mobile-nav-links">
-          {navItems.map((item) => {
+          {availableNavItems.map((item) => {
             const Icon = item.icon
             return (
-              <NavLink key={item.to} to={item.to} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink key={item.to} to={item.to} end={item.to === '/tactical'} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                 <Icon size={17} aria-hidden="true" />
                 <span>{item.label}</span>
               </NavLink>
@@ -121,12 +125,13 @@ export default function AppShell() {
           </button>
           </div>
           <nav id="primary-navigation" className="nav-row" aria-label="主导航">
-            {navItems.map((item) => {
+            {availableNavItems.map((item) => {
               const Icon = item.icon
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  end={item.to === '/tactical'}
                   aria-label={item.label}
                   title={collapsed ? item.label : undefined}
                   className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
@@ -178,7 +183,7 @@ export default function AppShell() {
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
               className="page-wrapper"
             >
-              <Outlet />
+              <Outlet context={usageAccess} />
             </motion.div>
           </div>
         </main>

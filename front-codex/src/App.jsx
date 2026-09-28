@@ -25,6 +25,7 @@ const StarseaEditorPage = lazy(() => import('./pages/StarseaEditor'))
 const StarseaReviewPage = lazy(() => import('./pages/StarseaReview'))
 const MarketPricesPage = lazy(() => import('./pages/MarketPrices'))
 const MarketAdminPage = lazy(() => import('./pages/MarketAdmin'))
+const TacticalUsagePage = lazy(() => import('./pages/TacticalUsage'))
 const pageFallback = label => <div className="loading-bar" aria-label={label}><span /></div>
 const starseaRoute = page => <Suspense fallback={pageFallback('加载星海见闻')}>{page}</Suspense>
 const corporationRoute = page => <Suspense fallback={pageFallback('加载军团页面')}>{page}</Suspense>
@@ -74,6 +75,7 @@ export default function App() {
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
             <Route path="/starmap" element={<TacticalBoardPage />} />
             <Route path="/tactical" element={appRoute(<TacticalCollaborationPage />)} />
+            <Route path="/tactical/usage" element={<RequireAuth>{appRoute(<TacticalUsagePage />)}</RequireAuth>} />
             <Route
               path="/usersetting"
               element={
