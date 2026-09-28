@@ -17,8 +17,9 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
 
   const search = page.getByRole('searchbox', { name: '搜索制造目标' })
   await search.fill('组装车间模块 II')
-  await expect(page.getByRole('option', { name: '组装车间模块 II' })).toBeVisible()
-  await page.getByRole('option', { name: '组装车间模块 II' }).click()
+  const targetOption = page.getByRole('option').filter({ hasText: '组装车间模块 II' }).filter({ hasText: '24041000020' })
+  await expect(targetOption).toBeVisible()
+  await targetOption.click()
   await expect(page.getByRole('heading', { name: '组装车间模块 II' })).toBeVisible()
 
   const quantity = page.getByRole('spinbutton', { name: '制造数量' })
