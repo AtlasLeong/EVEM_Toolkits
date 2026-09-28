@@ -38,11 +38,15 @@ test('loads the approved ship, industrial-material, and building scope', async (
   )))
   assert.equal(catalog.recipes.some((recipe) => recipe.category === 'ammunition'), false)
   assert.equal(catalog.recipes.some((recipe) => /[{}]/u.test(recipe.name)), false)
+  assert.equal(catalog.items.size, 178)
+  assert.equal([...catalog.items.values()].some((item) => item.name.startsWith('未命名投入品')), false)
 })
 
 test('rejects malformed recipes before exposing them to the estimator', () => {
   assert.throws(() => normalizeManufacturingCatalog({
     schemaVersion: 1,
+    scope: ['ship', 'material', 'building'],
+    items: [{ itemId: '200', name: '材料' }],
     recipes: [{
       productId: '100',
       name: '坏配方',
@@ -69,8 +73,53 @@ test('rejects duplicate product IDs instead of silently overwriting a recipe', (
   }
   assert.throws(() => normalizeManufacturingCatalog({
     schemaVersion: 1,
+    scope: ['ship', 'material', 'building'],
+    items: [{ itemId: '200', name: '材料' }],
     recipes: [recipe, { ...recipe }],
   }), /duplicate.*productId/i)
+})
+
+test('rejects an unsupported scope or invisible name characters', () => {
+  const recipe = {
+    productId: '100',
+    name: '可见\u200b名称',
+    category: 'ship',
+    outputNum: 1,
+    materials: [{ itemId: '200', quantity: 1 }],
+    money: 1,
+    time: 1,
+    maxInstallQuantity: 1,
+  }
+  assert.throws(() => normalizeManufacturingCatalog({
+    schemaVersion: 1,
+    scope: ['ship', 'ammunition'],
+    recipes: [recipe],
+  }), /scope/i)
+  assert.throws(() => normalizeManufacturingCatalog({
+    schemaVersion: 1,
+    scope: ['ship', 'material', 'building'],
+    items: [{ itemId: '200', name: '材料' }],
+    recipes: [recipe],
+  }), /name/i)
+})
+
+test('requires one display name for every referenced material', () => {
+  const recipe = {
+    productId: '100',
+    name: '材料引用',
+    category: 'ship',
+    outputNum: 1,
+    materials: [{ itemId: '200', quantity: 1 }],
+    money: 1,
+    time: 1,
+    maxInstallQuantity: 1,
+  }
+  assert.throws(() => normalizeManufacturingCatalog({
+    schemaVersion: 1,
+    scope: ['ship', 'material', 'building'],
+    recipes: [recipe],
+    items: [],
+  }), /missing.*item|items.*200|material.*200/i)
 })
 
 test('rejects control and zero-width characters in recipe names', () => {
@@ -87,11 +136,15 @@ test('rejects control and zero-width characters in recipe names', () => {
 
   assert.throws(() => normalizeManufacturingCatalog({
     schemaVersion: 1,
+    scope: ['ship', 'material', 'building'],
+    items: [{ itemId: '200', name: '材料' }],
     recipes: [recipe],
   }), /name.*usable/i)
 
   assert.throws(() => normalizeManufacturingCatalog({
     schemaVersion: 1,
+    scope: ['ship', 'material', 'building'],
+    items: [{ itemId: '200', name: '材料' }],
     recipes: [{ ...recipe, name: '坏\u0007配方' }],
   }), /name.*usable/i)
 })

@@ -78,7 +78,13 @@ export function normalizeManufacturingCatalog(source) {
     fail('source must be an object')
   }
   if (source.schemaVersion !== 1) fail('schemaVersion must be 1')
+  if (!Array.isArray(source.scope)) fail('scope must be an array')
+  const scope = new Set(source.scope)
+  if (scope.size !== VALID_CATEGORIES.size || source.scope.length !== VALID_CATEGORIES.size || [...scope].some(category => !VALID_CATEGORIES.has(category))) {
+    fail('scope must contain only ship, material, and building')
+  }
   if (!Array.isArray(source.recipes)) fail('recipes must be an array')
+  if (!Array.isArray(source.items)) fail('items must be an array')
 
   const recipes = source.recipes.map(normalizeRecipe)
   const byId = new Map()
@@ -102,7 +108,21 @@ export function normalizeManufacturingCatalog(source) {
     building: recipes.filter(recipe => recipe.category === 'building').length,
   }
 
-  return { schemaVersion: 1, recipes, counts, byId, byName }
+  const items = new Map()
+  for (const item of source.items) {
+    const itemId = normalizeId(item?.itemId, 'items.itemId')
+    const name = String(item?.name ?? '').trim()
+    if (!name || /[{}\p{Cc}\p{Cf}]/u.test(name)) fail(`items.${itemId}.name must be a usable display name`)
+    if (items.has(itemId)) fail(`duplicate itemId ${itemId}`)
+    items.set(itemId, { itemId, name })
+  }
+  for (const recipe of recipes) {
+    for (const material of recipe.materials) {
+      if (!items.has(material.itemId)) fail(`missing display item ${material.itemId}`)
+    }
+  }
+
+  return { schemaVersion: 1, scope: [...scope], recipes, items, counts, byId, byName }
 }
 
 /**
