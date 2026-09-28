@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Boxes, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench } from 'lucide-react'
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
 import { createManufacturingPlan, summarizeManufacturingPlan } from '../utils/manufacturingPlan'
@@ -32,17 +32,15 @@ function quoteState(quote) {
   return quotePrice(quote) ? '最新观测' : '尚未采集'
 }
 
-function itemName(catalog, itemId) {
-  return catalog?.items.get(itemId)?.name || `物品 ${itemId}`
-}
-
-function TreeNode({ node, catalog, overrides, onToggle, selectedId, onSelect }) {
+function TreeNode({ node, catalog, onToggle, selectedId, onSelect, path, expandedNodes, onToggleExpanded }) {
   const recipe = catalog.byId.get(node.itemId)
   const canRoute = Boolean(recipe)
   const buying = node.mode === 'buy'
   const selected = selectedId === node.itemId
+  const hasChildren = node.children?.length > 0
+  const expanded = expandedNodes.has(path)
   return (
-    <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`}>
+    <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`} role="treeitem" aria-expanded={hasChildren ? expanded : undefined}>
       <div className="manufacturing-tree-row">
         <button type="button" className="manufacturing-tree-select" aria-label={`查看 ${node.name}`} onClick={() => onSelect(node.itemId)}>
           <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" />
@@ -63,29 +61,33 @@ function TreeNode({ node, catalog, overrides, onToggle, selectedId, onSelect }) 
             {buying ? '自造' : '购买'}
           </button>
         ) : null}
-        {node.children?.length > 0 ? <ChevronDown className="manufacturing-tree-chevron" size={16} aria-hidden="true" /> : <span className="manufacturing-tree-chevron-spacer" />}
+        {hasChildren ? (
+          <button type="button" className="manufacturing-tree-expand" aria-label={`${expanded ? '收起' : '展开'} ${node.name}层级`} aria-expanded={expanded} onClick={() => onToggleExpanded(path)}>
+            {expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+          </button>
+        ) : <span className="manufacturing-tree-chevron-spacer" />}
       </div>
-      {node.children?.length > 0 ? (
+      {hasChildren && expanded ? (
         <ul className="manufacturing-tree-children">
-          {node.children.map(child => <TreeNode key={`${child.itemId}-${child.kind}`} node={child} catalog={catalog} overrides={overrides} onToggle={onToggle} selectedId={selectedId} onSelect={onSelect} />)}
+          {node.children.map((child, index) => <TreeNode key={`${path}.${index}`} node={child} catalog={catalog} onToggle={onToggle} selectedId={selectedId} onSelect={onSelect} path={`${path}.${index}`} expandedNodes={expandedNodes} onToggleExpanded={onToggleExpanded} />)}
         </ul>
       ) : null}
     </li>
   )
 }
 
-function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
+function TargetPicker({ recipes, selectedId, search, onSearch, onSelect, onFocusSearch, inputRef }) {
   const filtered = useMemo(() => {
     const text = search.trim().toLowerCase()
     return recipes.filter(recipe => !text || recipe.name.toLowerCase().includes(text) || recipe.productId.includes(text)).slice(0, 12)
   }, [recipes, search])
   const selected = recipes.find(recipe => recipe.productId === selectedId)
   return (
-    <div className="manufacturing-target-picker">
-      <label htmlFor="manufacturing-target-search">制造目标</label>
+    <div className="manufacturing-target-picker" aria-label="制造目标">
+      <div className="manufacturing-target-label"><h3>制造目标</h3><button type="button" className="manufacturing-change-target" aria-label="切换制造目标" onClick={onFocusSearch}>切换目标</button></div>
       <div className="manufacturing-search-field">
         <Search size={17} aria-hidden="true" />
-        <input id="manufacturing-target-search" aria-label="搜索制造目标" role="searchbox" value={search} onChange={event => onSearch(event.target.value)} placeholder={selected?.name || '搜索舰船、材料或建筑'} />
+        <input ref={inputRef} id="manufacturing-target-search" aria-label="搜索制造目标" role="searchbox" value={search} onChange={event => onSearch(event.target.value)} placeholder={selected?.name || '搜索舰船、材料或建筑'} />
       </div>
       {search.trim() ? (
         <div className="manufacturing-target-options" role="listbox" aria-label="制造目标结果">
@@ -103,6 +105,10 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
 
 function SettingField({ label, children }) {
   return <label className="manufacturing-setting"><span>{label}</span>{children}</label>
+}
+
+function LevelControl({ label, value, onChange, options = ['3', '4', '5'] }) {
+  return <div className="manufacturing-level-field"><span>{label}</span><div className="manufacturing-level-control" role="group" aria-label={label}>{options.map(option => <button key={option} type="button" className={String(value) === option ? 'is-active' : ''} aria-pressed={String(value) === option} onClick={() => onChange(option)}>{option}</button>)}</div></div>
 }
 
 function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading }) {
@@ -149,6 +155,8 @@ export default function ManufacturingEstimatorPage() {
   const [selectedNodeId, setSelectedNodeId] = useState('')
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [quoteError, setQuoteError] = useState('')
+  const [expandedNodes, setExpandedNodes] = useState(() => new Set(['0']))
+  const searchRef = useRef(null)
 
   const loadCatalog = useCallback(async () => {
     setCatalogError('')
@@ -164,6 +172,10 @@ export default function ManufacturingEstimatorPage() {
   }, [])
 
   useEffect(() => { loadCatalog() }, [loadCatalog])
+
+  useEffect(() => {
+    setExpandedNodes(new Set(['0']))
+  }, [selectedId])
 
   const plan = useMemo(() => {
     if (!catalog || !selectedId) return null
@@ -218,31 +230,46 @@ export default function ManufacturingEstimatorPage() {
   }
   const selectedQuote = selectedNodeId ? marketQuotes[selectedNodeId] : null
 
+  const treePaths = useMemo(() => {
+    if (!summary?.tree) return []
+    const paths = []
+    const visit = (node, path) => {
+      paths.push(path)
+      node.children?.forEach((child, index) => visit(child, `${path}.${index}`))
+    }
+    visit(summary.tree, '0')
+    return paths
+  }, [summary])
+
+  const toggleExpanded = path => setExpandedNodes(previous => {
+    const next = new Set(previous)
+    if (next.has(path)) next.delete(path)
+    else next.add(path)
+    return next
+  })
+  const expandAll = () => setExpandedNodes(new Set(treePaths))
+  const collapseAll = () => setExpandedNodes(new Set())
+
   if (catalogError) return <main className="manufacturing-page"><div className="manufacturing-error"><Factory size={30} /><h1>制造估价</h1><p>{catalogError}</p><button type="button" onClick={loadCatalog}>重新加载目录</button></div></main>
   if (!catalog || !summary) return <main className="manufacturing-page"><div className="manufacturing-loading"><Factory size={24} /><span>正在加载制造目录…</span></div></main>
   const selectedRecipe = catalog.byId.get(selectedId)
 
   return (
     <main className="manufacturing-page">
-      <header className="manufacturing-page-header"><div><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>按当前方案拆解制造链，区分自造与购买，并用行情或方案价格估算成本。</p></div><div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div></header>
+      <header className="manufacturing-page-header"><div><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div><div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div></header>
       <section className="manufacturing-workspace">
         <aside className="manufacturing-controls">
           <div className="manufacturing-panel-heading"><div><span className="eyebrow">PLAN SETUP</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
-          <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} onSelect={id => { setSelectedId(id); setSearch(''); setSelectedNodeId('') }} />
+          <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={id => { setSelectedId(id); setSearch(''); setSelectedNodeId(''); setExpandedNodes(new Set(['0'])) }} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
-          <div className="manufacturing-settings-grid">
-            <SettingField label="制造技能"><select aria-label="制造技能" value={settings.manufacturingSkill} onChange={event => setSettings(value => ({ ...value, manufacturingSkill: event.target.value }))}><option value="5">5 / 5</option><option value="4">4 / 5</option><option value="3">3 / 5</option></select></SettingField>
-            <SettingField label="研究技能"><select aria-label="研究技能" value={settings.researchSkill} onChange={event => setSettings(value => ({ ...value, researchSkill: event.target.value }))}><option value="5">5 / 5</option><option value="4">4 / 5</option><option value="3">3 / 5</option></select></SettingField>
-            <SettingField label="效率技能"><select aria-label="效率技能" value={settings.efficiencySkill} onChange={event => setSettings(value => ({ ...value, efficiencySkill: event.target.value }))}><option value="4">4 / 5</option><option value="5">5 / 5</option><option value="3">3 / 5</option></select></SettingField>
-            <SettingField label="生产建筑"><select aria-label="生产建筑" value={settings.building} onChange={event => setSettings(value => ({ ...value, building: event.target.value }))}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></SettingField>
-          </div>
+          <fieldset className="manufacturing-settings" aria-label="技能与效率"><legend>技能与效率</legend><div className="manufacturing-level-grid"><LevelControl label="制造" value={settings.manufacturingSkill} onChange={value => setSettings(current => ({ ...current, manufacturingSkill: value }))} /><LevelControl label="研究" value={settings.researchSkill} onChange={value => setSettings(current => ({ ...current, researchSkill: value }))} /><LevelControl label="效率" value={settings.efficiencySkill} onChange={value => setSettings(current => ({ ...current, efficiencySkill: value }))} /></div><label className="manufacturing-building-field"><span>生产建筑</span><select aria-label="生产建筑" value={settings.building} onChange={event => setSettings(value => ({ ...value, building: event.target.value }))}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label></fieldset>
           <label className="manufacturing-blueprint-toggle"><input type="checkbox" checked={settings.blueprintOwned} onChange={event => setSettings(value => ({ ...value, blueprintOwned: event.target.checked }))} /><span>已拥有蓝图</span><small>蓝图费用暂不计入</small></label>
           <div className="manufacturing-formula-callout"><Settings2 size={16} /><div><strong>效率公式待核实</strong><span>技能、建筑与蓝图状态先保留在方案中，等待公式校准后再影响数值。</span></div></div>
         </aside>
         <section className="manufacturing-tree-panel" aria-label="制造链路">
-          <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">MANUFACTURING ROUTE</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div></div>
+          <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">MANUFACTURING ROUTE</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-actions"><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div><div className="manufacturing-tree-expand-actions"><button type="button" aria-label="展开全部层级" onClick={expandAll}>展开全部</button><button type="button" aria-label="收起全部层级" onClick={collapseAll}>收起全部</button></div></div></div>
           <p className="manufacturing-tree-hint">点击节点查看价格；将中间产物切换为购买后，其下游制造会从本方案中移除。</p>
-          <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} overrides={overrides} onToggle={toggleRoute} selectedId={selectedNodeId} onSelect={setSelectedNodeId} /></ul>
+          <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} onToggle={toggleRoute} selectedId={selectedNodeId} onSelect={setSelectedNodeId} path="0" expandedNodes={expandedNodes} onToggleExpanded={toggleExpanded} /></ul>
           {quoteError ? <p className="manufacturing-inline-error" role="status">{quoteError}</p> : null}
           <div className="manufacturing-route-footer"><span>制造时间</span><strong>{Math.ceil((summary.manufacturingTime || 0) / 3600)} 小时</strong><span>购买项</span><strong>{summary.purchases.length} 类</strong></div>
         </section>

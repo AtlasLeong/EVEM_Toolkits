@@ -16,6 +16,9 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(page.getByRole('heading', { name: '制造估价' })).toBeVisible()
   await expect(page.getByRole('searchbox', { name: '搜索制造目标' })).toBeVisible()
   await expect(page.getByTestId('manufacturing-summary').getByText('效率公式待核实')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '制造目标' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '展开全部层级' })).toBeVisible()
+  await expect(page.getByRole('group', { name: '技能与效率' })).toBeVisible()
 
   const search = page.getByRole('searchbox', { name: '搜索制造目标' })
   await search.fill('组装车间模块 II')
@@ -23,6 +26,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(targetOption).toBeVisible()
   await targetOption.click()
   await expect(page.getByRole('heading', { name: '组装车间模块 II' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '切换制造目标' })).toBeVisible()
 
   const quantity = page.getByRole('spinbutton', { name: '制造数量' })
   await expect(quantity).toHaveValue('1')
@@ -30,6 +34,8 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(quantity).toHaveValue('2')
 
   await expect(page.getByRole('tree', { name: '制造链路' })).toBeVisible()
+  await page.getByRole('button', { name: '收起全部层级' }).click()
+  await expect(page.getByRole('treeitem').first()).toBeVisible()
   const routeToggle = page.getByRole('button', { name: /切换为购买/ }).first()
   await expect(routeToggle).toBeVisible()
   await routeToggle.click()
