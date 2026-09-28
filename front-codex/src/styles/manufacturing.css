@@ -584,3 +584,5 @@
 @media (max-width: 520px) {
   .manufacturing-page--terminal .manufacturing-route-toggle { padding: 5px 3px; font-size: .66rem; }
 }
+.manufacturing-page--terminal .manufacturing-quantity-control input { background: #0d222a; }
+.manufacturing-page--terminal .manufacturing-tree { min-height: 0; overflow: auto; padding-right: 4px; }
