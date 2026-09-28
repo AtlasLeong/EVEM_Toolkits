@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench } from 'lucide-react'
+import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench } from 'lucide-react'
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
 import { createManufacturingPlan, summarizeManufacturingPlan } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
@@ -41,8 +41,8 @@ function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, exp
   const hasChildren = node.children?.length > 0
   const expanded = expandedNodes.has(path)
   return (
-    <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`} role="treeitem" aria-expanded={hasChildren ? expanded : undefined}>
-      <div className="manufacturing-tree-row">
+    <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`} role="treeitem" aria-selected={selected} aria-expanded={hasChildren ? expanded : undefined}>
+      <div className="manufacturing-tree-row" data-testid="manufacturing-tree-row" data-selected={selected ? 'true' : 'false'}>
         <button type="button" className="manufacturing-tree-select" aria-label={`查看 ${node.name}`} onClick={() => onSelect(node.itemId)}>
           <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" />
           <span className="manufacturing-tree-copy">
@@ -52,11 +52,11 @@ function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, exp
         </button>
         {canRoute ? (
           <div className="manufacturing-route-segmented" role="group" aria-label={`生产方式 ${node.name}`}>
-            <button type="button" className={`manufacturing-route-toggle manufacturing-route-toggle--make${!buying ? ' is-active' : ''}`} aria-pressed={!buying} onClick={() => onModeChange(node.itemId, 'make')}>
-              <Wrench size={13} aria-hidden="true" />自造
+            <button type="button" className={`manufacturing-route-toggle manufacturing-route-toggle--make${!buying ? ' is-active' : ''}`} aria-pressed={!buying} data-state={!buying ? 'active' : 'idle'} onClick={() => onModeChange(node.itemId, 'make')}>
+              {!buying ? <Check size={13} aria-hidden="true" /> : <Wrench size={13} aria-hidden="true" />}自造
             </button>
-            <button type="button" className={`manufacturing-route-toggle manufacturing-route-toggle--buy${buying ? ' is-active' : ''}`} aria-pressed={buying} onClick={() => onModeChange(node.itemId, 'buy')}>
-              <ShoppingCart size={13} aria-hidden="true" />购买
+            <button type="button" className={`manufacturing-route-toggle manufacturing-route-toggle--buy${buying ? ' is-active' : ''}`} aria-pressed={buying} data-state={buying ? 'active' : 'idle'} onClick={() => onModeChange(node.itemId, 'buy')}>
+              {buying ? <Check size={13} aria-hidden="true" /> : <ShoppingCart size={13} aria-hidden="true" />}购买
             </button>
           </div>
         ) : <span className="manufacturing-route-leaf" aria-label={`市场采购 ${node.name}`}>市场采购</span>}
@@ -123,6 +123,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
       <div className="manufacturing-total-card">
         <span>{complete ? '总成本' : '已覆盖小计'}</span>
         <strong>{formatIsk(complete ? summary.total : summary.coveredSubtotal)}</strong>
+        <b className="manufacturing-total-compact" data-testid="manufacturing-total-compact">{formatCompactIsk(complete ? summary.total : summary.coveredSubtotal)}</b>
         <small>{complete ? '当前方案所有购买项均有价格' : `缺少 ${summary.missing.length} 项购买价格`}</small>
       </div>
       <dl className="manufacturing-cost-breakdown">
@@ -284,7 +285,7 @@ export default function ManufacturingEstimatorPage() {
   const selectedRecipe = catalog.byId.get(selectedId)
 
   return (
-    <main className="manufacturing-page">
+    <main className="manufacturing-page manufacturing-page--terminal">
       <header className="manufacturing-page-header"><div><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div><div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div></header>
       <section className="manufacturing-workspace">
         <aside className="manufacturing-controls">
