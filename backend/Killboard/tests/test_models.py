@@ -1,3 +1,10 @@
+"""Model tests.
+
+Run with ``--settings=EVE_MDjango.killboard_test_settings`` so this suite
+uses an isolated in-memory SQLite database and never imports production
+credentials or connects to the live MySQL databases.
+"""
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
