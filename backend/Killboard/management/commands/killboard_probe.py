@@ -7,8 +7,6 @@ captures are read from the repository.
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-
 from django.core.management import BaseCommand, CommandError
 from django.db import transaction
 from django.utils.module_loading import import_string
@@ -19,7 +17,8 @@ from Killboard.models import CollectionPolicy, ProbeCursor, ShipClass
 
 DEFAULT_CLASSES = (
     ("battleship", "战列舰", 4),
-    ("battlecruiser", "战列巡洋舰", 5),
+    # Battlecruisers are below battleships for collection-policy ranking.
+    ("battlecruiser", "战列巡洋舰", 3),
     ("dreadnought", "无畏舰", 6),
     ("carrier", "航母", 7),
     ("supercarrier", "超级航母", 8),
@@ -44,15 +43,31 @@ class Command(BaseCommand):
 
     def _policy(self, name):
         for key, label, rank in DEFAULT_CLASSES:
-            ShipClass.objects.get_or_create(key=key, defaults={"label": label, "rank": rank})
+            ship_class, _ = ShipClass.objects.get_or_create(
+                key=key, defaults={"label": label, "rank": rank}
+            )
+            if ship_class.rank != rank or ship_class.label != label or not ship_class.enabled:
+                ship_class.rank = rank
+                ship_class.label = label
+                ship_class.enabled = True
+                ship_class.save(update_fields=["rank", "label", "enabled"])
         policy, _ = CollectionPolicy.objects.get_or_create(
             name=name,
             defaults={
                 "min_ship_rank": 4,
-                "allowed_class_keys": [key for key, _, _ in DEFAULT_CLASSES],
+                "allowed_class_keys": [key for key, _, rank in DEFAULT_CLASSES if rank >= 4],
                 "enabled": True,
             },
         )
+        allowed = [key for key, _, rank in DEFAULT_CLASSES if rank >= 4]
+        # Only repair the built-in preset.  A named custom policy is operator
+        # configuration and must not be silently rewritten by every probe.
+        if name == "battleship_plus" and (
+            policy.min_ship_rank != 4 or policy.allowed_class_keys != allowed
+        ):
+            policy.min_ship_rank = 4
+            policy.allowed_class_keys = allowed
+            policy.save(update_fields=["min_ship_rank", "allowed_class_keys"])
         return policy
 
     def _client(self, path):
@@ -62,18 +77,22 @@ class Command(BaseCommand):
         return factory() if isinstance(factory, type) else factory()
 
     def handle(self, *args, **options):
+        # Validate all operator input before creating/updating any rows.  This
+        # also guarantees a malformed dry-run never writes configuration.
+        try:
+            config = DiscoveryConfig(
+                start_id=options["start_id"],
+                step=options["step"],
+                neighbor_reprobe=options["neighbor_reprobe"],
+                empty_threshold=options["empty_threshold"],
+                max_requests=options["max_requests"],
+            )
+        except ValueError as exc:
+            raise CommandError(str(exc)) from exc
         client = self._client(options["client"])
-        policy = self._policy(options["policy"])
-        cursor, _ = ProbeCursor.objects.get_or_create(name=options["cursor"])
-        config = DiscoveryConfig(
-            start_id=options["start_id"],
-            step=options["step"],
-            neighbor_reprobe=options["neighbor_reprobe"],
-            empty_threshold=options["empty_threshold"],
-            max_requests=options["max_requests"],
-        )
-        outer = nullcontext() if options["write"] else transaction.atomic()
-        with outer:
+        if options["write"]:
+            policy = self._policy(options["policy"])
+            cursor, _ = ProbeCursor.objects.get_or_create(name=options["cursor"])
             run = DiscoveryRunner(
                 client,
                 cursor=cursor,
@@ -81,7 +100,20 @@ class Command(BaseCommand):
                 config=config,
                 source=options["source"],
             ).run()
-            if not options["write"]:
+        else:
+            # Policy, cursor, run and reports all execute in a rollback-only
+            # transaction.  DiscoveryRunner uses its dedicated dry-run path so
+            # the normal short-transaction lease is not committed underneath.
+            with transaction.atomic():
+                policy = self._policy(options["policy"])
+                cursor, _ = ProbeCursor.objects.get_or_create(name=options["cursor"])
+                run = DiscoveryRunner(
+                    client,
+                    cursor=cursor,
+                    policy=policy,
+                    config=config,
+                    source=options["source"],
+                ).run(dry_run=True)
                 transaction.set_rollback(True)
         mode = "committed" if options["write"] else "dry-run"
         self.stdout.write(

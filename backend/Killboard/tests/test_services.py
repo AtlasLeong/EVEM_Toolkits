@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from django.test import TestCase
+from django.test import override_settings
 
 from Killboard.models import CollectionPolicy, KillItem, KillReport, ShipClass
 from Killboard.services import persist_report
@@ -50,6 +51,7 @@ def parsed_report(*, kill_id=100, ship_class_key="battleship", completeness=None
 class KillReportPersistenceTests(TestCase):
     def setUp(self):
         ShipClass.objects.create(key="frigate", label="Frigate", rank=1)
+        ShipClass.objects.create(key="battlecruiser", label="Battlecruiser", rank=3)
         ShipClass.objects.create(key="battleship", label="Battleship", rank=4)
         self.policy = CollectionPolicy.objects.create(
             name="battleship_plus",
@@ -101,3 +103,61 @@ class KillReportPersistenceTests(TestCase):
         self.assertFalse(created)
         self.assertEqual(report.completeness, KillReport.Completeness.COMPLETE)
         self.assertEqual(report.items.count(), 1)
+
+    def test_disabled_policy_fails_closed(self):
+        self.policy.enabled = False
+        self.policy.save(update_fields=["enabled"])
+
+        report, stored = persist_report(parsed_report(kill_id=102), policy=self.policy)
+
+        self.assertIsNone(report)
+        self.assertFalse(stored)
+        self.assertFalse(KillReport.objects.filter(kill_id=102).exists())
+
+    def test_battlecruiser_is_not_battleship_or_above(self):
+        policy = CollectionPolicy.objects.create(
+            name="ranked", min_ship_rank=4, allowed_class_keys=[]
+        )
+
+        report, stored = persist_report(
+            parsed_report(kill_id=103, ship_class_key="battlecruiser"),
+            policy=policy,
+        )
+
+        self.assertIsNone(report)
+        self.assertFalse(stored)
+
+    def test_missing_item_section_does_not_delete_existing_items(self):
+        persist_report(
+            parsed_report(kill_id=104, completeness="complete"),
+            policy=self.policy,
+        )
+        incoming = parsed_report(kill_id=104, completeness="complete")
+        incoming.pop("items")
+        incoming.pop("equipment_status")
+
+        report, created = persist_report(incoming, policy=self.policy)
+
+        self.assertFalse(created)
+        self.assertEqual(report.items.count(), 1)
+
+    def test_missing_participant_section_does_not_delete_existing_participants(self):
+        persist_report(
+            parsed_report(kill_id=105, completeness="complete"),
+            policy=self.policy,
+        )
+        incoming = parsed_report(kill_id=105, completeness="complete")
+        incoming["participants"] = []
+        incoming["participant_count"] = 1
+
+        report, created = persist_report(incoming, policy=self.policy)
+
+        self.assertFalse(created)
+        self.assertEqual(report.participants.count(), 1)
+
+    @override_settings(USE_TZ=False)
+    def test_naive_database_mode_keeps_parsed_time_naive(self):
+        report, created = persist_report(parsed_report(kill_id=106), policy=self.policy)
+
+        self.assertTrue(created)
+        self.assertIsNone(report.kill_time_display.tzinfo)

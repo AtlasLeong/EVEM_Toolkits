@@ -6,10 +6,11 @@ does not know about accounts, sessions, or transport details.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 import hashlib
 import json
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -33,8 +34,10 @@ def _completeness(value: str | None, parsed: dict) -> str:
 
 
 def _policy_allows(parsed: dict, policy: CollectionPolicy | None) -> bool:
-    if policy is None or not policy.enabled:
+    if policy is None:
         return True
+    if not policy.enabled:
+        return False
     class_key = str(parsed.get("ship_class_key") or "")
     allowed = set(policy.allowed_class_keys or [])
     if allowed:
@@ -51,8 +54,8 @@ def _parse_time(raw: str | None):
     except (TypeError, ValueError):
         return None
     if timezone.is_naive(value):
-        return value
-    return value
+        return value.replace(tzinfo=dt_timezone.utc) if settings.USE_TZ else value
+    return value if settings.USE_TZ else timezone.make_naive(value, dt_timezone.utc)
 
 
 def _hash_payload(parsed: dict) -> str:
@@ -70,18 +73,33 @@ def _set_if_present(report: KillReport, parsed: dict, field: str, *, preserve_bl
 
 
 def _save_children(report: KillReport, parsed: dict):
-    report.participants.all().delete()
+    participants = parsed.get("participants")
+    participant_status = parsed.get("participants_status")
+    participants_provided = (
+        participant_status == "provided"
+        or bool(participants)
+        or (participants == [] and parsed.get("participant_count") == 0)
+    )
+    if "participants" in parsed and participants is not None and participants_provided:
+        report.participants.all().delete()
+        for participant in participants or []:
+            KillParticipant.objects.create(report=report, **{
+                key: participant.get(key)
+                for key in (
+                    "character_id", "character_name", "corporation_id", "corporation_name",
+                    "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
+                    "is_top_damage", "source_index",
+                )
+                if key in participant
+            })
+
+    # An omitted/unknown equipment section is not evidence that the old
+    # children disappeared.  Only an explicitly provided section may replace
+    # existing rows, including an explicitly provided empty list.
+    equipment_status = parsed.get("equipment_status")
+    if "items" not in parsed or equipment_status in {"missing", "unavailable", "unknown"}:
+        return
     report.items.all().delete()
-    for participant in parsed.get("participants") or []:
-        KillParticipant.objects.create(report=report, **{
-            key: participant.get(key)
-            for key in (
-                "character_id", "character_name", "corporation_id", "corporation_name",
-                "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
-                "is_top_damage", "source_index",
-            )
-            if key in participant
-        })
     for item in parsed.get("items") or []:
         KillItem.objects.create(report=report, **{
             key: item.get(key)

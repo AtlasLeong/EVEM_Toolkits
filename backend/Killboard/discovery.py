@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from enum import Enum
 from typing import Any, Protocol
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -63,16 +63,23 @@ class DiscoveryConfig:
     empty_threshold: int = 3
     max_requests: int = 100
 
+    MAX_REQUESTS = 10_000
+    MAX_ID = 9_223_372_036_854_775_807
+
     def __post_init__(self):
-        if self.step < 1 or self.neighbor_reprobe < 0:
-            raise ValueError("step and neighbor_reprobe must be non-negative, with step >= 1")
+        # The first implementation deliberately probes every ID.  Jumping over
+        # IDs is not safe until a separate, hole-aware bootstrap index exists.
+        if self.step != 1 or self.neighbor_reprobe:
+            raise ValueError("discovery currently requires step=1 and no neighbor reprobe")
         if self.empty_threshold < 1 or self.max_requests < 1:
             raise ValueError("empty_threshold and max_requests must be positive")
-        if self.neighbor_reprobe >= self.step and self.step > 1:
-            raise ValueError("neighbor_reprobe must be smaller than step")
+        if self.max_requests > self.MAX_REQUESTS:
+            raise ValueError(f"max_requests must be <= {self.MAX_REQUESTS}")
+        if self.start_id is not None and not 1 <= self.start_id <= self.MAX_ID:
+            raise ValueError("start_id is outside the signed 64-bit kill-id range")
 
 
-def _exception_status(exc: BaseException) -> ProbeStatus:
+def _exception_status(exc: Exception) -> ProbeStatus:
     code = str(getattr(exc, "code", "")).lower()
     if code in {status.value for status in ProbeStatus}:
         return ProbeStatus(code)
@@ -94,8 +101,8 @@ def _time_value(raw: str | None):
     except (TypeError, ValueError):
         return None
     if timezone.is_naive(value):
-        return value.replace(tzinfo=timezone.utc)
-    return value
+        return value.replace(tzinfo=dt_timezone.utc) if settings.USE_TZ else value
+    return value if settings.USE_TZ else timezone.make_naive(value, dt_timezone.utc)
 
 
 class DiscoveryRunner:
@@ -120,8 +127,11 @@ class DiscoveryRunner:
         try:
             method = getattr(self.client, "get_kill_info", None) or getattr(self.client, "fetch")
             value = method(kill_id)
-        except BaseException as exc:  # transport implementations expose diverse errors
-            return ProbeOutcome(_exception_status(exc), error_code=str(getattr(exc, "code", "")))
+        except Exception as exc:  # do not swallow cancellation/keyboard interrupts
+            status = _exception_status(exc)
+            if status is ProbeStatus.MALFORMED:
+                raise
+            return ProbeOutcome(status, error_code=str(getattr(exc, "code", "")))
         if isinstance(value, ProbeOutcome):
             return value
         try:
@@ -140,30 +150,60 @@ class DiscoveryRunner:
         except (KillProtocolError, KillParseError, TypeError, ValueError) as exc:
             return ProbeOutcome(ProbeStatus.MALFORMED, error_code=type(exc).__name__)
 
-    def run(self) -> ProbeRun:
-        config = self.config
+    def run(self, *, dry_run: bool = False) -> ProbeRun:
+        """Claim a run in a short transaction, then do network I/O outside it.
+
+        ``dry_run`` intentionally uses one rollback-only transaction so callers
+        can exercise the full path without leaving policy, cursor, report, or
+        run rows behind.
+        """
+        if dry_run:
+            with transaction.atomic():
+                cursor = ProbeCursor.objects.select_for_update().get(pk=self.cursor.pk)
+                self._assert_no_running(cursor)
+                run = self._create_run(cursor)
+                self._run_locked(run, cursor)
+                transaction.set_rollback(True)
+                return run
+
         with transaction.atomic():
             cursor = ProbeCursor.objects.select_for_update().get(pk=self.cursor.pk)
-            if ProbeRun.objects.filter(cursor=cursor, status=ProbeRun.Status.RUNNING).exists():
-                raise RuntimeError("probe cursor already has a running run")
-            run = ProbeRun.objects.create(
-                cursor=cursor,
-                policy=self.policy,
-                status=ProbeRun.Status.RUNNING,
-                started_at_ms=int(timezone.now().timestamp() * 1000),
-            )
-            try:
-                self._run_locked(run, cursor)
-            except Exception:
+            self._assert_no_running(cursor)
+            run = self._create_run(cursor)
+        try:
+            self._run_locked(run, cursor)
+        except Exception:
+            # This is deliberately a new short transaction; a failed transport
+            # must remain observable even when report persistence rolled back.
+            with transaction.atomic():
                 run.status = ProbeRun.Status.FAILED
                 run.stop_reason = run.stop_reason or "failed"
                 run.finished_at_ms = int(timezone.now().timestamp() * 1000)
                 run.save(update_fields=["status", "stop_reason", "finished_at_ms"])
-                raise
-            return run
+            raise
+        return run
+
+    @staticmethod
+    def _assert_no_running(cursor: ProbeCursor) -> None:
+        if ProbeRun.objects.filter(cursor=cursor, status=ProbeRun.Status.RUNNING).exists():
+            raise RuntimeError("probe cursor already has a running run")
+
+    def _create_run(self, cursor: ProbeCursor) -> ProbeRun:
+        return ProbeRun.objects.create(
+            cursor=cursor,
+            policy=self.policy,
+            status=ProbeRun.Status.RUNNING,
+            started_at_ms=int(timezone.now().timestamp() * 1000),
+        )
 
     def _run_locked(self, run: ProbeRun, cursor: ProbeCursor) -> None:
         config = self.config
+        # An empty boundary is a per-run observation.  Carrying it across a
+        # restart would stop after one empty response and can move the cursor
+        # backwards repeatedly.
+        cursor.consecutive_empty_count = 0
+        cursor.updated_at_ms = int(timezone.now().timestamp() * 1000)
+        cursor.save(update_fields=["consecutive_empty_count", "updated_at_ms"])
         next_id = cursor.next_probe_id
         if next_id is None and cursor.last_success_id is not None:
             next_id = cursor.last_success_id + 1
@@ -175,13 +215,14 @@ class DiscoveryRunner:
             run.finished_at_ms = int(timezone.now().timestamp() * 1000)
             run.save(update_fields=["status", "stop_reason", "finished_at_ms"])
             return
+        if not 1 <= next_id <= config.MAX_ID:
+            raise ValueError("cursor next_probe_id is outside the signed 64-bit kill-id range")
 
-        pending: deque[tuple[int, bool]] = deque()
         while run.request_count < config.max_requests:
-            if pending:
-                probe_id, is_neighbor = pending.popleft()
-            else:
-                probe_id, is_neighbor = next_id, False
+            probe_id = next_id
+            if not 1 <= probe_id <= config.MAX_ID:
+                run.stop_reason = "id_limit"
+                break
             outcome = self._fetch(probe_id)
             run.request_count += 1
             if outcome.status is ProbeStatus.REPORT:
@@ -196,27 +237,19 @@ class DiscoveryRunner:
                 if report_time is not None:
                     cursor.last_success_kill_time = report_time
                 cursor.consecutive_empty_count = 0
-                next_id = probe_id + config.step
-                if config.step > 1 and config.neighbor_reprobe:
-                    pending.extend(
-                        (candidate, True)
-                        for candidate in range(
-                            max(probe_id + 1, next_id - config.neighbor_reprobe), next_id
-                        )
-                    )
+                next_id = probe_id + 1
                 cursor.next_probe_id = next_id
             elif outcome.status is ProbeStatus.EMPTY:
                 run.empty_count += 1
-                if not is_neighbor:
-                    cursor.consecutive_empty_count += 1
-                    next_id = max(next_id, probe_id + 1)
-                    cursor.next_probe_id = next_id
-                    if cursor.consecutive_empty_count >= config.empty_threshold:
-                        # Keep the first boundary ID as the safe restart point;
-                        # a later run may observe a newly published report there.
-                        cursor.next_probe_id = probe_id - (config.empty_threshold - 1)
-                        run.stop_reason = "empty_threshold"
-                        break
+                cursor.consecutive_empty_count += 1
+                next_id = probe_id + 1
+                cursor.next_probe_id = next_id
+                if cursor.consecutive_empty_count >= config.empty_threshold:
+                    # Keep the first boundary ID as the safe restart point;
+                    # a later run may observe a newly published report there.
+                    cursor.next_probe_id = probe_id - (config.empty_threshold - 1)
+                    run.stop_reason = "empty_threshold"
+                    break
             else:
                 run.error_code = outcome.error_code or outcome.status.value
                 run.stop_reason = outcome.status.value

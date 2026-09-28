@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from django.core.management import call_command
 from django.test import TestCase
 
 from Killboard.discovery import DiscoveryConfig, DiscoveryRunner, ProbeStatus
@@ -32,6 +33,11 @@ class FakeClient:
         if isinstance(value, BaseException):
             raise value
         return value
+
+
+class CommandClient:
+    def get_kill_info(self, kill_id):
+        return None
 
 
 class Unauthorized(Exception):
@@ -78,22 +84,28 @@ class DiscoveryTests(TestCase):
         self.assertEqual(cursor.next_probe_id, 102)
         self.assertEqual(cursor.consecutive_empty_count, 2)
 
-    def test_jump_reprobes_neighbor_before_accepting_candidate(self):
-        client = FakeClient({
-            100: response(100),
-            103: response(103, "2026-09-28T12:00:03+00:00"),
-            102: None,
-        })
-        cursor = ProbeCursor.objects.create(name="jump", next_probe_id=100)
+    def test_step_greater_than_one_is_rejected_to_avoid_skipping_ids(self):
+        with self.assertRaises(ValueError):
+            DiscoveryConfig(step=3, neighbor_reprobe=1)
 
-        DiscoveryRunner(
+    def test_empty_counter_is_reset_at_the_start_of_each_run(self):
+        client = FakeClient({100: None, 101: response(101)})
+        cursor = ProbeCursor.objects.create(
+            name="reset-empty", next_probe_id=100, consecutive_empty_count=2
+        )
+
+        run = DiscoveryRunner(
             client,
             cursor=cursor,
             policy=self.policy,
-            config=DiscoveryConfig(step=3, neighbor_reprobe=1, empty_threshold=1, max_requests=3),
+            config=DiscoveryConfig(empty_threshold=2, max_requests=2),
         ).run()
 
-        self.assertEqual(client.calls, [100, 102, 103])
+        cursor.refresh_from_db()
+        self.assertEqual(client.calls, [100, 101])
+        self.assertEqual(run.stop_reason, "max_requests")
+        self.assertEqual(cursor.last_success_id, 101)
+        self.assertEqual(cursor.consecutive_empty_count, 0)
 
     def test_classified_errors_stop_without_being_counted_as_empty(self):
         for error, expected in (
@@ -153,3 +165,78 @@ class DiscoveryTests(TestCase):
 
         self.assertEqual(client.calls, [100])
         self.assertEqual(run.stop_reason, "max_requests")
+
+    def test_max_requests_and_start_id_have_hard_bounds(self):
+        with self.assertRaises(ValueError):
+            DiscoveryConfig(max_requests=10001)
+        with self.assertRaises(ValueError):
+            DiscoveryConfig(start_id=0)
+
+    def test_unexpected_exception_is_recorded_as_failed_run(self):
+        cursor = ProbeCursor.objects.create(name="failed", next_probe_id=100)
+        run = None
+        with self.assertRaises(RuntimeError):
+            DiscoveryRunner(
+                FakeClient({100: RuntimeError("boom")}),
+                cursor=cursor,
+                policy=self.policy,
+                config=DiscoveryConfig(max_requests=1),
+            ).run()
+
+        run = cursor.runs.get()
+        self.assertEqual(run.status, run.Status.FAILED)
+        self.assertEqual(run.stop_reason, "failed")
+
+    def test_dry_run_rolls_back_run_cursor_and_reports(self):
+        cursor = ProbeCursor.objects.create(name="dry", next_probe_id=100)
+        runner = DiscoveryRunner(
+            FakeClient({100: response(100)}),
+            cursor=cursor,
+            policy=self.policy,
+            config=DiscoveryConfig(max_requests=1),
+        )
+
+        runner.run(dry_run=True)
+
+        cursor.refresh_from_db()
+        self.assertIsNone(cursor.last_success_id)
+        self.assertFalse(cursor.runs.exists())
+
+    def test_management_command_dry_run_does_not_create_configuration(self):
+        call_command(
+            "killboard_probe",
+            client="Killboard.tests.test_discovery.CommandClient",
+            cursor="command-dry",
+            policy="command-policy",
+            start_id=100,
+            max_requests=1,
+        )
+
+        self.assertFalse(ProbeCursor.objects.filter(name="command-dry").exists())
+        self.assertFalse(CollectionPolicy.objects.filter(name="command-policy").exists())
+        self.assertEqual(ShipClass.objects.count(), 1)
+
+    def test_management_command_rejects_invalid_config_before_writes(self):
+        from django.core.management import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "killboard_probe",
+                client="Killboard.tests.test_discovery.CommandClient",
+                cursor="command-invalid",
+                policy="command-invalid-policy",
+                start_id=100,
+                step=2,
+            )
+
+        self.assertFalse(ProbeCursor.objects.filter(name="command-invalid").exists())
+        self.assertFalse(CollectionPolicy.objects.filter(name="command-invalid-policy").exists())
+
+    def test_default_command_policy_excludes_battlecruisers(self):
+        from Killboard.management.commands.killboard_probe import Command
+
+        policy = Command()._policy("battleship_plus")
+
+        self.assertEqual(policy.min_ship_rank, 4)
+        self.assertNotIn("battlecruiser", policy.allowed_class_keys)
+        self.assertEqual(ShipClass.objects.get(key="battlecruiser").rank, 3)
