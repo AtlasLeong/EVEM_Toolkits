@@ -180,7 +180,13 @@ export default function ManufacturingEstimatorPage() {
     }
     return null
   }, [summary, selectedNodeId])
-  const purchaseIds = useMemo(() => summary?.purchases.map(item => item.itemId) || [], [summary])
+  const purchaseIds = useMemo(() => {
+    if (!summary) return []
+    return [...new Set([
+      ...summary.purchases.map(item => item.itemId),
+      ...summary.missing.map(item => item.itemId),
+    ])]
+  }, [summary])
 
   const refreshQuotes = useCallback(async (ids = purchaseIds) => {
     if (!ids.length) return

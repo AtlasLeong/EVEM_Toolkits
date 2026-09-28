@@ -2,9 +2,11 @@ import { expect, test } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 
 test('manufacturing estimator selects a target and exposes make/buy route controls', async ({ page }) => {
+  const quoteRequests = []
   await installApiMock(page, ({ method, url }) => {
     if (method === 'GET' && url.pathname === '/api/market/items/') {
       const itemId = url.searchParams.get('q') || '41000000000'
+      quoteRequests.push(itemId)
       return json({ count: 1, results: [{ item_id: itemId, name: `市场物品 ${itemId}`, best_sell: '1200', status: 'fresh', observed_at: new Date().toISOString() }] })
     }
     return undefined
@@ -31,6 +33,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   const routeToggle = page.getByRole('button', { name: /切换为购买/ }).first()
   await expect(routeToggle).toBeVisible()
   await routeToggle.click()
+  await expect.poll(() => quoteRequests.includes('24041000020')).toBeTruthy()
   await expect(page.getByRole('button', { name: /切换为自造/ }).first()).toBeVisible()
   await expect(page.getByText('市场参考价')).toBeVisible()
 
