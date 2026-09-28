@@ -159,6 +159,16 @@ function ceilDiv(quantity, outputNum) {
   return Math.floor((quantity + outputNum - 1) / outputNum)
 }
 
+function installGroups(batches, maxInstallQuantity) {
+  const installCount = ceilDiv(batches, maxInstallQuantity)
+  return {
+    installCount,
+    installBatches: Array.from({ length: installCount }, (_, index) => (
+      Math.min(maxInstallQuantity, batches - (index * maxInstallQuantity))
+    )),
+  }
+}
+
 function resolveExpandArgs(first, second) {
   if (second !== undefined) return { catalog: first, plan: second }
   if (first?.catalog) return { catalog: first.catalog, plan: first }
@@ -177,15 +187,14 @@ export function expandPlan(first, second) {
   const targetId = asId(plan.targetId, 'plan.targetId')
   const quantity = asPositiveInteger(plan.quantity, 'plan.quantity')
   const overrides = plan.overrides ?? {}
-  const purchases = new Map()
-  let manufacturingFee = decimalZero()
-  let manufacturingTime = 0
 
-  function expandItem(itemId, requiredQuantity, path) {
+  // Build the visible branch tree first.  Its quantities are intentionally
+  // branch-local so the UI can explain each route; shared cost accounting is
+  // performed separately below by productId.
+  function buildDisplayItem(itemId, requiredQuantity, path) {
     const recipe = catalog.byId.get(itemId)
     const name = itemName(catalog, itemId, recipe)
     if (!recipe) {
-      addPurchase(purchases, catalog, itemId, requiredQuantity, 'leaf')
       return {
         kind: 'purchase',
         mode: 'buy',
@@ -198,7 +207,6 @@ export function expandPlan(first, second) {
     }
 
     if (overrideMode(overrides, itemId) === 'buy') {
-      addPurchase(purchases, catalog, itemId, requiredQuantity, 'override')
       return {
         kind: 'purchase',
         mode: 'buy',
@@ -215,12 +223,7 @@ export function expandPlan(first, second) {
     }
     const batches = ceilDiv(requiredQuantity, recipe.outputNum)
     const producedQuantity = batches * recipe.outputNum
-    const installCount = ceilDiv(batches, recipe.maxInstallQuantity)
-    const installBatches = Array.from({ length: installCount }, (_, index) => (
-      Math.min(recipe.maxInstallQuantity, batches - (index * recipe.maxInstallQuantity))
-    ))
-    manufacturingFee = decimalAdd(manufacturingFee, decimalMultiplyInt(decimalFrom(recipe.money, 'recipe.money'), batches))
-    manufacturingTime += recipe.time * batches
+    const { installCount, installBatches } = installGroups(batches, recipe.maxInstallQuantity)
     const nextPath = new Set(path)
     nextPath.add(itemId)
     const node = {
@@ -243,12 +246,108 @@ export function expandPlan(first, second) {
     }
 
     for (const material of recipe.materials) {
-      node.children.push(expandItem(material.itemId, material.quantity * batches, nextPath))
+      node.children.push(buildDisplayItem(material.itemId, material.quantity * batches, nextPath))
     }
     return node
   }
 
-  const root = expandItem(targetId, quantity, new Set())
+  const root = buildDisplayItem(targetId, quantity, new Set())
+
+  // Aggregate all makeable requests before applying outputNum.  This is a
+  // small monotonic work queue: a recipe is processed only for newly required
+  // batches, so shared intermediates are manufactured once even when several
+  // visible branches request them.
+  const purchases = new Map()
+  const requestedByRecipe = new Map()
+  const processedBatches = new Map()
+  const recipeAggregates = new Map()
+  const pending = []
+  let manufacturingFee = decimalZero()
+  let manufacturingTime = 0
+
+  function requestRecipe(itemId, requestedQuantity) {
+    requestedByRecipe.set(itemId, (requestedByRecipe.get(itemId) ?? 0) + requestedQuantity)
+    pending.push(itemId)
+  }
+
+  function requestPurchase(itemId, requestedQuantity, source) {
+    addPurchase(purchases, catalog, itemId, requestedQuantity, source)
+  }
+
+  const rootRecipe = catalog.byId.get(targetId)
+  if (rootRecipe && overrideMode(overrides, targetId) !== 'buy') {
+    requestRecipe(targetId, quantity)
+  } else {
+    requestPurchase(targetId, quantity, rootRecipe ? 'override' : 'leaf')
+  }
+
+  while (pending.length > 0) {
+    const itemId = pending.shift()
+    const recipe = catalog.byId.get(itemId)
+    if (!recipe || overrideMode(overrides, itemId) === 'buy') continue
+
+    const requestedQuantity = requestedByRecipe.get(itemId) ?? 0
+    const batches = ceilDiv(requestedQuantity, recipe.outputNum)
+    const previousBatches = processedBatches.get(itemId) ?? 0
+    const additionalBatches = batches - previousBatches
+    if (additionalBatches <= 0) {
+      const existingAggregate = recipeAggregates.get(itemId)
+      if (existingAggregate) existingAggregate.requestedQuantity = requestedQuantity
+      continue
+    }
+    processedBatches.set(itemId, batches)
+
+    const previousAggregate = recipeAggregates.get(itemId)
+    const aggregate = previousAggregate ?? {
+      requestedQuantity: 0,
+      batches: 0,
+      manufacturingFee: decimalZero(),
+      manufacturingTime: 0,
+    }
+    aggregate.requestedQuantity = requestedQuantity
+    aggregate.batches = batches
+    aggregate.manufacturingFee = decimalAdd(
+      aggregate.manufacturingFee,
+      decimalMultiplyInt(decimalFrom(recipe.money, 'recipe.money'), additionalBatches),
+    )
+    aggregate.manufacturingTime += recipe.time * additionalBatches
+    recipeAggregates.set(itemId, aggregate)
+
+    manufacturingFee = decimalAdd(
+      manufacturingFee,
+      decimalMultiplyInt(decimalFrom(recipe.money, 'recipe.money'), additionalBatches),
+    )
+    manufacturingTime += recipe.time * additionalBatches
+
+    for (const material of recipe.materials) {
+      const materialQuantity = material.quantity * additionalBatches
+      const materialRecipe = catalog.byId.get(material.itemId)
+      if (materialRecipe && overrideMode(overrides, material.itemId) !== 'buy') {
+        requestRecipe(material.itemId, materialQuantity)
+      } else {
+        requestPurchase(material.itemId, materialQuantity, materialRecipe ? 'override' : 'leaf')
+      }
+    }
+  }
+
+  function annotateAggregate(node) {
+    if (node.kind !== 'recipe') return
+    const aggregate = recipeAggregates.get(node.itemId)
+    if (aggregate) {
+      const recipe = catalog.byId.get(node.itemId)
+      const groups = installGroups(aggregate.batches, recipe.maxInstallQuantity)
+      node.aggregateRequestedQuantity = aggregate.requestedQuantity
+      node.aggregateProducedQuantity = aggregate.batches * recipe.outputNum
+      node.aggregateBatches = aggregate.batches
+      node.aggregateInstallCount = groups.installCount
+      node.aggregateInstallBatches = groups.installBatches
+      node.aggregateManufacturingFee = decimalToString(aggregate.manufacturingFee)
+      node.aggregateManufacturingTime = aggregate.manufacturingTime
+    }
+    node.children.forEach(annotateAggregate)
+  }
+  annotateAggregate(root)
+
   return {
     schemaVersion: 1,
     root,

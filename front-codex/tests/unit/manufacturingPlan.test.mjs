@@ -89,6 +89,32 @@ test('recursively makes intermediate recipes and aggregates a shared leaf item',
   assert.equal(summary.manufacturingFee, '11')
 })
 
+test('aggregates a shared makeable intermediate by productId before batching its cost', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [
+      { itemId: '101', quantity: 1 },
+      { itemId: '102', quantity: 1 },
+    ]),
+    recipe('101', '路径甲', [{ itemId: '300', quantity: 1 }]),
+    recipe('102', '路径乙', [{ itemId: '300', quantity: 1 }]),
+    recipe('300', '共享中间品', [{ itemId: '200', quantity: 1 }], {
+      outputNum: 3,
+      money: 10,
+    }),
+  ])
+  const plan = createPlan(catalog, { targetId: '100', quantity: 1 })
+
+  const expanded = expandPlan(plan)
+  const summary = summarizePlan(plan)
+  const sharedNodes = expanded.root.children.flatMap((branch) => branch.children)
+
+  assert.equal(summary.manufacturingFee, '10')
+  assert.deepEqual(expanded.purchases, [{ itemId: '200', name: '物品 200', quantity: 1 }])
+  assert.equal(sharedNodes.length, 2)
+  assert.ok(sharedNodes.every((node) => node.aggregateRequestedQuantity === 2))
+  assert.ok(sharedNodes.every((node) => node.aggregateBatches === 1))
+})
+
 test('buy override turns an intermediate recipe into a purchase and prunes its subtree', () => {
   const catalog = makeCatalog([
     recipe('100', '成品', [{ itemId: '101', quantity: 2 }]),
