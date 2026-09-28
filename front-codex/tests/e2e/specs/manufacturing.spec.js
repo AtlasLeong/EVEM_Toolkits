@@ -13,7 +13,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await page.goto('/manufacturing')
   await expect(page.getByRole('heading', { name: '制造估价' })).toBeVisible()
   await expect(page.getByRole('searchbox', { name: '搜索制造目标' })).toBeVisible()
-  await expect(page.getByText('效率公式待核实')).toBeVisible()
+  await expect(page.getByTestId('manufacturing-summary').getByText('效率公式待核实')).toBeVisible()
 
   const search = page.getByRole('searchbox', { name: '搜索制造目标' })
   await search.fill('组装车间模块 II')
