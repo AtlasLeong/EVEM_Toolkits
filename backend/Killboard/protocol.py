@@ -16,6 +16,11 @@ import msgpack
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_DEPTH = 24
 MAX_RESPONSE_NODES = 10_000
+MAX_ARRAY_ITEMS = 4_096
+MAX_MAP_ITEMS = 1_024
+MAX_STRING_BYTES = 64 * 1024
+MAX_BINARY_BYTES = MAX_RESPONSE_BYTES
+MAX_EXTENSION_BYTES = MAX_RESPONSE_BYTES
 EXPECTED_EXTENSION = 19
 EXPECTED_RESULT_KIND = 71
 
@@ -30,9 +35,18 @@ def _unpack(data: bytes) -> Any:
     if not isinstance(data, bytes) or len(data) > MAX_RESPONSE_BYTES:
         raise KillProtocolError("kill response exceeds the size limit")
     try:
-        return msgpack.unpackb(data, raw=False, strict_map_key=False)
+        return msgpack.unpackb(
+            data,
+            raw=False,
+            strict_map_key=False,
+            max_array_len=MAX_ARRAY_ITEMS,
+            max_map_len=MAX_MAP_ITEMS,
+            max_str_len=MAX_STRING_BYTES,
+            max_bin_len=MAX_BINARY_BYTES,
+            max_ext_len=MAX_EXTENSION_BYTES,
+        )
     except (ValueError, TypeError, UnicodeDecodeError, RecursionError,
-            msgpack.UnpackException) as exc:
+            OverflowError, msgpack.UnpackException) as exc:
         raise KillProtocolError("invalid kill response MessagePack") from exc
 
 

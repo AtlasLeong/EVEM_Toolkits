@@ -16,6 +16,7 @@ MAX_TEXT_LENGTH = 255
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.:-]*")
 _INTEGER = re.compile(r"0|[1-9][0-9]*")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_ENTITY = re.compile(r"&[^<>;\r\n]{1,64};")
 
 
 class KillParseError(ValueError):
@@ -111,6 +112,8 @@ def _parse_attrs(raw: str) -> tuple[str, dict[str, str], bool]:
             index = end
         if _CONTROL.search(value):
             _fail("control character in kill blob attribute")
+        if _ENTITY.search(value):
+            _fail("entities are not allowed in kill blob attributes")
         if len(value) > MAX_TEXT_LENGTH:
             _fail("kill blob attribute value is too long")
         attrs[attr_name] = value

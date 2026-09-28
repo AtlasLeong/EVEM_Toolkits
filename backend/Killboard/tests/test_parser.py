@@ -2,11 +2,16 @@
 
 from decimal import Decimal
 import unittest
+from unittest.mock import patch
 
 import msgpack
 
 from Killboard.parser import KillParseError, parse_kill_blob
-from Killboard.protocol import KillProtocolError, decode_kill_info_response
+from Killboard.protocol import (
+    MAX_ARRAY_ITEMS,
+    KillProtocolError,
+    decode_kill_info_response,
+)
 
 
 def _response(blob):
@@ -27,6 +32,17 @@ class KillProtocolTests(unittest.TestCase):
     def test_empty_response_is_none(self):
         self.assertIsNone(decode_kill_info_response(msgpack.packb(None, use_bin_type=True)))
         self.assertIsNone(decode_kill_info_response(msgpack.packb([], use_bin_type=True)))
+
+    def test_unpacker_applies_container_limits_before_materializing(self):
+        payload = msgpack.packb([0] * (MAX_ARRAY_ITEMS + 1), use_bin_type=True)
+
+        with patch("Killboard.protocol.msgpack.unpackb", wraps=msgpack.unpackb) as unpack:
+            with self.assertRaises(KillProtocolError):
+                decode_kill_info_response(payload)
+
+        self.assertTrue(unpack.call_args_list)
+        for call in unpack.call_args_list:
+            self.assertEqual(call.kwargs["max_array_len"], MAX_ARRAY_ITEMS)
 
 
 class KillBlobParserTests(unittest.TestCase):
@@ -90,6 +106,10 @@ class KillBlobParserTests(unittest.TestCase):
     def test_rejects_control_characters(self):
         with self.assertRaises(KillParseError):
             parse_kill_blob('<kill killID="1" shipName="bad\x01value" />')
+
+    def test_rejects_entities_in_attribute_values(self):
+        with self.assertRaises(KillParseError):
+            parse_kill_blob('<kill killID="1" shipName="A&amp;B" />')
 
     def test_rejects_oversized_blob(self):
         with self.assertRaises(KillParseError):
