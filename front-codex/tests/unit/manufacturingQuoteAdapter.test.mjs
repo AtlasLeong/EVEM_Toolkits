@@ -101,3 +101,13 @@ test('does not turn an invalid successful JSON response into an absent quote', a
   )
 })
 
+test('surfaces network failures as transport errors instead of absent quotes', async () => {
+  const api = fixture()
+  await assert.rejects(
+    api.fetchManufacturingQuotes(['101'], {
+      fetchImpl: async () => { throw new Error('connection reset') },
+    }),
+    error => error?.name === 'ManufacturingMarketError' && error?.code === 'transport_error',
+  )
+})
+
