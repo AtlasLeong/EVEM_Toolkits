@@ -1,0 +1,156 @@
+"""Transactional persistence services for parsed kill reports.
+
+The collector deliberately hands this module plain, parser-validated values.  It
+does not know about accounts, sessions, or transport details.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+import hashlib
+import json
+
+from django.db import transaction
+from django.utils import timezone
+
+from .models import CollectionPolicy, KillItem, KillParticipant, KillReport, ShipClass
+
+
+_COMPLETENESS_RANK = {
+    KillReport.Completeness.PARTIAL: 0,
+    KillReport.Completeness.NEEDS_REVIEW: 1,
+    KillReport.Completeness.COMPLETE: 2,
+}
+
+
+def _completeness(value: str | None, parsed: dict) -> str:
+    if value in _COMPLETENESS_RANK:
+        return value
+    required = (parsed.get("ship_name"), parsed.get("kill_time_raw"), parsed.get("victim_name"))
+    if all(required) and parsed.get("participants") is not None:
+        return KillReport.Completeness.COMPLETE
+    return KillReport.Completeness.PARTIAL
+
+
+def _policy_allows(parsed: dict, policy: CollectionPolicy | None) -> bool:
+    if policy is None or not policy.enabled:
+        return True
+    class_key = str(parsed.get("ship_class_key") or "")
+    allowed = set(policy.allowed_class_keys or [])
+    if allowed:
+        return class_key in allowed
+    ship_class = ShipClass.objects.filter(key=class_key, enabled=True).first()
+    return ship_class is not None and ship_class.rank >= policy.min_ship_rank
+
+
+def _parse_time(raw: str | None):
+    if not raw:
+        return None
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if timezone.is_naive(value):
+        return value
+    return value
+
+
+def _hash_payload(parsed: dict) -> str:
+    encoded = json.dumps(parsed, sort_keys=True, default=str, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _set_if_present(report: KillReport, parsed: dict, field: str, *, preserve_blank=True):
+    if field not in parsed:
+        return
+    value = parsed[field]
+    if preserve_blank and value in (None, ""):
+        return
+    setattr(report, field, value)
+
+
+def _save_children(report: KillReport, parsed: dict):
+    report.participants.all().delete()
+    report.items.all().delete()
+    for participant in parsed.get("participants") or []:
+        KillParticipant.objects.create(report=report, **{
+            key: participant.get(key)
+            for key in (
+                "character_id", "character_name", "corporation_id", "corporation_name",
+                "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
+                "is_top_damage", "source_index",
+            )
+            if key in participant
+        })
+    for item in parsed.get("items") or []:
+        KillItem.objects.create(report=report, **{
+            key: item.get(key)
+            for key in (
+                "type_id", "name", "slot", "quantity_dropped", "quantity_destroyed",
+                "quantity_unknown", "status",
+            )
+            if key in item
+        })
+
+
+@transaction.atomic
+def persist_report(
+    parsed: dict,
+    *,
+    policy: CollectionPolicy | None = None,
+    source: str = "unknown",
+    parser_version: str = "1",
+) -> tuple[KillReport | None, bool]:
+    """Insert or safely merge one parser result.
+
+    Returns ``(None, False)`` when the active collection policy excludes the
+    ship.  A lower completeness result never overwrites an existing record.
+    """
+
+    if not _policy_allows(parsed, policy):
+        return None, False
+    kill_id = int(parsed["kill_id"])
+    incoming_completeness = _completeness(parsed.get("completeness"), parsed)
+    incoming_rank = _COMPLETENESS_RANK[incoming_completeness]
+    try:
+        report = KillReport.objects.select_for_update().get(kill_id=kill_id)
+        created = False
+    except KillReport.DoesNotExist:
+        report = KillReport(kill_id=kill_id)
+        created = True
+
+    existing_rank = _COMPLETENESS_RANK.get(report.completeness, 0)
+    if not created and incoming_rank < existing_rank:
+        return report, False
+
+    fields = (
+        "ship_type_id", "ship_name", "ship_class_key", "system_id", "system_name",
+        "victim_character_id", "victim_name", "victim_corporation_id", "victim_corporation_name",
+        "victim_alliance_id", "victim_alliance_name", "kill_time_raw", "time_quality", "isk_lost",
+        "participant_count",
+    )
+    for field in fields:
+        _set_if_present(report, parsed, field)
+    if parsed.get("participant_count") is not None:
+        report.participant_count_source = parsed.get("participant_count_source", "source")
+    report.kill_time_display = _parse_time(parsed.get("kill_time_raw")) or report.kill_time_display
+    report.source = source
+    report.parser_version = parser_version
+    report.completeness = incoming_completeness
+    report.raw_hash = _hash_payload(parsed)
+    report.collected_at_ms = int(parsed.get("collected_at_ms") or report.collected_at_ms or 0)
+    report.updated_at_ms = int(timezone.now().timestamp() * 1000)
+    report.save()
+    _save_children(report, parsed)
+    return report, created
+
+
+# Explicit alias used by callers that prefer the domain term.
+upsert_kill_report = persist_report
+
+
+class KillReportService:
+    """Small dependency-free facade for management commands and tests."""
+
+    persist = staticmethod(persist_report)
+    upsert = staticmethod(persist_report)
