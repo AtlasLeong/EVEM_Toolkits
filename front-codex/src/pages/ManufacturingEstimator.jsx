@@ -7,7 +7,7 @@ import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
 const CATEGORY_LABELS = { ship: '舰船', material: '材料', building: '建筑' }
-const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', building: '标准工厂', blueprintOwned: true }
+const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', efficiencyRate: '', building: '标准工厂', blueprintOwned: true }
 
 function formatIsk(value) {
   if (value === null || value === undefined || value === '') return '待补价格'
@@ -109,6 +109,10 @@ function SettingField({ label, children }) {
 
 function LevelControl({ label, value, onChange, options = ['3', '4', '5'] }) {
   return <div className="manufacturing-level-field"><span>{label}</span><div className="manufacturing-level-control" role="group" aria-label={label}>{options.map(option => <button key={option} type="button" className={String(value) === option ? 'is-active' : ''} aria-pressed={String(value) === option} onClick={() => onChange(option)}>{option}</button>)}</div></div>
+}
+
+function EfficiencyRateField({ value, onChange }) {
+  return <label className="manufacturing-efficiency-field"><span><strong>制造效率</strong><small>手动覆盖</small></span><div className="manufacturing-efficiency-input"><input aria-label="制造效率百分比" type="number" min="0" max="100" step="0.1" inputMode="decimal" placeholder="填写效率" value={value} onChange={event => onChange(event.target.value)} /><b>%</b></div><em>当前仅记录，待效率公式校准后计入估价</em></label>
 }
 
 function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading }) {
@@ -262,7 +266,7 @@ export default function ManufacturingEstimatorPage() {
           <div className="manufacturing-panel-heading"><div><span className="eyebrow">PLAN SETUP</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
           <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={id => { setSelectedId(id); setSearch(''); setSelectedNodeId(''); setExpandedNodes(new Set(['0'])) }} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
-          <fieldset className="manufacturing-settings" aria-label="技能与效率"><legend>技能与效率</legend><div className="manufacturing-level-grid"><LevelControl label="制造" value={settings.manufacturingSkill} onChange={value => setSettings(current => ({ ...current, manufacturingSkill: value }))} /><LevelControl label="研究" value={settings.researchSkill} onChange={value => setSettings(current => ({ ...current, researchSkill: value }))} /><LevelControl label="效率" value={settings.efficiencySkill} onChange={value => setSettings(current => ({ ...current, efficiencySkill: value }))} /></div><label className="manufacturing-building-field"><span>生产建筑</span><select aria-label="生产建筑" value={settings.building} onChange={event => setSettings(value => ({ ...value, building: event.target.value }))}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label></fieldset>
+          <fieldset className="manufacturing-settings" aria-label="技能与效率"><legend>技能与效率</legend><div className="manufacturing-level-grid"><LevelControl label="制造" value={settings.manufacturingSkill} onChange={value => setSettings(current => ({ ...current, manufacturingSkill: value }))} /><LevelControl label="研究" value={settings.researchSkill} onChange={value => setSettings(current => ({ ...current, researchSkill: value }))} /><LevelControl label="效率技能" value={settings.efficiencySkill} onChange={value => setSettings(current => ({ ...current, efficiencySkill: value }))} /></div><EfficiencyRateField value={settings.efficiencyRate} onChange={value => setSettings(current => ({ ...current, efficiencyRate: value }))} /><label className="manufacturing-building-field"><span>生产建筑</span><select aria-label="生产建筑" value={settings.building} onChange={event => setSettings(value => ({ ...value, building: event.target.value }))}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label></fieldset>
           <label className="manufacturing-blueprint-toggle"><input type="checkbox" checked={settings.blueprintOwned} onChange={event => setSettings(value => ({ ...value, blueprintOwned: event.target.checked }))} /><span>已拥有蓝图</span><small>蓝图费用暂不计入</small></label>
           <div className="manufacturing-formula-callout"><Settings2 size={16} /><div><strong>效率公式待核实</strong><span>技能、建筑与蓝图状态先保留在方案中，等待公式校准后再影响数值。</span></div></div>
         </aside>

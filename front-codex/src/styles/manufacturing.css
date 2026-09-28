@@ -138,6 +138,15 @@
 .manufacturing-level-control button { min-width:0; border:0; border-right:1px solid #e1e9e5; padding:6px 0; background:#fff; color:#78908b; font-size:.7rem; font-weight:750; cursor:pointer; }
 .manufacturing-level-control button:last-child { border-right:0; }
 .manufacturing-level-control button:hover, .manufacturing-level-control button.is-active { background:var(--industry-accent); color:#fff; }
+.manufacturing-efficiency-field { display:grid; gap:5px; margin-top:11px; }
+.manufacturing-efficiency-field > span { display:flex; align-items:baseline; justify-content:space-between; color:var(--industry-muted); font-size:.66rem; font-weight:750; }
+.manufacturing-efficiency-field > span strong { color:var(--industry-ink); font-size:.7rem; }
+.manufacturing-efficiency-field > span small { color:var(--industry-accent); font-size:.62rem; font-weight:700; }
+.manufacturing-efficiency-input { display:flex; align-items:center; border:1px solid #cbdad4; border-radius:8px; background:#fff; transition:border-color .15s, box-shadow .15s; }
+.manufacturing-efficiency-input:focus-within { border-color:var(--industry-accent); box-shadow:0 0 0 3px rgba(39,124,114,.1); }
+.manufacturing-efficiency-input input { width:100%; min-width:0; border:0; outline:0; padding:7px 8px; background:transparent; color:var(--industry-ink); font-size:.78rem; }
+.manufacturing-efficiency-input b { padding-right:9px; color:var(--industry-accent); font-size:.78rem; }
+.manufacturing-efficiency-field em { color:var(--industry-muted); font-size:.61rem; font-style:normal; line-height:1.35; }
 .manufacturing-building-field { display:grid; grid-template-columns:72px 1fr; align-items:center; gap:8px; margin-top:10px; }
 .manufacturing-building-field select { width:100%; border:1px solid var(--industry-border); border-radius:8px; padding:7px 8px; background:#fff; color:var(--industry-ink); font-size:.72rem; }
 .manufacturing-blueprint-toggle { margin-top:12px; font-size:.78rem; }

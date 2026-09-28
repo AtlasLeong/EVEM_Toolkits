@@ -19,6 +19,9 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(page.getByRole('heading', { name: '制造目标' })).toBeVisible()
   await expect(page.getByRole('button', { name: '展开全部层级' })).toBeVisible()
   await expect(page.getByRole('group', { name: '技能与效率' })).toBeVisible()
+  const efficiencyRate = page.getByRole('spinbutton', { name: '制造效率百分比' })
+  await efficiencyRate.fill('12.5')
+  await expect(efficiencyRate).toHaveValue('12.5')
 
   const search = page.getByRole('searchbox', { name: '搜索制造目标' })
   await search.fill('组装车间模块 II')
