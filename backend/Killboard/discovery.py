@@ -143,7 +143,11 @@ class DiscoveryRunner:
             blob = decoded.get("kill_blob") if isinstance(decoded, dict) else None
             if blob is None:
                 return ProbeOutcome(ProbeStatus.MALFORMED, error_code="missing_kill_blob")
-            parsed = parse_kill_blob(blob)
+            # The captured forest only carries attackers/items/other. Identity,
+            # timestamp and final-blow fields live in the verified outer map.
+            # Pass that map through so reports such as those with no attacker
+            # section still retain the victim and last-hit summary.
+            parsed = parse_kill_blob(blob, summary=decoded)
             if parsed.get("kill_id") != kill_id:
                 return ProbeOutcome(ProbeStatus.MALFORMED, error_code="kill_id_mismatch")
             return ProbeOutcome(ProbeStatus.REPORT, payload=parsed)

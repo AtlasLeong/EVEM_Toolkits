@@ -88,7 +88,7 @@ def _save_children(report: KillReport, parsed: dict):
                 for key in (
                     "character_id", "character_name", "corporation_id", "corporation_name",
                     "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
-                    "is_top_damage", "source_index",
+                "is_top_damage", "ship_type_id", "weapon_type_id", "source_index",
                 )
                 if key in participant
             })
@@ -155,6 +155,16 @@ def persist_report(
     report.source = source
     report.parser_version = parser_version
     report.completeness = incoming_completeness
+    if "participants_status" in parsed:
+        incoming_status = parsed["participants_status"]
+        if created or incoming_status not in {"missing", "unavailable", "unknown"} or report.participants_status not in {"provided", "summary"}:
+            report.participants_status = incoming_status
+    elif parsed.get("participants"):
+        report.participants_status = "provided"
+    if "equipment_status" in parsed:
+        incoming_status = parsed["equipment_status"]
+        if created or incoming_status not in {"missing", "unavailable", "unknown"} or report.equipment_status != "provided":
+            report.equipment_status = incoming_status
     report.raw_hash = _hash_payload(parsed)
     report.collected_at_ms = int(parsed.get("collected_at_ms") or report.collected_at_ms or 0)
     report.updated_at_ms = int(timezone.now().timestamp() * 1000)

@@ -1,6 +1,7 @@
 """Red tests for bounded, classified kill-id discovery."""
 
 from datetime import datetime, timezone
+import msgpack
 
 from django.core.management import call_command
 from django.test import TestCase
@@ -20,6 +21,22 @@ def response(kill_id, when="2026-09-28T12:00:00+00:00"):
         '</kill>'
     )
     return {"kill_blob": blob}
+
+
+def captured_response(kill_id):
+    blob = '<attackers><a c="8" s="401" w="501" d="100" /></attackers><other />'
+    nested = msgpack.packb({
+        "kill_id": kill_id,
+        "solar_system_id": 30000001,
+        "victim_ship_type_id": 9001,
+        "victim_character_id": 7,
+        "final_character_id": 8,
+        "final_damage_done": 100,
+        "kill_time": "2026-09-28T12:00:00",
+        "kill_blob": blob,
+    }, use_bin_type=True)
+    inner = msgpack.packb([71, nested], use_bin_type=True)
+    return msgpack.packb(msgpack.ExtType(19, inner), use_bin_type=True)
 
 
 class FakeClient:
@@ -60,6 +77,19 @@ class DiscoveryTests(TestCase):
             min_ship_rank=4,
             allowed_class_keys=["battleship"],
         )
+
+    def test_runner_passes_captured_summary_to_parser(self):
+        cursor = ProbeCursor.objects.create(name="captured-summary", next_probe_id=100)
+        runner = DiscoveryRunner(
+            FakeClient({100: captured_response(100)}),
+            cursor=cursor,
+            policy=None,
+            config=DiscoveryConfig(max_requests=1),
+        )
+
+        run = runner.run()
+
+        self.assertEqual(run.report_count, 1)
 
     def test_contiguous_reports_advance_cursor_and_stop_on_empty_hole(self):
         client = FakeClient({

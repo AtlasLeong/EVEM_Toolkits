@@ -51,6 +51,19 @@ class KillboardModelTests(TestCase):
             status=KillItem.Status.DROPPED,
         )
 
+        report.participants_status = 'provided'
+        report.equipment_status = 'provided'
+        report.save(update_fields=['participants_status', 'equipment_status'])
+        participant.ship_type_id = 9001
+        participant.weapon_type_id = 9002
+        participant.save(update_fields=['ship_type_id', 'weapon_type_id'])
+        report.refresh_from_db()
+        participant.refresh_from_db()
+        self.assertEqual(report.equipment_status, 'provided')
+        self.assertEqual(report.participants_status, 'provided')
+        self.assertEqual(participant.ship_type_id, 9001)
+        self.assertEqual(participant.weapon_type_id, 9002)
+
         self.assertEqual(report.participants.get(), participant)
         self.assertEqual(report.items.get(), item)
 

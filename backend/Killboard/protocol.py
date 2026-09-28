@@ -1,9 +1,10 @@
 """Bounded decoder for the captured ``get_kill_info`` response envelope.
 
-The game RPC uses a MessagePack extension (code 19) whose payload is the
-``[71, nested_bytes]`` envelope observed in the approved capture.  This module
-only unwraps that shape; authentication, sockets and raw capture files do not
-belong here.
+The observed game RPC has a transport extension (code 10) around the business
+extension (code 19), whose payload is ``[71, nested_bytes]``.  Some clients
+already unwrap code 10 before handing the value to this module, so the direct
+code-19 shape remains accepted for compatibility.  Authentication, sockets
+and raw capture files do not belong here.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ MAX_STRING_BYTES = 64 * 1024
 MAX_BINARY_BYTES = MAX_RESPONSE_BYTES
 MAX_EXTENSION_BYTES = MAX_RESPONSE_BYTES
 EXPECTED_EXTENSION = 19
+EXPECTED_TRANSPORT_EXTENSION = 10
 EXPECTED_RESULT_KIND = 71
 
 
@@ -57,9 +59,11 @@ def _walk(value: Any, depth: int, budget: list[int]) -> Any:
     if budget[0] < 0:
         raise KillProtocolError("kill response node limit exceeded")
     if isinstance(value, msgpack.ExtType):
-        if value.code != EXPECTED_EXTENSION:
-            raise KillProtocolError("unsupported kill response extension")
-        return _walk(_unpack(value.data), depth + 1, budget)
+        # Extensions are only valid at the envelope boundary.  The transport
+        # wrapper is unwrapped explicitly by ``_unwrap_envelope`` below;
+        # accepting it recursively would allow arbitrary nested transport
+        # payloads to bypass the shape check.
+        raise KillProtocolError("unexpected kill response extension")
     if isinstance(value, bytes):
         # Bytes in the verified envelope are nested MessagePack, not arbitrary
         # opaque payloads.  Decode them only when they occur as the envelope's
@@ -79,6 +83,16 @@ def _walk(value: Any, depth: int, budget: list[int]) -> Any:
     return value
 
 
+def _unwrap_envelope(value: Any, budget: list[int]) -> Any:
+    """Unwrap the observed transport/business extension pair exactly once."""
+    if isinstance(value, msgpack.ExtType) and value.code == EXPECTED_TRANSPORT_EXTENSION:
+        value = _unpack(value.data)
+    if not isinstance(value, msgpack.ExtType) or value.code != EXPECTED_EXTENSION:
+        raise KillProtocolError("invalid get_kill_info extension envelope")
+    value = _unpack(value.data)
+    return _walk(value, 0, budget)
+
+
 def decode_kill_info_response(payload: bytes | bytearray | Any) -> dict[str, Any] | None:
     """Decode one ``get_kill_info`` result and return its safe mapping.
 
@@ -95,9 +109,9 @@ def decode_kill_info_response(payload: bytes | bytearray | Any) -> dict[str, Any
         value = _unpack(payload)
     else:
         value = payload
-    value = _walk(value, 0, [MAX_RESPONSE_NODES])
     if value is None or value == []:
         return None
+    value = _unwrap_envelope(value, [MAX_RESPONSE_NODES])
     if not isinstance(value, list) or len(value) != 2 or value[0] != EXPECTED_RESULT_KIND:
         raise KillProtocolError("invalid get_kill_info envelope")
     nested = value[1]
@@ -108,4 +122,9 @@ def decode_kill_info_response(payload: bytes | bytearray | Any) -> dict[str, Any
         return None
     if not isinstance(nested_value, dict):
         raise KillProtocolError("get_kill_info result is not a mapping")
+    # A captured response stores kill_blob as text; older callers used bytes,
+    # which remain accepted here and are normalized later by the parser.
+    blob = nested_value.get("kill_blob")
+    if blob is not None and not isinstance(blob, (str, bytes, bytearray)):
+        raise KillProtocolError("kill response kill_blob is not text")
     return nested_value

@@ -27,9 +27,12 @@ DATABASES = {
 
 DATABASE_ROUTERS = ['EVE_MDjango.db_routers.LicenseDatabaseRouter']
 AUTH_USER_MODEL = 'auth.User'
-ROOT_URLCONF = 'License.urls'
+ROOT_URLCONF = 'EVE_MDjango.killboard_test_urls'
 MIDDLEWARE = []
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 MIGRATION_MODULES = {'ActivationCode': None}
+REST_FRAMEWORK = {
+    'DEFAULT_THROTTLE_RATES': {'killboard_public': '120/hour'},
+}
 

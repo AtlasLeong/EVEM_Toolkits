@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined } from 'lucide-react'
+import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Swords } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -8,6 +8,7 @@ import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
   { to: '/market', label: '市场价格', icon: ChartNoAxesCombined },
+  { to: '/killboard', label: '击毁情报', icon: Swords },
   { to: '/starmap', label: '星系导航', icon: Compass },
   { to: '/tactical', label: '战术板', icon: Crosshair },
   { to: '/fraudlist', label: '防诈名单', icon: Shield },
@@ -16,7 +17,7 @@ const navItems = [
   { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/market', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/market', '/killboard', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))

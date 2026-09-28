@@ -66,6 +66,9 @@ class KillReportPersistenceTests(TestCase):
         self.assertEqual(report.kill_id, 100)
         self.assertEqual(report.participants.count(), 1)
         self.assertEqual(report.items.get().status, KillItem.Status.DROPPED)
+        self.assertEqual(report.equipment_status, 'provided')
+        self.assertEqual(report.participants_status, 'provided')
+        self.assertEqual(report.participants.get().ship_type_id, None)
 
         filtered, stored = persist_report(
             parsed_report(kill_id=101, ship_class_key="frigate"),
@@ -140,6 +143,21 @@ class KillReportPersistenceTests(TestCase):
 
         self.assertFalse(created)
         self.assertEqual(report.items.count(), 1)
+        self.assertEqual(report.equipment_status, 'provided')
+
+    def test_missing_status_does_not_downgrade_existing_source(self):
+        persist_report(parsed_report(kill_id=107, completeness="complete"), policy=self.policy)
+        incoming = parsed_report(kill_id=107, completeness="complete")
+        incoming["participants"] = []
+        incoming["participants_status"] = "missing"
+        incoming.pop("items")
+        incoming["equipment_status"] = "missing"
+
+        report, created = persist_report(incoming, policy=self.policy)
+
+        self.assertFalse(created)
+        self.assertEqual(report.participants_status, 'provided')
+        self.assertEqual(report.equipment_status, 'provided')
 
     def test_missing_participant_section_does_not_delete_existing_participants(self):
         persist_report(

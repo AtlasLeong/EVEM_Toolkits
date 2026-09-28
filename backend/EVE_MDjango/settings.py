@@ -214,6 +214,7 @@ REST_FRAMEWORK = {
         'minute': '1/minute',
         'custom': '5/day',
         'market_public': '120/hour',
+        'killboard_public': '120/hour',
     }
 }
 
