@@ -429,3 +429,16 @@ test("归属审核显示本次申请名称简称，历史空值回退军团资�
   await expect(page.locator(".corp-review-detail")).toContainText("历史名称");
   await expect(page.locator(".corp-review-detail")).toContainText("OLD");
 });
+
+test("归属申请批准后明确提示去完善资料，不误导为已公开", async ({ page }) => {
+  await communityFixture(page, { auth: true, staff: true });
+  await page.goto("/corporations/review");
+  await page.locator(".corp-review-list button").click();
+  await page.getByRole("button", { name: "批准申请", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "已获得管理权，公开主页还需完善资料",
+  );
+  await expect(
+    page.getByRole("link", { name: "去我的军团完善资料", exact: true }),
+  ).toHaveAttribute("href", /\/corporations\/manage\?id=2/);
+});

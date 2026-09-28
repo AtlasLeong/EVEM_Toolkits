@@ -1,6 +1,7 @@
 import { useContext, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 import {
   EmptyState,
@@ -72,7 +73,7 @@ function ReviewWorkspace() {
   const [selected, setSelected] = useState(null);
   const activeSelection = useRef(null);
   activeSelection.current = `${kind}-${selected}`;
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(null);
   const capability = useQuery({
     queryKey: [...prefix, "capabilities"],
     queryFn: getCommunityCapabilities,
@@ -117,7 +118,7 @@ function ReviewWorkspace() {
               setKind(value);
               setSelected(null);
               setPage(1);
-              setNotice("");
+              setNotice(null);
             }}
           >
             {label}
@@ -127,7 +128,19 @@ function ReviewWorkspace() {
       {notice && (
         <p className="corp-success" role="status">
           <Check size={16} />
-          {notice}
+          {notice.kind === "claims" && notice.decision === "approve"
+            ? "已获得管理权，公开主页还需完善资料。"
+            : "审核已完成"}
+          {notice.kind === "claims" &&
+            notice.decision === "approve" &&
+            notice.corporationId && (
+              <Link
+                className="corp-success-link"
+                to={`/corporations/manage?id=${notice.corporationId}`}
+              >
+                去我的军团完善资料
+              </Link>
+            )}
         </p>
       )}
       <div className="corp-review-layout">
@@ -150,7 +163,7 @@ function ReviewWorkspace() {
                       className={selected === item.id ? "active" : ""}
                       onClick={() => {
                         setSelected(item.id);
-                        setNotice("");
+                        setNotice(null);
                       }}
                     >
                       <strong>{item.corporation?.name || item.name}</strong>
@@ -183,11 +196,11 @@ function ReviewWorkspace() {
             kind={kind}
             id={selected}
             prefix={prefix}
-            done={async () => {
+            done={async (result) => {
               // A late decision must not discard another item's review notes.
               if (activeSelection.current === `${kind}-${selected}`) {
                 setSelected(null);
-                setNotice("审核已完成");
+                setNotice(result);
               }
               await refresh();
             }}
@@ -223,7 +236,11 @@ function ReviewDetail({ kind, id, prefix, done }) {
     action.run(async () => {
       await decideCorporationReview(kind, id, decision, reason.trim());
       await refreshPublic(data.corporation?.id);
-      await done();
+      await done({
+        kind,
+        decision,
+        corporationId: data.corporation?.id,
+      });
     });
   const fields = {
     tagline: "军团口号",
