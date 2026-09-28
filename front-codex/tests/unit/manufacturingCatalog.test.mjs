@@ -72,3 +72,26 @@ test('rejects duplicate product IDs instead of silently overwriting a recipe', (
     recipes: [recipe, { ...recipe }],
   }), /duplicate.*productId/i)
 })
+
+test('rejects control and zero-width characters in recipe names', () => {
+  const recipe = {
+    productId: '100',
+    name: '坏\u200b配方',
+    category: 'ship',
+    outputNum: 1,
+    materials: [{ itemId: '200', quantity: 1 }],
+    money: 1,
+    time: 1,
+    maxInstallQuantity: 1,
+  }
+
+  assert.throws(() => normalizeManufacturingCatalog({
+    schemaVersion: 1,
+    recipes: [recipe],
+  }), /name.*usable/i)
+
+  assert.throws(() => normalizeManufacturingCatalog({
+    schemaVersion: 1,
+    recipes: [{ ...recipe, name: '坏\u0007配方' }],
+  }), /name.*usable/i)
+})

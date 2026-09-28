@@ -48,7 +48,9 @@ function normalizeRecipe(recipe, index) {
 
   const productId = normalizeId(recipe.productId, `recipes[${index}].productId`)
   const name = String(recipe.name ?? '').trim()
-  if (!name || /[{}]/u.test(name)) fail(`recipes[${index}].name must be a usable display name`)
+  if (!name || /[{}\p{Cc}\p{Cf}]/u.test(name)) {
+    fail(`recipes[${index}].name must be a usable display name`)
+  }
   if (!VALID_CATEGORIES.has(recipe.category)) {
     fail(`recipes[${index}].category must be ship, material, or building`)
   }
