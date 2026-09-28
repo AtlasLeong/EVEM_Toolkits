@@ -13,6 +13,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   })
 
   await page.goto('/manufacturing')
+  await expect(page.locator('main.manufacturing-page--terminal')).toBeVisible()
   await expect(page.getByRole('heading', { name: '制造估价' })).toBeVisible()
   await expect(page.getByRole('searchbox', { name: '搜索制造目标' })).toBeVisible()
   await expect(page.getByTestId('manufacturing-summary').getByText('效率公式待核实')).toBeVisible()
@@ -58,6 +59,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect.poll(() => quoteRequests.includes('24041000020')).toBeTruthy()
   await expect(routeGroup.getByRole('button', { name: '购买', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(routeGroup.getByRole('button', { name: '购买', exact: true })).toHaveAttribute('data-state', 'active')
+  await expect(routeGroup.getByRole('button', { name: '购买', exact: true })).toHaveCSS('background-color', 'rgb(246, 188, 105)')
   await expect(page.locator('[data-testid="manufacturing-tree-row"][data-selected="true"]')).toBeVisible()
   await expect(page.getByText('市场参考价')).toBeVisible()
 

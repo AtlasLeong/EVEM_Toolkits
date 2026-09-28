@@ -187,6 +187,185 @@
 .manufacturing-route-segmented { flex-basis: 108px; }
 }
 
+/* Market terminal alignment: keep the manufacturing surface in the same
+   dark, high-contrast family as the market workstation. */
+.manufacturing-page--terminal {
+  --manufacturing-panel: #102831;
+  --manufacturing-panel-raised: #193944;
+  --manufacturing-line: #2c4852;
+  --manufacturing-control: #365560;
+  --manufacturing-text: #e9f2f3;
+  --manufacturing-muted: #abc0c5;
+  --manufacturing-cyan: #67d4d5;
+  --manufacturing-cyan-soft: #9aebea;
+  --manufacturing-amber: #f6bc69;
+  --manufacturing-amber-soft: #ffd092;
+  --manufacturing-green: #83e2aa;
+  --manufacturing-green-soft: #c5f3d5;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--manufacturing-text);
+}
+.shell-main:has(.manufacturing-page--terminal) { padding: 18px 24px 16px; background: var(--console-bg, #faf9f6); }
+.page-wrapper:has(.manufacturing-page--terminal), .page-stage:has(.manufacturing-page--terminal) { height: 100%; min-height: 0; }
+.manufacturing-page--terminal .manufacturing-page-header { flex: 0 0 auto; align-items: center; margin: 0; padding: 0 2px 8px; }
+.manufacturing-page--terminal .manufacturing-page-header .eyebrow { color: var(--console-accent, #a6533e); font-size: 10px; letter-spacing: .13em; }
+.manufacturing-page--terminal .manufacturing-page-header h1 { margin: 5px 0 3px; color: var(--console-text, #242422); font-size: clamp(1.55rem, 2.2vw, 2rem); line-height: 1.1; }
+.manufacturing-page--terminal .manufacturing-page-header p { color: var(--console-muted, #6c6a63); font-size: 12px; }
+.manufacturing-page--terminal .manufacturing-header-meta { gap: 6px; }
+.manufacturing-page--terminal .manufacturing-header-meta span { border: 1px solid var(--console-line, #cecac1); border-radius: 999px; padding: 7px 10px; color: var(--console-muted, #6c6a63); background: var(--console-surface, #fff); font-size: 11px; }
+.manufacturing-page--terminal .manufacturing-workspace { display: grid; grid-template-columns: 240px minmax(0, 1fr) 260px; flex: 1 1 auto; width: 100%; min-height: 0; height: auto; gap: 1px; border: 1px solid var(--manufacturing-line); border-radius: 12px; overflow: hidden; background: var(--manufacturing-line); box-shadow: 0 2px 8px rgb(10 32 38 / 12%); }
+.manufacturing-page--terminal .manufacturing-controls,
+.manufacturing-page--terminal .manufacturing-tree-panel,
+.manufacturing-page--terminal .manufacturing-summary { min-width: 0; min-height: 0; border-color: var(--manufacturing-line); background: var(--manufacturing-panel); color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-controls { padding: 16px 14px; border-right: 1px solid var(--manufacturing-line); }
+.manufacturing-page--terminal .manufacturing-tree-panel { display: flex; flex-direction: column; padding: 18px 20px 14px; background: linear-gradient(145deg, #102831, #122e38); }
+.manufacturing-page--terminal .manufacturing-summary { padding: 16px 14px; border-left: 1px solid var(--manufacturing-line); }
+.manufacturing-page--terminal .manufacturing-controls,
+.manufacturing-page--terminal .manufacturing-tree-panel,
+.manufacturing-page--terminal .manufacturing-summary { overflow-y: auto; scrollbar-color: #45636c transparent; }
+.manufacturing-page--terminal .manufacturing-panel-heading { margin-bottom: 13px; }
+.manufacturing-page--terminal .manufacturing-panel-heading .eyebrow,
+.manufacturing-page--terminal .manufacturing-summary-heading .eyebrow { color: var(--manufacturing-muted); font-size: 10px; letter-spacing: .04em; }
+.manufacturing-page--terminal .manufacturing-panel-heading h2,
+.manufacturing-page--terminal .manufacturing-summary-heading h2 { color: var(--manufacturing-text); font-size: 16px; letter-spacing: -.01em; }
+.manufacturing-page--terminal .manufacturing-save-state { border-color: var(--manufacturing-control); border-radius: 999px; color: var(--manufacturing-muted); background: var(--manufacturing-panel-raised); }
+.manufacturing-page--terminal .manufacturing-target-label h3,
+.manufacturing-page--terminal .manufacturing-setting > span,
+.manufacturing-page--terminal .manufacturing-level-field > span,
+.manufacturing-page--terminal .manufacturing-building-field > span { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-change-target { border: 1px solid var(--manufacturing-control); background: transparent; color: var(--manufacturing-cyan); }
+.manufacturing-page--terminal .manufacturing-change-target:hover { background: #204751; }
+.manufacturing-page--terminal .manufacturing-search-field { border-color: var(--manufacturing-control); border-radius: 7px; background: #0d222a; color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-search-field:focus-within { border-color: var(--manufacturing-cyan); outline: 2px solid rgb(103 212 213 / 16%); outline-offset: 1px; }
+.manufacturing-page--terminal .manufacturing-search-field input { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-search-field input::placeholder { color: #78959c; }
+.manufacturing-page--terminal .manufacturing-target-options { border-color: var(--manufacturing-control); background: var(--manufacturing-panel); box-shadow: 0 10px 24px rgb(0 0 0 / 25%); }
+.manufacturing-page--terminal .manufacturing-target-options button { border-bottom-color: var(--manufacturing-line); color: var(--manufacturing-text); background: var(--manufacturing-panel); }
+.manufacturing-page--terminal .manufacturing-target-options button:hover,
+.manufacturing-page--terminal .manufacturing-target-options button[aria-selected=true] { background: #1a3c46; }
+.manufacturing-page--terminal .manufacturing-target-options button small,
+.manufacturing-page--terminal .manufacturing-empty { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-selected-target { border-color: var(--manufacturing-line); background: var(--manufacturing-panel-raised); }
+.manufacturing-page--terminal .manufacturing-selected-target strong { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-selected-target small { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-quantity-control,
+.manufacturing-page--terminal .manufacturing-level-control,
+.manufacturing-page--terminal .manufacturing-efficiency-input,
+.manufacturing-page--terminal .manufacturing-building-field select { border-color: var(--manufacturing-control); background: #0d222a; color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-quantity-control button { color: var(--manufacturing-cyan); background: var(--manufacturing-panel-raised); }
+.manufacturing-page--terminal .manufacturing-quantity-control input,
+.manufacturing-page--terminal .manufacturing-efficiency-input input,
+.manufacturing-page--terminal .manufacturing-building-field select { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-settings { border-color: var(--manufacturing-line); background: var(--manufacturing-panel-raised); }
+.manufacturing-page--terminal .manufacturing-settings legend { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-level-control button { border-right-color: var(--manufacturing-line); background: #0d222a; color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-level-control button:hover,
+.manufacturing-page--terminal .manufacturing-level-control button.is-active { background: var(--manufacturing-cyan); color: #102831; }
+.manufacturing-page--terminal .manufacturing-efficiency-field > span strong { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-efficiency-field > span small,
+.manufacturing-page--terminal .manufacturing-efficiency-input b { color: var(--manufacturing-cyan); }
+.manufacturing-page--terminal .manufacturing-efficiency-field em,
+.manufacturing-page--terminal .manufacturing-blueprint-toggle small { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-blueprint-toggle { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-blueprint-toggle input { accent-color: var(--manufacturing-cyan); }
+.manufacturing-page--terminal .manufacturing-formula-callout { border-color: var(--manufacturing-line); border-left-color: var(--manufacturing-amber); background: #192f37; color: var(--manufacturing-amber-soft); }
+.manufacturing-page--terminal .manufacturing-formula-callout span { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-tree-heading { align-items: center; }
+.manufacturing-page--terminal .manufacturing-tree-heading h2 { max-width: 42vw; overflow: hidden; color: var(--manufacturing-text); font-size: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.manufacturing-page--terminal .manufacturing-tree-legend { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .dot-make { background: var(--manufacturing-green); }
+.manufacturing-page--terminal .dot-buy { background: var(--manufacturing-amber); }
+.manufacturing-page--terminal .manufacturing-tree-expand-actions button,
+.manufacturing-page--terminal .manufacturing-route-policy button { border-color: var(--manufacturing-control); background: transparent; color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-tree-expand-actions button:hover,
+.manufacturing-page--terminal .manufacturing-route-policy button:hover { border-color: var(--manufacturing-cyan); background: #204751; color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-route-policy { border-bottom-color: var(--manufacturing-line); }
+.manufacturing-page--terminal .manufacturing-route-policy > span,
+.manufacturing-page--terminal .manufacturing-tree-hint { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-route-action-message { border-left-color: var(--manufacturing-cyan); color: var(--manufacturing-cyan-soft); }
+.manufacturing-page--terminal .manufacturing-tree-row { min-height: 54px; border-color: var(--manufacturing-line); border-radius: 8px; background: rgb(25 57 68 / 52%); }
+.manufacturing-page--terminal .manufacturing-tree-node--recipe > .manufacturing-tree-row { background: #153640; }
+.manufacturing-page--terminal .manufacturing-tree-node.is-selected > .manufacturing-tree-row { border-color: var(--manufacturing-cyan); box-shadow: inset 3px 0 var(--manufacturing-cyan), 0 0 0 1px rgb(103 212 213 / 26%); }
+.manufacturing-page--terminal .manufacturing-tree-select { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-tree-icon { background: #202527; }
+.manufacturing-page--terminal .manufacturing-tree-copy strong { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-tree-copy small { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-tree-children { border-left-color: var(--manufacturing-control); }
+.manufacturing-page--terminal .manufacturing-tree-expand { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-tree-expand:hover { background: #204751; color: var(--manufacturing-cyan); }
+.manufacturing-page--terminal .manufacturing-route-segmented { flex-basis: 124px; border-color: var(--manufacturing-control); background: var(--manufacturing-panel); }
+.manufacturing-page--terminal .manufacturing-route-toggle { border-right-color: var(--manufacturing-control); color: var(--manufacturing-muted); background: transparent; }
+.manufacturing-page--terminal .manufacturing-route-toggle:hover { background: #204751; color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-route-toggle--make.is-active { background: var(--manufacturing-green); color: #102831; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%); }
+.manufacturing-page--terminal .manufacturing-route-toggle--buy.is-active { background: var(--manufacturing-amber); color: #102831; box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%); }
+.manufacturing-page--terminal .manufacturing-route-leaf { color: var(--manufacturing-amber-soft); background: #4a3b27; }
+.manufacturing-page--terminal .manufacturing-route-footer { border-top-color: var(--manufacturing-line); color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-route-footer strong { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-summary-heading h2 { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-complete-state.is-complete { color: var(--manufacturing-green-soft); background: #1d4b40; }
+.manufacturing-page--terminal .manufacturing-complete-state.is-partial { color: var(--manufacturing-amber-soft); background: #4a3b27; }
+.manufacturing-page--terminal .manufacturing-total-card { border-color: var(--manufacturing-line); background: linear-gradient(145deg, #193944, #122d36); }
+.manufacturing-page--terminal .manufacturing-total-card span,
+.manufacturing-page--terminal .manufacturing-total-card small { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-total-card strong { color: var(--manufacturing-text); font-size: 1.55rem; line-height: 1.2; }
+.manufacturing-page--terminal .manufacturing-total-compact { display: block; margin-top: 7px; color: var(--manufacturing-cyan); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.manufacturing-page--terminal .manufacturing-cost-breakdown dt { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-cost-breakdown dd { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-formula-note { color: var(--manufacturing-amber); }
+.manufacturing-page--terminal .manufacturing-missing { border-left-color: var(--manufacturing-amber); color: var(--manufacturing-amber-soft); background: #382e22; }
+.manufacturing-page--terminal .manufacturing-price-editor { border-top-color: var(--manufacturing-line); }
+.manufacturing-page--terminal .manufacturing-price-editor h3 { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-route-pill.is-make { color: var(--manufacturing-green-soft); background: #1d4b40; }
+.manufacturing-page--terminal .manufacturing-route-pill.is-buy { color: var(--manufacturing-amber-soft); background: #4a3b27; }
+.manufacturing-page--terminal .manufacturing-market-reference { border-color: var(--manufacturing-line); background: var(--manufacturing-panel-raised); }
+.manufacturing-page--terminal .manufacturing-market-reference span,
+.manufacturing-page--terminal .manufacturing-market-reference small,
+.manufacturing-page--terminal .manufacturing-price-help { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-market-reference strong { color: var(--manufacturing-amber-soft); }
+.manufacturing-page--terminal .manufacturing-manual-price div { border-color: var(--manufacturing-control); background: #0d222a; }
+.manufacturing-page--terminal .manufacturing-manual-price input { color: var(--manufacturing-text); }
+.manufacturing-page--terminal .manufacturing-manual-price div span { color: var(--manufacturing-muted); }
+.manufacturing-page--terminal .manufacturing-manual-badge { color: var(--manufacturing-cyan); background: #204751; }
+.manufacturing-page--terminal .manufacturing-refresh-button { border-color: var(--manufacturing-control); background: transparent; color: var(--manufacturing-cyan); }
+.manufacturing-page--terminal .manufacturing-refresh-button:hover { border-color: var(--manufacturing-cyan); background: #204751; }
+.manufacturing-page--terminal button:focus-visible,
+.manufacturing-page--terminal input:focus-visible,
+.manufacturing-page--terminal select:focus-visible { outline: 2px solid var(--manufacturing-cyan); outline-offset: 2px; }
+
+@media (max-width: 1179px) {
+  .manufacturing-page--terminal .manufacturing-workspace { grid-template-columns: 210px minmax(0, 1fr); }
+  .manufacturing-page--terminal .manufacturing-summary { grid-column: 1 / -1; border-top: 1px solid var(--manufacturing-line); border-left: 0; }
+}
+@media (max-width: 767px) {
+  .shell-main:has(.manufacturing-page--terminal) { padding: 12px; }
+  .manufacturing-page--terminal { height: auto; min-height: 100%; overflow: visible; }
+  .manufacturing-page--terminal .manufacturing-page-header { align-items: flex-start; flex-direction: column; }
+  .manufacturing-page--terminal .manufacturing-workspace { display: block; height: auto; overflow: visible; }
+  .manufacturing-page--terminal .manufacturing-controls,
+  .manufacturing-page--terminal .manufacturing-tree-panel,
+  .manufacturing-page--terminal .manufacturing-summary { overflow: visible; border: 0; }
+  .manufacturing-page--terminal .manufacturing-controls { border-bottom: 1px solid var(--manufacturing-line); }
+  .manufacturing-page--terminal .manufacturing-tree-panel { min-height: 440px; }
+  .manufacturing-page--terminal .manufacturing-summary { border-top: 1px solid var(--manufacturing-line); }
+}
+@media (max-width: 520px) {
+  .manufacturing-page--terminal .manufacturing-page-header h1 { font-size: 1.65rem; }
+  .manufacturing-page--terminal .manufacturing-header-meta { width: 100%; }
+  .manufacturing-page--terminal .manufacturing-header-meta span { flex: 1; }
+  .manufacturing-page--terminal .manufacturing-tree-heading { align-items: flex-start; flex-direction: column; }
+  .manufacturing-page--terminal .manufacturing-tree-heading h2 { max-width: 100%; }
+  .manufacturing-page--terminal .manufacturing-tree-actions { width: 100%; justify-content: space-between; }
+  .manufacturing-page--terminal .manufacturing-route-segmented { flex-basis: 116px; }
+  .manufacturing-page--terminal .manufacturing-total-card strong { font-size: 1.35rem; }
+}
+
 .manufacturing-page-header { display:flex; justify-content:space-between; gap:24px; align-items:flex-end; max-width:1680px; margin:0 auto 22px; }
 .manufacturing-page-header h1 { margin:8px 0 6px; font-size:clamp(2rem, 3vw, 3rem); letter-spacing:-.04em; }
 .manufacturing-page-header p { margin:0; color:var(--industry-muted); font-size:.95rem; }
