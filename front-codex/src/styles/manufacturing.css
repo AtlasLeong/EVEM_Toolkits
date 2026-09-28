@@ -571,3 +571,16 @@
   .manufacturing-tree-heading h2 { max-width:100%; }
   .manufacturing-tree-actions { width:100%; justify-content:space-between; }
 }
+
+/* Keep terminal-scoped layout rules last so the legacy workstation cascade
+   cannot reintroduce the old gutters or hide route labels on narrow screens. */
+.shell-main:has(.manufacturing-page--terminal) { padding: 18px 24px 16px; background: var(--console-bg, #faf9f6); }
+.manufacturing-page--terminal { display: flex; height: 100%; min-height: 0; padding: 0; overflow: hidden; background: transparent; }
+.manufacturing-page--terminal .manufacturing-route-toggle { padding: 5px 7px; font-size: .66rem; }
+@media (max-width: 767px) {
+  .shell-main:has(.manufacturing-page--terminal) { padding: 12px; overflow: visible; }
+  .manufacturing-page--terminal { height: auto; min-height: 100%; overflow: visible; padding: 0; }
+}
+@media (max-width: 520px) {
+  .manufacturing-page--terminal .manufacturing-route-toggle { padding: 5px 3px; font-size: .66rem; }
+}
