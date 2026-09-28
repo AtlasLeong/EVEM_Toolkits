@@ -87,3 +87,17 @@ test('fetches each ID through the compatible public q filter without credentials
   assert.equal(quotes['101'].best_sell, '10.00')
 })
 
+test('does not turn an invalid successful JSON response into an absent quote', async () => {
+  const api = fixture()
+  await assert.rejects(
+    api.fetchManufacturingQuotes(['101'], {
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => { throw new SyntaxError('invalid json') },
+      }),
+    }),
+    error => error?.name === 'ManufacturingMarketError' && error?.code === 'invalid_json',
+  )
+})
+

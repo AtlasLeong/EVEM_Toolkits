@@ -12,10 +12,12 @@ export const DEFAULT_QUOTE_CONCURRENCY = 8
 const QUOTE_STATUSES = new Set(['fresh', 'stale', 'empty', 'uncollected', 'absent'])
 
 export class ManufacturingMarketError extends Error {
-  constructor(message, status) {
+  constructor(message, status, { code = 'market_error', cause } = {}) {
     super(message)
     this.name = 'ManufacturingMarketError'
     this.status = status
+    this.code = code
+    if (cause !== undefined) this.cause = cause
   }
 }
 
@@ -121,15 +123,35 @@ function errorMessage(payload, status) {
 }
 
 async function fetchOneQuote(itemId, { apiUrl, fetchImpl, signal }) {
-  const response = await fetchImpl(buildItemsUrl(apiUrl, itemId), {
-    signal,
-    credentials: 'omit',
-  })
+  let response
+  try {
+    response = await fetchImpl(buildItemsUrl(apiUrl, itemId), {
+      signal,
+      credentials: 'omit',
+    })
+  } catch (cause) {
+    throw new ManufacturingMarketError('行情请求失败，请稍后重试。', undefined, {
+      code: 'transport_error',
+      cause,
+    })
+  }
   if (!response?.ok) {
     const payload = typeof response?.json === 'function' ? await response.json().catch(() => ({})) : {}
-    throw new ManufacturingMarketError(errorMessage(payload, response?.status), response?.status)
+    throw new ManufacturingMarketError(errorMessage(payload, response?.status), response?.status, {
+      code: 'http_error',
+    })
   }
-  return normalizeManufacturingQuotes(await response.json().catch(() => ({})), [itemId])
+  let payload
+  try {
+    if (typeof response.json !== 'function') throw new TypeError('JSON response body is unavailable')
+    payload = await response.json()
+  } catch (cause) {
+    throw new ManufacturingMarketError('行情响应不是有效 JSON。', response?.status, {
+      code: 'invalid_json',
+      cause,
+    })
+  }
+  return normalizeManufacturingQuotes(payload, [itemId])
 }
 
 async function mapWithConcurrency(values, worker, concurrency) {
