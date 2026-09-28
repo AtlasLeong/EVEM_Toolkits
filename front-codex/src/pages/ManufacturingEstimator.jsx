@@ -3,6 +3,7 @@ import { Boxes, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Sear
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
 import { createManufacturingPlan, summarizeManufacturingPlan } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
+import { formatCompactIsk } from '../utils/manufacturingDisplay'
 import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
