@@ -832,10 +832,18 @@
 .corp-success {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   color: var(--success);
   font-size: 13px;
   line-height: 1.7;
+}
+.corp-success-link {
+  margin-left: auto;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .corp-hint {
   color: var(--text-soft);
