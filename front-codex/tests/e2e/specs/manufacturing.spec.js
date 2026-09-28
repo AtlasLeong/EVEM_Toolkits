@@ -16,7 +16,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(page.locator('main.manufacturing-page--terminal')).toBeVisible()
   await expect(page.getByRole('heading', { name: '制造估价' })).toBeVisible()
   await expect(page.getByRole('searchbox', { name: '搜索制造目标' })).toBeVisible()
-  await expect(page.getByTestId('manufacturing-summary').getByText('效率公式待核实')).toBeVisible()
+  await expect(page.getByTestId('manufacturing-summary').getByText('材料效率已应用')).toBeVisible()
   await expect(page.getByRole('heading', { name: '制造目标' })).toBeVisible()
   await expect(page.getByTestId('manufacturing-total-compact')).toContainText(/万|亿/)
   await expect(page.getByRole('button', { name: '展开全部层级' })).toBeVisible()

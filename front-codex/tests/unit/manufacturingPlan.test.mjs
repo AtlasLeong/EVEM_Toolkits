@@ -49,6 +49,42 @@ test('ceil-divides requested quantity by outputNum before expanding materials', 
   assert.equal(summary.manufacturingFee, '20')
 })
 
+test('reduces material requirements by the configured efficiency rate', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '200', quantity: 10 }], { money: 2 }),
+  ])
+  const plan = createPlan(catalog, {
+    targetId: '100',
+    quantity: 1,
+    settings: { efficiencyRate: '50' },
+    purchasePrices: { '200': '1' },
+  })
+
+  const expanded = expandPlan(plan)
+  const summary = summarizePlan(plan)
+
+  assert.equal(expanded.root.children[0].quantity, 5)
+  assert.deepEqual(expanded.purchases, [{ itemId: '200', name: '物品 200', quantity: 5 }])
+  assert.equal(summary.materialSubtotal, '5')
+  assert.equal(summary.total, '7')
+})
+
+test('rounds reduced per-batch requirements up to avoid understating materials', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '200', quantity: 3 }]),
+  ])
+  const plan = createPlan(catalog, {
+    targetId: '100',
+    quantity: 1,
+    settings: { efficiencyRate: '50' },
+  })
+
+  const expanded = expandPlan(plan)
+
+  assert.equal(expanded.root.children[0].quantity, 2)
+  assert.equal(expanded.purchases[0].quantity, 2)
+})
+
 test('splits recipe batches into capped installation groups without changing cost', () => {
   const catalog = makeCatalog([
     recipe('100', '批量成品', [{ itemId: '200', quantity: 1 }], {

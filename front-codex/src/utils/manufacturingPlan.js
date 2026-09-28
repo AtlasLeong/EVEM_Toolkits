@@ -159,6 +159,19 @@ function ceilDiv(quantity, outputNum) {
   return Math.floor((quantity + outputNum - 1) / outputNum)
 }
 
+// Efficiency is entered as a percentage and may contain a decimal fraction.
+// Keep one decimal place as an integer so material scaling stays deterministic
+// and never loses precision to binary floating point arithmetic.
+function efficiencyTenths(value) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.min(1000, Math.max(0, Math.round(parsed * 10)))
+}
+
+function scaleMaterialQuantity(quantity, efficiency) {
+  return Math.ceil((quantity * (1000 - efficiency)) / 1000)
+}
+
 function installGroups(batches, maxInstallQuantity) {
   const installCount = ceilDiv(batches, maxInstallQuantity)
   return {
@@ -187,6 +200,7 @@ export function expandPlan(first, second) {
   const targetId = asId(plan.targetId, 'plan.targetId')
   const quantity = asPositiveInteger(plan.quantity, 'plan.quantity')
   const overrides = plan.overrides ?? {}
+  const efficiency = efficiencyTenths(plan.settings?.efficiencyRate)
 
   // Build the visible branch tree first.  Its quantities are intentionally
   // branch-local so the UI can explain each route; shared cost accounting is
@@ -246,7 +260,8 @@ export function expandPlan(first, second) {
     }
 
     for (const material of recipe.materials) {
-      node.children.push(buildDisplayItem(material.itemId, material.quantity * batches, nextPath))
+      const materialPerBatch = scaleMaterialQuantity(material.quantity, efficiency)
+      node.children.push(buildDisplayItem(material.itemId, materialPerBatch * batches, nextPath))
     }
     return node
   }
@@ -320,7 +335,8 @@ export function expandPlan(first, second) {
     manufacturingTime += recipe.time * additionalBatches
 
     for (const material of recipe.materials) {
-      const materialQuantity = material.quantity * additionalBatches
+      const materialPerBatch = scaleMaterialQuantity(material.quantity, efficiency)
+      const materialQuantity = materialPerBatch * additionalBatches
       const materialRecipe = catalog.byId.get(material.itemId)
       if (materialRecipe && overrideMode(overrides, material.itemId) !== 'buy') {
         requestRecipe(material.itemId, materialQuantity)
