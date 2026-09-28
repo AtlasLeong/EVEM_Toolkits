@@ -49,6 +49,26 @@ test('ceil-divides requested quantity by outputNum before expanding materials', 
   assert.equal(summary.manufacturingFee, '20')
 })
 
+test('splits recipe batches into capped installation groups without changing cost', () => {
+  const catalog = makeCatalog([
+    recipe('100', '批量成品', [{ itemId: '200', quantity: 1 }], {
+      outputNum: 1,
+      maxInstallQuantity: 10,
+      money: 7,
+    }),
+  ])
+  const plan = createPlan(catalog, { targetId: '100', quantity: 23 })
+
+  const expanded = expandPlan(plan)
+  const summary = summarizePlan(plan)
+
+  assert.equal(expanded.root.batches, 23)
+  assert.equal(expanded.root.installCount, 3)
+  assert.deepEqual(expanded.root.installBatches, [10, 10, 3])
+  assert.ok(expanded.root.installBatches.every((count) => count <= 10))
+  assert.equal(summary.manufacturingFee, '161')
+})
+
 test('recursively makes intermediate recipes and aggregates a shared leaf item', () => {
   const catalog = makeCatalog([
     recipe('100', '成品', [

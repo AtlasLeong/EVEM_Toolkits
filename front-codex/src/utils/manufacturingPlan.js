@@ -215,6 +215,10 @@ export function expandPlan(first, second) {
     }
     const batches = ceilDiv(requiredQuantity, recipe.outputNum)
     const producedQuantity = batches * recipe.outputNum
+    const installCount = ceilDiv(batches, recipe.maxInstallQuantity)
+    const installBatches = Array.from({ length: installCount }, (_, index) => (
+      Math.min(recipe.maxInstallQuantity, batches - (index * recipe.maxInstallQuantity))
+    ))
     manufacturingFee = decimalAdd(manufacturingFee, decimalMultiplyInt(decimalFrom(recipe.money, 'recipe.money'), batches))
     manufacturingTime += recipe.time * batches
     const nextPath = new Set(path)
@@ -230,6 +234,9 @@ export function expandPlan(first, second) {
       producedQuantity,
       batches,
       outputNum: recipe.outputNum,
+      maxInstallQuantity: recipe.maxInstallQuantity,
+      installCount,
+      installBatches,
       manufacturingFee: decimalToString(decimalMultiplyInt(decimalFrom(recipe.money, 'recipe.money'), batches)),
       manufacturingTime: recipe.time * batches,
       children: [],
