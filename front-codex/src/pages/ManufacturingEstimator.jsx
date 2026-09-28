@@ -32,7 +32,7 @@ function quoteState(quote) {
   return quotePrice(quote) ? '最新观测' : '尚未采集'
 }
 
-function TreeNode({ node, catalog, onToggle, selectedId, onSelect, path, expandedNodes, onToggleExpanded }) {
+function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, expandedNodes, onToggleExpanded }) {
   const recipe = catalog.byId.get(node.itemId)
   const canRoute = Boolean(recipe)
   const buying = node.mode === 'buy'
@@ -49,18 +49,16 @@ function TreeNode({ node, catalog, onToggle, selectedId, onSelect, path, expande
             <small>{formatQuantity(node.quantity)} 件 · {node.kind === 'recipe' && !buying ? `自造 · ${CATEGORY_LABELS[node.category] || '制造'}` : '购买'}</small>
           </span>
         </button>
-        <span className={`manufacturing-route-pill ${buying ? 'is-buy' : 'is-make'}`}>{buying ? '购买' : '自造'}</span>
         {canRoute ? (
-          <button
-            type="button"
-            className="manufacturing-route-toggle"
-            aria-label={`${buying ? '切换为自造' : '切换为购买'} ${node.name}`}
-            onClick={() => onToggle(node.itemId)}
-          >
-            {buying ? <Wrench size={14} aria-hidden="true" /> : <ShoppingCart size={14} aria-hidden="true" />}
-            {buying ? '自造' : '购买'}
-          </button>
-        ) : null}
+          <div className="manufacturing-route-segmented" role="group" aria-label={`生产方式 ${node.name}`}>
+            <button type="button" className={`manufacturing-route-toggle manufacturing-route-toggle--make${!buying ? ' is-active' : ''}`} aria-pressed={!buying} onClick={() => onModeChange(node.itemId, 'make')}>
+              <Wrench size={13} aria-hidden="true" />自造
+            </button>
+            <button type="button" className={`manufacturing-route-toggle manufacturing-route-toggle--buy${buying ? ' is-active' : ''}`} aria-pressed={buying} onClick={() => onModeChange(node.itemId, 'buy')}>
+              <ShoppingCart size={13} aria-hidden="true" />购买
+            </button>
+          </div>
+        ) : <span className="manufacturing-route-leaf" aria-label={`市场采购 ${node.name}`}>市场采购</span>}
         {hasChildren ? (
           <button type="button" className="manufacturing-tree-expand" aria-label={`${expanded ? '收起' : '展开'} ${node.name}层级`} aria-expanded={expanded} onClick={() => onToggleExpanded(path)}>
             {expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
@@ -69,7 +67,7 @@ function TreeNode({ node, catalog, onToggle, selectedId, onSelect, path, expande
       </div>
       {hasChildren && expanded ? (
         <ul className="manufacturing-tree-children">
-          {node.children.map((child, index) => <TreeNode key={`${path}.${index}`} node={child} catalog={catalog} onToggle={onToggle} selectedId={selectedId} onSelect={onSelect} path={`${path}.${index}`} expandedNodes={expandedNodes} onToggleExpanded={onToggleExpanded} />)}
+          {node.children.map((child, index) => <TreeNode key={`${path}.${index}`} node={child} catalog={catalog} onModeChange={onModeChange} selectedId={selectedId} onSelect={onSelect} path={`${path}.${index}`} expandedNodes={expandedNodes} onToggleExpanded={onToggleExpanded} />)}
         </ul>
       ) : null}
     </li>
@@ -160,6 +158,7 @@ export default function ManufacturingEstimatorPage() {
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [quoteError, setQuoteError] = useState('')
   const [expandedNodes, setExpandedNodes] = useState(() => new Set(['0']))
+  const [routeActionMessage, setRouteActionMessage] = useState('')
   const searchRef = useRef(null)
 
   const loadCatalog = useCallback(async () => {
@@ -224,9 +223,34 @@ export default function ManufacturingEstimatorPage() {
     if (missing.length) refreshQuotes(missing)
   }, [purchaseIds, marketQuotes, refreshQuotes])
 
-  const toggleRoute = itemId => {
+  const recipeIds = useMemo(() => catalog?.recipes.map(recipe => recipe.productId) || [], [catalog])
+
+  const onModeChange = (itemId, mode) => {
     setSelectedNodeId(itemId)
-    setOverrides(previous => ({ ...previous, [itemId]: previous[itemId] === 'buy' ? 'make' : 'buy' }))
+    setOverrides(previous => ({ ...previous, [itemId]: mode }))
+    setRouteActionMessage(`${catalog.items.get(itemId)?.name || catalog.byId.get(itemId)?.name || '节点'}：已切换为${mode === 'buy' ? '购买' : '自造'}`)
+  }
+
+  const applyRoutePolicy = policy => {
+    if (!selectedId || !recipeIds.length) return
+    const nextOverrides = Object.fromEntries(recipeIds.map(itemId => {
+      if (policy === 'buy-intermediates') return [itemId, itemId === selectedId ? 'make' : 'buy']
+      if (policy === 'make-all') return [itemId, 'make']
+      return [itemId, undefined]
+    }).filter(([, mode]) => mode !== undefined))
+    setOverrides(nextOverrides)
+    setSelectedNodeId('')
+    setRouteActionMessage(policy === 'make-all' ? '已应用：全部自造（包含所有中间件）' : policy === 'buy-intermediates' ? '已应用：购买中间件（根目标保持自造）' : '已恢复默认路线（全部节点按配方自造）')
+  }
+
+  const handleTargetSelect = id => {
+    setSelectedId(id)
+    setOverrides({})
+    setPurchasePrices({})
+    setSelectedNodeId('')
+    setSearch('')
+    setExpandedNodes(new Set(['0']))
+    setRouteActionMessage('')
   }
   const updateManualPrice = value => {
     if (!selectedNodeId) return
@@ -264,7 +288,7 @@ export default function ManufacturingEstimatorPage() {
       <section className="manufacturing-workspace">
         <aside className="manufacturing-controls">
           <div className="manufacturing-panel-heading"><div><span className="eyebrow">PLAN SETUP</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
-          <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={id => { setSelectedId(id); setSearch(''); setSelectedNodeId(''); setExpandedNodes(new Set(['0'])) }} />
+          <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={handleTargetSelect} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
           <fieldset className="manufacturing-settings" aria-label="技能与效率"><legend>技能与效率</legend><div className="manufacturing-level-grid"><LevelControl label="制造" value={settings.manufacturingSkill} onChange={value => setSettings(current => ({ ...current, manufacturingSkill: value }))} /><LevelControl label="研究" value={settings.researchSkill} onChange={value => setSettings(current => ({ ...current, researchSkill: value }))} /><LevelControl label="效率技能" value={settings.efficiencySkill} onChange={value => setSettings(current => ({ ...current, efficiencySkill: value }))} /></div><EfficiencyRateField value={settings.efficiencyRate} onChange={value => setSettings(current => ({ ...current, efficiencyRate: value }))} /><label className="manufacturing-building-field"><span>生产建筑</span><select aria-label="生产建筑" value={settings.building} onChange={event => setSettings(value => ({ ...value, building: event.target.value }))}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label></fieldset>
           <label className="manufacturing-blueprint-toggle"><input type="checkbox" checked={settings.blueprintOwned} onChange={event => setSettings(value => ({ ...value, blueprintOwned: event.target.checked }))} /><span>已拥有蓝图</span><small>蓝图费用暂不计入</small></label>
@@ -272,8 +296,10 @@ export default function ManufacturingEstimatorPage() {
         </aside>
         <section className="manufacturing-tree-panel" aria-label="制造链路">
           <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">MANUFACTURING ROUTE</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-actions"><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div><div className="manufacturing-tree-expand-actions"><button type="button" aria-label="展开全部层级" onClick={expandAll}>展开全部</button><button type="button" aria-label="收起全部层级" onClick={collapseAll}>收起全部</button></div></div></div>
+          <div className="manufacturing-route-policy" aria-label="批量路线策略"><span>批量策略</span><button type="button" aria-label="全部自造" onClick={() => applyRoutePolicy('make-all')}>全部自造</button><button type="button" aria-label="购买中间件" onClick={() => applyRoutePolicy('buy-intermediates')}>购买中间件</button><button type="button" aria-label="恢复默认" onClick={() => applyRoutePolicy('default')}>恢复默认</button></div>
+          {routeActionMessage ? <p className="manufacturing-route-action-message" role="status" aria-live="polite">{routeActionMessage}</p> : null}
           <p className="manufacturing-tree-hint">点击节点查看价格；将中间产物切换为购买后，其下游制造会从本方案中移除。</p>
-          <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} onToggle={toggleRoute} selectedId={selectedNodeId} onSelect={setSelectedNodeId} path="0" expandedNodes={expandedNodes} onToggleExpanded={toggleExpanded} /></ul>
+          <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} onModeChange={onModeChange} selectedId={selectedNodeId} onSelect={setSelectedNodeId} path="0" expandedNodes={expandedNodes} onToggleExpanded={toggleExpanded} /></ul>
           {quoteError ? <p className="manufacturing-inline-error" role="status">{quoteError}</p> : null}
           <div className="manufacturing-route-footer"><span>制造时间</span><strong>{Math.ceil((summary.manufacturingTime || 0) / 3600)} 小时</strong><span>购买项</span><strong>{summary.purchases.length} 类</strong></div>
         </section>
