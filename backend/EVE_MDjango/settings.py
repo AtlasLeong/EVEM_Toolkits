@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     'TacticalCollaboration',
     'Starsea',
     'Market',
+    'Killboard',
 ]
 
 MIDDLEWARE = [
