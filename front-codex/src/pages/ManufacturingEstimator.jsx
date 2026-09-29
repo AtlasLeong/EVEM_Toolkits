@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench, X } from 'lucide-react'
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
 import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
@@ -8,7 +9,7 @@ import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
 const CATEGORY_LABELS = { ship: '舰船', material: '材料', building: '建筑' }
-const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', materialEfficiencyPercent: String(DEFAULT_MATERIAL_EFFICIENCY), building: '标准工厂', blueprintOwned: true }
+const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', materialEfficiencyPercent: String(DEFAULT_MATERIAL_EFFICIENCY), building: '标准工厂' }
 
 function formatIsk(value) {
   if (value === null || value === undefined || value === '') return '待补价格'
@@ -75,31 +76,160 @@ function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, exp
   )
 }
 
-function TargetPicker({ recipes, selectedId, search, onSearch, onSelect, onFocusSearch, inputRef }) {
-  const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase()
-    return recipes.filter(recipe => !text || recipe.name.toLowerCase().includes(text) || recipe.productId.includes(text)).slice(0, 12)
-  }, [recipes, search])
+const TARGET_CATEGORY_ORDER = ['ship', 'material', 'building']
+
+function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
+  const pickerId = useId()
+  const [open, setOpen] = useState(false)
+  const [activeCategory, setActiveCategory] = useState('ship')
+  const [activeOptionId, setActiveOptionId] = useState(null)
+  const pickerRef = useRef(null)
+  const dialogRef = useRef(null)
+  const inputRef = useRef(null)
+  const openerRef = useRef(null)
+  const groupsRef = useRef(null)
+  const tabRefs = useRef({})
+  const [dialogPosition, setDialogPosition] = useState(null)
   const selected = recipes.find(recipe => recipe.productId === selectedId)
-  return (
-    <div className="manufacturing-target-picker" aria-label="制造目标">
-      <div className="manufacturing-target-label"><h3>制造目标</h3><button type="button" className="manufacturing-change-target" aria-label="切换制造目标" onClick={onFocusSearch}>切换目标</button></div>
+  const groups = useMemo(() => {
+    const text = search.trim().toLowerCase()
+    return TARGET_CATEGORY_ORDER.map(category => {
+      const matching = recipes.filter(recipe => recipe.category === category && (!text || recipe.name.toLowerCase().includes(text)))
+      return { category, label: CATEGORY_LABELS[category], count: matching.length, recipes: matching }
+    }).filter(group => group.recipes.length)
+  }, [recipes, search])
+  const categoryCounts = useMemo(() => Object.fromEntries(TARGET_CATEGORY_ORDER.map(category => [category, recipes.filter(recipe => recipe.category === category).length])), [recipes])
+  const visibleGroups = useMemo(() => search.trim() ? groups : groups.filter(group => group.category === activeCategory), [activeCategory, groups, search])
+
+  const updatePosition = useCallback(() => {
+    const rect = pickerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const width = Math.min(Math.max(rect.width, 360), window.innerWidth - 20)
+    const height = Math.min(window.innerWidth < 768 ? 650 : 520, window.innerHeight - 20)
+    setDialogPosition({
+      top: Math.max(10, Math.min(rect.bottom + 6, window.innerHeight - height - 10)),
+      left: Math.max(10, Math.min(rect.left, window.innerWidth - width - 10)),
+      width,
+      height,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const root = document.getElementById('root')
+    const wasInert = root?.inert
+    const previousOverflow = document.body.style.overflow
+    if (root) root.inert = true
+    document.body.style.overflow = 'hidden'
+    inputRef.current?.focus({ preventScroll: true })
+    const handleKeyDown = event => {
+      if (event.isComposing || event.keyCode === 229) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setOpen(false)
+      }
+      if (event.key !== 'Tab') return
+      const controls = Array.from(dialogRef.current?.querySelectorAll('button, input, [tabindex]') || [])
+        .filter(element => !element.disabled && element.tabIndex >= 0 && element.getClientRects().length)
+      const first = controls[0]
+      const last = controls[controls.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', updatePosition)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', updatePosition)
+      if (root) root.inert = wasInert
+      document.body.style.overflow = previousOverflow
+      if (openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true })
+    }
+  }, [open, updatePosition])
+
+  useEffect(() => {
+    if (groupsRef.current) groupsRef.current.scrollTop = 0
+    setActiveOptionId(null)
+  }, [activeCategory, search])
+
+  const openPicker = event => {
+    openerRef.current = event.currentTarget
+    onSearch('')
+    setActiveCategory(selected?.category || 'ship')
+    updatePosition()
+    setOpen(true)
+  }
+  const chooseTarget = productId => {
+    onSelect(productId)
+    onSearch('')
+    setOpen(false)
+  }
+  const selectCategory = category => {
+    onSearch('')
+    setActiveCategory(category)
+  }
+  const handleCategoryKeyDown = (event, category) => {
+    const index = TARGET_CATEGORY_ORDER.indexOf(category)
+    const nextIndex = { ArrowRight: (index + 1) % 3, ArrowLeft: (index + 2) % 3, Home: 0, End: 2 }[event.key]
+    if (nextIndex === undefined) return
+    event.preventDefault()
+    const nextCategory = TARGET_CATEGORY_ORDER[nextIndex]
+    selectCategory(nextCategory)
+    tabRefs.current[nextCategory]?.focus()
+  }
+  const handleOptionKeyDown = event => {
+    const options = Array.from(event.currentTarget.querySelectorAll('[role="option"]'))
+    const index = options.indexOf(document.activeElement)
+    const nextIndex = { ArrowDown: Math.min(index + 1, options.length - 1), ArrowUp: Math.max(index - 1, 0), Home: 0, End: options.length - 1 }[event.key]
+    if (nextIndex === undefined) return
+    event.preventDefault()
+    options[nextIndex]?.focus()
+  }
+  const handleSearchKeyDown = event => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const options = dialogRef.current?.querySelectorAll('[role="option"]')
+    if (!options?.length) return
+    event.preventDefault()
+    options[event.key === 'ArrowDown' ? 0 : options.length - 1]?.focus()
+  }
+  const targetDialog = open && typeof document !== 'undefined' ? createPortal(<div className="manufacturing-target-portal manufacturing-page--terminal">
+    <div className="manufacturing-target-backdrop" aria-hidden="true" onClick={() => setOpen(false)} />
+    <div ref={dialogRef} className="manufacturing-target-dialog" style={dialogPosition ? { '--target-dialog-top': `${dialogPosition.top}px`, '--target-dialog-left': `${dialogPosition.left}px`, '--target-dialog-width': `${dialogPosition.width}px`, '--target-dialog-height': `${dialogPosition.height}px` } : undefined} role="dialog" aria-label="选择制造目标" aria-modal="true">
+      <div className="manufacturing-target-dialog-heading"><div><span className="eyebrow">目标目录</span><strong>选择制造目标</strong></div><button type="button" className="manufacturing-target-dialog-close" aria-label="关闭目标选择器" onClick={() => setOpen(false)}><X size={16} aria-hidden="true" /></button></div>
       <div className="manufacturing-search-field">
         <Search size={17} aria-hidden="true" />
-        <input ref={inputRef} id="manufacturing-target-search" aria-label="搜索制造目标" role="searchbox" value={search} onChange={event => onSearch(event.target.value)} placeholder={selected?.name || '搜索舰船、材料或建筑'} />
+        <input ref={inputRef} id={`${pickerId}-search`} aria-label="搜索制造目标" role="searchbox" value={search} onChange={event => onSearch(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="按名称搜索舰船、材料或建筑" />
       </div>
-      {search.trim() ? (
-        <div className="manufacturing-target-options" role="listbox" aria-label="制造目标结果">
-          {filtered.length ? filtered.map(recipe => (
-            <button role="option" aria-selected={recipe.productId === selectedId} key={recipe.productId} type="button" onClick={() => onSelect(recipe.productId)}>
-              <span>{recipe.name}</span><small>{CATEGORY_LABELS[recipe.category]} · {recipe.productId}</small>
-            </button>
-          )) : <p className="manufacturing-empty">没有匹配目标</p>}
-        </div>
-      ) : null}
-      {selected ? <div className="manufacturing-selected-target"><MarketItemIcon itemId={selected.productId} size={40} /><span><strong>{selected.name}</strong><small>{CATEGORY_LABELS[selected.category]}配方 · 产出 {selected.outputNum} 件</small></span></div> : null}
+      <div className="manufacturing-target-tabs" role="tablist" aria-label="制造分类">
+        {TARGET_CATEGORY_ORDER.map(category => <button ref={node => { tabRefs.current[category] = node }} key={category} id={`${pickerId}-${category}`} type="button" role="tab" tabIndex={activeCategory === category ? 0 : -1} aria-selected={activeCategory === category} aria-controls={`${pickerId}-panel`} onClick={() => selectCategory(category)} onKeyDown={event => handleCategoryKeyDown(event, category)}><span>{CATEGORY_LABELS[category]}</span><small>{categoryCounts[category]}</small></button>)}
+      </div>
+      <div ref={groupsRef} className="manufacturing-target-groups" id={`${pickerId}-panel`} role="tabpanel" aria-labelledby={search.trim() ? undefined : `${pickerId}-${activeCategory}`} aria-label={search.trim() ? '所有分类搜索结果' : undefined}>
+        {visibleGroups.length ? visibleGroups.map(group => {
+          const tabStop = group.recipes.find(item => item.productId === activeOptionId) || group.recipes.find(item => item.productId === selectedId) || group.recipes[0]
+          return <section key={group.category} className="manufacturing-target-group" data-testid={`manufacturing-target-group-${group.category}`} aria-label={group.label}>
+          <div className="manufacturing-target-group-heading"><strong>{group.label}</strong><span>{group.count}</span></div>
+          <div className="manufacturing-target-options" role="listbox" aria-label={`${group.label}目标`} onKeyDown={handleOptionKeyDown}>
+            {group.recipes.map(recipe => <button role="option" aria-selected={recipe.productId === selectedId} aria-label={recipe.name} key={recipe.productId} type="button" tabIndex={recipe.productId === tabStop.productId ? 0 : -1} onFocus={() => setActiveOptionId(recipe.productId)} onClick={() => chooseTarget(recipe.productId)}><MarketItemIcon itemId={recipe.productId} size={28} /><span className="manufacturing-target-copy"><strong>{recipe.name}</strong><small>产出 {recipe.outputNum} 件</small></span>{recipe.productId === selectedId ? <Check size={15} aria-hidden="true" /> : null}</button>)}
+          </div>
+        </section>
+        }) : <p className="manufacturing-empty">没有匹配目标</p>}
+      </div>
     </div>
-  )
+  </div>, document.body) : null
+
+  return <>
+    <div ref={pickerRef} className={`manufacturing-target-picker${open ? ' is-open' : ''}`} aria-label="制造目标">
+      <div className="manufacturing-target-label"><h3>制造目标</h3><button type="button" className="manufacturing-change-target" aria-label="切换制造目标" aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}>切换目标</button></div>
+      {selected ? <button type="button" className="manufacturing-selected-target" aria-label={`当前制造目标：${selected.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}><MarketItemIcon itemId={selected.productId} size={40} /><span className="manufacturing-target-copy"><strong>{selected.name}</strong><small>{CATEGORY_LABELS[selected.category]}配方 · 产出 {selected.outputNum} 件</small></span><ChevronDown size={15} aria-hidden="true" /></button> : null}
+    </div>
+    {targetDialog}
+  </>
 }
 
 function SettingField({ label, children }) {
@@ -130,7 +260,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
       <dl className="manufacturing-cost-breakdown">
         <div><dt>市场材料</dt><dd>{formatIsk(summary.materialSubtotal)}</dd></div>
         <div><dt>制造费用</dt><dd>{formatIsk(summary.manufacturingFee)}</dd></div>
-        <div><dt>蓝图费用</dt><dd>{formatIsk(summary.blueprintCost)}</dd></div>
+        <div><dt>蓝图费用</dt><dd>未计入</dd></div>
       </dl>
       <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>材料效率 {summary.materialEfficiencyPercent}% 已应用</span></div>
       <p className="manufacturing-price-help">材料按客户端逐批取整；制造费用与时间暂按基础配方估算。</p>
@@ -163,7 +293,6 @@ export default function ManufacturingEstimatorPage() {
   const [quoteError, setQuoteError] = useState('')
   const [expandedNodes, setExpandedNodes] = useState(() => new Set(['0']))
   const [routeActionMessage, setRouteActionMessage] = useState('')
-  const searchRef = useRef(null)
 
   const loadCatalog = useCallback(async () => {
     setCatalogError('')
@@ -186,7 +315,7 @@ export default function ManufacturingEstimatorPage() {
 
   const plan = useMemo(() => {
     if (!catalog || !selectedId) return null
-    return createManufacturingPlan(catalog, { targetId: selectedId, quantity, overrides, purchasePrices, marketQuotes, settings: { ...settings, blueprintCost: settings.blueprintOwned ? 0 : 0 } })
+    return createManufacturingPlan(catalog, { targetId: selectedId, quantity, overrides, purchasePrices, marketQuotes, settings })
   }, [catalog, selectedId, quantity, overrides, purchasePrices, marketQuotes, settings])
   const summary = useMemo(() => plan ? summarizeManufacturingPlan(catalog, plan) : null, [catalog, plan])
   const selectedNode = useMemo(() => {
@@ -299,7 +428,7 @@ export default function ManufacturingEstimatorPage() {
       <section className="manufacturing-workspace">
         <aside className="manufacturing-controls" data-testid="manufacturing-config-rail">
           <div className="manufacturing-panel-heading"><div><span className="eyebrow">方案配置</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
-          <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={handleTargetSelect} />
+          <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} onSelect={handleTargetSelect} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input data-testid="manufacturing-quantity-value" aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
           <fieldset className="manufacturing-settings" aria-label="技能与效率">
             <legend>技能与效率</legend>
@@ -311,7 +440,6 @@ export default function ManufacturingEstimatorPage() {
               <p className="manufacturing-price-help">分类技能与建筑自动换算暂未核实，以上预设不参与计算。</p>
             </details>
           </fieldset>
-          <label className="manufacturing-blueprint-toggle"><input type="checkbox" checked={settings.blueprintOwned} onChange={event => setSettings(value => ({ ...value, blueprintOwned: event.target.checked }))} /><span>已拥有蓝图</span><small>蓝图费用暂不计入</small></label>
         </aside>
         <section className="manufacturing-tree-panel" data-testid="manufacturing-route-workspace" aria-label="制造链路">
            <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">制造路线</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-actions"><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div><div className="manufacturing-tree-expand-actions"><button type="button" aria-label="展开全部层级" onClick={expandAll}>展开全部</button><button type="button" aria-label="收起全部层级" onClick={collapseAll}>收起全部</button></div></div></div>

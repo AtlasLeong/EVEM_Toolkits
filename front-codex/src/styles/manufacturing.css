@@ -1205,3 +1205,253 @@
 .manufacturing-page--terminal .manufacturing-efficiency-input:hover {
   border-color: var(--terminal-line-strong);
 }
+
+/* Categorized target picker: a compact command-style surface on desktop and
+   a bottom sheet on small screens. */
+.manufacturing-page--terminal .manufacturing-target-picker {
+  position: relative;
+}
+.manufacturing-page--terminal .manufacturing-selected-target {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 9px;
+  border: 1px solid var(--terminal-line);
+  padding: 7px 9px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.manufacturing-page--terminal .manufacturing-selected-target:hover,
+.manufacturing-page--terminal .manufacturing-selected-target[aria-expanded="true"] {
+  border-color: var(--terminal-amber);
+  background: #1b353d;
+}
+.manufacturing-page--terminal .manufacturing-selected-target .manufacturing-target-copy {
+  min-width: 0;
+  flex: 1;
+}
+.manufacturing-page--terminal .manufacturing-selected-target > .market-item-icon,
+.manufacturing-page--terminal .manufacturing-target-options button > .market-item-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.manufacturing-page--terminal .manufacturing-selected-target > svg {
+  color: var(--terminal-muted);
+}
+.manufacturing-page--terminal .manufacturing-target-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog {
+  position: fixed;
+  z-index: 41;
+  top: var(--target-dialog-top);
+  left: var(--target-dialog-left);
+  width: var(--target-dialog-width);
+  display: flex;
+  flex-direction: column;
+  max-height: var(--target-dialog-height);
+  border: 1px solid var(--terminal-line-strong);
+  border-radius: 10px;
+  padding: 11px;
+  background: #0c2027;
+  box-shadow: 0 18px 36px rgb(0 0 0 / 36%);
+}
+.manufacturing-page--terminal .manufacturing-target-dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-bottom: 9px;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog-heading > div {
+  display: grid;
+  gap: 2px;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog-heading .eyebrow {
+  color: var(--terminal-subtle);
+  font-size: 10px;
+  letter-spacing: .1em;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog-heading strong {
+  color: var(--terminal-text);
+  font-size: 15px;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog-close {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--terminal-line);
+  border-radius: 5px;
+  padding: 4px;
+  width: 36px;
+  height: 36px;
+  color: var(--terminal-muted);
+  background: transparent;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog-close:hover {
+  border-color: var(--terminal-amber);
+  color: var(--terminal-amber);
+}
+.manufacturing-page--terminal .manufacturing-target-dialog .manufacturing-search-field {
+  flex: 0 0 auto;
+  margin-bottom: 9px;
+}
+.manufacturing-page--terminal .manufacturing-target-dialog .manufacturing-search-field input {
+  font-size: 13px;
+}
+.manufacturing-page--terminal .manufacturing-target-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  flex-shrink: 0;
+  margin-bottom: 9px;
+  padding: 3px;
+  border: 1px solid var(--terminal-line);
+  border-radius: 7px;
+  background: #0a1a20;
+}
+.manufacturing-page--terminal .manufacturing-target-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  border: 0;
+  border-radius: 5px;
+  padding: 8px 4px;
+  color: var(--terminal-muted);
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+.manufacturing-page--terminal .manufacturing-target-tabs button:hover,
+.manufacturing-page--terminal .manufacturing-target-tabs button[aria-selected="true"] {
+  color: var(--terminal-text);
+  background: #1a3c46;
+}
+.manufacturing-page--terminal .manufacturing-target-tabs button[aria-selected="true"] {
+  box-shadow: inset 0 0 0 1px var(--terminal-line-strong);
+}
+.manufacturing-page--terminal .manufacturing-target-tabs small {
+  color: var(--terminal-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.manufacturing-page--terminal .manufacturing-target-groups {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--terminal-line-strong) transparent;
+  scrollbar-width: thin;
+}
+.manufacturing-page--terminal .manufacturing-target-group + .manufacturing-target-group {
+  margin-top: 12px;
+}
+.manufacturing-page--terminal .manufacturing-target-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  color: var(--terminal-muted);
+  font-size: 12px;
+  letter-spacing: .04em;
+}
+.manufacturing-page--terminal .manufacturing-target-group-heading span {
+  color: var(--terminal-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.manufacturing-page--terminal .manufacturing-target-options {
+  display: grid;
+  max-height: none;
+  margin: 0;
+  border: 1px solid var(--terminal-line);
+  border-radius: 7px;
+  box-shadow: none;
+}
+.manufacturing-page--terminal .manufacturing-target-options button {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  gap: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--terminal-line);
+  padding: 6px 8px;
+  color: var(--terminal-text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.manufacturing-page--terminal .manufacturing-target-options button:last-child {
+  border-bottom: 0;
+}
+.manufacturing-page--terminal .manufacturing-target-options button:hover,
+.manufacturing-page--terminal .manufacturing-target-options button[aria-selected="true"] {
+  color: var(--terminal-text);
+  background: #173640;
+}
+.manufacturing-page--terminal .manufacturing-target-options button[aria-selected="true"] {
+  box-shadow: inset 2px 0 0 var(--terminal-amber);
+}
+.manufacturing-page--terminal .manufacturing-target-options button > .manufacturing-target-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 1px;
+}
+.manufacturing-page--terminal .manufacturing-target-options button strong {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.manufacturing-page--terminal .manufacturing-target-options button small {
+  color: var(--terminal-muted);
+  font-size: 11px;
+}
+.manufacturing-page--terminal .manufacturing-target-options button > svg {
+  flex-shrink: 0;
+  color: var(--terminal-amber);
+}
+.manufacturing-page--terminal .manufacturing-target-options button:focus-visible,
+.manufacturing-page--terminal .manufacturing-target-tabs button:focus-visible,
+.manufacturing-page--terminal .manufacturing-target-dialog-close:focus-visible {
+  outline: 2px solid var(--terminal-amber);
+  outline-offset: -2px;
+}
+
+@media (max-width: 767px) {
+  .manufacturing-page--terminal .manufacturing-target-dialog {
+    position: fixed;
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: min(var(--target-dialog-height), calc(100dvh - 20px));
+    border-radius: 12px;
+    box-shadow: 0 24px 48px rgb(0 0 0 / 48%);
+  }
+  .manufacturing-page--terminal .manufacturing-target-backdrop {
+    background: rgb(3 12 16 / 58%);
+  }
+}
+
+/* The portal inherits the terminal palette without creating a second layout
+   surface or a containing block for fixed positioning. */
+.manufacturing-target-portal.manufacturing-page--terminal {
+  display: contents;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  padding: 0;
+}
