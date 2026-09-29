@@ -214,3 +214,36 @@ test('confirmed client images render through the shared component while revoked 
     assert.match(fallbackMarkup, /market-item-icon-fallback/)
   }
 })
+
+test('a failed confirmed image load switches to the package fallback', async () => {
+  const MarketItemIcon = await loadComponent()
+  const { normalizeClientIconMapping } = await loadClientIconMapping()
+  const mapping = normalizeClientIconMapping({
+    schemaVersion: 1,
+    mappings: [mappingRecord({ itemId: '28007000000', iconPath: '/images/client-items/28007000000.png' })],
+  })
+
+  const originalUseState = React.useState
+  let failed = false
+  React.useState = initial => {
+    assert.equal(initial, false)
+    return [failed, next => {
+      failed = typeof next === 'function' ? next(failed) : next
+    }]
+  }
+
+  try {
+    const outer = MarketItemIcon({ itemId: '28007000000', mapping })
+    const imageComponent = outer.props.children
+    const image = imageComponent.type(imageComponent.props)
+    assert.equal(image.type, 'img')
+
+    image.props.onError()
+
+    const fallback = imageComponent.type(imageComponent.props)
+    assert.equal(fallback.props.className, 'market-item-icon-fallback')
+    assert.equal(fallback.props['aria-hidden'], 'true')
+  } finally {
+    React.useState = originalUseState
+  }
+})
