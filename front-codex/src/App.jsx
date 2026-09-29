@@ -102,6 +102,7 @@ export default function App() {
               }
             />
           </Route>
+          {import.meta.env.DEV && IconVerificationPage && <Route path="/dev/icon-verification" element={appRoute(<IconVerificationPage />)} />}
           <Route path="/login" element={appRoute(<LoginPage />)} />
           <Route path="/fraudlogin" element={appRoute(<FraudAdminLoginPage />)} />
           <Route path="*" element={<Navigate replace to="/market" />} />

@@ -1,3 +1,5 @@
+@import './styles/iconVerification.css';
+
 :root {
   /* Shared warm-neutral palette, including portalled dialogs and native fields. */
   --console-bg: #faf9f6;
