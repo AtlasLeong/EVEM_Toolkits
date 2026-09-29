@@ -23,8 +23,8 @@ function MarketIconImage({ src, size }) {
   )
 }
 
-export default function MarketItemIcon({ itemId, size = 40, className = '' }) {
-  const src = getMarketItemIcon(itemId)
+export default function MarketItemIcon({ itemId, size = 40, className = '', mapping }) {
+  const src = getMarketItemIcon(itemId, mapping)
 
   return (
     <span

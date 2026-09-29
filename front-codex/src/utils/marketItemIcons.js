@@ -1,4 +1,6 @@
 // Approved original-game crops, associated with catalog IDs rather than names.
+import { getConfirmedClientIcon } from './clientIconMapping.js'
+
 export const MARKET_ITEM_ICON_IDS = Object.freeze([
   '28007000000',
   '42002000012', '42002000013', '42002000014', '42002000015',
@@ -18,8 +20,14 @@ export const MARKET_ITEM_ICON_IDS = Object.freeze([
 
 const iconIds = new Set(MARKET_ITEM_ICON_IDS)
 
-export function getMarketItemIcon(itemId) {
+export function getMarketItemIcon(itemId, clientMapping) {
   if (typeof itemId !== 'string' && typeof itemId !== 'number') return null
+
+  const confirmedIcon = clientMapping === undefined
+    ? getConfirmedClientIcon(itemId)
+    : getConfirmedClientIcon(clientMapping, itemId)
+  if (confirmedIcon) return confirmedIcon
+
   const id = String(itemId)
   return iconIds.has(id) ? `/images/market-items/${id}.webp` : null
 }
