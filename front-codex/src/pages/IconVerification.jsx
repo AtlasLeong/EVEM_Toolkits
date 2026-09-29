@@ -169,7 +169,7 @@ function saveStoredBindings(bindings) {
   try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(bindings)) } catch { /* storage is optional in private browsing */ }
 }
 
-function catalogItemsFromSource(source) {
+export function catalogItemsFromSource(source) {
   const byId = new Map()
   for (const item of Array.isArray(source?.items) ? source.items : []) {
     const itemId = normalizedId(item?.itemId)
@@ -179,7 +179,7 @@ function catalogItemsFromSource(source) {
   for (const recipe of Array.isArray(source?.recipes) ? source.recipes : []) {
     const itemId = normalizedId(recipe?.productId)
     const name = safeText(recipe?.name)
-    if (itemId && name && !byId.has(itemId)) byId.set(itemId, { itemId, name, category: safeText(recipe.category) || 'material' })
+    if (itemId && name) byId.set(itemId, { itemId, name, category: safeText(recipe.category) || byId.get(itemId)?.category || 'material' })
   }
   return [...byId.values()].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN') || left.itemId.localeCompare(right.itemId))
 }

@@ -1,8 +1,12 @@
-﻿import { defineConfig } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { clientIconDevServerPlugin } from './scripts/client-icon-dev-server.mjs'
 
-export default defineConfig(({ command, mode }) => ({
-  plugins: [react()],
+export default defineConfig(({ command, mode, isPreview }) => ({
+  plugins: [
+    react(),
+    ...(command === 'serve' && !isPreview && mode !== 'production' ? [clientIconDevServerPlugin()] : []),
+  ],
   // Explicit opt-in loopback preview. Builds and ordinary development retain
   // their configured API; demo credentials must never fall back to production.
   ...(command === 'serve' && mode === 'tactical-local' ? {
@@ -13,7 +17,10 @@ export default defineConfig(({ command, mode }) => ({
   } : {}),
   server: {
     port: 5180,
-    watch: { ignored: ['**/test-results-tactical/**', '**/output/playwright/**'] },
+    fs: {
+      deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/output/client-icon-candidates/**'],
+    },
+    watch: { ignored: ['**/test-results-tactical/**', '**/output/playwright/**', '**/output/client-icon-candidates/**'] },
   },
   build: {
     rollupOptions: {

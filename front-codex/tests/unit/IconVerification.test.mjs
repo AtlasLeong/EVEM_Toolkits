@@ -104,3 +104,13 @@ test('normalizes malformed persisted bindings before UI state derives statuses',
   assert.deepEqual(Object.keys(normalizeStoredBindings(persisted)), ['good'])
   assert.deepEqual(normalizeStoredBindings({ nullEntry: null, arrayEntry: [] }), {})
 })
+
+test('catalog categories prefer recipe classifications over generic item entries', async () => {
+  const { catalogItemsFromSource } = await loadPage()
+  const catalog = catalogItemsFromSource({
+    items: [{ itemId: '101', name: '试验舰船' }, { itemId: '202', name: '基础材料' }],
+    recipes: [{ productId: '101', name: '试验舰船', category: 'ship', materials: [{ itemId: '202' }] }],
+  })
+  assert.equal(catalog.find(item => item.itemId === '101').category, 'ship')
+  assert.equal(catalog.find(item => item.itemId === '202').category, 'material')
+})

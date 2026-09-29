@@ -9,6 +9,13 @@ const THUMBNAIL_SIZE = 96
 const MIN_ICON_DIMENSION = 16
 const MAX_ICON_DIMENSION = 2048
 const SHA256_PATTERN = /^[a-f0-9]{64}$/i
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const DEFAULT_RESEARCH_ROOT = path.resolve(PROJECT_ROOT, '../output/research/client-icons-2026-09-29')
+const DEFAULT_ARGUMENTS = {
+  manifest: path.join(DEFAULT_RESEARCH_ROOT, 'decoded-images-manifest.json'),
+  images: path.join(DEFAULT_RESEARCH_ROOT, 'decoded-images'),
+  out: path.join(PROJECT_ROOT, 'output/client-icon-candidates'),
+}
 
 function safeRelativePath(value) {
   if (typeof value !== 'string' || value.trim() === '') return null
@@ -119,6 +126,13 @@ export async function prepareClientIconCandidates({ manifestPath, imagesDir, out
 }
 
 function parseArgs(argv) {
+  if (argv.length === 0) {
+    return {
+      manifest: process.env.EVEM_ICON_MANIFEST || DEFAULT_ARGUMENTS.manifest,
+      images: process.env.EVEM_ICON_IMAGES || DEFAULT_ARGUMENTS.images,
+      out: process.env.EVEM_ICON_OUTPUT || DEFAULT_ARGUMENTS.out,
+    }
+  }
   const values = {}
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
