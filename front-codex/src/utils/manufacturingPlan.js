@@ -159,17 +159,25 @@ function ceilDiv(quantity, outputNum) {
   return Math.floor((quantity + outputNum - 1) / outputNum)
 }
 
-// Efficiency is entered as a percentage and may contain a decimal fraction.
-// Keep one decimal place as an integer so material scaling stays deterministic
-// and never loses precision to binary floating point arithmetic.
-function efficiencyTenths(value) {
+export const DEFAULT_MATERIAL_EFFICIENCY = 150
+export const MIN_MATERIAL_EFFICIENCY = 75
+
+// Client material_amend is a multiplier in percent, NOT a percent reduction.
+// Skills/facilities/decoders are already included in this manually entered value.
+export function resolveMaterialEfficiency(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return DEFAULT_MATERIAL_EFFICIENCY
   const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return 0
-  return Math.min(1000, Math.max(0, Math.round(parsed * 10)))
+  if (!Number.isFinite(parsed)) return DEFAULT_MATERIAL_EFFICIENCY
+  return Math.max(MIN_MATERIAL_EFFICIENCY, parsed)
 }
 
 function scaleMaterialQuantity(quantity, efficiency) {
-  return Math.ceil((quantity * (1000 - efficiency)) / 1000)
+  // Exact decimal ceil per run; batch multiplication happens only afterwards.
+  const { coefficient, scale } = decimalFrom(efficiency, 'material efficiency')
+  const divisor = 100n * (10n ** BigInt(scale))
+  const result = Number((BigInt(quantity) * coefficient + divisor - 1n) / divisor)
+  if (!Number.isSafeInteger(result)) fail('scaled material quantity exceeds safe integer range')
+  return result
 }
 
 function installGroups(batches, maxInstallQuantity) {
@@ -200,7 +208,7 @@ export function expandPlan(first, second) {
   const targetId = asId(plan.targetId, 'plan.targetId')
   const quantity = asPositiveInteger(plan.quantity, 'plan.quantity')
   const overrides = plan.overrides ?? {}
-  const efficiency = efficiencyTenths(plan.settings?.efficiencyRate)
+  const efficiency = resolveMaterialEfficiency(plan.settings?.materialEfficiencyPercent)
 
   // Build the visible branch tree first.  Its quantities are intentionally
   // branch-local so the UI can explain each route; shared cost accounting is
@@ -551,6 +559,7 @@ export function summarizePlan(first, second) {
     targetId: plan.targetId,
     quantity: plan.quantity,
     formulaStatus: 'unverified',
+    materialEfficiencyPercent: resolveMaterialEfficiency(settings.materialEfficiencyPercent),
     complete,
     total: complete ? decimalToString(coveredSubtotal) : null,
     coveredSubtotal: decimalToString(coveredSubtotal),

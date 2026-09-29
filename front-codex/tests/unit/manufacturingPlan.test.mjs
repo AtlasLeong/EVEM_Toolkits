@@ -3,10 +3,18 @@ import assert from 'node:assert/strict'
 
 import { loadManufacturingCatalog } from '../../src/utils/manufacturingCatalog.js'
 import {
-  createPlan,
+  createPlan as createRawPlan,
   expandPlan,
   summarizePlan,
 } from '../../src/utils/manufacturingPlan.js'
+
+// Accounting fixtures explicitly use unmodified 100% recipe quantities.
+function createPlan(catalog, options) {
+  return createRawPlan(catalog, {
+    ...options,
+    settings: { materialEfficiencyPercent: '100', ...options.settings },
+  })
+}
 
 function makeCatalog(recipes) {
   const itemIds = new Set()
@@ -49,40 +57,80 @@ test('ceil-divides requested quantity by outputNum before expanding materials', 
   assert.equal(summary.manufacturingFee, '20')
 })
 
-test('reduces material requirements by the configured efficiency rate', () => {
+test('uses the client material percentage as a multiplier, not a reduction', () => {
   const catalog = makeCatalog([
     recipe('100', '成品', [{ itemId: '200', quantity: 10 }], { money: 2 }),
   ])
   const plan = createPlan(catalog, {
     targetId: '100',
     quantity: 1,
-    settings: { efficiencyRate: '50' },
+    settings: { materialEfficiencyPercent: '150' },
     purchasePrices: { '200': '1' },
   })
 
   const expanded = expandPlan(plan)
   const summary = summarizePlan(plan)
 
-  assert.equal(expanded.root.children[0].quantity, 5)
-  assert.deepEqual(expanded.purchases, [{ itemId: '200', name: '物品 200', quantity: 5 }])
-  assert.equal(summary.materialSubtotal, '5')
-  assert.equal(summary.total, '7')
+  assert.equal(expanded.root.children[0].quantity, 15)
+  assert.deepEqual(expanded.purchases, [{ itemId: '200', name: '物品 200', quantity: 15 }])
+  assert.equal(summary.materialSubtotal, '15')
+  assert.equal(summary.total, '17')
+  assert.equal(summary.materialEfficiencyPercent, 150)
 })
 
-test('rounds reduced per-batch requirements up to avoid understating materials', () => {
+test('rounds per-batch materials before multiplying runs, matching the client', () => {
   const catalog = makeCatalog([
-    recipe('100', '成品', [{ itemId: '200', quantity: 3 }]),
+    recipe('100', '成品', [{ itemId: '200', quantity: 5 }]),
   ])
   const plan = createPlan(catalog, {
     targetId: '100',
-    quantity: 1,
-    settings: { efficiencyRate: '50' },
+    quantity: 2,
+    settings: { materialEfficiencyPercent: '75' },
   })
 
   const expanded = expandPlan(plan)
 
-  assert.equal(expanded.root.children[0].quantity, 2)
-  assert.equal(expanded.purchases[0].quantity, 2)
+  assert.equal(expanded.root.children[0].quantity, 8)
+  assert.equal(expanded.purchases[0].quantity, 8)
+})
+
+test('defaults absent, blank and invalid efficiency to initial 150%', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 10 }])])
+  for (const value of [undefined, null, '', ' ', 'oops', Infinity]) {
+    const plan = createRawPlan(catalog, { targetId: '100', settings: { materialEfficiencyPercent: value } })
+    assert.equal(expandPlan(plan).purchases[0].quantity, 15)
+  }
+  assert.equal(expandPlan(createRawPlan(catalog, { targetId: '100' })).purchases[0].quantity, 15)
+})
+
+test('clamps at the client 75% floor instead of zeroing materials', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 100 }])])
+  for (const value of ['75', '50', '0', '-1']) {
+    const summary = summarizePlan(createPlan(catalog, { targetId: '100', settings: { materialEfficiencyPercent: value } }))
+    assert.equal(summary.tree.children[0].quantity, 75)
+    assert.equal(summary.materialEfficiencyPercent, 75)
+  }
+})
+
+test('preserves fractional efficiency without floating-point extra material', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 10000 }])])
+  const plan = createPlan(catalog, { targetId: '100', settings: { materialEfficiencyPercent: '112.11' } })
+  assert.equal(expandPlan(plan).purchases[0].quantity, 11211)
+})
+
+test('scales every made recipe but does not scale a purchased product again', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '101', quantity: 2 }]),
+    recipe('101', '中间件', [{ itemId: '200', quantity: 3 }]),
+  ])
+  const plan = createRawPlan(catalog, { targetId: '100' })
+  assert.equal(expandPlan(plan).purchases[0].quantity, 15) // ceil(2*1.5) * ceil(3*1.5)
+  plan.overrides['101'] = 'buy'
+  const bought = expandPlan(plan)
+  assert.deepEqual(bought.purchases, [{ itemId: '101', name: '物品 101', quantity: 3 }])
+  assert.equal(bought.root.children[0].children.length, 0)
+  plan.overrides['100'] = 'buy'
+  assert.equal(expandPlan(plan).purchases[0].quantity, 1)
 })
 
 test('splits recipe batches into capped installation groups without changing cost', () => {

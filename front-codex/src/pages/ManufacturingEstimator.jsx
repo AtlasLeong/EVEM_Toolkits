@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench } from 'lucide-react'
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
-import { createManufacturingPlan, summarizeManufacturingPlan } from '../utils/manufacturingPlan'
+import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
 import { formatCompactIsk } from '../utils/manufacturingDisplay'
 import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
 const CATEGORY_LABELS = { ship: '舰船', material: '材料', building: '建筑' }
-const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', efficiencyRate: '', building: '标准工厂', blueprintOwned: true }
+const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', materialEfficiencyPercent: String(DEFAULT_MATERIAL_EFFICIENCY), building: '标准工厂', blueprintOwned: true }
 
 function formatIsk(value) {
   if (value === null || value === undefined || value === '') return '待补价格'
@@ -106,19 +106,20 @@ function SettingField({ label, children }) {
   return <label className="manufacturing-setting"><span>{label}</span>{children}</label>
 }
 
-function LevelControl({ label, value, onChange, options = ['3', '4', '5'] }) {
-  return <div className="manufacturing-level-field"><span>{label}</span><div className="manufacturing-level-control" role="group" aria-label={label}>{options.map(option => <button key={option} type="button" className={String(value) === option ? 'is-active' : ''} aria-pressed={String(value) === option} onClick={() => onChange(option)}>{option}</button>)}</div></div>
+function LevelControl({ label, value, onChange, disabled = false, options = ['3', '4', '5'] }) {
+  return <div className="manufacturing-level-field"><span>{label}</span><div className="manufacturing-level-control" role="group" aria-label={label}>{options.map(option => <button key={option} type="button" disabled={disabled} title={disabled ? '技能预设暂未接入，请填写游戏内最终材料效率' : undefined} className={String(value) === option ? 'is-active' : ''} aria-pressed={String(value) === option} onClick={() => onChange(option)}>{option}</button>)}</div></div>
 }
 
 function EfficiencyRateField({ value, onChange }) {
-  return <label className="manufacturing-efficiency-field"><span><strong>制造效率</strong><small>手动覆盖</small></span><div className="manufacturing-efficiency-input"><input aria-label="制造效率百分比" type="number" min="0" max="100" step="0.1" inputMode="decimal" placeholder="填写效率" value={value} onChange={event => onChange(event.target.value)} /><b>%</b></div><em>按比例减少材料需求，结果向上取整</em></label>
+  const belowFloor = value.trim() !== '' && Number(value) < MIN_MATERIAL_EFFICIENCY
+  return <label className="manufacturing-efficiency-field"><span><strong>制造材料效率</strong><small>最终值 · 全链应用</small></span><div className="manufacturing-efficiency-input"><input aria-label="制造效率百分比" aria-describedby="manufacturing-efficiency-help" type="number" min={MIN_MATERIAL_EFFICIENCY} step="0.01" inputMode="decimal" placeholder={String(DEFAULT_MATERIAL_EFFICIENCY)} value={value} onChange={event => onChange(event.target.value)} /><b>%</b></div><em id="manufacturing-efficiency-help">{belowFloor ? '低于客户端下限，按 75% 计算。' : `生效 ${resolveMaterialEfficiency(value)}% · 数值越低，材料越省。`}</em></label>
 }
 
 function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading }) {
   const complete = summary?.complete
   const selectedPurchase = selectedNode?.mode === 'buy'
   return (
-    <aside className="manufacturing-summary" data-testid="manufacturing-summary">
+    <aside className="manufacturing-summary" data-testid="manufacturing-cost-rail">
        <div className="manufacturing-summary-heading"><div><span className="eyebrow">成本摘要</span><h2>成本概览</h2></div><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{complete ? '可计算' : '待补报价'}</span></div>
       <div className="manufacturing-total-card">
         <span>{complete ? '总成本' : '已覆盖小计'}</span>
@@ -131,7 +132,8 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
         <div><dt>制造费用</dt><dd>{formatIsk(summary.manufacturingFee)}</dd></div>
         <div><dt>蓝图费用</dt><dd>{formatIsk(summary.blueprintCost)}</dd></div>
       </dl>
-      <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>材料效率已应用</span></div>
+      <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>材料效率 {summary.materialEfficiencyPercent}% 已应用</span></div>
+      <p className="manufacturing-price-help">材料按客户端逐批取整；制造费用与时间暂按基础配方估算。</p>
       {summary.missing.length > 0 ? <div className="manufacturing-missing" role="status"><strong>尚未计入</strong><span>{summary.missing.slice(0, 3).map(entry => `${entry.name}（${entry.reason}）`).join('、')}{summary.missing.length > 3 ? ` 等 ${summary.missing.length} 项` : ''}</span></div> : null}
       <section className="manufacturing-price-editor" aria-label="方案价格编辑">
         <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">节点报价</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedPurchase ? <span className="manufacturing-route-pill is-buy">购买</span> : selectedNode ? <span className="manufacturing-route-pill is-make">自造</span> : null}</div>
@@ -286,17 +288,29 @@ export default function ManufacturingEstimatorPage() {
 
   return (
     <main className="manufacturing-page manufacturing-page--terminal">
-      <header className="manufacturing-page-header"><div><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div><div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div></header>
+      <header className="manufacturing-page-header" data-testid="manufacturing-terminal-header">
+        <div className="manufacturing-terminal-brand"><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div>
+        <div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div>
+      </header>
       <section className="manufacturing-workspace">
-        <aside className="manufacturing-controls">
+        <aside className="manufacturing-controls" data-testid="manufacturing-config-rail">
           <div className="manufacturing-panel-heading"><div><span className="eyebrow">方案配置</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
           <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={handleTargetSelect} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
-          <fieldset className="manufacturing-settings" aria-label="技能与效率"><legend>技能与效率</legend><div className="manufacturing-level-grid"><LevelControl label="制造" value={settings.manufacturingSkill} onChange={value => setSettings(current => ({ ...current, manufacturingSkill: value }))} /><LevelControl label="研究" value={settings.researchSkill} onChange={value => setSettings(current => ({ ...current, researchSkill: value }))} /><LevelControl label="效率技能" value={settings.efficiencySkill} onChange={value => setSettings(current => ({ ...current, efficiencySkill: value }))} /></div><EfficiencyRateField value={settings.efficiencyRate} onChange={value => setSettings(current => ({ ...current, efficiencyRate: value }))} /><label className="manufacturing-building-field"><span>生产建筑</span><select aria-label="生产建筑" value={settings.building} onChange={event => setSettings(value => ({ ...value, building: event.target.value }))}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label></fieldset>
+          <fieldset className="manufacturing-settings" aria-label="技能与效率">
+            <legend>技能与效率</legend>
+            <EfficiencyRateField value={settings.materialEfficiencyPercent} onChange={value => setSettings(current => ({ ...current, materialEfficiencyPercent: value }))} />
+            <p className="manufacturing-price-help">填写游戏中含技能、设施加成的最终值；初始 150%，最低 75%。当前统一用于所有自造层级。</p>
+            <details className="manufacturing-pending-presets"><summary>技能 / 建筑预设 · 待接入</summary>
+              <div className="manufacturing-level-grid"><LevelControl disabled label="制造" value={settings.manufacturingSkill} /><LevelControl disabled label="研究" value={settings.researchSkill} /><LevelControl disabled label="效率技能" value={settings.efficiencySkill} /></div>
+              <label className="manufacturing-building-field"><span>生产建筑</span><select disabled aria-label="生产建筑" value={settings.building}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label>
+              <p className="manufacturing-price-help">分类技能与建筑自动换算暂未核实，以上预设不参与计算。</p>
+            </details>
+          </fieldset>
           <label className="manufacturing-blueprint-toggle"><input type="checkbox" checked={settings.blueprintOwned} onChange={event => setSettings(value => ({ ...value, blueprintOwned: event.target.checked }))} /><span>已拥有蓝图</span><small>蓝图费用暂不计入</small></label>
-          <div className="manufacturing-formula-callout"><Settings2 size={16} /><div><strong>效率覆盖已启用</strong><span>制造效率会按比例减少每批材料需求；技能、建筑和蓝图费用仍保留在方案中。</span></div></div>
+          <div className="manufacturing-formula-callout"><Settings2 size={16} /><div><strong>材料公式已核实</strong><span>每批材料 = 基础用量 × 效率 ÷ 100，向上取整后乘批数。150% 表示 1.5 倍用量，并非减免比例。</span></div></div>
         </aside>
-        <section className="manufacturing-tree-panel" aria-label="制造链路">
+        <section className="manufacturing-tree-panel" data-testid="manufacturing-route-workspace" aria-label="制造链路">
            <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">制造路线</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-actions"><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div><div className="manufacturing-tree-expand-actions"><button type="button" aria-label="展开全部层级" onClick={expandAll}>展开全部</button><button type="button" aria-label="收起全部层级" onClick={collapseAll}>收起全部</button></div></div></div>
           <div className="manufacturing-route-policy" aria-label="批量路线策略"><span>批量策略</span><button type="button" aria-label="全部自造" onClick={() => applyRoutePolicy('make-all')}>全部自造</button><button type="button" aria-label="购买中间件" onClick={() => applyRoutePolicy('buy-intermediates')}>购买中间件</button><button type="button" aria-label="恢复默认" onClick={() => applyRoutePolicy('default')}>恢复默认</button></div>
           {routeActionMessage ? <p className="manufacturing-route-action-message" role="status" aria-live="polite">{routeActionMessage}</p> : null}
