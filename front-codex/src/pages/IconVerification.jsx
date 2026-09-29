@@ -154,10 +154,15 @@ function loadStoredBindings() {
   if (typeof window === 'undefined' || !window.localStorage) return {}
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '{}')
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    return normalizeStoredBindings(parsed)
   } catch {
     return {}
   }
+}
+
+export function normalizeStoredBindings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  return Object.fromEntries(Object.entries(value).map(([key, binding]) => [key, normalizeBinding(binding)]).filter(([, binding]) => binding))
 }
 
 function saveStoredBindings(bindings) {
@@ -240,7 +245,7 @@ export default function IconVerification() {
   useEffect(() => { setPage(1) }, [candidateQuery, candidateSource, candidateFormat, candidateMinDimension])
   useEffect(() => {
     if (!selectedItemId && filteredItems[0]) setSelectedItemId(filteredItems[0].itemId)
-    if (selectedItemId && !catalog.some(item => item.itemId === selectedItemId)) setSelectedItemId(filteredItems[0]?.itemId || '')
+    if (selectedItemId && !filteredItems.some(item => item.itemId === selectedItemId)) setSelectedItemId(filteredItems[0]?.itemId || '')
   }, [catalog, filteredItems, selectedItemId])
 
   function handleBind() {
@@ -282,12 +287,12 @@ export default function IconVerification() {
           <div className="panel-head"><div><h2>物品目录</h2><p>{filteredItems.length} 个物品</p></div></div>
           <input className="text-input" aria-label="搜索物品" value={itemQuery} onChange={event => setItemQuery(event.target.value)} placeholder="搜索名称或 ID" />
           <div className="icon-verification-filters"><select className="text-input" aria-label="物品分类" value={itemCategory} onChange={event => setItemCategory(event.target.value)}><option value="">全部分类</option><option value="ship">舰船</option><option value="material">材料</option><option value="building">建筑</option></select><select className="text-input" aria-label="绑定状态" value={itemStatus} onChange={event => setItemStatus(event.target.value)}><option value="">全部状态</option><option value="unmapped">未绑定</option><option value="confirmed">已确认</option><option value="conflict">冲突</option><option value="revoked">已撤销</option></select></div>
-          <div className="icon-verification-list">{filteredItems.map(item => <button key={item.itemId} type="button" className={`icon-item-row ${selectedItemId === item.itemId ? 'is-selected' : ''}`} onClick={() => setSelectedItemId(item.itemId)}><strong>{item.name}</strong><span>{item.category}</span></button>)}</div>
+          <div className="icon-verification-list">{filteredItems.map(item => <button key={item.itemId} type="button" aria-pressed={selectedItemId === item.itemId} className={`icon-item-row ${selectedItemId === item.itemId ? 'is-selected' : ''}`} onClick={() => setSelectedItemId(item.itemId)}><strong>{item.name}</strong><span>{item.category}</span></button>)}</div>
         </section>
         <section className="icon-verification-pane" aria-label="候选图标">
           <div className="panel-head"><div><h2>候选图标</h2><p>{filteredCandidates.length} 个候选</p></div></div>
           <div className="icon-verification-filters"><input className="text-input" aria-label="搜索候选" value={candidateQuery} onChange={event => setCandidateQuery(event.target.value)} placeholder="搜索哈希、来源或图标 ID" /><input className="text-input" aria-label="来源目录" value={candidateSource} onChange={event => setCandidateSource(event.target.value)} placeholder="来源目录" /><select className="text-input" aria-label="候选格式" value={candidateFormat} onChange={event => setCandidateFormat(event.target.value)}><option value="">全部格式</option><option value="png">PNG</option></select><select className="text-input" aria-label="最小尺寸" value={candidateMinDimension} onChange={event => setCandidateMinDimension(event.target.value)}><option value="">全部尺寸</option><option value="96">≥ 96px</option><option value="128">≥ 128px</option><option value="256">≥ 256px</option></select></div>
-          {loading ? <p className="empty-state">正在加载候选清单…</p> : filteredCandidates.length === 0 ? <p className="empty-state">{EMPTY_MANIFEST_MESSAGE}</p> : <><div className="icon-candidate-grid">{pagedCandidates.map(candidate => <button key={candidate.sourceHash} type="button" className={`icon-candidate-card ${selectedCandidateHash === candidate.sourceHash ? 'is-selected' : ''}`} onClick={() => setSelectedCandidateHash(candidate.sourceHash)}><img src={`${CANDIDATE_ROOT}${candidate.thumbnailUrl}`} loading="lazy" alt="" /><strong>{candidate.sourceHash.slice(0, 10)}…</strong><span>{candidate.width} × {candidate.height} · {candidate.format}</span><small>{candidate.source}</small></button>)}</div><div className="icon-verification-pagination"><button type="button" className="ghost-btn" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>上一页</button><span>第 {page} 页</span><button type="button" className="ghost-btn" disabled={page * PAGE_SIZE >= filteredCandidates.length} onClick={() => setPage(current => current + 1)}>下一页</button></div></>}
+          {loading ? <p className="empty-state">正在加载候选清单…</p> : filteredCandidates.length === 0 ? <p className="empty-state">{EMPTY_MANIFEST_MESSAGE}</p> : <><div className="icon-candidate-grid">{pagedCandidates.map(candidate => <button key={candidate.sourceHash} type="button" aria-pressed={selectedCandidateHash === candidate.sourceHash} className={`icon-candidate-card ${selectedCandidateHash === candidate.sourceHash ? 'is-selected' : ''}`} onClick={() => setSelectedCandidateHash(candidate.sourceHash)}><img src={`${CANDIDATE_ROOT}${candidate.thumbnailUrl}`} loading="lazy" alt="" /><strong>{candidate.sourceHash.slice(0, 10)}…</strong><span>{candidate.width} × {candidate.height} · {candidate.format}</span><small>{candidate.source}</small></button>)}</div><div className="icon-verification-pagination"><button type="button" className="ghost-btn" disabled={page <= 1} onClick={() => setPage(current => current - 1)}>上一页</button><span>第 {page} 页</span><button type="button" className="ghost-btn" disabled={page * PAGE_SIZE >= filteredCandidates.length} onClick={() => setPage(current => current + 1)}>下一页</button></div></>}
         </section>
         <aside className="icon-verification-pane icon-verification-inspector" aria-label="绑定检查器">
           <div className="panel-head"><div><h2>绑定检查器</h2><p>仅在这里显示内部 ID</p></div></div>

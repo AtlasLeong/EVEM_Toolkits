@@ -92,3 +92,15 @@ test('empty candidate manifests provide an icons:prepare recovery instruction', 
   const { EMPTY_MANIFEST_MESSAGE } = await loadPage()
   assert.match(EMPTY_MANIFEST_MESSAGE, /icons:prepare/)
 })
+
+test('normalizes malformed persisted bindings before UI state derives statuses', async () => {
+  const { normalizeStoredBindings } = await loadPage()
+  const persisted = {
+    good: { itemId: '101', iconPath: '/images/client-items/101.png', sourceHash: hashA, width: 128, height: 128, format: 'png', status: 'confirmed', confirmedAt: '2026-09-29T00:00:00.000Z' },
+    nullEntry: null,
+    arrayEntry: [],
+    textEntry: 'bad',
+  }
+  assert.deepEqual(Object.keys(normalizeStoredBindings(persisted)), ['good'])
+  assert.deepEqual(normalizeStoredBindings({ nullEntry: null, arrayEntry: [] }), {})
+})
