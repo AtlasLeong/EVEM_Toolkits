@@ -9,6 +9,7 @@
     "dev:starsea": "vite --host 127.0.0.1 --port 4195 --strictPort --mode starsea-local",
     "build": "vite build && npm run check:bundle",
     "check:bundle": "node scripts/check-bundle.mjs",
+    "icons:prepare": "node scripts/prepare-client-icon-candidates.mjs",
     "preview": "vite preview",
     "preview:ui": "node tests/preview/server.mjs",
     "test:e2e": "playwright test",
