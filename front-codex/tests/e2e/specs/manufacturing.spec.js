@@ -19,6 +19,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(page.getByTestId('manufacturing-route-workspace')).toBeVisible()
   await expect(page.getByTestId('manufacturing-cost-rail')).toBeVisible()
   await expect(page.locator('main.manufacturing-page--terminal')).toHaveCSS('background-color', 'rgb(11, 23, 29)')
+  await expect(page.getByText('材料公式已核实', { exact: true })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: '制造估价' })).toBeVisible()
   await expect(page.getByRole('searchbox', { name: '搜索制造目标' })).toBeVisible()
   await expect(page.getByTestId('manufacturing-cost-rail').getByText('材料效率 150% 已应用')).toBeVisible()
@@ -57,6 +58,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
 
   const quantity = page.getByRole('spinbutton', { name: '制造数量' })
   await expect(quantity).toHaveValue('1')
+  await expect(page.getByTestId('manufacturing-quantity-value')).toHaveValue('1')
   await page.getByRole('button', { name: '增加制造数量' }).click()
   await expect(quantity).toHaveValue('2')
 
@@ -81,6 +83,13 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(routeGroup.getByRole('button', { name: '购买', exact: true })).toHaveCSS('background-color', 'rgb(239, 181, 102)')
   await expect(page.locator('[data-testid="manufacturing-tree-row"][data-selected="true"]')).toBeVisible()
   await expect(page.getByText('市场参考价')).toBeVisible()
+
+  const quoteRequestCount = quoteRequests.length
+  await page.getByRole('button', { name: '增加制造数量' }).click()
+  await page.getByRole('button', { name: '增加制造数量' }).click()
+  await expect(quantity).toHaveValue('4')
+  await expect(page.getByTestId('manufacturing-quantity-value')).toHaveValue('4')
+  await expect.poll(() => quoteRequests.length).toBe(quoteRequestCount)
 
   const manualPrice = page.getByRole('textbox', { name: '方案手填单价' })
   await expect(manualPrice).toBeVisible()

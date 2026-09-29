@@ -206,8 +206,12 @@ export default function ManufacturingEstimatorPage() {
       ...summary.missing.map(item => item.itemId),
     ])]
   }, [summary])
+  // Quantity changes rebuild the summary tree, so keep the quote dependency
+  // stable when the set of purchasable item ids did not actually change.
+  const purchaseIdsKey = useMemo(() => [...purchaseIds].sort().join(','), [purchaseIds])
+  const stablePurchaseIds = useMemo(() => purchaseIdsKey ? purchaseIdsKey.split(',') : [], [purchaseIdsKey])
 
-  const refreshQuotes = useCallback(async (ids = purchaseIds) => {
+  const refreshQuotes = useCallback(async (ids = stablePurchaseIds) => {
     if (!ids.length) return
     setQuoteLoading(true)
     setQuoteError('')
@@ -219,13 +223,13 @@ export default function ManufacturingEstimatorPage() {
     } finally {
       setQuoteLoading(false)
     }
-  }, [purchaseIds])
+  }, [stablePurchaseIds])
 
   useEffect(() => {
-    if (!purchaseIds.length) return
-    const missing = purchaseIds.filter(itemId => !Object.prototype.hasOwnProperty.call(marketQuotes, itemId))
+    if (!stablePurchaseIds.length) return
+    const missing = stablePurchaseIds.filter(itemId => !Object.prototype.hasOwnProperty.call(marketQuotes, itemId))
     if (missing.length) refreshQuotes(missing)
-  }, [purchaseIds, marketQuotes, refreshQuotes])
+  }, [purchaseIdsKey, stablePurchaseIds, marketQuotes, refreshQuotes])
 
   const recipeIds = useMemo(() => catalog?.recipes.map(recipe => recipe.productId) || [], [catalog])
 
@@ -296,7 +300,7 @@ export default function ManufacturingEstimatorPage() {
         <aside className="manufacturing-controls" data-testid="manufacturing-config-rail">
           <div className="manufacturing-panel-heading"><div><span className="eyebrow">方案配置</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
           <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} inputRef={searchRef} onFocusSearch={() => { setSearch(''); searchRef.current?.focus() }} onSelect={handleTargetSelect} />
-          <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
+          <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input data-testid="manufacturing-quantity-value" aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
           <fieldset className="manufacturing-settings" aria-label="技能与效率">
             <legend>技能与效率</legend>
             <EfficiencyRateField value={settings.materialEfficiencyPercent} onChange={value => setSettings(current => ({ ...current, materialEfficiencyPercent: value }))} />
@@ -308,7 +312,6 @@ export default function ManufacturingEstimatorPage() {
             </details>
           </fieldset>
           <label className="manufacturing-blueprint-toggle"><input type="checkbox" checked={settings.blueprintOwned} onChange={event => setSettings(value => ({ ...value, blueprintOwned: event.target.checked }))} /><span>已拥有蓝图</span><small>蓝图费用暂不计入</small></label>
-          <div className="manufacturing-formula-callout"><Settings2 size={16} /><div><strong>材料公式已核实</strong><span>每批材料 = 基础用量 × 效率 ÷ 100，向上取整后乘批数。150% 表示 1.5 倍用量，并非减免比例。</span></div></div>
         </aside>
         <section className="manufacturing-tree-panel" data-testid="manufacturing-route-workspace" aria-label="制造链路">
            <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">制造路线</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-actions"><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div><div className="manufacturing-tree-expand-actions"><button type="button" aria-label="展开全部层级" onClick={expandAll}>展开全部</button><button type="button" aria-label="收起全部层级" onClick={collapseAll}>收起全部</button></div></div></div>

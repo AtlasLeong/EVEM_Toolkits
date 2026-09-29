@@ -1135,3 +1135,73 @@
     font-size: .61rem;
   }
 }
+
+/* Control polish: one quiet boundary, clear keyboard focus, no click-induced
+   double outlines. The controls follow the shadcn Input Group/Button Group
+   pattern while staying within the terminal palette. */
+.manufacturing-page--terminal .manufacturing-search-field {
+  border: 1px solid var(--terminal-line);
+  box-shadow: none;
+}
+.manufacturing-page--terminal .manufacturing-search-field:focus-within {
+  border-color: var(--terminal-amber);
+  outline: 2px solid rgb(239 181 102 / 14%);
+  outline-offset: 1px;
+  box-shadow: none;
+}
+.manufacturing-page--terminal .manufacturing-search-field input:focus,
+.manufacturing-page--terminal .manufacturing-quantity-control input:focus {
+  outline: 0;
+}
+
+.manufacturing-page--terminal .manufacturing-quantity-control {
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  border: 1px solid var(--terminal-line);
+  border-radius: 7px;
+  background: #0a1a20;
+  overflow: hidden;
+  contain: layout paint;
+}
+.manufacturing-page--terminal .manufacturing-quantity-control button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: var(--terminal-muted);
+  background: transparent;
+  transition: background-color .12s ease, color .12s ease;
+}
+.manufacturing-page--terminal .manufacturing-quantity-control button:hover {
+  color: var(--terminal-amber-soft);
+  background: rgb(239 181 102 / 10%);
+}
+.manufacturing-page--terminal .manufacturing-quantity-control button:active {
+  color: var(--terminal-text);
+  background: rgb(239 181 102 / 18%);
+}
+.manufacturing-page--terminal .manufacturing-quantity-control button:focus:not(:focus-visible) {
+  outline: 0;
+}
+.manufacturing-page--terminal .manufacturing-quantity-control button:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--terminal-amber);
+  outline-offset: -2px;
+}
+.manufacturing-page--terminal .manufacturing-quantity-control input {
+  border: 0;
+  border-inline: 1px solid var(--terminal-line);
+  padding: 8px 6px;
+  color: var(--terminal-text);
+  background: transparent;
+  font-variant-numeric: tabular-nums;
+}
+
+.manufacturing-page--terminal .manufacturing-search-field,
+.manufacturing-page--terminal .manufacturing-quantity-control,
+.manufacturing-page--terminal .manufacturing-efficiency-input {
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.manufacturing-page--terminal .manufacturing-search-field:hover,
+.manufacturing-page--terminal .manufacturing-quantity-control:hover,
+.manufacturing-page--terminal .manufacturing-efficiency-input:hover {
+  border-color: var(--terminal-line-strong);
+}
