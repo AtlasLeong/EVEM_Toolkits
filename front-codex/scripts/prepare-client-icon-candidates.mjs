@@ -73,7 +73,7 @@ function normalizeCandidate(item, imagesRoot) {
  */
 export async function normalizeCandidateManifest(manifest, { imagesDir } = {}) {
   if (!imagesDir) throw new TypeError('imagesDir is required')
-  const imagesRoot = path.resolve(imagesDir)
+  const imagesRoot = await fs.realpath(path.resolve(imagesDir))
   const candidates = []
   const seenHashes = new Set()
   for (const item of getManifestItems(manifest)) {
@@ -82,6 +82,8 @@ export async function normalizeCandidateManifest(manifest, { imagesDir } = {}) {
     try {
       const stat = await fs.stat(candidate.imagePath)
       if (!stat.isFile()) continue
+      const realImagePath = await fs.realpath(candidate.imagePath)
+      if (!isWithin(imagesRoot, realImagePath)) continue
     } catch {
       continue
     }
