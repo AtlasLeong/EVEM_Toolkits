@@ -32,7 +32,7 @@ def security_meta(value):
         }
     if status <= 0:
         band = 'nullsec'
-        label = '零安'
+        label = '00地区'
     elif status < 0.5:
         band = 'low'
         label = '低安'
@@ -66,5 +66,27 @@ def system_security_map(system_ids):
                 'region_name': getattr(region, 'zh_name', None) or getattr(region, 'name', '') or '',
             }
     except (ImportError, DatabaseError, AttributeError, TypeError, ValueError, RuntimeError):
-        return {}
+        result = {}
+    # BoardSystems is an optional business table.  Fill only missing labels
+    # from the verified client static geography snapshot; never copy a
+    # constellation/region security value onto a system.
+    try:
+        from GameData.registry import location_record
+        for system_id in ids:
+            key = str(system_id)
+            if key in result and result[key].get('system_name'):
+                continue
+            location = location_record(system_id)
+            if not location:
+                continue
+            current = result.get(key, {})
+            result[key] = {
+                **security_meta(location.get('security_status')),
+                **current,
+                'system_name': current.get('system_name') or location.get('system_name', ''),
+                'constellation_name': current.get('constellation_name') or location.get('constellation_name', ''),
+                'region_name': current.get('region_name') or location.get('region_name', ''),
+            }
+    except (ImportError, TypeError, ValueError, RuntimeError):
+        pass
     return result

@@ -79,6 +79,9 @@ class KillReport(models.Model):
     isk_lost = models.DecimalField(max_digits=24, decimal_places=2, null=True, blank=True)
     participant_count = models.PositiveIntegerField(null=True, blank=True)
     participant_count_source = models.CharField(max_length=32, default='unknown')
+    victim_damage_taken = models.PositiveBigIntegerField(null=True, blank=True)
+    damage_total_verified = models.BooleanField(default=False)
+    final_summary = models.JSONField(default=dict, blank=True)
     participants_status = models.CharField(max_length=16, default='unknown')
     equipment_status = models.CharField(max_length=16, default='unknown')
     source = models.CharField(max_length=64, default='unknown', db_index=True)
@@ -115,6 +118,9 @@ class KillParticipant(models.Model):
     weapon_type_id = models.BigIntegerField(null=True, blank=True)
     is_final_blow = models.BooleanField(default=False)
     is_top_damage = models.BooleanField(default=False)
+    camouflaged_faction_id = models.BigIntegerField(null=True, blank=True)
+    feat_score = models.DecimalField(max_digits=24, decimal_places=6, null=True, blank=True)
+    is_source_summary = models.BooleanField(default=False)
     source_index = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:

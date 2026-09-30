@@ -13,6 +13,12 @@ function idLabel(value) {
   return value === null || value === undefined || value === '' ? '' : String(value)
 }
 
+// Legacy records may still carry client localization wrappers. Only remove
+// recognized wrappers, never the tier text inside them or arbitrary braces.
+export function formatKillboardName(value) {
+  return String(value || '').replace(/\{(?:module|module_affix):([^{}]+)\}/g, '$1').replace(/\s+/g, ' ').trim()
+}
+
 export function selectedReport(selectedId, detail, summary) {
   if (!idLabel(selectedId)) return null
   if (detail && String(detail.kill_id) === String(selectedId)) return detail
@@ -43,7 +49,7 @@ export function killboardCollectionLabel(status) {
 }
 
 export function participantShipLabel(row = {}) {
-  const name = typeof row.ship_name === 'string' ? row.ship_name.trim() : ''
+  const name = formatKillboardName(row.ship_name)
   return name || (idLabel(row.ship_type_id) ? '舰船名称待补' : '舰船资料未返回')
 }
 
@@ -52,20 +58,26 @@ export function participantIdentity(row = {}) {
   const corporationId = idLabel(row.corporation_id)
   const characterName = String(row.character_name || '').trim()
   const corporationName = String(row.corporation_name || '').trim()
+  const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
+  const sourceOnly = !characterName && !characterId && Boolean(sourceName)
   return {
-    name: characterName || (characterId ? `角色 ID ${characterId}` : '未知角色'),
+    name: characterName || sourceName || (characterId ? `角色 ID ${characterId}` : '身份资料未返回'),
     nameDetail: characterName && characterId ? `ID ${characterId}` : characterId,
-    corporation: corporationName || (corporationId ? `军团 ID ${corporationId}` : '军团资料未返回'),
+    corporation: corporationName || (sourceOnly ? '来源记录 · 无角色身份' : corporationId ? `军团 ID ${corporationId}` : '军团资料未返回'),
     corporationDetail: corporationName && corporationId ? `ID ${corporationId}` : corporationId,
     named: Boolean(characterName),
   }
 }
 
 export function visibleParticipantRows(rows = []) {
+  let characterCount = 0
   return rows.filter(row => {
     if (!row || typeof row !== 'object') return false
-    return String(row.character_name || '').trim().length > 0
-  }).slice(0, 7)
+    const characterName = String(row.character_name || '').trim()
+    if (characterName) return characterCount++ < 7
+    const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
+    return Boolean(sourceName && (row.is_final_blow || row.is_top_damage))
+  })
 }
 
 export function participantVisibilityNote(rows = []) {
@@ -94,8 +106,18 @@ export function slotGroup(slot) {
   if (flag >= 11 && flag <= 18) return 'low'
   if (flag >= 19 && flag <= 26) return 'mid'
   if (flag >= 27 && flag <= 34) return 'high'
-  if (flag >= 92 && flag <= 99) return 'rig'
+  if ((flag >= 92 && flag <= 107) || flag === 110 || flag === 111) return 'rig'
+  if (flag >= 2001 && flag <= 2004) return 'low'
+  if (flag >= 3001 && flag <= 3004) return 'mid'
+  if (flag >= 4001 && flag <= 4004) return 'high'
   return 'other'
+}
+
+export function equipmentSlotLabel(slot) {
+  const flag = slotFlag(slot)
+  if (flag === 110) return '机库改装件'
+  if (flag === 111) return '防御改装件'
+  return SLOT_GROUPS.find(group => group.key === slotGroup(slot) && group.key !== 'other')?.label || '槽位待确认'
 }
 
 export function groupEquipmentItems(rows = []) {

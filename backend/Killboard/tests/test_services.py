@@ -49,6 +49,25 @@ def parsed_report(*, kill_id=100, ship_class_key="battleship", isk_lost=Decimal(
 
 
 class KillReportPersistenceTests(TestCase):
+    def test_source_combat_metadata_survives_database_round_trip(self):
+        from Killboard.parser import parse_kill_blob
+        parsed = parse_kill_blob('<attackers><a s=8 w=9 d=100 cf=500019 fs=3141.37/></attackers>',
+                                 summary={'kill_id': 105, 'final_ship_type_id': 8,
+                                          'final_weapon_type_id': 9, 'final_damage_done': 100,
+                                          'killer_camouflaged_faction_id': 500019,
+                                          'killer_feat_score': 3141.37, 'victim_damage_taken': 100})
+        report, _ = persist_report(parsed)
+        report.refresh_from_db()
+        self.assertEqual(report.victim_damage_taken, 100)
+        self.assertTrue(report.damage_total_verified)
+        self.assertEqual(report.final_summary['damage'], 100)
+        self.assertEqual(report.final_summary['feat_score'], '3141.37')
+        row = report.participants.get()
+        self.assertEqual(row.camouflaged_faction_id, 500019)
+        self.assertEqual(row.feat_score, Decimal('3141.37'))
+        self.assertTrue(row.is_final_blow)
+        self.assertTrue(row.is_top_damage)
+
     def setUp(self):
         ShipClass.objects.create(key="frigate", label="Frigate", rank=1)
         ShipClass.objects.create(key="battlecruiser", label="Battlecruiser", rank=3)

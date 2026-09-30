@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, AlertTriangle, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getKillReport, getKillboardStatus, listKillReports } from '../services/apiKillboard'
-import { groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantIdentity, participantVisibilityNote, reportSourceNote, selectedReport, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
+import { equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantVisibilityNote, reportSourceNote, selectedReport, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
 import KillParticipantRow from '../components/killboard/KillParticipantRow'
 import GameItemImage from '../components/GameItemImage'
 import '../styles/killboard.css'
@@ -74,25 +74,25 @@ function VisualAsset({ src, kind = 'item', alt = '' }) {
   </div>
 }
 
-function Participants({ report }) {
+function Participants({ report, hidden = false, compact = false }) {
   const rows = report?.participants || []
   const visibleRows = visibleParticipantRows(rows)
   const visibilityNote = participantVisibilityNote(rows)
-  return <section className="kb-panel kb-participants-panel">
-    <div className="kb-panel-head"><div><span className="kb-eyebrow">COMBATANTS</span><h3>击毁人员</h3></div><span className="kb-panel-count">{report?.participant_count ?? '—'} 条记录</span></div>
+  return <section className="kb-panel kb-participants-panel" id="kb-panel-people" role={compact ? 'tabpanel' : 'region'} aria-labelledby={compact ? 'kb-tab-people' : 'kb-heading-people'} hidden={hidden}>
+    <div className="kb-panel-head"><div><span className="kb-eyebrow">COMBATANTS</span><h3 id="kb-heading-people">参战记录</h3></div><span className="kb-panel-count">{report?.participant_count ?? '—'} 条记录</span></div>
     {report?.participants_status !== 'provided' && !rows.length ? <EmptyState title="参与者明细暂不可用">{statusLabel(report?.participants_status, '当前报告未提供攻击列表')}</EmptyState> : visibleRows.length ? <><div className="kb-participant-list">{visibleRows.map((row, index) => <KillParticipantRow row={row} key={`${row.character_id || row.character_name || 'unknown'}-${index}`} />)}</div>{visibilityNote ? <p className="kb-participant-note">{visibilityNote}</p> : null}</> : <EmptyState title="未解析到玩家身份">报告包含伤害记录，但暂未返回可展示的玩家名称。</EmptyState>}
   </section>
 }
 
-function Equipment({ report }) {
+function Equipment({ report, hidden = false, compact = false }) {
   const rows = report?.items || []
   const groups = useMemo(() => groupEquipmentItems(rows), [rows])
   const [activeGroup, setActiveGroup] = useState('all')
   useEffect(() => setActiveGroup('all'), [report?.kill_id])
   const visibleRows = activeGroup === 'all' ? rows : groups.find(group => group.key === activeGroup)?.items || []
-  return <section className="kb-panel kb-equipment-panel">
-    <div className="kb-panel-head"><div><span className="kb-eyebrow">SALVAGE / FITTING</span><h3>装备与掉落</h3></div><span className="kb-panel-count">{rows.length ? `${rows.length} 项` : '—'}</span></div>
-    {report?.equipment_status !== 'provided' && !rows.length ? <EmptyState title="装备明细未提供">不会把空结果误判为“没有掉落”。</EmptyState> : rows.length ? <><div className="kb-slot-tabs" role="tablist" aria-label="装备槽位分类"><button type="button" role="tab" aria-selected={activeGroup === 'all'} className={activeGroup === 'all' ? 'is-active' : ''} onClick={() => setActiveGroup('all')}>全部 <b>{rows.length}</b></button>{groups.map(group => <button type="button" role="tab" aria-selected={activeGroup === group.key} key={group.key} disabled={!group.items.length} className={activeGroup === group.key ? 'is-active' : ''} onClick={() => setActiveGroup(group.key)}>{group.label} <b>{group.items.length}</b></button>)}</div><p className="kb-slot-hint"><Layers3 size={13} />按报告槽位标记归类，未识别项保留在“其他”。</p><div className="kb-item-list">{visibleRows.map((row, index) => <div className="kb-item" key={`${row.type_id || 'unknown'}-${index}`}><VisualAsset src={itemImage(row)} kind="item" /><div className="kb-item-main"><strong>{row.name || (row.type_id ? `物品 ID ${row.type_id}` : '未知物品')}</strong><span>{row.slot || '槽位未知'}</span></div><span className={`kb-item-status kb-item-status--${row.status}`}>{itemStatusLabel(row.status)}{row.quantity_dropped ? ` · ${row.quantity_dropped}` : ''}</span></div>)}</div></> : <EmptyState title="没有可展示的装备" />}
+  return <section className="kb-panel kb-equipment-panel" id="kb-panel-equipment" role={compact ? 'tabpanel' : 'region'} aria-labelledby={compact ? 'kb-tab-equipment' : 'kb-heading-equipment'} hidden={hidden}>
+    <div className="kb-panel-head"><div><span className="kb-eyebrow">SALVAGE / FITTING</span><h3 id="kb-heading-equipment">装备与掉落</h3></div><span className="kb-panel-count">{rows.length ? `${rows.length} 项` : '—'}</span></div>
+    {report?.equipment_status !== 'provided' && !rows.length ? <EmptyState title="装备明细未提供">不会把空结果误判为“没有掉落”。</EmptyState> : rows.length ? <><div className="kb-slot-tabs" role="group" aria-label="装备槽位分类"><button type="button" aria-pressed={activeGroup === 'all'} className={activeGroup === 'all' ? 'is-active' : ''} onClick={() => setActiveGroup('all')}>全部 <b>{rows.length}</b></button>{groups.map(group => <button type="button" aria-pressed={activeGroup === group.key} key={group.key} disabled={!group.items.length} className={activeGroup === group.key ? 'is-active' : ''} onClick={() => setActiveGroup(group.key)}>{group.label} <b>{group.items.length}</b></button>)}</div><p className="kb-slot-hint"><Layers3 size={14} />蓝色标记为掉落；未识别槽位归入其他。</p><div className="kb-item-list">{visibleRows.map((row, index) => { const name = formatKillboardName(row.name) || '物品名称待补'; return <div className={`kb-item kb-item--${row.status}`} key={`${row.type_id || 'unknown'}-${index}`}><VisualAsset src={itemImage(row)} kind="item" /><div className="kb-item-main"><strong title={name}>{name}</strong><span>{equipmentSlotLabel(row.slot)}{row.quantity ? ` · ${row.quantity} 件` : ''}</span></div><span className={`kb-item-status kb-item-status--${row.status}`}>{itemStatusLabel(row.status)}{row.quantity_dropped ? ` · ${row.quantity_dropped}` : ''}</span></div> })}</div></> : <EmptyState title="没有可展示的装备" />}
   </section>
 }
 
@@ -110,6 +110,9 @@ export default function KillboardPage() {
   const [error, setError] = useState('')
   const [forbidden, setForbidden] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [compactDetail, setCompactDetail] = useState(false)
+  const [activePanel, setActivePanel] = useState('people')
+  const contentRef = useRef(null)
   const revoked = useRef(false)
   const requests = useRef(new Set())
 
@@ -188,7 +191,24 @@ export default function KillboardPage() {
 
   const activeReport = useMemo(() => reports.find(row => String(row.kill_id) === String(selectedId)) || null, [reports, selectedId])
   const current = forbidden ? null : selectedReport(selectedId, selected, activeReport)
-  const finalBlow = useMemo(() => (current?.participants || []).find(row => row.is_final_blow && String(row.character_name || '').trim()), [current])
+  useEffect(() => {
+    const element = contentRef.current
+    if (!element || typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0]?.contentRect.width
+      if (Number.isFinite(width)) setCompactDetail(width < 720)
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [current?.kill_id])
+
+  function switchPanel(event) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const next = event.key === 'Home' ? 'people' : event.key === 'End' ? 'equipment' : activePanel === 'people' ? 'equipment' : 'people'
+    setActivePanel(next)
+    event.currentTarget.parentElement.querySelector(`#kb-tab-${next}`)?.focus()
+  }
 
   function selectReport(id) {
     if (revoked.current) return
@@ -200,7 +220,7 @@ export default function KillboardPage() {
   return <div className="page-stack kb-page">
     <header className="kb-header">
       <div><div className="kb-brandline"><Swords size={18} aria-hidden="true" /><span>EVE ECHOES / KILL INTELLIGENCE</span></div><h1>击毁情报</h1><p>{reportSourceNote(current) || '仅收录价值大于 200 亿 ISK 的最新报告，保留星系安等与可验证的掉落信息。'}</p></div>
-      <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />零安</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div><span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span><button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
+      <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />00地区</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div><span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span><button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
     </header>
     <div className="kb-workspace">
       <aside className="kb-sidebar" aria-label="击毁报告筛选">
@@ -213,9 +233,9 @@ export default function KillboardPage() {
       <main className="kb-main" aria-busy={detailLoading}>
         {error ? <div className={`kb-error${forbidden ? ' is-forbidden' : ''}`} role="alert"><AlertTriangle size={17} /><div><strong>{forbidden ? '访问受限' : '加载失败'}</strong><span>{error}</span></div>{!forbidden ? <button type="button" onClick={() => setError('')} aria-label="关闭错误"><X size={15} /></button> : null}</div> : null}
         {current ? <>
-          <section className="kb-hero kb-panel"><VisualAsset src={shipImage(current)} kind="ship" alt={current.ship_name || '舰船'} /><div className="kb-hero-copy"><span className="kb-eyebrow">KILL REPORT / {current.kill_id}</span><h2>{current.ship_name || '未知舰船'}</h2><div className="kb-hero-meta"><span>{classLabel(current)}</span><span>{current.system_name || '未知星系'}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />安等 {security.valueLabel} · {security.zoneLabel}</span><span>{formatTime(current.kill_time_display, current.kill_time_raw)}</span></div></div><div className="kb-hero-value"><span>估算损失</span><strong title={exactIsk(current.isk_lost)}>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong></div></section>
-          <div className="kb-stat-grid"><div className="kb-stat"><span>受击目标</span><strong>{current.victim_name || '目标身份未返回'}</strong><small>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</small></div><div className="kb-stat"><span>火力记录</span><strong>{current.participant_count ?? '—'} 条记录</strong><small>{statusLabel(current.participants_status, '来源已提供，含未识别身份')}</small></div><div className="kb-stat"><span>最后一击</span><strong>{finalBlow ? participantIdentity(finalBlow).name : '最后一击资料未返回'}</strong><small>击毁人员</small></div></div>
-          <div className="kb-content-grid"><Participants report={current} /><Equipment report={current} /></div>
+          <section className="kb-hero kb-panel"><VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} /><div className="kb-hero-copy"><span className="kb-eyebrow">报告 {current.kill_id} · {classLabel(current)}</span><h2>{formatKillboardName(current.ship_name) || '未知舰船'}</h2><div className="kb-hero-victim"><strong>{current.victim_name || '目标身份未返回'}</strong><span>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</span></div><div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div></div><div className="kb-hero-value"><span>估算损失</span><strong title={exactIsk(current.isk_lost)}>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><time>{formatTime(current.kill_time_display, current.kill_time_raw)}</time></div></section>
+          {compactDetail ? <div className="kb-detail-tabs" role="tablist" aria-label="报告详情"><button type="button" role="tab" id="kb-tab-people" aria-controls="kb-panel-people" aria-selected={activePanel === 'people'} tabIndex={activePanel === 'people' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('people')}>人员</button><button type="button" role="tab" id="kb-tab-equipment" aria-controls="kb-panel-equipment" aria-selected={activePanel === 'equipment'} tabIndex={activePanel === 'equipment' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('equipment')}>装备</button></div> : null}
+          <div className={`kb-content-grid${compactDetail ? ' is-compact' : ''}`} ref={contentRef}><Participants report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'people'} /><Equipment report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'equipment'} /></div>
         </> : <EmptyState title="选择一份报告查看详情">左侧索引展示价值大于 200 亿 ISK 的最新击毁报告。</EmptyState>}
       </main>
     </div>

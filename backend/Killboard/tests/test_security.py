@@ -16,6 +16,7 @@ class SecurityMetaTests(SimpleTestCase):
         self.assertEqual(security_meta(0)['security_band'], 'nullsec')
         self.assertEqual(security_meta(0.49)['security_band'], 'low')
         self.assertEqual(security_meta(0.5)['security_band'], 'high')
+        self.assertEqual(security_meta(0)['security_label'], '00地区')
 
     def test_system_lookup_is_batched_and_resolves_names(self):
         region = SimpleNamespace(zh_name='星域甲', name='Region A')
@@ -39,6 +40,21 @@ class SecurityMetaTests(SimpleTestCase):
 
         with patch.object(builtins, '__import__', side_effect=import_without_tactical_models):
             self.assertEqual(system_security_map([7]), {})
+
+    def test_missing_tactical_row_uses_verified_client_location_labels(self):
+        original_import = builtins.__import__
+
+        def import_without_tactical_models(name, *args, **kwargs):
+            if name == 'TacticalBoard.models':
+                raise RuntimeError('model app is not installed in this settings module')
+            return original_import(name, *args, **kwargs)
+
+        with patch.object(builtins, '__import__', side_effect=import_without_tactical_models):
+            result = system_security_map([33007327])
+        self.assertEqual(result['33007327']['system_name'], 'NI-D1003327')
+        self.assertEqual(result['33007327']['constellation_name'], 'EI-S1238')
+        self.assertEqual(result['33007327']['region_name'], 'EI-S11907')
+        self.assertEqual(result['33007327']['security_label'], '安等未知')
 
     def test_unavailable_system_table_fails_closed_when_queryset_is_evaluated(self):
         class UnavailableRows:

@@ -12,6 +12,55 @@ SCRIPT = Path(__file__).resolve().parents[2] / 'sync_game_data.py'
 
 
 class SharedCatalogImportTests(unittest.TestCase):
+    def display_export(self, *, security=None):
+        root = self.root / 'display'
+        root.mkdir(exist_ok=True)
+        payload = {'schemaVersion': 1, 'currentThxSha256': 'a' * 64,
+            'names': {'123': {'name': '皮特丙型 自适应全能力场',
+                'raw_name': '{module_affix:皮特C} {module:自适应全能力场}',
+                'name_localization': {'locale': 'zhcn', 'message_id': 611508,
+                    'logical_path': 'staticdata/gettext/zhcn/611.sd', 'table_sha256': 'a' * 64}}},
+            'locations': {'33007327': {'system_name': 'NI-D1003327', 'constellation_id': 22000099,
+                'constellation_name': 'EI-S1238', 'region_id': 12000009, 'region_name': 'EI-S11907',
+                'security_status': security}}, 'camouflage': {},
+            'tables': {'sigmadata/eve/universe/gettext.sd': {'md5': 'b' * 32, 'sha256': 'c' * 64}},
+            'method': 'exact client static lookup'}
+        raw = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        (root / 'client-display.json').write_bytes(raw)
+        report = {'schemaVersion': 1, 'errors': [],
+            'sourceFilesSha256': {'client-display.json': hashlib.sha256(raw).hexdigest()},
+            'nameRecordsChecked': 1, 'locationRecordsChecked': 1, 'camouflageRecordsChecked': 0}
+        (root / 'display-verification.json').write_text(json.dumps(report), encoding='utf-8')
+        return root
+
+    def test_verified_display_export_adds_names_locations_and_immutable_provenance(self):
+        self.export(name='{module_affix:皮特C} {module:自适应全能力场}')
+        sync = self.subject().sync_game_data
+        first = sync(self.source, self.catalog, self.data, self.images)
+        old_bytes = (self.data / 'versions' / f"{first['revision']}.json").read_bytes()
+        display = self.display_export(security=-0.5)
+        second = sync(self.source, self.catalog, self.data, self.images, display_root=display)
+        payload = json.loads((self.data / 'versions' / f"{second['revision']}.json").read_bytes())
+        self.assertEqual(payload['items']['123']['name'], '皮特丙型 自适应全能力场')
+        self.assertEqual(payload['items']['123']['raw_name'], '{module_affix:皮特C} {module:自适应全能力场}')
+        self.assertEqual(payload['locations']['33007327']['security_status'], -0.5)
+        source = payload['sources'][second['revision']]
+        self.assertEqual(source['display_data']['method'], 'exact client static lookup')
+        self.assertEqual(source['source_files_sha256']['client-display.json'],
+            hashlib.sha256((display / 'client-display.json').read_bytes()).hexdigest())
+        self.assertEqual((self.data / 'versions' / f"{first['revision']}.json").read_bytes(), old_bytes)
+        self.assertEqual(sync(self.source, self.catalog, self.data, self.images, display_root=display), second)
+
+    def test_display_snapshot_and_modified_verification_fail_before_pointer_changes(self):
+        self.export()
+        sync = self.subject().sync_game_data
+        first = sync(self.source, self.catalog, self.data, self.images)
+        display = self.display_export()
+        (display / 'client-display.json').write_bytes(b'{}')
+        with self.assertRaisesRegex(ValueError, 'display.*checksum'):
+            sync(self.source, self.catalog, self.data, self.images, display_root=display)
+        self.assertEqual(json.loads((self.data / 'current.json').read_bytes())['revision'], first['revision'])
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

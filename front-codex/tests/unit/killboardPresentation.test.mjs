@@ -157,7 +157,7 @@ test('killboard security metadata normalizes aliases and keeps text plus semanti
   })
   assert.equal(killboardSecurityMeta({ system_security: 0.2 }).zoneLabel, '低安')
   assert.equal(killboardSecurityMeta({ solar_system_security: 0.5 }).zoneLabel, '高安')
-  assert.equal(killboardSecurityMeta({ solarsystem_security: -0.1 }).zoneLabel, '零安')
+  assert.equal(killboardSecurityMeta({ solarsystem_security: -0.1 }).zoneLabel, '00地区')
   assert.equal(killboardSecurityMeta({ system: { security_status: 0.9 } }).valueLabel, '0.90')
   assert.deepEqual(killboardSecurityMeta({ security_status: 'unknown' }), {
     value: null,
@@ -168,4 +168,42 @@ test('killboard security metadata normalizes aliases and keeps text plus semanti
     color: '#9fb4b9',
   })
   assert.equal(killboardSecurityMeta(null).zoneLabel, '安等未知')
+})
+
+test('killboard only uses confirmed 00, low and high security boundaries', () => {
+  for (const [value, label] of [[-1, '00地区'], [0, '00地区'], [0.01, '低安'], [0.4999, '低安'], [0.5, '高安'], [1, '高安']]) {
+    assert.equal(killboardSecurityMeta({ security_status: value }).zoneLabel, label)
+  }
+})
+
+test('legacy equipment names unwrap only recognized tokens while retaining tier text', () => {
+  assert.equal(typeof presentation.formatKillboardName, 'function')
+  assert.equal(presentation.formatKillboardName('{module_affix:皮特丙型} {module:自适应全能力场}'), '皮特丙型 自适应全能力场')
+  assert.equal(presentation.formatKillboardName('{module:旗舰级半导体记忆电池}'), '旗舰级半导体记忆电池')
+  assert.equal(presentation.formatKillboardName('{unknown:保持原文}'), '{unknown:保持原文}')
+  assert.equal(presentation.formatKillboardName('常规 甲型 模块'), '常规 甲型 模块')
+})
+
+test('verified expanded client slots include mechanical and defence rigs but not adjacent unknown slots', () => {
+  for (const [slot, expected] of [[100, 'rig'], [107, 'rig'], [111, 'rig'], [108, 'other'], [109, 'other'], [110, 'rig'], [2001, 'low'], [2004, 'low'], [3001, 'mid'], [4004, 'high']]) {
+    assert.equal(presentation.slotGroup(slot), expected, String(slot))
+  }
+  assert.equal(typeof presentation.equipmentSlotLabel, 'function')
+  assert.equal(presentation.equipmentSlotLabel('原始槽位 100'), '改装件')
+  assert.equal(presentation.equipmentSlotLabel('原始槽位 108'), '槽位待确认')
+})
+
+test('source-only named highlights remain visible separately from the first seven character rows', () => {
+  const rows = [
+    { display_name: '混乱风暴发射器', identity_kind: 'source', is_final_blow: true, is_top_damage: true },
+    ...Array.from({ length: 8 }, (_, index) => ({ character_id: String(index + 1), character_name: `玩家${index + 1}` })),
+    { display_name: '不展示普通来源行', identity_kind: 'source' },
+    { is_final_blow: true },
+  ]
+  const visible = visibleParticipantRows(rows)
+  assert.deepEqual(visible.map(row => row.display_name || row.character_name), ['混乱风暴发射器', '玩家1', '玩家2', '玩家3', '玩家4', '玩家5', '玩家6', '玩家7'])
+  const identity = participantIdentity(rows[0])
+  assert.equal(identity.name, '混乱风暴发射器')
+  assert.equal(identity.corporation, '来源记录 · 无角色身份')
+  assert.equal(presentation.participantIdentity({ ship_name: '元帅级', identity_kind: 'source', is_final_blow: true }).name, '元帅级')
 })

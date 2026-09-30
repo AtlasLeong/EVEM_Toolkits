@@ -252,6 +252,9 @@ def _participant(node: _Node, index: int) -> dict:
         "is_top_damage": _bool(_attr(node, "topdamage", "top_damage"), "top damage"),
         "ship_type_id": _int(_attr(node, "shiptypeid", "ship_type_id", "s"), "ship type id"),
         "weapon_type_id": _int(_attr(node, "weapontypeid", "weapon_type_id", "w"), "weapon type id"),
+        "camouflaged_faction_id": _int(_attr(node, "cf", "camouflaged_faction_id"), "camouflaged faction id"),
+        "feat_score": _decimal(_attr(node, "fs", "feat_score"), "feat score"),
+        "is_source_summary": False,
         "source_index": index,
     }
 
@@ -292,9 +295,7 @@ def _summary_attr(summary: Mapping | None, *names: str):
 
 def _summary_participant(summary: Mapping) -> dict | None:
     character_id = _int(_summary_attr(summary, "final_character_id"), "final character id")
-    if character_id is None:
-        return None
-    return {
+    row = {
         "character_id": character_id,
         "character_name": "",
         "corporation_id": _int(_summary_attr(summary, "final_corporation_id"), "final corporation id"),
@@ -307,8 +308,33 @@ def _summary_participant(summary: Mapping) -> dict | None:
         "is_top_damage": False,
         "ship_type_id": _int(_summary_attr(summary, "final_ship_type_id"), "final ship type id"),
         "weapon_type_id": _int(_summary_attr(summary, "final_weapon_type_id"), "final weapon type id"),
+        "camouflaged_faction_id": _int(_summary_attr(summary, "killer_camouflaged_faction_id"), "final camouflage faction id"),
+        "feat_score": _decimal(_summary_attr(summary, "killer_feat_score"), "final feat score"),
+        "is_source_summary": True,
         "source_index": 0,
     }
+    if not any(row.get(key) for key in ('character_id', 'ship_type_id', 'weapon_type_id', 'damage')):
+        return None
+    return row
+
+
+def _match_final(participants: list[dict], final: dict) -> list[dict]:
+    # A missing character ID does not mean NPC. Require a useful source
+    # signature, and do not attach anonymous final metadata to a named player.
+    if final.get('character_id'):
+        matches = [row for row in participants if row.get('character_id') == final['character_id']]
+    elif final.get('damage') is not None and any(final.get(k) for k in ('ship_type_id', 'weapon_type_id', 'camouflaged_faction_id')):
+        keys = [key for key in ('damage', 'ship_type_id', 'weapon_type_id', 'camouflaged_faction_id', 'feat_score')
+                if final.get(key) is not None]
+        matches = [row for row in participants if not row.get('character_id')
+                   and all(row.get(key) == final[key] for key in keys)]
+    else:
+        matches = []
+    return matches
+
+
+def _json_row(row: dict) -> dict:
+    return {key: str(value) if isinstance(value, Decimal) else value for key, value in row.items()}
 
 
 def _identity_value(identity_map: Mapping, collection: str, identifier: int | None) -> Mapping | str | None:
@@ -483,15 +509,26 @@ def parse_kill_blob(
         victim_alliance_id = _int(get("victim_alliance_id"), "victim alliance id")
         victim_alliance_name = ""
 
+    final_summary = {}
+    final_ambiguous = False
     if outer:
         summary_participant = _summary_participant(outer)
         if summary_participant:
-            matches = [p for p in participants if p['character_id'] == summary_participant['character_id']]
-            if matches:
+            matches = _match_final(participants, summary_participant)
+            if len(matches) == 1:
                 matches[0]['is_final_blow'] = True
+                for key, value in summary_participant.items():
+                    if key not in ('source_index', 'is_source_summary', 'is_top_damage') and matches[0].get(key) in (None, ''):
+                        matches[0][key] = value
+                final_summary = {**_json_row(summary_participant), 'match_status': 'matched',
+                                 'source_index': matches[0]['source_index']}
+            elif len(matches) > 1:
+                final_ambiguous = True
+                final_summary = {**_json_row(summary_participant), 'match_status': 'ambiguous'}
             else:
                 summary_participant['source_index'] = len(participants)
                 participants.append(summary_participant)
+                final_summary = {**_json_row(summary_participant), 'match_status': 'added'}
 
     if identity_map is not None:
         victim_name, victim_corporation_name, victim_alliance_name = _enrich_identity(
@@ -505,6 +542,18 @@ def parse_kill_blob(
             identity_map=identity_map,
         )
 
+    total_damage = _int(_summary_attr(outer, 'victim_damage_taken'), 'total damage')
+    damage_verified = bool(total_damage and participants and not final_ambiguous
+                           and all(row.get('damage') is not None for row in participants)
+                           and sum(row['damage'] for row in participants) == total_damage)
+    if total_damage:
+        for row in participants:
+            if row.get('damage') is not None and row.get('damage_pct') is None:
+                row['damage_pct'] = Decimal(row['damage'] * 100 // total_damage)
+    if damage_verified:
+        highest = max(row['damage'] for row in participants)
+        for row in participants:
+            row['is_top_damage'] = row['damage'] == highest
     kill_time_raw = _text(get("killtime", "kill_time", "time"))
     time_quality = "source" if re.search(r"(?:z|[+-][0-9]{2}:[0-9]{2})$", kill_time_raw, re.I) else "unknown"
     result = {
@@ -528,11 +577,17 @@ def parse_kill_blob(
             "participant count",
         ),
         "participant_count_source": "source" if legacy_root and _attr(legacy_root, "participantcount", "participant_count") else "unknown",
+        "victim_damage_taken": total_damage,
+        "damage_total_verified": damage_verified,
+        "final_summary": final_summary,
         "participants": participants,
         "items": item_rows,
         "equipment_status": "provided" if items_node else "missing",
         "participants_status": "provided" if attackers_node else "summary" if participants else "missing",
     }
+    if damage_verified and result['participant_count'] is None:
+        result['participant_count'] = len(participants)
+        result['participant_count_source'] = 'damage_reconciled'
     if outer:
         for field in ('final_character_id', 'final_corporation_id', 'final_alliance_id', 'final_ship_type_id', 'final_weapon_type_id', 'final_damage_done'):
             result[field] = _int(outer.get(field), field)

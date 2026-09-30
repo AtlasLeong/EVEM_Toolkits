@@ -8,6 +8,33 @@ from unittest.mock import patch
 
 
 class SharedRegistryTests(SimpleTestCase):
+    def test_verified_client_location_is_available_without_business_database(self):
+        registry = self.subject()
+        location = registry.location_record(33007327)
+        self.assertEqual(location['system_name'], 'NI-D1003327')
+        self.assertEqual(location['constellation_id'], 22000099)
+        self.assertEqual(location['constellation_name'], 'EI-S1238')
+        self.assertEqual(location['region_id'], 12000009)
+        self.assertEqual(location['region_name'], 'EI-S11907')
+
+    def test_location_does_not_substitute_regional_security_for_missing_system_security(self):
+        registry = self.subject()
+        payload = {'locations': {'33007327': {'system_name': 'NI-D1003327',
+            'constellation_id': 22000099, 'constellation_name': 'EI-S1238',
+            'region_id': 12000009, 'region_name': 'EI-S11907', 'region_security': 0.7}}}
+        self.assertIsNone(registry.location_record(33007327, catalog=payload)['security_status'])
+        for value in (True, None, '../33007327', 33007328):
+            self.assertIsNone(registry.location_record(value, catalog=payload))
+
+    def test_item_name_uses_exact_localized_client_text_and_retains_raw_template(self):
+        registry = self.subject()
+        row = registry.item_record(11302300025)
+        self.assertEqual(row['name'], '皮特丙型 自适应全能力场')
+        self.assertIn('{module_affix:', row['raw_name'])
+        self.assertEqual(row['name_localization']['locale'], 'zhcn')
+        self.assertRegex(row['name_localization']['table_sha256'], r'^[0-9a-f]{64}$')
+        self.assertNotIn('C:', str(row['name_localization']))
+
     def subject(self):
         import importlib.util
         self.assertIsNotNone(importlib.util.find_spec('GameData.registry'), 'The common catalog must be independent of Killboard')

@@ -96,7 +96,33 @@ def load_current(data_root):
     return pointer, read_json(version)
 
 
-def sync_game_data(source_root=EXPORT, catalog_path=MARKET, data_root=DATA, frontend_root=IMAGES):
+def load_display_export(display_root):
+    """Validate the independently reviewed client-display export."""
+    display_root = Path(display_root)
+    client_path = display_root / 'client-display.json'
+    verify_path = display_root / 'display-verification.json'
+    if not client_path.is_file() or not verify_path.is_file():
+        raise ValueError('display export is incomplete')
+    client_raw = client_path.read_bytes()
+    payload = json.loads(client_raw)
+    report = read_json(verify_path)
+    bound = report.get('sourceFilesSha256')
+    expected = {'client-display.json': hashlib.sha256(client_raw).hexdigest()}
+    if bound != expected:
+        raise ValueError('display verification checksum mismatch')
+    if payload.get('schemaVersion') != 1 or report.get('schemaVersion') != 1:
+        raise ValueError('display export schema is invalid')
+    if report.get('errors') != []:
+        raise ValueError('display verification is incomplete')
+    for key in ('names', 'locations', 'camouflage'):
+        if not isinstance(payload.get(key, {}), dict):
+            raise ValueError(f'display {key} table is invalid')
+    if not isinstance(payload.get('method'), str) or not payload.get('method'):
+        raise ValueError('display method is missing')
+    return payload, {**expected, 'display-verification.json': checksum(verify_path)}
+
+
+def sync_game_data(source_root=EXPORT, catalog_path=MARKET, data_root=DATA, frontend_root=IMAGES, display_root=None):
     source_root, catalog_path, data_root, frontend_root = map(Path, (source_root, catalog_path, data_root, frontend_root))
     raw_inputs = {name: (source_root / name).read_bytes() for name in INPUTS}
     inputs = {name: json.loads(raw) for name, raw in raw_inputs.items()}
@@ -121,6 +147,11 @@ def sync_game_data(source_root=EXPORT, catalog_path=MARKET, data_root=DATA, fron
         expected_inputs = {name: digest for name, digest in input_hashes.items() if name != 'verification.json'}
         if not isinstance(bound, dict) or bound != expected_inputs:
             raise ValueError('Verification input checksum mismatch; re-verify the unchanged export')
+    display_payload = None
+    display_hashes = {}
+    if display_root is not None:
+        display_payload, display_hashes = load_display_export(display_root)
+        input_hashes.update(display_hashes)
     market_raw = catalog_path.read_bytes()
     input_hashes['market_catalog.json'] = hashlib.sha256(market_raw).hexdigest()
     input_hashes['importer_format'] = str(IMPORTER_FORMAT)
@@ -157,6 +188,11 @@ def sync_game_data(source_root=EXPORT, catalog_path=MARKET, data_root=DATA, fron
                 'current': True, 'source_revision': revision, 'table_path': table_path, 'table_key': table_key,
                 'icon_id': row.get('iconId'), 'image_status': row.get('status'),
                 'image_role': row.get('imageRole', ''), 'image_warning': row.get('compositeWarning'), 'asset_key': None}
+        if display_payload:
+            item['raw_name'] = row.get('name') or ''
+            enrichment = display_payload.get('names', {}).get(key, {})
+            if isinstance(enrichment, dict):
+                item.update({field: enrichment[field] for field in ('name', 'raw_name', 'name_localization') if field in enrichment})
         if row.get('status') == 'verified':
             asset = assets_by_path.get(row.get('logicalIconPath'))
             digest = row.get('textureMd5', '')
@@ -205,8 +241,24 @@ def sync_game_data(source_root=EXPORT, catalog_path=MARKET, data_root=DATA, fron
                   'classification_method': 'client evetypes/item_data: category_id = type_id // 1000000000; group_id = type_id // 1000000; ship category 10',
                   'classification_evidence': 'scripts/game_data/client_assets/README.md',
                   'image_scope': 'exact client configuration references; includes non-tradable and unpublished records'}
+    if display_payload:
+        provenance['display_data'] = {
+            'method': display_payload.get('method'),
+            'source_export': source_path(display_root),
+            'current_thx_sha256': display_payload.get('currentThxSha256'),
+            'tables': display_payload.get('tables', {}),
+            'source_files_sha256': display_hashes,
+        }
     sources = {**previous.get('sources', {}), revision: provenance}
-    payload = {'schema_version': 1, 'revision': revision, 'sources': sources, 'items': items, 'assets': assets, 'tables': tables}
+    payload = {'schema_version': 1, 'revision': revision, 'sources': sources, 'items': items, 'assets': assets,
+               'tables': tables}
+    # Do not rewrite an older immutable revision merely because the importer
+    # learned about display tables later. A display export creates a new
+    # revision; existing catalogs remain byte-for-byte stable on re-run.
+    if display_payload or 'locations' in previous:
+        payload['locations'] = display_payload.get('locations', {}) if display_payload else previous.get('locations', {})
+    if display_payload or 'camouflage' in previous:
+        payload['camouflage'] = display_payload.get('camouflage', {}) if display_payload else previous.get('camouflage', {})
     blob = encoded(payload)
     version_file = data_root / 'versions' / f'{revision}.json'
     # Copy by PNG content hash; same-sized corruption is repaired as well.
@@ -253,8 +305,10 @@ def main():
     parser.add_argument('--market-catalog', type=Path, default=MARKET)
     parser.add_argument('--data-root', type=Path, default=DATA)
     parser.add_argument('--image-root', type=Path, default=IMAGES)
+    parser.add_argument('--display-root', type=Path, default=None)
     args = parser.parse_args()
-    print(json.dumps(sync_game_data(args.source_root, args.market_catalog, args.data_root, args.image_root), ensure_ascii=False))
+    print(json.dumps(sync_game_data(args.source_root, args.market_catalog, args.data_root, args.image_root,
+                                    args.display_root), ensure_ascii=False))
 
 
 if __name__ == '__main__':

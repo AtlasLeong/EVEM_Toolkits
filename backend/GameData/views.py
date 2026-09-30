@@ -72,7 +72,8 @@ class ItemsView(PublicCatalogView):
         if ids is not None and (len(ids) > 100 or any(not registry.item_key(key) for key in ids)):
             raise ValidationError({'ids': 'Use 1–100 positive item IDs separated by commas.'})
         revision, catalog = request_snapshot(version)
-        count, rows = registry.find_items(ids=ids, query=query, kind=kind, page=page, page_size=size, catalog=catalog)
+        count, rows = registry.find_items(ids=ids, query=query, kind=kind, page=page, page_size=size,
+                                          catalog=catalog, display=version is None)
         return cached_response(request, {'count': count, 'results': rows, 'revision': revision}, revision, immutable=bool(version))
 
 
@@ -80,7 +81,7 @@ class ItemView(PublicCatalogView):
     def get(self, request, item_id):
         version = version_parameter(request)
         revision, catalog = request_snapshot(version)
-        row = registry.item_payload(item_id, catalog=catalog)
+        row = registry.item_payload(item_id, catalog=catalog, display=version is None)
         if row is None:
             raise Http404
         return cached_response(request, row, revision, immutable=bool(version))

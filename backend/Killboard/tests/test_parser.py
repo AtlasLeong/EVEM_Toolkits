@@ -75,6 +75,77 @@ class KillProtocolTests(unittest.TestCase):
 
 
 class KillBlobParserTests(unittest.TestCase):
+    def test_anonymous_final_summary_matches_unique_verified_source_row(self):
+        parsed = parse_kill_blob(
+            '<attackers><a s=10500000601 w=11004320024 d=384191 cf=500019 fs=3141.37/></attackers>',
+            summary={'kill_id': 19748417, 'final_character_id': None,
+                     'final_ship_type_id': 10500000601, 'final_weapon_type_id': 11004320024,
+                     'final_damage_done': 384191, 'killer_camouflaged_faction_id': 500019,
+                     'killer_feat_score': 3141.37, 'victim_damage_taken': 2283208},
+        )
+        self.assertEqual(len(parsed['participants']), 1)
+        self.assertTrue(parsed['participants'][0]['is_final_blow'])
+        self.assertEqual(parsed['participants'][0]['camouflaged_faction_id'], 500019)
+        self.assertEqual(parsed['participants'][0]['feat_score'], Decimal('3141.37'))
+        self.assertEqual(parsed['participants'][0]['damage_pct'], Decimal('16'))
+        self.assertEqual(parsed['final_summary']['match_status'], 'matched')
+        self.assertFalse(parsed['damage_total_verified'])
+        self.assertFalse(parsed['participants'][0]['is_top_damage'])
+
+    def test_missing_anonymous_final_is_preserved_and_reconciles_complete_damage(self):
+        parsed = parse_kill_blob(
+            '<attackers><a s=55900003010 d=239106/><a s=10500003211 d=461421/></attackers>',
+            summary={'kill_id': 20043145, 'final_character_id': None,
+                     'final_ship_type_id': 55900003010, 'final_damage_done': 293464,
+                     'victim_damage_taken': 993991},
+        )
+        self.assertEqual(len(parsed['participants']), 3)
+        final = parsed['participants'][-1]
+        self.assertTrue(final['is_final_blow'])
+        self.assertTrue(final['is_source_summary'])
+        self.assertEqual(final['damage'], 293464)
+        self.assertEqual(final['damage_pct'], Decimal('29'))
+        self.assertEqual(parsed['final_summary']['match_status'], 'added')
+        self.assertTrue(parsed['damage_total_verified'])
+        self.assertTrue(parsed['participants'][1]['is_top_damage'])
+        self.assertFalse(final['is_top_damage'])
+
+    def test_one_source_row_can_be_both_final_and_top_when_damage_is_complete(self):
+        parsed = parse_kill_blob('<attackers><a c=7 s=8 w=9 d=100/></attackers>',
+                                 summary={'kill_id': 101, 'final_character_id': 7,
+                                          'final_ship_type_id': 8, 'final_weapon_type_id': 9,
+                                          'final_damage_done': 100, 'victim_damage_taken': 100})
+        row = parsed['participants'][0]
+        self.assertTrue(row['is_final_blow'])
+        self.assertTrue(row['is_top_damage'])
+        self.assertEqual(parsed['participant_count'], 1)
+        self.assertEqual(parsed['participant_count_source'], 'damage_reconciled')
+
+    def test_ambiguous_final_summary_never_marks_arbitrary_row_or_duplicates_damage(self):
+        parsed = parse_kill_blob('<attackers><a s=8 w=9 d=100/><a s=8 w=9 d=100/></attackers>',
+                                 summary={'kill_id': 102, 'final_ship_type_id': 8,
+                                          'final_weapon_type_id': 9, 'final_damage_done': 100,
+                                          'victim_damage_taken': 200})
+        self.assertEqual(len(parsed['participants']), 2)
+        self.assertFalse(any(p['is_final_blow'] for p in parsed['participants']))
+        self.assertEqual(parsed['final_summary']['match_status'], 'ambiguous')
+        self.assertFalse(parsed['damage_total_verified'])
+        self.assertFalse(any(p['is_top_damage'] for p in parsed['participants']))
+
+    def test_partial_damage_and_missing_damage_do_not_claim_top_record(self):
+        for blob, total in [('<attackers><a c=7 d=100/></attackers>', 200),
+                            ('<attackers><a c=7 d=100/><a c=8/></attackers>', 100)]:
+            parsed = parse_kill_blob(blob, summary={'kill_id': 103, 'victim_damage_taken': total})
+            self.assertFalse(parsed['damage_total_verified'])
+            self.assertFalse(any(p['is_top_damage'] for p in parsed['participants']))
+
+    def test_empty_final_fields_are_not_a_fake_final_attacker(self):
+        parsed = parse_kill_blob('<attackers><a c=7 d=100/></attackers>',
+                                 summary={'kill_id': 104, 'final_character_id': None,
+                                          'final_ship_type_id': None, 'final_damage_done': None})
+        self.assertEqual(len(parsed['participants']), 1)
+        self.assertEqual(parsed['final_summary'], {})
+
     def test_parses_report_participants_and_d_x_c_equipment_fields(self):
         blob = """
             <kill killID="19748417" shipTypeID="123" shipName="Vassago"

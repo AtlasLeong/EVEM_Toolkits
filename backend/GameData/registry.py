@@ -17,6 +17,29 @@ logger = logging.getLogger(__name__)
 _pointer, _signature, _checked_at = {}, None, 0.0
 
 
+@lru_cache(maxsize=1)
+def _display_snapshot():
+    """Load the small, verified client-display enrichment snapshot.
+
+    The large immutable catalog remains the authority for item/artwork rows;
+    this companion snapshot stores exact localized strings and static-space
+    names that are not present in older catalog revisions.  It intentionally
+    contains provenance, rather than machine-local paths, so the same records
+    can be shared by Killboard, market and future modules.
+    """
+    try:
+        payload = json.loads((DATA_ROOT / 'display.json').read_text(encoding='utf-8'))
+        if payload.get('schema_version') != 1 or not isinstance(payload.get('provenance'), dict):
+            raise ValueError('Invalid display snapshot')
+        for field in ('items', 'locations', 'camouflage'):
+            if not isinstance(payload.get(field, {}), dict):
+                raise ValueError('Invalid display snapshot field')
+        return payload
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+        logger.warning('Client display enrichment unavailable; exact display lookups omitted.')
+        return {}
+
+
 class CatalogUnavailable(RuntimeError):
     """An imported catalog cannot currently be verified or loaded."""
 
@@ -93,8 +116,18 @@ def _catalog(version=None):
 
 def item_record(type_id, version=None, *, catalog=None):
     payload = _catalog(version) if catalog is None else catalog
-    row = payload.get('items', {}).get(item_key(type_id))
-    return dict(row) if isinstance(row, dict) else None
+    key = item_key(type_id)
+    row = payload.get('items', {}).get(key)
+    if not isinstance(row, dict):
+        return None
+    row = dict(row)
+    # Enrichment is deliberately only applied to the live shared catalog. A
+    # caller passing an explicit snapshot is asking for that exact revision.
+    if catalog is None and version is None:
+        display = _display_snapshot().get('items', {}).get(key, {})
+        if isinstance(display, dict):
+            row.update(display)
+    return row
 
 
 def item_name(type_id, version=None):
@@ -124,9 +157,13 @@ def item_provenance(type_id, version=None):
     row = payload.get('items', {}).get(item_key(type_id), {})
     if not row:
         return {}
+    display = _display_snapshot().get('items', {}).get(item_key(type_id), {}) if version is None else {}
     return {'source': dict(payload.get('sources', {}).get(row.get('source_revision'), {})),
             'table': dict(payload.get('tables', {}).get(row.get('table_key'), {})),
-            'asset': dict(payload.get('assets', {}).get(row.get('asset_key'), {}))}
+            'asset': dict(payload.get('assets', {}).get(row.get('asset_key'), {})),
+            'display': {'provenance': dict(_display_snapshot().get('provenance', {})),
+                        'localization': dict(display.get('name_localization', {}))}
+            if display else {}}
 
 
 def _client_category(key, row):
@@ -139,14 +176,21 @@ def _entity_kind(key, row):
     return row.get('entity_kind') or ('ships' if _client_category(key, row) == 10 else 'items')
 
 
-def item_payload(type_id, version=None, *, catalog=None):
+def item_payload(type_id, version=None, *, catalog=None, display=None):
     payload = _catalog(version) if catalog is None else catalog
     row = item_record(type_id, catalog=payload)
     if row is None:
         return None
+    if display is None:
+        display = catalog is None
+    if display and catalog is not None:
+        enrichment = _display_snapshot().get('items', {}).get(item_key(type_id), {})
+        if isinstance(enrichment, dict):
+            row.update(enrichment)
     key = item_key(type_id)
     metadata = image_metadata(type_id, catalog=payload) or {}
-    return {'item_id': item_key(type_id), 'name': row.get('name', ''), 'category_id': row.get('category_id'),
+    return {'item_id': item_key(type_id), 'name': row.get('name', ''), 'raw_name': row.get('raw_name', row.get('name', '')),
+            'name_localization': row.get('name_localization'), 'category_id': row.get('category_id'),
             'subcategory_id': row.get('subcategory_id'), 'category': row.get('category_label', ''),
             'entity_kind': _entity_kind(key, row), 'client_category_id': _client_category(key, row),
             'client_group_id': row.get('client_group_id', int(key) // 1000000),
@@ -155,19 +199,56 @@ def item_payload(type_id, version=None, *, catalog=None):
             'current': row.get('current', False), 'source_revision': row.get('source_revision')}
 
 
-def find_items(*, ids=None, query='', kind='', page=1, page_size=50, version=None, catalog=None):
+def location_record(system_id, version=None, *, catalog=None):
+    """Return exact system/constellation/region labels from client static data."""
+    key = item_key(system_id)
+    if not key:
+        return None
+    payload = _catalog(version) if catalog is None else catalog
+    row = payload.get('locations', {}).get(key)
+    if not isinstance(row, dict) and catalog is None and version is None:
+        row = _display_snapshot().get('locations', {}).get(key)
+    if not isinstance(row, dict):
+        return None
+    row = dict(row)
+    row.setdefault('security_status', None)
+    return row
+
+
+def camouflaged_identity(faction_id, feat_score, version=None, *, catalog=None):
+    """Look up an exact client-derived camouflage label; never infer a rank."""
+    faction_key = item_key(faction_id)
+    if not faction_key or feat_score is None:
+        return None
+    try:
+        score_key = f'{float(feat_score):.2f}'
+    except (TypeError, ValueError):
+        return None
+    payload = _catalog(version) if catalog is None else catalog
+    table = payload.get('camouflage', {})
+    if catalog is None and version is None:
+        table = {**_display_snapshot().get('camouflage', {}), **(table if isinstance(table, dict) else {})}
+    row = table.get(f'{faction_key}:{score_key}') if isinstance(table, dict) else None
+    return dict(row) if isinstance(row, dict) else None
+
+
+def find_items(*, ids=None, query='', kind='', page=1, page_size=50, version=None, catalog=None, display=None):
     payload = _catalog(version) if catalog is None else catalog
     items = payload.get('items', {})
+    if display is None:
+        display = catalog is None
     if ids is not None:
         keys = [key for key in dict.fromkeys(map(item_key, ids)) if key in items]
     else:
         query = query.casefold()
+        display_items = _display_snapshot().get('items', {}) if display else {}
         keys = [key for key, row in items.items() if row.get('current') and
                 (kind != 'ships' or _entity_kind(key, row) == 'ships') and
-                (not query or query in str(row.get('name', '')).casefold() or query == key)]
+                (not query or query in str(display_items.get(key, {}).get('name', row.get('name', ''))).casefold()
+                 or query in str(row.get('name', '')).casefold() or query == key)]
         keys.sort(key=int)
     start = (page - 1) * page_size
-    return len(keys), [item_payload(key, catalog=payload) for key in keys[start:start + page_size]]
+    return len(keys), [item_payload(key, catalog=payload, display=display) for key in keys[start:start + page_size]]
 
 
 def catalog_status():
@@ -180,3 +261,4 @@ def clear_cache():
     global _pointer, _signature, _checked_at
     _pointer, _signature, _checked_at = {}, None, 0.0
     _load_version.cache_clear()
+    _display_snapshot.cache_clear()

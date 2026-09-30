@@ -186,6 +186,24 @@ test('raw participant counts are labelled records, not a proven number of player
   page.unmount()
 })
 
+test('the hero includes victim metadata and redundant stat cards no longer occupy the detail desk', async () => {
+  const page = harness()
+  page.render()
+  const report = { ...privateReport(), victim_corporation_name: 'VICTIM CORP', victim_alliance_name: 'VICTIM ALLIANCE', constellation_name: 'CONSTELLATION', region_name: 'REGION' }
+  page.calls.list[0].resolve({ results: [report], count: 1 })
+  page.calls.detail[0].resolve(report)
+  page.calls.status[0].resolve({})
+  await page.flush()
+  const hero = nodes(page.tree).find(node => node.props.className === 'kb-hero kb-panel')
+  assert.match(JSON.stringify(hero), /PRIVATE VICTIM/)
+  assert.match(JSON.stringify(hero), /VICTIM CORP/)
+  assert.match(JSON.stringify(hero), /CONSTELLATION/)
+  assert.match(JSON.stringify(hero), /REGION/)
+  assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-stat-grid'))
+  assert.doesNotMatch(JSON.stringify(page.tree), /火力记录|最后一击资料未返回/)
+  page.unmount()
+})
+
 test('refresh reloads health and displays a newly persisted cooldown', async () => {
   const page = harness()
   await loadPrivate(page, { status: false })

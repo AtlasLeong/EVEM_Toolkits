@@ -102,7 +102,8 @@ def _save_children(report: KillReport, parsed: dict):
                 for key in (
                     "character_id", "character_name", "corporation_id", "corporation_name",
                     "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
-                "is_top_damage", "ship_type_id", "weapon_type_id", "source_index",
+                    "is_top_damage", "ship_type_id", "weapon_type_id", "source_index",
+                    "camouflaged_faction_id", "feat_score", "is_source_summary",
                 )
                 if key in participant
             })
@@ -160,6 +161,7 @@ def persist_report(
         "victim_character_id", "victim_name", "victim_corporation_id", "victim_corporation_name",
         "victim_alliance_id", "victim_alliance_name", "kill_time_raw", "time_quality", "isk_lost",
         "participant_count",
+        "victim_damage_taken", "damage_total_verified", "final_summary",
     )
     for field in fields:
         _set_if_present(report, parsed, field)

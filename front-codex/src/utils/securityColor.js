@@ -69,7 +69,7 @@ export function killboardSecurityMeta(report = {}) {
   }
   const valueLabel = value.toFixed(2)
   if (value <= 0) {
-    return { value, valueLabel, zoneLabel: '零安', band: 'nullsec', className: 'is-nullsec', color: KILLBOARD_SECURITY_COLORS.nullsec }
+    return { value, valueLabel, zoneLabel: '00地区', band: 'nullsec', className: 'is-nullsec', color: KILLBOARD_SECURITY_COLORS.nullsec }
   }
   if (value < 0.5) {
     return { value, valueLabel, zoneLabel: '低安', band: 'low', className: 'is-low', color: KILLBOARD_SECURITY_COLORS.low }

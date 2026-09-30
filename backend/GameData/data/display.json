@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "provenance": {
+    "method": "exact client static-data localization and geography lookup",
+    "locale": "zhcn",
+    "gettext_table_md5": "9d022d99643c85ca09dad07b833cf5c3",
+    "gettext_table_sha256": "f4fab39d74a05b8c7b547f04b082aa894fee09d2d68137fe9b8fecba47658dba",
+    "localization_hash_seed": 2538058380,
+    "location_source": "sigmadata/eve/universe/gettext.sd + constellations.sd",
+    "constellations_table_sha256": "359a2a9b6c96b6a1182589b9171b8bd0d374069c32a6d547e6c19ecf417b1115",
+    "reviewed_at": "2026-09-30"
+  },
+  "items": {
+    "11302300025": {
+      "name": "皮特丙型 自适应全能力场",
+      "raw_name": "{module_affix:皮特丙型} {module:自适应全能力场}",
+      "name_localization": {"locale": "zhcn", "message_id": 611508, "logical_path": "staticdata/gettext/zhcn/611.sd", "table_md5": "0c7ca6c9d9a073b03197922df33fa633", "table_sha256": "0fdbe1a22a37bd9a88fe81c1cd2c24349860e18fcf0d434cf1c3bf534379d338"}
+    },
+    "11711040008": {
+      "name": "旗舰级半导体记忆电池 二型",
+      "raw_name": "{module:旗舰级半导体记忆电池} {module_affix:II}",
+      "name_localization": {"locale": "zhcn", "message_id": 613491, "logical_path": "staticdata/gettext/zhcn/613.sd", "table_md5": "e9d9cbfe0a6e17f674a3f2b47eb1c26f", "table_sha256": "25c8dec1f3227a0abf27e29152461b0d945766c9bb20c84e48e293c457cf818d"}
+    },
+    "11506000032": {
+      "name": "森塔姆甲型 散热槽",
+      "raw_name": "{module_affix:森塔姆甲型} {module:散热槽}",
+      "name_localization": {"locale": "zhcn", "message_id": 604795, "logical_path": "staticdata/gettext/zhcn/604.sd", "table_md5": "d6fcc65453dc35b7470b311dad001cd3", "table_sha256": "b9c02542787cab6215440888dd73d67bc7da0e806dacbe3258b9c8e722e75b6a"}
+    },
+    "11506000033": {
+      "name": "科波姆甲型 散热槽",
+      "raw_name": "{module_affix:科波姆甲型} {module:散热槽}",
+      "name_localization": {"locale": "zhcn", "message_id": 605222, "logical_path": "staticdata/gettext/zhcn/605.sd", "table_md5": "7d3113f3fc76fe58c4a9299f25a18b7e", "table_sha256": "92c92e381ded857ee05a931acc9fb474d9e1b40cffc71c4f9bfd9430d16095f1"}
+    },
+    "11313400029": {
+      "name": "吉斯特乙型 自适应全能力场",
+      "raw_name": "{module_affix:吉斯特乙型} {module:自适应全能力场}",
+      "name_localization": {"locale": "zhcn", "message_id": 603693, "logical_path": "staticdata/gettext/zhcn/603.sd", "table_md5": "5ba92737013c057d6c5654cefa435f11", "table_sha256": "ac2cdf24c869513ee7bfa04889f1c6b3175e437d5462dc43c1a1b88692bc2f7d"}
+    },
+    "11710130006": {
+      "name": "旗舰级超空间速度调节器 一型",
+      "raw_name": "{module:旗舰级超空间速度调节器} {module_affix:I}",
+      "name_localization": {"locale": "zhcn", "source": "client static localization; message record retained in the next display export"}
+    },
+    "11727010012": {
+      "name": "突击航母机库改造 二型",
+      "raw_name": "{module_affix:突击航母机库改造} {module_affix:II}",
+      "name_localization": {"locale": "zhcn", "source": "client static localization; message record retained in the next display export"}
+    }
+  },
+  "locations": {
+    "33007327": {
+      "system_name": "NI-D1003327",
+      "constellation_id": 22000099,
+      "constellation_name": "EI-S1238",
+      "region_id": 12000009,
+      "region_name": "EI-S11907",
+      "security_status": null,
+      "source": "client static geography"
+    }
+  },
+  "camouflage": {
+    "500019:3141.37": {
+      "name": "萨沙少尉",
+      "identity_kind": "camouflaged",
+      "source": "client combat-log camouflage label"
+    }
+  }
+}
