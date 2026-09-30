@@ -73,6 +73,52 @@ class WorkerTests(TestCase):
             call_command('killboard_probe', start_id=100, max_requests=1, write=True)
         self.assertTrue(getattr(client, 'closed', False))
 
+    def test_probe_command_passes_active_policy_value_threshold_to_supported_client(self):
+        from decimal import Decimal
+        from Killboard.models import CollectionPolicy
+        for name, threshold in (('high_value_all', Decimal('20000000000.00')),
+                                ('custom_threshold', Decimal('123.45')),
+                                ('custom_no_threshold', None)):
+            with self.subTest(policy=name):
+                if name != 'high_value_all':
+                    CollectionPolicy.objects.create(name=name, min_ship_rank=0, min_isk_lost=threshold)
+                client = FakeClient({100: None})
+                observed = []
+                client.set_enrichment_min_isk = observed.append
+                with patch('Killboard.management.commands.killboard_probe.Command._client', return_value=client):
+                    call_command('killboard_probe', policy=name, cursor=name, start_id=100,
+                                 max_requests=1, write=True)
+                self.assertEqual(observed, [threshold])
+
+    def test_low_value_reports_advance_full_pass_without_using_identity_rpc_budget(self):
+        from Killboard.collector_transport import CollectorError, KillboardClient
+        from Killboard.models import KillReport
+        from Killboard.tests.test_collector_transport import WireSocket, envelope, response as wire_response, sent_rpc, successful_login
+        from Killboard.session_bundle import REQUIRED_METHODS
+        from Killboard.tests.test_session_bundle import with_profiles
+        stream = successful_login()
+        for index in range(24):
+            stream += wire_response(index + 5, envelope({
+                'kill_blob': '<other/>', 'kill_id': 100 + index, 'victim_character_id': 101,
+                'isk_lost': '20000000000.00',
+            }))
+        wire = WireSocket(stream)
+        client = KillboardClient(with_profiles())
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire), \
+                patch('Killboard.management.commands.killboard_probe.Command._client', return_value=client):
+            try:
+                call_command('killboard_probe', cursor='capacity', start_id=100, max_requests=24,
+                             rpc_interval=0, rpc_budget=36, write=True)
+            except CollectorError:
+                self.fail('Discarded reports must not request unprovided identity responses')
+        cursor = ProbeCursor.objects.get(name='capacity')
+        self.assertEqual(cursor.next_probe_id, 124)
+        self.assertEqual(cursor.last_success_id, 123)
+        self.assertFalse(KillReport.objects.exists())
+        self.assertEqual([sent_rpc(raw)[3][0] for raw in wire.sent[1:]],
+                         [*REQUIRED_METHODS[:4], *(['get_kill_info'] * 24)])
+        self.assertTrue(wire.closed)
+
     def test_pacer_waits_between_all_rpcs_and_enforces_total_budget(self):
         from Killboard.worker import CollectorPacer, BudgetExhaustedError
         clock = Clock()

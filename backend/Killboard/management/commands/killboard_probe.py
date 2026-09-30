@@ -126,6 +126,8 @@ class Command(BaseCommand):
                 client = self._client(options['client'])
                 if hasattr(client, 'set_before_rpc'):
                     client.set_before_rpc(pacer)
+                if hasattr(client, 'set_enrichment_min_isk'):
+                    client.set_enrichment_min_isk(policy.min_isk_lost)
                 return client
             runner = DiscoveryRunner(None, cursor=cursor, policy=policy, config=config,
                                      source=options['source'], client_factory=load_client)

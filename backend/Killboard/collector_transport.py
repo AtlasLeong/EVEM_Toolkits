@@ -10,6 +10,7 @@ rotation, PCAP/DPAPI reader, automatic scan or network work at import time.
 from __future__ import annotations
 
 import copy
+from decimal import Decimal, InvalidOperation
 import math
 from typing import Any
 
@@ -229,6 +230,7 @@ class KillboardClient:
             raise ValueError('Invalid Killboard enrichment setting.')
         self.session = KillboardSession(bundle, timeout, before_rpc=before_rpc)
         self.enrich = enrich
+        self._enrichment_min_isk = None
         self._closed = False
         self._failure: CollectorError | None = None
         self._identities = {'characters': {}, 'corporations': {}}
@@ -237,6 +239,25 @@ class KillboardClient:
     def set_before_rpc(self, callback) -> None:
         """Install one run-wide pacer without connecting or invoking it."""
         self.session.set_before_rpc(callback)
+
+    def set_enrichment_min_isk(self, value) -> None:
+        """Skip identity RPCs for losses excluded by a strict value policy.
+
+        None retains the generic/manual client's full enrichment behavior.
+        Invalid configuration is rejected before connecting or spending RPCs.
+        """
+        if value is None:
+            self._enrichment_min_isk = None
+            return
+        if isinstance(value, bool) or not isinstance(value, (Decimal, int, float, str)):
+            raise ValueError('Invalid Killboard enrichment threshold.')
+        try:
+            threshold = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            raise ValueError('Invalid Killboard enrichment threshold.') from None
+        if not threshold.is_finite() or threshold < 0:
+            raise ValueError('Invalid Killboard enrichment threshold.')
+        self._enrichment_min_isk = threshold
 
     def __enter__(self):
         if self._closed:
@@ -305,6 +326,12 @@ class KillboardClient:
 
     def _enrich_report(self, decoded):
         parsed = parse_kill_blob(decoded['kill_blob'], summary=decoded)
+        # Discovery still parses and records every verified report response,
+        # including excluded losses, so its consecutive-ID cursor can advance.
+        # Malformed/nonfinite source values are rejected by the parser above.
+        if self._enrichment_min_isk is not None and (
+                parsed['isk_lost'] is None or parsed['isk_lost'] <= self._enrichment_min_isk):
+            return decoded
         participants = [row for row in parsed['participants']
                         if type(row.get('character_id')) is int and row['character_id'] > 0][:7]
         identifiers = [parsed['victim_character_id'], *[row['character_id'] for row in participants]]

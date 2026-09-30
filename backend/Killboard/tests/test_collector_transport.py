@@ -1,6 +1,7 @@
 """Offline byte-stream transport tests; no account or server is contacted."""
 
 import importlib
+from decimal import Decimal
 import os
 from pathlib import Path
 import socket
@@ -378,6 +379,78 @@ class CollectorTransportTests(unittest.TestCase):
             with client:
                 self.assertEqual(decode_kill_info_response(client.get_kill_info(100))['kill_id'], 100)
         self.assertEqual(len(wire.sent), 6)
+
+    def test_policy_threshold_skips_identity_rpcs_for_missing_equal_or_lower_loss(self):
+        self.assertTrue(hasattr(self.transport.KillboardClient, 'set_enrichment_min_isk'),
+                        'Policy-aware enrichment threshold is missing')
+        for value in (None, '0', '19999999999.99', '20000000000.00'):
+            with self.subTest(value=value):
+                report = {'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101}
+                if value is not None:
+                    report['isk_lost'] = value
+                wire = WireSocket(successful_login() + response(5, envelope(report)))
+                with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+                    with self.transport.KillboardClient(with_profiles()) as client:
+                        client.set_enrichment_min_isk(Decimal('20000000000.00'))
+                        decoded = client.get_kill_info(100)
+                self.assertEqual(decoded['kill_id'], 100)
+                self.assertNotIn('identity_map', decoded)
+                self.assertEqual([sent_rpc(raw)[3][0] for raw in wire.sent[1:]],
+                                 list(self.bundle_module.REQUIRED_METHODS))
+
+    def test_loss_strictly_above_policy_threshold_still_enriches_identities(self):
+        self.assertTrue(hasattr(self.transport.KillboardClient, 'set_enrichment_min_isk'),
+                        'Policy-aware enrichment threshold is missing')
+        report = {'kill_blob': '<other/>', 'kill_id': 100,
+                  'victim_character_id': 101, 'isk_lost': '20000000000.01'}
+        wire = WireSocket(successful_login() + response(5, envelope(report))
+                          + response(6, [character()]) + response(7, [corporation()]))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with self.transport.KillboardClient(with_profiles()) as client:
+                client.set_enrichment_min_isk('20000000000.00')
+                decoded = client.get_kill_info(100)
+        self.assertEqual(decoded['identity_map']['characters'][101]['name'], 'Synthetic pilot')
+        self.assertEqual([sent_rpc(raw)[3][0] for raw in wire.sent[-2:]],
+                         ['get_public_info', 'get_corp_brief'])
+
+    def test_nonfinite_loss_never_spends_identity_rpcs_and_keeps_malformed_stop(self):
+        self.assertTrue(hasattr(self.transport.KillboardClient, 'set_enrichment_min_isk'),
+                        'Policy-aware enrichment threshold is missing')
+        for value in ('NaN', 'Infinity', '-Infinity'):
+            with self.subTest(value=value):
+                report = {'kill_blob': '<other/>', 'kill_id': 100,
+                          'victim_character_id': 101, 'isk_lost': value}
+                wire = WireSocket(successful_login() + response(5, envelope(report)))
+                with patch('Market.collector_protocol.socket.create_connection', return_value=wire) as connect:
+                    client = self.transport.KillboardClient(with_profiles())
+                    client.set_enrichment_min_isk(Decimal('20000000000.00'))
+                    with self.assertRaises(self.transport.CollectorError) as caught:
+                        client.get_kill_info(100)
+                    self.assertEqual(caught.exception.code, 'malformed')
+                    with self.assertRaises(self.transport.CollectorError):
+                        client.get_kill_info(101)
+                    connect.assert_called_once()
+                self.assertEqual(len(wire.sent), 6)
+                self.assertTrue(wire.closed)
+
+    def test_enrichment_threshold_validates_without_connection_and_none_restores_default(self):
+        self.assertTrue(hasattr(self.transport.KillboardClient, 'set_enrichment_min_isk'),
+                        'Policy-aware enrichment threshold is missing')
+        with patch('Market.collector_protocol.socket.create_connection') as connect:
+            client = self.transport.KillboardClient(with_profiles())
+            for value in (True, False, -1, 'NaN', 'Infinity', '', [], object()):
+                with self.subTest(value_type=type(value).__name__), self.assertRaises(ValueError):
+                    client.set_enrichment_min_isk(value)
+            connect.assert_not_called()
+        wire = WireSocket(successful_login() + response(5, envelope({
+            'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101}))
+            + response(6, [character()]) + response(7, [corporation()]))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with client:
+                client.set_enrichment_min_isk(Decimal('20000000000.00'))
+                client.set_enrichment_min_isk(None)
+                self.assertEqual(client.get_kill_info(100)['identity_map']['characters'][101]['name'],
+                                 'Synthetic pilot')
 
     def test_throttle_during_enrichment_latches_and_never_returns_partial_report(self):
         self.assertTrue(hasattr(self.transport.KillboardClient, 'get_public_info'), 'identity enrichment is missing')
