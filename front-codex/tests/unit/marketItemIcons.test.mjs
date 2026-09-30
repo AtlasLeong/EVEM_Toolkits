@@ -159,7 +159,8 @@ test('known icons render decorative lazy images with reserved square dimensions'
   assert.match(markup, /class="market-item-icon"/)
   assert.match(markup, /style="[^"]*width:40px;[^"]*height:40px/)
   assert.match(markup, /class="market-item-icon-image"/)
-  assert.match(markup, /src="\/images\/market-items\/28007000000.webp"/)
+  assert.match(markup, /src="\/images\/game-items\/823a3352e8c8c545af8305d5b684c083dd374208a45f672f2c53c877067b1360\.png"/)
+  assert.match(markup, /object-fit:contain/)
   assert.match(markup, /alt=""/)
   assert.match(markup, /width="40"/)
   assert.match(markup, /height="40"/)
@@ -234,7 +235,8 @@ test('a failed confirmed image load switches to the package fallback', async () 
 
   try {
     const outer = MarketItemIcon({ itemId: '28007000000', mapping })
-    const imageComponent = outer.props.children
+    const sharedComponent = outer.props.children
+    const imageComponent = sharedComponent.type(sharedComponent.props)
     const image = imageComponent.type(imageComponent.props)
     assert.equal(image.type, 'img')
 

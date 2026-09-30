@@ -1,30 +1,8 @@
-import { useState } from 'react'
 import { Package } from 'lucide-react'
-import { getMarketItemIcon } from '../utils/marketItemIcons'
+import GameItemImage from './GameItemImage'
 
-function MarketIconImage({ src, size }) {
-  const [failed, setFailed] = useState(false)
-
-  if (!src || failed) {
-    return <Package className="market-item-icon-fallback" size={Math.round(size / 2)} aria-hidden="true" />
-  }
-
-  return (
-    <img
-      className="market-item-icon-image"
-      src={src}
-      alt=""
-      width={size}
-      height={size}
-      loading="lazy"
-      decoding="async"
-      onError={() => setFailed(true)}
-    />
-  )
-}
-
-export default function MarketItemIcon({ itemId, size = 40, className = '', mapping }) {
-  const src = getMarketItemIcon(itemId, mapping)
+export default function MarketItemIcon({ item, itemId, src, size = 40, className = '', mapping }) {
+  const imageItem = item || { item_id: itemId }
 
   return (
     <span
@@ -33,7 +11,8 @@ export default function MarketItemIcon({ itemId, size = 40, className = '', mapp
       aria-hidden="true"
     >
       {/* A new item gets a fresh load attempt, even after the previous image failed. */}
-      <MarketIconImage key={src || 'unknown'} src={src} size={size} />
+      <GameItemImage item={imageItem} src={src} mapping={mapping} imageClassName="market-item-icon-image" width={size} height={size}
+        fallback={<Package className="market-item-icon-fallback" size={Math.round(size / 2)} aria-hidden="true" />} />
     </span>
   )
 }

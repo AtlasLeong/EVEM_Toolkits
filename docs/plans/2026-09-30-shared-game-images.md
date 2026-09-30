@@ -30,3 +30,12 @@
 - Open manufacturing locally and verify loaded images, target picker, and nested materials visually. Leave preview available to the user.
 
 Scope approval: user requested rechecking the shared source thread and integrating it for a local look. No deployment is included.
+
+## Verification results
+
+- Imported 575 exact item-ID references into 519 unique original PNGs (11.21 MiB); all 566 manufacturing references and all 48 approved market icon IDs are covered.
+- Importer fixtures cover dry-run, content hashes, dimensions including shared aliases, complete coverage, invalid IDs, unsafe public paths, destination conflicts, and linked-directory escape prevention.
+- Frontend unit suite: 441 passed. Existing manufacturing, market, and icon-verification browser suites: 26 passed. Production build and bundle budgets passed.
+- Browser inspection confirmed original 156x128 images loaded with contain sizing. A fully expanded multi-level building route had 159 shared image nodes; all 14 in-viewport images loaded. Ship picker and market list images were also visually checked.
+- Independent review found no new component blockers. Its market-scope maintenance suggestion was addressed by importing the explicit MARKET_ITEM_ICON_IDS allowlist. Final importer review caught the exact parent-directory junction case; it was reproduced by a failing test and corrected.
+- Local preview is http://127.0.0.1:5190/manufacturing. No push or deployment was performed.
