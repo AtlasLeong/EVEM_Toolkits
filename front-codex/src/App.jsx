@@ -3,6 +3,7 @@ import { lazy, Suspense, useContext, useEffect } from 'react'
 import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
+import useKillboardAccess from './hooks/useKillboardAccess'
 const LoginPage = lazy(() => import('./pages/Login'))
 const InfoCenterPage = lazy(() => import('./pages/InfoCenter'))
 const FraudListPage = lazy(() => import('./pages/FraudList'))
@@ -48,6 +49,15 @@ function RequireAuth({ children }) {
   return children
 }
 
+function RequireKillboardAccess({ children }) {
+  const { isAuthenticated } = useContext(AuthContext)
+  const access = useKillboardAccess()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (access.loading) return pageFallback('验证击毁情报权限')
+  if (!access.allowed) return <Navigate to="/market" replace />
+  return children
+}
+
 export default function App() {
   return (
     <div className="site-frame">
@@ -61,8 +71,8 @@ export default function App() {
             <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
             <Route path="/market" element={appRoute(<MarketPricesPage />)} />
             <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
-            <Route path="/killboard" element={appRoute(<KillboardPage />)} />
-            <Route path="/killboard/:killId" element={appRoute(<KillboardPage />)} />
+            <Route path="/killboard" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
+            <Route path="/killboard/:killId" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
             <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
             <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
             <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />

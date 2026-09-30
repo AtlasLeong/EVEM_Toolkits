@@ -165,6 +165,54 @@ class KillBlobParserTests(unittest.TestCase):
         self.assertEqual(result["items"][1]["quantity_unknown"], 5)
         self.assertEqual(result["items"][1]["status"], "destroyed")
 
+    def test_enriches_compact_ids_from_verified_identity_maps(self):
+        blob = (
+            '<attackers>'
+            '<a c="101" r="201" a="301" s="401" w="501" d="100"/>'
+            '</attackers>'
+        )
+        identity = {
+            "characters": {
+                101: {
+                    "name": "刀功料理",
+                    "corporation_id": 201,
+                    "alliance_id": 301,
+                },
+                42: {
+                    "name": "三天没挨打",
+                    "corporation_id": 202,
+                    "alliance_id": 302,
+                },
+            },
+            "corporations": {
+                201: {"name": "罗德骑士团", "ticker": "KOFR"},
+                202: {"name": "双子王的暗卫喵", "ticker": "GCG1"},
+            },
+            "alliances": {
+                301: {"name": "联盟一"},
+                302: {"name": "联盟二"},
+            },
+        }
+
+        result = parse_kill_blob(
+            blob,
+            summary={
+                "kill_id": 19748417,
+                "victim_character_id": 42,
+                "victim_corporation_id": 202,
+                "victim_alliance_id": 302,
+            },
+            identity_map=identity,
+        )
+
+        participant = result["participants"][0]
+        self.assertEqual(participant["character_name"], "刀功料理")
+        self.assertEqual(participant["corporation_name"], "罗德骑士团")
+        self.assertEqual(participant["alliance_name"], "联盟一")
+        self.assertEqual(result["victim_name"], "三天没挨打")
+        self.assertEqual(result["victim_corporation_name"], "双子王的暗卫喵")
+        self.assertEqual(result["victim_alliance_name"], "联盟二")
+
     def test_captured_blob_without_attackers_keeps_summary_identity_and_unknown_count(self):
         result = parse_kill_blob(
             '<other><o data=-3.0 isk_ship=1.0/></other>',

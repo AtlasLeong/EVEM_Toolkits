@@ -1,23 +1,51 @@
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.db.models import Q
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import ValidationError
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 
-from .models import KillReport, ProbeRun, ShipClass
+from .access import KillboardOwnerPermission, can_view_killboard
+from .models import KillReport, ProbeCursor, ProbeRun, ShipClass
+from .worker import paused_reason
 from .serializers import detail_payload, report_payload
+from .security import system_security_map
 
 
-class PublicKillboardView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
+class PrivateKillboardResponseMixin:
+    """Prevent private report data from being shared by browser/CDN caches."""
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        response['Cache-Control'] = 'no-store, private'
+        vary = {part.strip() for part in response.get('Vary', '').split(',') if part.strip()}
+        vary.add('Authorization')
+        response['Vary'] = ', '.join(sorted(vary))
+        return response
+
+
+class PrivateKillboardView(PrivateKillboardResponseMixin, APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, KillboardOwnerPermission]
     throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'killboard_public'
+    throttle_scope = 'killboard_private'
+
+
+class KillboardAccessView(PrivateKillboardResponseMixin, APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'killboard_private'
+
+    def get(self, request):
+        return Response({'can_view_killboard': can_view_killboard(request.user)})
 
 
 def _page(request):
@@ -52,7 +80,15 @@ def _day_start(value):
     return timezone.make_aware(point) if timezone.is_aware(timezone.now()) else point
 
 
-class ReportsView(PublicKillboardView):
+def _minimum_isk_lost():
+    try:
+        value = Decimal(str(getattr(settings, 'KILLBOARD_MIN_ISK_LOST', '20000000000.00')))
+        return value if value.is_finite() and value >= 0 else Decimal('20000000000.00')
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal('20000000000.00')
+
+
+class ReportsView(PrivateKillboardView):
     def get(self, request):
         page, size = _page(request)
         query = _text(request, 'q')
@@ -64,7 +100,7 @@ class ReportsView(PublicKillboardView):
         to_date = _date(_text(request, 'to', 10), 'to')
         if from_date and to_date and from_date > to_date:
             raise ValidationError({'to': 'to must not be earlier than from.'})
-        rows = KillReport.objects.all()
+        rows = KillReport.objects.filter(isk_lost__gt=_minimum_isk_lost())
         if query:
             rows = rows.filter(
                 Q(ship_name__icontains=query) | Q(system_name__icontains=query)
@@ -94,15 +130,17 @@ class ReportsView(PublicKillboardView):
         rows = rows.order_by('-kill_time_display', '-kill_id')
         count = rows.count()
         offset = (page - 1) * size
+        page_rows = list(rows[offset:offset + size])
+        security = system_security_map(row.system_id for row in page_rows)
         return Response({
             'count': count,
             'page': page,
             'page_size': size,
-            'results': [report_payload(row) for row in rows[offset:offset + size]],
+            'results': [report_payload(row, security=security.get(str(row.system_id))) for row in page_rows],
         })
 
 
-class ReportDetailView(PublicKillboardView):
+class ReportDetailView(PrivateKillboardView):
     def get(self, request, kill_id):
         try:
             kill_id = int(kill_id)
@@ -111,12 +149,13 @@ class ReportDetailView(PublicKillboardView):
         if kill_id < 1:
             raise ValidationError({'kill_id': 'kill_id must be positive.'})
         report = get_object_or_404(
-            KillReport.objects.prefetch_related('participants', 'items'), kill_id=kill_id,
+            KillReport.objects.prefetch_related('participants', 'items').filter(isk_lost__gt=_minimum_isk_lost()), kill_id=kill_id,
         )
-        return Response(detail_payload(report))
+        security = system_security_map([report.system_id]).get(str(report.system_id))
+        return Response(detail_payload(report, security=security))
 
 
-class FiltersView(PublicKillboardView):
+class FiltersView(PrivateKillboardView):
     def get(self, request):
         return Response({'ship_classes': [
             {'key': row.key, 'label': row.label, 'rank': row.rank}
@@ -124,13 +163,23 @@ class FiltersView(PublicKillboardView):
         ]})
 
 
-class StatusView(PublicKillboardView):
+class StatusView(PrivateKillboardView):
     def get(self, request):
-        latest = KillReport.objects.order_by('-kill_time_display', '-kill_id').first()
-        latest_run = ProbeRun.objects.order_by('-created_at_ms', '-id').first()
+        latest = KillReport.objects.filter(isk_lost__gt=_minimum_isk_lost()).order_by('-kill_time_display', '-kill_id').first()
+        cursor = ProbeCursor.objects.filter(name='latest').first()
+        latest_run = ProbeRun.objects.filter(cursor=cursor).order_by('-created_at_ms', '-id').first() if cursor else None
+        configured = bool(getattr(settings, 'KILLBOARD_COLLECTION_ENABLED', False))
+        paused = paused_reason(cursor) if cursor else ''
+        ready = configured and cursor is not None and cursor.next_probe_id is not None and not paused
         return Response({
-            'state': 'not_configured' if latest_run is None else latest_run.status,
-            'collection_enabled': False,
+            'state': paused or ('not_configured' if not ready else latest_run.status if latest_run else 'ready'),
+            'configured': configured,
+            'collection_enabled': ready,
             'last_collected_at': latest_run.finished_at_ms if latest_run else None,
             'latest_kill_id': str(latest.kill_id) if latest else None,
+            'candidate_kill_id': str(cursor.candidate_id) if cursor and cursor.candidate_id else None,
+            'coverage_verified': False,
+            'cooldown_until_ms': cursor.cooldown_until_ms if cursor else None,
+            'stop_reason': latest_run.stop_reason if latest_run else None,
+            'last_success_id': str(cursor.last_success_id) if cursor and cursor.last_success_id else None,
         })

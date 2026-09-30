@@ -1,0 +1,24 @@
+[Unit]
+Description=EVEM Killboard collection pass (requires an operator-supplied client)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/EVEMTK/deploy/current/backend/Killboard/management/commands/killboard_probe.py
+ConditionPathExists=/EVEMTK/deploy/shared/killboard/collector.env
+
+[Service]
+Type=oneshot
+User=evem-killboard
+Group=evem-killboard
+WorkingDirectory=/EVEMTK/deploy/current/backend
+EnvironmentFile=/EVEMTK/deploy/shared/killboard/collector.env
+EnvironmentFile=/EVEMTK/deploy/shared/killboard/provision/database.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/EVEMTK/deploy/shared/market-python
+ExecStart=/bin/sh /EVEMTK/deploy/current/backend/Killboard/run-collector.sh
+TimeoutStartSec=4min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyDirectories=/EVEMTK
+ReadWritePaths=/EVEMTK/deploy/shared/killboard/collector.lock

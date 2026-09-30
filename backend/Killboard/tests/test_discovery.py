@@ -1,13 +1,14 @@
 """Red tests for bounded, classified kill-id discovery."""
 
 from datetime import datetime, timezone
+from Killboard.models import epoch_ms
 import msgpack
 
 from django.core.management import call_command
 from django.test import TestCase
 
 from Killboard.discovery import DiscoveryConfig, DiscoveryRunner, ProbeStatus
-from Killboard.models import CollectionPolicy, ProbeCursor, ShipClass
+from Killboard.models import CollectionPolicy, KillReport, ProbeCursor, ProbeRun, ShipClass
 
 
 def response(kill_id, when="2026-09-28T12:00:00+00:00"):
@@ -23,9 +24,9 @@ def response(kill_id, when="2026-09-28T12:00:00+00:00"):
     return {"kill_blob": blob}
 
 
-def captured_response(kill_id):
+def captured_response(kill_id, identity_map=None):
     blob = '<attackers><a c="8" s="401" w="501" d="100" /></attackers><other />'
-    nested = msgpack.packb({
+    payload = {
         "kill_id": kill_id,
         "solar_system_id": 30000001,
         "victim_ship_type_id": 9001,
@@ -34,7 +35,10 @@ def captured_response(kill_id):
         "final_damage_done": 100,
         "kill_time": "2026-09-28T12:00:00",
         "kill_blob": blob,
-    }, use_bin_type=True)
+    }
+    if identity_map is not None:
+        payload["identity_map"] = identity_map
+    nested = msgpack.packb(payload, use_bin_type=True)
     inner = msgpack.packb([71, nested], use_bin_type=True)
     return msgpack.packb(msgpack.ExtType(19, inner), use_bin_type=True)
 
@@ -81,7 +85,10 @@ class DiscoveryTests(TestCase):
     def test_runner_passes_captured_summary_to_parser(self):
         cursor = ProbeCursor.objects.create(name="captured-summary", next_probe_id=100)
         runner = DiscoveryRunner(
-            FakeClient({100: captured_response(100)}),
+            FakeClient({100: captured_response(100, {
+                "characters": {"8": {"name": "击毁者", "corporation_id": 9}},
+                "corporations": {"9": {"name": "侦察军团"}},
+            })}),
             cursor=cursor,
             policy=None,
             config=DiscoveryConfig(max_requests=1),
@@ -90,6 +97,9 @@ class DiscoveryTests(TestCase):
         run = runner.run()
 
         self.assertEqual(run.report_count, 1)
+        participant = KillReport.objects.get(kill_id=100).participants.get()
+        self.assertEqual(participant.character_name, "击毁者")
+        self.assertEqual(participant.corporation_name, "侦察军团")
 
     def test_contiguous_reports_advance_cursor_and_stop_on_empty_hole(self):
         client = FakeClient({
@@ -270,3 +280,70 @@ class DiscoveryTests(TestCase):
         self.assertEqual(policy.min_ship_rank, 4)
         self.assertNotIn("battlecruiser", policy.allowed_class_keys)
         self.assertEqual(ShipClass.objects.get(key="battlecruiser").rank, 3)
+
+    def test_expired_running_run_is_recovered_before_next_run(self):
+        now = epoch_ms()
+        cursor = ProbeCursor.objects.create(name="orphan", next_probe_id=100)
+        orphan = ProbeRun.objects.create(
+            cursor=cursor,
+            status=ProbeRun.Status.RUNNING,
+            started_at_ms=now - 120_000,
+            lease_expires_at_ms=now - 1,
+            lease_owner="old-worker",
+        )
+        runner = DiscoveryRunner(
+            FakeClient({100: response(100)}),
+            cursor=cursor,
+            policy=self.policy,
+            config=DiscoveryConfig(max_requests=1),
+        )
+
+        run = runner.run()
+
+        orphan.refresh_from_db()
+        self.assertEqual(orphan.status, ProbeRun.Status.FAILED)
+        self.assertEqual(orphan.stop_reason, "lease_expired")
+        self.assertEqual(run.status, ProbeRun.Status.STOPPED)
+        self.assertIsNone(run.lease_expires_at_ms)
+        self.assertEqual(run.lease_owner, "")
+
+    def test_default_value_policy_is_repaired_to_all_classes_and_enabled(self):
+        from decimal import Decimal
+        from Killboard.management.commands.killboard_probe import Command, DEFAULT_POLICY
+
+        existing = CollectionPolicy.objects.create(
+            name=DEFAULT_POLICY,
+            enabled=False,
+            min_ship_rank=4,
+            allowed_class_keys=["battleship"],
+            min_isk_lost=Decimal("1.00"),
+        )
+
+        policy = Command()._policy(DEFAULT_POLICY)
+
+        existing.refresh_from_db()
+        self.assertEqual(policy.pk, existing.pk)
+        self.assertTrue(existing.enabled)
+        self.assertEqual(existing.min_ship_rank, 0)
+        self.assertEqual(existing.allowed_class_keys, [])
+        self.assertEqual(existing.min_isk_lost, Decimal("20000000000.00"))
+
+    def test_active_lease_still_blocks_second_run(self):
+        now = epoch_ms()
+        cursor = ProbeCursor.objects.create(name="active-lease", next_probe_id=100)
+        ProbeRun.objects.create(
+            cursor=cursor,
+            status=ProbeRun.Status.RUNNING,
+            started_at_ms=now,
+            lease_expires_at_ms=now + 120_000,
+            lease_owner="active-worker",
+        )
+        runner = DiscoveryRunner(
+            FakeClient({100: response(100)}),
+            cursor=cursor,
+            policy=self.policy,
+            config=DiscoveryConfig(max_requests=1),
+        )
+
+        with self.assertRaises(RuntimeError):
+            runner.run()

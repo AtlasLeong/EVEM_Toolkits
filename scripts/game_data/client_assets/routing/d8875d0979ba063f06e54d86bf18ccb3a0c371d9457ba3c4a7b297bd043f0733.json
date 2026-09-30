@@ -1,0 +1,4562 @@
+{
+  "schemaVersion": 1,
+  "currentThxSha256": "d8875d0979ba063f06e54d86bf18ccb3a0c371d9457ba3c4a7b297bd043f0733",
+  "scope": "exact affected itemIds only; do not apply globally solely by iconId",
+  "overrides": {
+    "gui_v1/icon/item/16000000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16000000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16000000001.ktx",
+      "iconId": "16000000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16000000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16000000001": {
+            "item_icon_bg": 16000001
+          },
+          "16000000002": {
+            "item_icon_bg": 16000002
+          },
+          "16000000003": {
+            "item_icon_bg": 16000003
+          },
+          "16000000004": {
+            "item_icon_bg": 16000004
+          },
+          "16000000005": {
+            "item_icon_bg": 16000005
+          },
+          "16000000006": {
+            "item_icon_bg": 16000006
+          },
+          "16000000007": {
+            "item_icon_bg": 16000007
+          },
+          "16000000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000000": {
+            "item_icon_bg": 16000001
+          },
+          "66000000001": {
+            "item_icon_bg": 16000002
+          },
+          "66000000002": {
+            "item_icon_bg": 16000003
+          },
+          "66000000003": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16000000001",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000002",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000003",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000004",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000005",
+            "logicalPath": "staticdata/items/64.sd",
+            "digest": "652ffea1727abb61327ec48d4186791c",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000006",
+            "logicalPath": "staticdata/items/65.sd",
+            "digest": "6ef1c1626ebfca1290031d7032161043",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000007",
+            "logicalPath": "staticdata/items/66.sd",
+            "digest": "ac0e0fcb4e5b76038cb53895c05bdcd4",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "16000000008",
+            "logicalPath": "staticdata/items/67.sd",
+            "digest": "6066a6537923986a23e09c940952480e",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "66000000000",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "66000000001",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "66000000002",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16000000001
+          },
+          {
+            "itemId": "66000000003",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16000000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16000000001",
+        "16000000002",
+        "16000000003",
+        "16000000004",
+        "16000000005",
+        "16000000006",
+        "16000000007",
+        "16000000008",
+        "66000000000",
+        "66000000001",
+        "66000000002",
+        "66000000003"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16000000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16000000001.ktx",
+        "primaryKey": 283633065,
+        "tableKey": 283633065,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 22573,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "9175486c807bc75a0059085e32870a99",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16001000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16001000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16001000001.ktx",
+      "iconId": "16001000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16001000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16001000001": {
+            "item_icon_bg": 16000001
+          },
+          "16001000002": {
+            "item_icon_bg": 16000002
+          },
+          "16001000003": {
+            "item_icon_bg": 16000003
+          },
+          "16001000004": {
+            "item_icon_bg": 16000004
+          },
+          "16001000005": {
+            "item_icon_bg": 16000005
+          },
+          "16001000006": {
+            "item_icon_bg": 16000006
+          },
+          "16001000007": {
+            "item_icon_bg": 16000007
+          },
+          "16001000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000004": {
+            "item_icon_bg": 16000001
+          },
+          "66000000005": {
+            "item_icon_bg": 16000002
+          },
+          "66000000006": {
+            "item_icon_bg": 16000003
+          },
+          "66000000007": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16001000001",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000002",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000003",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000004",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000005",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000006",
+            "logicalPath": "staticdata/items/64.sd",
+            "digest": "652ffea1727abb61327ec48d4186791c",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000007",
+            "logicalPath": "staticdata/items/65.sd",
+            "digest": "6ef1c1626ebfca1290031d7032161043",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "16001000008",
+            "logicalPath": "staticdata/items/66.sd",
+            "digest": "ac0e0fcb4e5b76038cb53895c05bdcd4",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "66000000004",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "66000000005",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "66000000006",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16001000001
+          },
+          {
+            "itemId": "66000000007",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16001000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16001000001",
+        "16001000002",
+        "16001000003",
+        "16001000004",
+        "16001000005",
+        "16001000006",
+        "16001000007",
+        "16001000008",
+        "66000000004",
+        "66000000005",
+        "66000000006",
+        "66000000007"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16001000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16001000001.ktx",
+        "primaryKey": 3143858520,
+        "tableKey": 3143858520,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 41014,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "b7006b011adea5102901acedcf7984a9",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16002000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16002000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16002000001.ktx",
+      "iconId": "16002000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16002000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16002000001": {
+            "item_icon_bg": 16000001
+          },
+          "16002000002": {
+            "item_icon_bg": 16000002
+          },
+          "16002000003": {
+            "item_icon_bg": 16000003
+          },
+          "16002000004": {
+            "item_icon_bg": 16000004
+          },
+          "16002000005": {
+            "item_icon_bg": 16000005
+          },
+          "16002000006": {
+            "item_icon_bg": 16000006
+          },
+          "16002000007": {
+            "item_icon_bg": 16000007
+          },
+          "16002000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000008": {
+            "item_icon_bg": 16000001
+          },
+          "66000000009": {
+            "item_icon_bg": 16000002
+          },
+          "66000000010": {
+            "item_icon_bg": 16000003
+          },
+          "66000000011": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16002000001",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000002",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000003",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000004",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000005",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000006",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000007",
+            "logicalPath": "staticdata/items/64.sd",
+            "digest": "652ffea1727abb61327ec48d4186791c",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "16002000008",
+            "logicalPath": "staticdata/items/65.sd",
+            "digest": "6ef1c1626ebfca1290031d7032161043",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "66000000008",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "66000000009",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "66000000010",
+            "logicalPath": "staticdata/items/64.sd",
+            "digest": "652ffea1727abb61327ec48d4186791c",
+            "fieldValue": 16002000001
+          },
+          {
+            "itemId": "66000000011",
+            "logicalPath": "staticdata/items/65.sd",
+            "digest": "6ef1c1626ebfca1290031d7032161043",
+            "fieldValue": 16002000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16002000001",
+        "16002000002",
+        "16002000003",
+        "16002000004",
+        "16002000005",
+        "16002000006",
+        "16002000007",
+        "16002000008",
+        "66000000008",
+        "66000000009",
+        "66000000010",
+        "66000000011"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16002000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16002000001.ktx",
+        "primaryKey": 3106960330,
+        "tableKey": 3106960330,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 38369,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "f06ea95a1e28a7fe0c82a7897742d9f7",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16003000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16003000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16003000001.ktx",
+      "iconId": "16003000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16003000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16003000001": {
+            "item_icon_bg": 16000001
+          },
+          "16003000002": {
+            "item_icon_bg": 16000002
+          },
+          "16003000003": {
+            "item_icon_bg": 16000003
+          },
+          "16003000004": {
+            "item_icon_bg": 16000004
+          },
+          "16003000005": {
+            "item_icon_bg": 16000005
+          },
+          "16003000006": {
+            "item_icon_bg": 16000006
+          },
+          "16003000007": {
+            "item_icon_bg": 16000007
+          },
+          "16003000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000012": {
+            "item_icon_bg": 16000001
+          },
+          "66000000013": {
+            "item_icon_bg": 16000002
+          },
+          "66000000014": {
+            "item_icon_bg": 16000003
+          },
+          "66000000015": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16003000001",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000002",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000003",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000004",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000005",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000006",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000007",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "16003000008",
+            "logicalPath": "staticdata/items/64.sd",
+            "digest": "652ffea1727abb61327ec48d4186791c",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "66000000012",
+            "logicalPath": "staticdata/items/66.sd",
+            "digest": "ac0e0fcb4e5b76038cb53895c05bdcd4",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "66000000013",
+            "logicalPath": "staticdata/items/67.sd",
+            "digest": "6066a6537923986a23e09c940952480e",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "66000000014",
+            "logicalPath": "staticdata/items/68.sd",
+            "digest": "c7e37e28e83fcf80fbadda90b1329cde",
+            "fieldValue": 16003000001
+          },
+          {
+            "itemId": "66000000015",
+            "logicalPath": "staticdata/items/69.sd",
+            "digest": "63d71b9f46cf424e19d5fb27ea614e28",
+            "fieldValue": 16003000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16003000001",
+        "16003000002",
+        "16003000003",
+        "16003000004",
+        "16003000005",
+        "16003000006",
+        "16003000007",
+        "16003000008",
+        "66000000012",
+        "66000000013",
+        "66000000014",
+        "66000000015"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16003000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16003000001.ktx",
+        "primaryKey": 3071718577,
+        "tableKey": 3071718577,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 40939,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "153741706e8962c3825c314d8c61adfc",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16004000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16004000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16004000001.ktx",
+      "iconId": "16004000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16004000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16004000001": {
+            "item_icon_bg": 16000001
+          },
+          "16004000002": {
+            "item_icon_bg": 16000002
+          },
+          "16004000003": {
+            "item_icon_bg": 16000003
+          },
+          "16004000004": {
+            "item_icon_bg": 16000004
+          },
+          "16004000005": {
+            "item_icon_bg": 16000005
+          },
+          "16004000006": {
+            "item_icon_bg": 16000006
+          },
+          "16004000007": {
+            "item_icon_bg": 16000007
+          },
+          "16004000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000016": {
+            "item_icon_bg": 16000001
+          },
+          "66000000017": {
+            "item_icon_bg": 16000002
+          },
+          "66000000018": {
+            "item_icon_bg": 16000003
+          },
+          "66000000019": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16004000001",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000002",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000003",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000004",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000005",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000006",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000007",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "16004000008",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "66000000016",
+            "logicalPath": "staticdata/items/70.sd",
+            "digest": "ac107c4511ca2c4210cc3be1b3e91ff1",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "66000000017",
+            "logicalPath": "staticdata/items/71.sd",
+            "digest": "1f8daf2772b3a494b99819a9e0d9fedd",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "66000000018",
+            "logicalPath": "staticdata/items/72.sd",
+            "digest": "27628bf514dc420a82051e4d2dfd1439",
+            "fieldValue": 16004000001
+          },
+          {
+            "itemId": "66000000019",
+            "logicalPath": "staticdata/items/73.sd",
+            "digest": "68de2b9ff28b3b0b5390a66876707e62",
+            "fieldValue": 16004000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16004000001",
+        "16004000002",
+        "16004000003",
+        "16004000004",
+        "16004000005",
+        "16004000006",
+        "16004000007",
+        "16004000008",
+        "66000000016",
+        "66000000017",
+        "66000000018",
+        "66000000019"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16004000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16004000001.ktx",
+        "primaryKey": 2888648308,
+        "tableKey": 2888648308,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 37858,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "d8b448ae2ecc4dc9862d3a2af586561e",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16005000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16005000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16005000001.ktx",
+      "iconId": "16005000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16005000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16005000001": {
+            "item_icon_bg": 16000001
+          },
+          "16005000002": {
+            "item_icon_bg": 16000002
+          },
+          "16005000003": {
+            "item_icon_bg": 16000003
+          },
+          "16005000004": {
+            "item_icon_bg": 16000004
+          },
+          "16005000005": {
+            "item_icon_bg": 16000005
+          },
+          "16005000006": {
+            "item_icon_bg": 16000006
+          },
+          "16005000007": {
+            "item_icon_bg": 16000007
+          },
+          "16005000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000020": {
+            "item_icon_bg": 16000001
+          },
+          "66000000021": {
+            "item_icon_bg": 16000002
+          },
+          "66000000022": {
+            "item_icon_bg": 16000003
+          },
+          "66000000023": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16005000001",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000002",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000003",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000004",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000005",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000006",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000007",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "16005000008",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "66000000020",
+            "logicalPath": "staticdata/items/74.sd",
+            "digest": "faaf30e26edc633957a67899f8eddfa5",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "66000000021",
+            "logicalPath": "staticdata/items/75.sd",
+            "digest": "76ec00464092e4725d650b9b2d53ae31",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "66000000022",
+            "logicalPath": "staticdata/items/76.sd",
+            "digest": "f251fd04266bb289c51e1ff71c5658f3",
+            "fieldValue": 16005000001
+          },
+          {
+            "itemId": "66000000023",
+            "logicalPath": "staticdata/items/77.sd",
+            "digest": "2f9dd3c182609b7ce8a0a72f6a75ae82",
+            "fieldValue": 16005000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16005000001",
+        "16005000002",
+        "16005000003",
+        "16005000004",
+        "16005000005",
+        "16005000006",
+        "16005000007",
+        "16005000008",
+        "66000000020",
+        "66000000021",
+        "66000000022",
+        "66000000023"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16005000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16005000001.ktx",
+        "primaryKey": 1129783708,
+        "tableKey": 1129783708,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 37681,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "be0b2357b50b1e171d9733d41bd465cc",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16006000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16006000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16006000001.ktx",
+      "iconId": "16006000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16006000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16006000001": {
+            "item_icon_bg": 16000001
+          },
+          "16006000002": {
+            "item_icon_bg": 16000002
+          },
+          "16006000003": {
+            "item_icon_bg": 16000003
+          },
+          "16006000004": {
+            "item_icon_bg": 16000004
+          },
+          "16006000005": {
+            "item_icon_bg": 16000005
+          },
+          "16006000006": {
+            "item_icon_bg": 16000006
+          },
+          "16006000007": {
+            "item_icon_bg": 16000007
+          },
+          "16006000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000024": {
+            "item_icon_bg": 16000001
+          },
+          "66000000025": {
+            "item_icon_bg": 16000002
+          },
+          "66000000026": {
+            "item_icon_bg": 16000003
+          },
+          "66000000027": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16006000001",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000002",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000003",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000004",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000005",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000006",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000007",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "16006000008",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "66000000024",
+            "logicalPath": "staticdata/items/78.sd",
+            "digest": "5c67892201feba23610ffed22bc7b950",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "66000000025",
+            "logicalPath": "staticdata/items/79.sd",
+            "digest": "567bfa85887182cc8f339c625c840186",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "66000000026",
+            "logicalPath": "staticdata/items/80.sd",
+            "digest": "9aeae0633187d62f72987d0dad1faadb",
+            "fieldValue": 16006000001
+          },
+          {
+            "itemId": "66000000027",
+            "logicalPath": "staticdata/items/81.sd",
+            "digest": "c09d62336e5675a86fc2ce772b9e0956",
+            "fieldValue": 16006000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16006000001",
+        "16006000002",
+        "16006000003",
+        "16006000004",
+        "16006000005",
+        "16006000006",
+        "16006000007",
+        "16006000008",
+        "66000000024",
+        "66000000025",
+        "66000000026",
+        "66000000027"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16006000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16006000001.ktx",
+        "primaryKey": 3989646115,
+        "tableKey": 3989646115,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 37633,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "588ea71790cb5f1617f31116632c8901",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16007000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16007000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16007000001.ktx",
+      "iconId": "16007000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16007000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16007000001": {
+            "item_icon_bg": 16000001
+          },
+          "16007000002": {
+            "item_icon_bg": 16000002
+          },
+          "16007000003": {
+            "item_icon_bg": 16000003
+          },
+          "16007000004": {
+            "item_icon_bg": 16000004
+          },
+          "16007000005": {
+            "item_icon_bg": 16000005
+          },
+          "16007000006": {
+            "item_icon_bg": 16000006
+          },
+          "16007000007": {
+            "item_icon_bg": 16000007
+          },
+          "16007000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000028": {
+            "item_icon_bg": 16000001
+          },
+          "66000000029": {
+            "item_icon_bg": 16000002
+          },
+          "66000000030": {
+            "item_icon_bg": 16000003
+          },
+          "66000000031": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16007000001",
+            "logicalPath": "staticdata/items/53.sd",
+            "digest": "eb88492a55a6ee1910e68204859038ba",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000002",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000003",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000004",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000005",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000006",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000007",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "16007000008",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "66000000028",
+            "logicalPath": "staticdata/items/82.sd",
+            "digest": "49223266b0e1e774e147a721f69ffca5",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "66000000029",
+            "logicalPath": "staticdata/items/83.sd",
+            "digest": "adf26a9eff13073fdadf065c6c5b150c",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "66000000030",
+            "logicalPath": "staticdata/items/84.sd",
+            "digest": "dd560487f1bf7d0763633cdfae5b1843",
+            "fieldValue": 16007000001
+          },
+          {
+            "itemId": "66000000031",
+            "logicalPath": "staticdata/items/85.sd",
+            "digest": "17b5cf5ce8b9764ec94dcf669d3b7617",
+            "fieldValue": 16007000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16007000001",
+        "16007000002",
+        "16007000003",
+        "16007000004",
+        "16007000005",
+        "16007000006",
+        "16007000007",
+        "16007000008",
+        "66000000028",
+        "66000000029",
+        "66000000030",
+        "66000000031"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16007000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16007000001.ktx",
+        "primaryKey": 3142190197,
+        "tableKey": 3142190197,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 37530,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "7883e481c1972fdeddc306c48f315e1c",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16008000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16008000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16008000001.ktx",
+      "iconId": "16008000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16008000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16008000001": {
+            "item_icon_bg": 16000001
+          },
+          "16008000002": {
+            "item_icon_bg": 16000002
+          },
+          "16008000003": {
+            "item_icon_bg": 16000003
+          },
+          "16008000004": {
+            "item_icon_bg": 16000004
+          },
+          "16008000005": {
+            "item_icon_bg": 16000005
+          },
+          "16008000006": {
+            "item_icon_bg": 16000006
+          },
+          "16008000007": {
+            "item_icon_bg": 16000007
+          },
+          "16008000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000032": {
+            "item_icon_bg": 16000001
+          },
+          "66000000033": {
+            "item_icon_bg": 16000002
+          },
+          "66000000034": {
+            "item_icon_bg": 16000003
+          },
+          "66000000035": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16008000001",
+            "logicalPath": "staticdata/items/52.sd",
+            "digest": "f0e613ed9e57ea661454218782a37f9c",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000002",
+            "logicalPath": "staticdata/items/53.sd",
+            "digest": "eb88492a55a6ee1910e68204859038ba",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000003",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000004",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000005",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000006",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000007",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "16008000008",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "66000000032",
+            "logicalPath": "staticdata/items/86.sd",
+            "digest": "919c3bb84a16401ce0e530724150757f",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "66000000033",
+            "logicalPath": "staticdata/items/87.sd",
+            "digest": "d22171438d38b7cf865d41bcd41bd7e8",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "66000000034",
+            "logicalPath": "staticdata/items/88.sd",
+            "digest": "8c131c86e312fbd515b5df11316bb541",
+            "fieldValue": 16008000001
+          },
+          {
+            "itemId": "66000000035",
+            "logicalPath": "staticdata/items/89.sd",
+            "digest": "4651f1a63fb5724a6f629ce3083dcc5f",
+            "fieldValue": 16008000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16008000001",
+        "16008000002",
+        "16008000003",
+        "16008000004",
+        "16008000005",
+        "16008000006",
+        "16008000007",
+        "16008000008",
+        "66000000032",
+        "66000000033",
+        "66000000034",
+        "66000000035"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16008000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16008000001.ktx",
+        "primaryKey": 290428861,
+        "tableKey": 290428861,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 38993,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "81573a24b8d15df54943bc8a73e22492",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16009000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16009000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16009000001.ktx",
+      "iconId": "16009000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16009000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16009000001": {
+            "item_icon_bg": 16000001
+          },
+          "16009000002": {
+            "item_icon_bg": 16000002
+          },
+          "16009000003": {
+            "item_icon_bg": 16000003
+          },
+          "16009000004": {
+            "item_icon_bg": 16000004
+          },
+          "16009000005": {
+            "item_icon_bg": 16000005
+          },
+          "16009000006": {
+            "item_icon_bg": 16000006
+          },
+          "16009000007": {
+            "item_icon_bg": 16000007
+          },
+          "16009000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000036": {
+            "item_icon_bg": 16000001
+          },
+          "66000000037": {
+            "item_icon_bg": 16000002
+          },
+          "66000000038": {
+            "item_icon_bg": 16000003
+          },
+          "66000000039": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16009000001",
+            "logicalPath": "staticdata/items/51.sd",
+            "digest": "8f270f41ec630b4024ad4fc6f5cc0741",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000002",
+            "logicalPath": "staticdata/items/52.sd",
+            "digest": "f0e613ed9e57ea661454218782a37f9c",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000003",
+            "logicalPath": "staticdata/items/53.sd",
+            "digest": "eb88492a55a6ee1910e68204859038ba",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000004",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000005",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000006",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000007",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "16009000008",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "66000000036",
+            "logicalPath": "staticdata/items/90.sd",
+            "digest": "1cdea7eaacd85c4476c2f483a579d20e",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "66000000037",
+            "logicalPath": "staticdata/items/91.sd",
+            "digest": "ac86a13160b0d792cd89e297c69c93df",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "66000000038",
+            "logicalPath": "staticdata/items/92.sd",
+            "digest": "fbb518290dc7dfe14d5abd54afdf7b6b",
+            "fieldValue": 16009000001
+          },
+          {
+            "itemId": "66000000039",
+            "logicalPath": "staticdata/items/93.sd",
+            "digest": "04b7a73ea97b8805fa688d8df543e45a",
+            "fieldValue": 16009000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16009000001",
+        "16009000002",
+        "16009000003",
+        "16009000004",
+        "16009000005",
+        "16009000006",
+        "16009000007",
+        "16009000008",
+        "66000000036",
+        "66000000037",
+        "66000000038",
+        "66000000039"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16009000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16009000001.ktx",
+        "primaryKey": 3289828695,
+        "tableKey": 3289828695,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 41054,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "3bd579f640bfae5edba8a564bdf5e787",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16010000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16010000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16010000001.ktx",
+      "iconId": "16010000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16010000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16010000001": {
+            "item_icon_bg": 16000001
+          },
+          "16010000002": {
+            "item_icon_bg": 16000002
+          },
+          "16010000003": {
+            "item_icon_bg": 16000003
+          },
+          "16010000004": {
+            "item_icon_bg": 16000004
+          },
+          "16010000005": {
+            "item_icon_bg": 16000005
+          },
+          "16010000006": {
+            "item_icon_bg": 16000006
+          },
+          "16010000007": {
+            "item_icon_bg": 16000007
+          },
+          "16010000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000040": {
+            "item_icon_bg": 16000001
+          },
+          "66000000041": {
+            "item_icon_bg": 16000002
+          },
+          "66000000042": {
+            "item_icon_bg": 16000003
+          },
+          "66000000043": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16010000001",
+            "logicalPath": "staticdata/items/50.sd",
+            "digest": "9a8a93e2e51205c8da114962f9d8ea45",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000002",
+            "logicalPath": "staticdata/items/51.sd",
+            "digest": "8f270f41ec630b4024ad4fc6f5cc0741",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000003",
+            "logicalPath": "staticdata/items/52.sd",
+            "digest": "f0e613ed9e57ea661454218782a37f9c",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000004",
+            "logicalPath": "staticdata/items/53.sd",
+            "digest": "eb88492a55a6ee1910e68204859038ba",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000005",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000006",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000007",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "16010000008",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "66000000040",
+            "logicalPath": "staticdata/items/94.sd",
+            "digest": "3ea12ca937d7132b2d775cf0651eb99f",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "66000000041",
+            "logicalPath": "staticdata/items/95.sd",
+            "digest": "4a50023c87155111ba7a341cdac4c41b",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "66000000042",
+            "logicalPath": "staticdata/items/96.sd",
+            "digest": "03463ef2fbfa98d2bb1f848c0a72df43",
+            "fieldValue": 16010000001
+          },
+          {
+            "itemId": "66000000043",
+            "logicalPath": "staticdata/items/97.sd",
+            "digest": "a509017ce2fb76ed181cbc943ebdfb96",
+            "fieldValue": 16010000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16010000001",
+        "16010000002",
+        "16010000003",
+        "16010000004",
+        "16010000005",
+        "16010000006",
+        "16010000007",
+        "16010000008",
+        "66000000040",
+        "66000000041",
+        "66000000042",
+        "66000000043"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16010000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16010000001.ktx",
+        "primaryKey": 2142833713,
+        "tableKey": 2142833713,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 39346,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "3809d1ea337c01a873cfc2661125ad77",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16011000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16011000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16011000001.ktx",
+      "iconId": "16011000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_icon_path / get_implant_blueprint_icon_path reads exact item_data.icon_id",
+        "methodLines": [
+          792,
+          797,
+          1828,
+          1831
+        ],
+        "field": "icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16011000001.png",
+        "uiDispatch": {
+          "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-95a57ecf8c1e08bc1807a7d9132ba0ee.bin",
+          "clientModule": "ui_new/item/utility.py",
+          "method": "set_item_icon",
+          "methodLines": [
+            486,
+            582
+          ]
+        },
+        "compositeWarning": "Foreground component only. UI may merge a separate rarity/blueprint background; this extraction does not claim the composed result.",
+        "renderTable": {
+          "logicalPath": "staticdata/items/item_render_icon.sd",
+          "digest": "320ba2be72256feae10d9445caaef09f"
+        },
+        "renderDataByItemId": {
+          "16011000001": {
+            "item_icon_bg": 16000001
+          },
+          "16011000002": {
+            "item_icon_bg": 16000002
+          },
+          "16011000003": {
+            "item_icon_bg": 16000003
+          },
+          "16011000004": {
+            "item_icon_bg": 16000004
+          },
+          "16011000005": {
+            "item_icon_bg": 16000005
+          },
+          "16011000006": {
+            "item_icon_bg": 16000006
+          },
+          "16011000007": {
+            "item_icon_bg": 16000007
+          },
+          "16011000008": {
+            "item_icon_bg": 16000008
+          },
+          "66000000044": {
+            "item_icon_bg": 16000001
+          },
+          "66000000045": {
+            "item_icon_bg": 16000002
+          },
+          "66000000046": {
+            "item_icon_bg": 16000003
+          },
+          "66000000047": {
+            "item_icon_bg": 16000004
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16011000001",
+            "logicalPath": "staticdata/items/49.sd",
+            "digest": "5c8a561f31d032cf6cf2f4a2864d504c",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000002",
+            "logicalPath": "staticdata/items/50.sd",
+            "digest": "9a8a93e2e51205c8da114962f9d8ea45",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000003",
+            "logicalPath": "staticdata/items/51.sd",
+            "digest": "8f270f41ec630b4024ad4fc6f5cc0741",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000004",
+            "logicalPath": "staticdata/items/52.sd",
+            "digest": "f0e613ed9e57ea661454218782a37f9c",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000005",
+            "logicalPath": "staticdata/items/53.sd",
+            "digest": "eb88492a55a6ee1910e68204859038ba",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000006",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000007",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "16011000008",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "66000000044",
+            "logicalPath": "staticdata/items/98.sd",
+            "digest": "9a49d55e6b8125d5e7a05e86fbb04536",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "66000000045",
+            "logicalPath": "staticdata/items/99.sd",
+            "digest": "b8f080055281087ad9208930154c9f4b",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "66000000046",
+            "logicalPath": "staticdata/items/100.sd",
+            "digest": "53ee9d4a38f49301e0446d188c9d8fba",
+            "fieldValue": 16011000001
+          },
+          {
+            "itemId": "66000000047",
+            "logicalPath": "staticdata/items/0.sd",
+            "digest": "8ed829b7f4647cee3edcd4e418c1613a",
+            "fieldValue": 16011000001
+          }
+        ]
+      },
+      "role": "implant-foreground-component",
+      "itemIds": [
+        "16011000001",
+        "16011000002",
+        "16011000003",
+        "16011000004",
+        "16011000005",
+        "16011000006",
+        "16011000007",
+        "16011000008",
+        "66000000044",
+        "66000000045",
+        "66000000046",
+        "66000000047"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16011000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16011000001.ktx",
+        "primaryKey": 3018988750,
+        "tableKey": 3018988750,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 22771,
+        "field0": 1900547,
+        "field1": 3668,
+        "digest": "a73c76b963208a6ddc4f243f3960e77e",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16112000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16112000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16112000001.ktx",
+      "iconId": "16112000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_skill_icon_path reads exact item_implant[type_id].skill_icon_id; all affected records checked",
+        "methodLines": [
+          1834,
+          1838
+        ],
+        "field": "skill_icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16112000001.png",
+        "implantTable": {
+          "logicalPath": "staticdata/items/item_implant.sd",
+          "digest": "b7edf7f8fd577d32abba98f23ae12380"
+        },
+        "skillDataByItemId": {
+          "16112000001": {
+            "original_type_id": 16012000001,
+            "implant_type": 3,
+            "skill_icon_id": 16112000001
+          },
+          "16112000002": {
+            "original_type_id": 16012000002,
+            "implant_type": 3,
+            "skill_icon_id": 16112000001
+          },
+          "16112000003": {
+            "original_type_id": 16012000003,
+            "implant_type": 3,
+            "skill_icon_id": 16112000001
+          },
+          "16112000004": {
+            "original_type_id": 16012000004,
+            "implant_type": 3,
+            "skill_icon_id": 16112000001
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16112000001",
+            "logicalPath": "staticdata/items/49.sd",
+            "digest": "5c8a561f31d032cf6cf2f4a2864d504c",
+            "fieldValue": 16112000001
+          },
+          {
+            "itemId": "16112000002",
+            "logicalPath": "staticdata/items/50.sd",
+            "digest": "9a8a93e2e51205c8da114962f9d8ea45",
+            "fieldValue": 16112000001
+          },
+          {
+            "itemId": "16112000003",
+            "logicalPath": "staticdata/items/51.sd",
+            "digest": "8f270f41ec630b4024ad4fc6f5cc0741",
+            "fieldValue": 16112000001
+          },
+          {
+            "itemId": "16112000004",
+            "logicalPath": "staticdata/items/52.sd",
+            "digest": "f0e613ed9e57ea661454218782a37f9c",
+            "fieldValue": 16112000001
+          }
+        ]
+      },
+      "role": "implant-skill-icon",
+      "itemIds": [
+        "16112000001",
+        "16112000002",
+        "16112000003",
+        "16112000004"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16112000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16112000001.ktx",
+        "primaryKey": 1078987820,
+        "tableKey": 1078987820,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 40322,
+        "field0": 8126467,
+        "field1": 3204,
+        "digest": "7345aa93eccb46f71687f07a7a68a7f0",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/16113000001.ktx": {
+      "logicalPath": "gui_v1/icon/implant/16113000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/16113000001.ktx",
+      "iconId": "16113000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "get_implant_skill_icon_path reads exact item_implant[type_id].skill_icon_id; all affected records checked",
+        "methodLines": [
+          1834,
+          1838
+        ],
+        "field": "skill_icon_id",
+        "requestedClientPath": "gui_v1/icon/implant/16113000001.png",
+        "implantTable": {
+          "logicalPath": "staticdata/items/item_implant.sd",
+          "digest": "b7edf7f8fd577d32abba98f23ae12380"
+        },
+        "skillDataByItemId": {
+          "16113000001": {
+            "original_type_id": 16013000001,
+            "implant_type": 3,
+            "skill_icon_id": 16113000001
+          },
+          "16113000002": {
+            "original_type_id": 16013000002,
+            "implant_type": 3,
+            "skill_icon_id": 16113000001
+          },
+          "16113000003": {
+            "original_type_id": 16013000003,
+            "implant_type": 3,
+            "skill_icon_id": 16113000001
+          },
+          "16113000004": {
+            "original_type_id": 16013000004,
+            "implant_type": 3,
+            "skill_icon_id": 16113000001
+          }
+        },
+        "itemTableSources": [
+          {
+            "itemId": "16113000001",
+            "logicalPath": "staticdata/items/48.sd",
+            "digest": "48fdc6f3a8418f37f33701088480f248",
+            "fieldValue": 16113000001
+          },
+          {
+            "itemId": "16113000002",
+            "logicalPath": "staticdata/items/49.sd",
+            "digest": "5c8a561f31d032cf6cf2f4a2864d504c",
+            "fieldValue": 16113000001
+          },
+          {
+            "itemId": "16113000003",
+            "logicalPath": "staticdata/items/50.sd",
+            "digest": "9a8a93e2e51205c8da114962f9d8ea45",
+            "fieldValue": 16113000001
+          },
+          {
+            "itemId": "16113000004",
+            "logicalPath": "staticdata/items/51.sd",
+            "digest": "8f270f41ec630b4024ad4fc6f5cc0741",
+            "fieldValue": 16113000001
+          }
+        ]
+      },
+      "role": "implant-skill-icon",
+      "itemIds": [
+        "16113000001",
+        "16113000002",
+        "16113000003",
+        "16113000004"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/implant/16113000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/implant/16113000001.ktx",
+        "primaryKey": 1704654945,
+        "tableKey": 1704654945,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 39688,
+        "field0": 1835011,
+        "field1": 3204,
+        "digest": "706376bcb53ea8d9c46c44eebf64bd1c",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000001.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000001.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000001.ktx",
+      "iconId": "28029000001",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000001.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000001",
+            "logicalPath": "staticdata/items/50.sd",
+            "digest": "9a8a93e2e51205c8da114962f9d8ea45",
+            "fieldValue": "gui_v1/icon/badge/28029000001.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000001"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000001.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000001.ktx",
+        "primaryKey": 1294584982,
+        "tableKey": 1294584982,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18663,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "faeb3b1d65df959ff30bb47958b36283",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000002.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000002.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000002.ktx",
+      "iconId": "28029000002",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000002.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000002",
+            "logicalPath": "staticdata/items/51.sd",
+            "digest": "8f270f41ec630b4024ad4fc6f5cc0741",
+            "fieldValue": "gui_v1/icon/badge/28029000002.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000002"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000002.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000002.ktx",
+        "primaryKey": 1773414529,
+        "tableKey": 1773414529,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19099,
+        "field0": 14483522,
+        "field1": 118404,
+        "digest": "31c4ca717d76ebab3d3ed1d6d3c6a45f",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000003.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000003.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000003.ktx",
+      "iconId": "28029000003",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000003.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000003",
+            "logicalPath": "staticdata/items/52.sd",
+            "digest": "f0e613ed9e57ea661454218782a37f9c",
+            "fieldValue": "gui_v1/icon/badge/28029000003.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000003"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000003.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000003.ktx",
+        "primaryKey": 2277766775,
+        "tableKey": 2277766775,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18994,
+        "field0": 15532099,
+        "field1": 118404,
+        "digest": "e3154641ec8b87957bc340983c6fcbb8",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000004.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000004.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000004.ktx",
+      "iconId": "28029000004",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000004.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000004",
+            "logicalPath": "staticdata/items/53.sd",
+            "digest": "eb88492a55a6ee1910e68204859038ba",
+            "fieldValue": "gui_v1/icon/badge/28029000004.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000004"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000004.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000004.ktx",
+        "primaryKey": 2080663506,
+        "tableKey": 2080663506,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18775,
+        "field0": 1900612,
+        "field1": 118404,
+        "digest": "4f6ebf777081c8e4ab1edb062144be0e",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000005.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000005.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000005.ktx",
+      "iconId": "28029000005",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000005.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000005",
+            "logicalPath": "staticdata/items/54.sd",
+            "digest": "eb2863ef65c75c336fb2d7271aae387c",
+            "fieldValue": "gui_v1/icon/badge/28029000005.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000005"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000005.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000005.ktx",
+        "primaryKey": 3766463003,
+        "tableKey": 3766463003,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19821,
+        "field0": 1966156,
+        "field1": 118404,
+        "digest": "d7545a9b0aafa1d52d19099465bb56f0",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000006.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000006.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000006.ktx",
+      "iconId": "28029000006",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000006.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000006",
+            "logicalPath": "staticdata/items/55.sd",
+            "digest": "336092cadc816dc6cccacfb7a5152a34",
+            "fieldValue": "gui_v1/icon/badge/28029000006.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000006"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000006.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000006.ktx",
+        "primaryKey": 3332170149,
+        "tableKey": 3332170149,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20038,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "a7b2854b5dc52ef04137fb546064b9e2",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000007.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000007.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000007.ktx",
+      "iconId": "28029000007",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000007.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000007",
+            "logicalPath": "staticdata/items/56.sd",
+            "digest": "b9ab9d4209950cf394874f20c00c51bc",
+            "fieldValue": "gui_v1/icon/badge/28029000007.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000007"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000007.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000007.ktx",
+        "primaryKey": 2242003380,
+        "tableKey": 2242003380,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19694,
+        "field0": 14417986,
+        "field1": 118404,
+        "digest": "0998afce30a551b511648e955f53b8c2",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000008.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000008.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000008.ktx",
+      "iconId": "28029000008",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000008.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000008",
+            "logicalPath": "staticdata/items/57.sd",
+            "digest": "85e3e82b91062d87155c409d790227a6",
+            "fieldValue": "gui_v1/icon/badge/28029000008.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000008"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000008.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000008.ktx",
+        "primaryKey": 3494980687,
+        "tableKey": 3494980687,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19870,
+        "field0": 15466562,
+        "field1": 118404,
+        "digest": "e51af455ea1435f08f9984cf17f0be37",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000009.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000009.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000009.ktx",
+      "iconId": "28029000009",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000009.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000009",
+            "logicalPath": "staticdata/items/58.sd",
+            "digest": "86e2f5990e89cd17e9aad110894f2eb2",
+            "fieldValue": "gui_v1/icon/badge/28029000009.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000009"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000009.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000009.ktx",
+        "primaryKey": 608030826,
+        "tableKey": 608030826,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19545,
+        "field0": 11272259,
+        "field1": 118404,
+        "digest": "a0dedd16f81cbf6982e4bfe2df3a018f",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000010.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000010.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000010.ktx",
+      "iconId": "28029000010",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000010.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000010",
+            "logicalPath": "staticdata/items/59.sd",
+            "digest": "fd0b03079d14116b262de7f442b696dc",
+            "fieldValue": "gui_v1/icon/badge/28029000010.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000010"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000010.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000010.ktx",
+        "primaryKey": 3900162585,
+        "tableKey": 3900162585,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19764,
+        "field0": 11272268,
+        "field1": 118404,
+        "digest": "a1f940bf4b387d23496e1a4a17ce1b19",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000011.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000011.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000011.ktx",
+      "iconId": "28029000011",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000011.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000011",
+            "logicalPath": "staticdata/items/60.sd",
+            "digest": "745031749f7852c10a7fe583bca031e8",
+            "fieldValue": "gui_v1/icon/badge/28029000011.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000011"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000011.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000011.ktx",
+        "primaryKey": 2505009839,
+        "tableKey": 2505009839,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19286,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "c5be26979497620f6f84a659b8f57696",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000012.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000012.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000012.ktx",
+      "iconId": "28029000012",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000012.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000012",
+            "logicalPath": "staticdata/items/61.sd",
+            "digest": "a09b470960f486ad709128e2e9a22184",
+            "fieldValue": "gui_v1/icon/badge/28029000012.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000012"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000012.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000012.ktx",
+        "primaryKey": 1263115681,
+        "tableKey": 1263115681,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19944,
+        "field0": 15466562,
+        "field1": 118404,
+        "digest": "8e7ef765edffda017447211d4e192fda",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000013.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000013.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000013.ktx",
+      "iconId": "28029000013",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000013.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000013",
+            "logicalPath": "staticdata/items/62.sd",
+            "digest": "f23711068334d1e9b9e7d223867e8795",
+            "fieldValue": "gui_v1/icon/badge/28029000013.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000013"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000013.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000013.ktx",
+        "primaryKey": 950148937,
+        "tableKey": 950148937,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18921,
+        "field0": 1835074,
+        "field1": 118404,
+        "digest": "1f99b4c9510e101d0175177a32313d22",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000014.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000014.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000014.ktx",
+      "iconId": "28029000014",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000014.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000014",
+            "logicalPath": "staticdata/items/63.sd",
+            "digest": "07197b45719cd9b5e61f920ba163b9ac",
+            "fieldValue": "gui_v1/icon/badge/28029000014.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000014"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000014.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000014.ktx",
+        "primaryKey": 2526769573,
+        "tableKey": 2526769573,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18460,
+        "field0": 1835075,
+        "field1": 118404,
+        "digest": "c193d503489f434bb3b3c7ff5a8440fd",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000015.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000015.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000015.ktx",
+      "iconId": "28029000015",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000015.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000015",
+            "logicalPath": "staticdata/items/64.sd",
+            "digest": "652ffea1727abb61327ec48d4186791c",
+            "fieldValue": "gui_v1/icon/badge/28029000015.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000015"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000015.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000015.ktx",
+        "primaryKey": 2281381164,
+        "tableKey": 2281381164,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20319,
+        "field0": 1835084,
+        "field1": 118404,
+        "digest": "40a9c0f875bc317d208472628c419013",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000016.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000016.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000016.ktx",
+      "iconId": "28029000016",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000016.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000016",
+            "logicalPath": "staticdata/items/65.sd",
+            "digest": "6ef1c1626ebfca1290031d7032161043",
+            "fieldValue": "gui_v1/icon/badge/28029000016.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000016"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000016.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000016.ktx",
+        "primaryKey": 1071862313,
+        "tableKey": 1071862313,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20386,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "3faae4b4868c65494bdf1a0c8bac5b0f",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000017.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000017.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000017.ktx",
+      "iconId": "28029000017",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000017.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000017",
+            "logicalPath": "staticdata/items/66.sd",
+            "digest": "ac0e0fcb4e5b76038cb53895c05bdcd4",
+            "fieldValue": "gui_v1/icon/badge/28029000017.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000017"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000017.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000017.ktx",
+        "primaryKey": 124223311,
+        "tableKey": 124223311,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19365,
+        "field0": 1835074,
+        "field1": 118404,
+        "digest": "97dcc104bd4d12685a22b7e12612e4e1",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000018.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000018.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000018.ktx",
+      "iconId": "28029000018",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000018.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000018",
+            "logicalPath": "staticdata/items/67.sd",
+            "digest": "6066a6537923986a23e09c940952480e",
+            "fieldValue": "gui_v1/icon/badge/28029000018.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000018"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000018.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000018.ktx",
+        "primaryKey": 1389980253,
+        "tableKey": 1389980253,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18952,
+        "field0": 1835074,
+        "field1": 118404,
+        "digest": "bfb5158da204728c9e98d7f7d4bf71bc",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000019.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000019.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000019.ktx",
+      "iconId": "28029000019",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000019.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000019",
+            "logicalPath": "staticdata/items/68.sd",
+            "digest": "c7e37e28e83fcf80fbadda90b1329cde",
+            "fieldValue": "gui_v1/icon/badge/28029000019.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000019"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000019.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000019.ktx",
+        "primaryKey": 3861434119,
+        "tableKey": 3861434119,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20202,
+        "field0": 1835075,
+        "field1": 118404,
+        "digest": "90e282efca6a949a43def057a90859ab",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000020.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000020.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000020.ktx",
+      "iconId": "28029000020",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000020.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000020",
+            "logicalPath": "staticdata/items/69.sd",
+            "digest": "63d71b9f46cf424e19d5fb27ea614e28",
+            "fieldValue": "gui_v1/icon/badge/28029000020.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000020"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000020.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000020.ktx",
+        "primaryKey": 1529460307,
+        "tableKey": 1529460307,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18517,
+        "field0": 1835084,
+        "field1": 118404,
+        "digest": "e07e2210f7c33994b0106a4f07f8dfc2",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000021.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000021.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000021.ktx",
+      "iconId": "28029000021",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000021.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000021",
+            "logicalPath": "staticdata/items/70.sd",
+            "digest": "ac107c4511ca2c4210cc3be1b3e91ff1",
+            "fieldValue": "gui_v1/icon/badge/28029000021.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000021"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000021.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000021.ktx",
+        "primaryKey": 2572748020,
+        "tableKey": 2572748020,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19634,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "20663bfc3e66b53cc38c2b4ca961904e",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000022.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000022.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000022.ktx",
+      "iconId": "28029000022",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000022.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000022",
+            "logicalPath": "staticdata/items/71.sd",
+            "digest": "1f8daf2772b3a494b99819a9e0d9fedd",
+            "fieldValue": "gui_v1/icon/badge/28029000022.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000022"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000022.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000022.ktx",
+        "primaryKey": 3140214424,
+        "tableKey": 3140214424,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20413,
+        "field0": 14417986,
+        "field1": 118404,
+        "digest": "dc97fcfc8aaac6e386ae44275b3a34fa",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000023.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000023.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000023.ktx",
+      "iconId": "28029000023",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000023.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000023",
+            "logicalPath": "staticdata/items/72.sd",
+            "digest": "27628bf514dc420a82051e4d2dfd1439",
+            "fieldValue": "gui_v1/icon/badge/28029000023.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000023"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000023.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000023.ktx",
+        "primaryKey": 1347809230,
+        "tableKey": 1347809230,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18877,
+        "field0": 14417986,
+        "field1": 118404,
+        "digest": "b628a2cc51f2f6be247d782edabb482e",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000024.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000024.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000024.ktx",
+      "iconId": "28029000024",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000024.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000024",
+            "logicalPath": "staticdata/items/73.sd",
+            "digest": "68de2b9ff28b3b0b5390a66876707e62",
+            "fieldValue": "gui_v1/icon/badge/28029000024.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000024"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000024.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000024.ktx",
+        "primaryKey": 1625385904,
+        "tableKey": 1625385904,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18688,
+        "field0": 14417988,
+        "field1": 118404,
+        "digest": "9e587ecffe19f244e22adce7e7b96245",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000025.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000025.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000025.ktx",
+      "iconId": "28029000025",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000025.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000025",
+            "logicalPath": "staticdata/items/74.sd",
+            "digest": "faaf30e26edc633957a67899f8eddfa5",
+            "fieldValue": "gui_v1/icon/badge/28029000025.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000025"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000025.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000025.ktx",
+        "primaryKey": 4245827663,
+        "tableKey": 4245827663,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20518,
+        "field0": 15466573,
+        "field1": 118404,
+        "digest": "85d3d7762351d8ab6e3633b45d638f83",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000026.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000026.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000026.ktx",
+      "iconId": "28029000026",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000026.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000026",
+            "logicalPath": "staticdata/items/75.sd",
+            "digest": "76ec00464092e4725d650b9b2d53ae31",
+            "fieldValue": "gui_v1/icon/badge/28029000026.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000026"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000026.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000026.ktx",
+        "primaryKey": 3456982889,
+        "tableKey": 3456982889,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19043,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "4757063e705381f3988d5790026b0fb1",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000027.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000027.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000027.ktx",
+      "iconId": "28029000027",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000027.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000027",
+            "logicalPath": "staticdata/items/76.sd",
+            "digest": "f251fd04266bb289c51e1ff71c5658f3",
+            "fieldValue": "gui_v1/icon/badge/28029000027.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000027"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000027.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000027.ktx",
+        "primaryKey": 301202480,
+        "tableKey": 301202480,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20531,
+        "field0": 14417986,
+        "field1": 118404,
+        "digest": "61238fac12ef7b7b0b3b354d5573c77c",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000028.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000028.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000028.ktx",
+      "iconId": "28029000028",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000028.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000028",
+            "logicalPath": "staticdata/items/77.sd",
+            "digest": "2f9dd3c182609b7ce8a0a72f6a75ae82",
+            "fieldValue": "gui_v1/icon/badge/28029000028.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000028"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000028.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000028.ktx",
+        "primaryKey": 2891164423,
+        "tableKey": 2891164423,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19606,
+        "field0": 14417985,
+        "field1": 118404,
+        "digest": "d2214053e2823d7bf3f55692bb93474d",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000029.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000029.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000029.ktx",
+      "iconId": "28029000029",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000029.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000029",
+            "logicalPath": "staticdata/items/78.sd",
+            "digest": "5c67892201feba23610ffed22bc7b950",
+            "fieldValue": "gui_v1/icon/badge/28029000029.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000029"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000029.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000029.ktx",
+        "primaryKey": 3735161269,
+        "tableKey": 3735161269,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20135,
+        "field0": 15466563,
+        "field1": 118404,
+        "digest": "8e894f5bcbbf4b6d425ce185c2e95274",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000030.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000030.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000030.ktx",
+      "iconId": "28029000030",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000030.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000030",
+            "logicalPath": "staticdata/items/79.sd",
+            "digest": "567bfa85887182cc8f339c625c840186",
+            "fieldValue": "gui_v1/icon/badge/28029000030.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000030"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000030.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000030.ktx",
+        "primaryKey": 3942317876,
+        "tableKey": 3942317876,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20268,
+        "field0": 15466572,
+        "field1": 118404,
+        "digest": "82a00a9a92db5e95c7541e6b9c12b39a",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000031.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000031.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000031.ktx",
+      "iconId": "28029000031",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000031.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000031",
+            "logicalPath": "staticdata/items/80.sd",
+            "digest": "9aeae0633187d62f72987d0dad1faadb",
+            "fieldValue": "gui_v1/icon/badge/28029000031.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000031"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000031.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000031.ktx",
+        "primaryKey": 1779125313,
+        "tableKey": 1779125313,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19223,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "e1530a3fc3d17fc22ba80a8df00387be",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000032.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000032.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000032.ktx",
+      "iconId": "28029000032",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000032.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000032",
+            "logicalPath": "staticdata/items/81.sd",
+            "digest": "c09d62336e5675a86fc2ce772b9e0956",
+            "fieldValue": "gui_v1/icon/badge/28029000032.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000032"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000032.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000032.ktx",
+        "primaryKey": 2821395394,
+        "tableKey": 2821395394,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18624,
+        "field0": 15466562,
+        "field1": 118404,
+        "digest": "6e52ffae9ee3f75fdc3a2b821b185f5d",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000033.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000033.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000033.ktx",
+      "iconId": "28029000033",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000033.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000033",
+            "logicalPath": "staticdata/items/82.sd",
+            "digest": "49223266b0e1e774e147a721f69ffca5",
+            "fieldValue": "gui_v1/icon/badge/28029000033.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000033"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000033.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000033.ktx",
+        "primaryKey": 3675886675,
+        "tableKey": 3675886675,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19079,
+        "field0": 15466562,
+        "field1": 118404,
+        "digest": "81dffd8df4c40254b0fc300632636e82",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000034.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000034.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000034.ktx",
+      "iconId": "28029000034",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000034.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000034",
+            "logicalPath": "staticdata/items/83.sd",
+            "digest": "adf26a9eff13073fdadf065c6c5b150c",
+            "fieldValue": "gui_v1/icon/badge/28029000034.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000034"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000034.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000034.ktx",
+        "primaryKey": 327404618,
+        "tableKey": 327404618,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18583,
+        "field0": 15466564,
+        "field1": 118404,
+        "digest": "4547b8d2a58cce2386aa9b4ce10da7d5",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000035.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000035.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000035.ktx",
+      "iconId": "28029000035",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000035.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000035",
+            "logicalPath": "staticdata/items/84.sd",
+            "digest": "dd560487f1bf7d0763633cdfae5b1843",
+            "fieldValue": "gui_v1/icon/badge/28029000035.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000035"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000035.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000035.ktx",
+        "primaryKey": 2579076725,
+        "tableKey": 2579076725,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18487,
+        "field0": 15466573,
+        "field1": 118404,
+        "digest": "5daa07ee5e239a5b2f860dd6b42ec876",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000036.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000036.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000036.ktx",
+      "iconId": "28029000036",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000036.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000036",
+            "logicalPath": "staticdata/items/85.sd",
+            "digest": "17b5cf5ce8b9764ec94dcf669d3b7617",
+            "fieldValue": "gui_v1/icon/badge/28029000036.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000036"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000036.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000036.ktx",
+        "primaryKey": 2425473946,
+        "tableKey": 2425473946,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19991,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "14e2370c9034dbb2926ba43b3f02fec8",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000037.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000037.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000037.ktx",
+      "iconId": "28029000037",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000037.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000037",
+            "logicalPath": "staticdata/items/86.sd",
+            "digest": "919c3bb84a16401ce0e530724150757f",
+            "fieldValue": "gui_v1/icon/badge/28029000037.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000037"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000037.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000037.ktx",
+        "primaryKey": 621005591,
+        "tableKey": 621005591,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 40650,
+        "field0": 1835074,
+        "field1": 118404,
+        "digest": "444db13531d39e2a9175c1be91f7bcd7",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000038.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000038.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000038.ktx",
+      "iconId": "28029000038",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000038.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000038",
+            "logicalPath": "staticdata/items/87.sd",
+            "digest": "d22171438d38b7cf865d41bcd41bd7e8",
+            "fieldValue": "gui_v1/icon/badge/28029000038.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000038"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000038.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000038.ktx",
+        "primaryKey": 1063091634,
+        "tableKey": 1063091634,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20343,
+        "field0": 1835074,
+        "field1": 118404,
+        "digest": "08b8d2851ea57c6a0a61f2d7bd7701f7",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000039.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000039.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000039.ktx",
+      "iconId": "28029000039",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000039.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000039",
+            "logicalPath": "staticdata/items/88.sd",
+            "digest": "8c131c86e312fbd515b5df11316bb541",
+            "fieldValue": "gui_v1/icon/badge/28029000039.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000039"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000039.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000039.ktx",
+        "primaryKey": 2093237345,
+        "tableKey": 2093237345,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19176,
+        "field0": 1835075,
+        "field1": 118404,
+        "digest": "dc80f03cfeef8bf9d4c3ce4e66f546dd",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000040.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000040.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000040.ktx",
+      "iconId": "28029000040",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000040.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000040",
+            "logicalPath": "staticdata/items/89.sd",
+            "digest": "4651f1a63fb5724a6f629ce3083dcc5f",
+            "fieldValue": "gui_v1/icon/badge/28029000040.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000040"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000040.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000040.ktx",
+        "primaryKey": 151648470,
+        "tableKey": 151648470,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19968,
+        "field0": 1835084,
+        "field1": 118404,
+        "digest": "ac5c6c64dee6900564cceb3e77357029",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000041.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000041.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000041.ktx",
+      "iconId": "28029000041",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000041.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000041",
+            "logicalPath": "staticdata/items/90.sd",
+            "digest": "1cdea7eaacd85c4476c2f483a579d20e",
+            "fieldValue": "gui_v1/icon/badge/28029000041.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000041"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000041.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000041.ktx",
+        "primaryKey": 523939875,
+        "tableKey": 523939875,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19486,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "ad112e8cc8f128f0ae87f37783ca8ca2",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000042.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000042.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000042.ktx",
+      "iconId": "28029000042",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000042.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000042",
+            "logicalPath": "staticdata/items/91.sd",
+            "digest": "ac86a13160b0d792cd89e297c69c93df",
+            "fieldValue": "gui_v1/icon/badge/28029000042.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000042"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000042.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000042.ktx",
+        "primaryKey": 4102510766,
+        "tableKey": 4102510766,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18749,
+        "field0": 15466562,
+        "field1": 118404,
+        "digest": "f8f1e8ab1218f9548e3acd19ad1b933b",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000043.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000043.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000043.ktx",
+      "iconId": "28029000043",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000043.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000043",
+            "logicalPath": "staticdata/items/92.sd",
+            "digest": "fbb518290dc7dfe14d5abd54afdf7b6b",
+            "fieldValue": "gui_v1/icon/badge/28029000043.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000043"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000043.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000043.ktx",
+        "primaryKey": 2959523964,
+        "tableKey": 2959523964,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19652,
+        "field0": 1835074,
+        "field1": 118404,
+        "digest": "cf545f9a1c26884da7c8ab74c0f02e14",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000044.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000044.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000044.ktx",
+      "iconId": "28029000044",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000044.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000044",
+            "logicalPath": "staticdata/items/93.sd",
+            "digest": "04b7a73ea97b8805fa688d8df543e45a",
+            "fieldValue": "gui_v1/icon/badge/28029000044.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000044"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000044.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000044.ktx",
+        "primaryKey": 210113556,
+        "tableKey": 210113556,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19412,
+        "field0": 1835076,
+        "field1": 118404,
+        "digest": "84fd9702a284e50fcaa56c52cbfa5c42",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000045.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000045.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000045.ktx",
+      "iconId": "28029000045",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000045.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000045",
+            "logicalPath": "staticdata/items/94.sd",
+            "digest": "3ea12ca937d7132b2d775cf0651eb99f",
+            "fieldValue": "gui_v1/icon/badge/28029000045.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000045"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000045.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000045.ktx",
+        "primaryKey": 2156771386,
+        "tableKey": 2156771386,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20460,
+        "field0": 1835085,
+        "field1": 118404,
+        "digest": "a7b07c23c2c9e49169e717fddddf6fa0",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000046.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000046.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000046.ktx",
+      "iconId": "28029000046",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000046.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000046",
+            "logicalPath": "staticdata/items/95.sd",
+            "digest": "4a50023c87155111ba7a341cdac4c41b",
+            "fieldValue": "gui_v1/icon/badge/28029000046.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000046"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000046.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000046.ktx",
+        "primaryKey": 3710741690,
+        "tableKey": 3710741690,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18896,
+        "field0": 1900607,
+        "field1": 118404,
+        "digest": "c50151d3a1f2ea34e1d0a924d94b94ea",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000047.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000047.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000047.ktx",
+      "iconId": "28029000047",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000047.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000047",
+            "logicalPath": "staticdata/items/96.sd",
+            "digest": "03463ef2fbfa98d2bb1f848c0a72df43",
+            "fieldValue": "gui_v1/icon/badge/28029000047.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000047"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000047.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000047.ktx",
+        "primaryKey": 1470931230,
+        "tableKey": 1470931230,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 20170,
+        "field0": 15532098,
+        "field1": 118404,
+        "digest": "a9ae8267af9a5f3863c091ebd2b7a5fc",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000048.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000048.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000048.ktx",
+      "iconId": "28029000048",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000048.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000048",
+            "logicalPath": "staticdata/items/97.sd",
+            "digest": "a509017ce2fb76ed181cbc943ebdfb96",
+            "fieldValue": "gui_v1/icon/badge/28029000048.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000048"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000048.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000048.ktx",
+        "primaryKey": 3041944686,
+        "tableKey": 3041944686,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19331,
+        "field0": 1900610,
+        "field1": 118404,
+        "digest": "0e4ce209efb1b33a8846abb39abaca84",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000049.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000049.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000049.ktx",
+      "iconId": "28029000049",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000049.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000049",
+            "logicalPath": "staticdata/items/98.sd",
+            "digest": "9a49d55e6b8125d5e7a05e86fbb04536",
+            "fieldValue": "gui_v1/icon/badge/28029000049.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000049"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000049.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000049.ktx",
+        "primaryKey": 2996557235,
+        "tableKey": 2996557235,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 19256,
+        "field0": 1900611,
+        "field1": 118404,
+        "digest": "2f3b54c3e24d0588255db90e0f350d98",
+        "status": "native-path-key-match"
+      }
+    },
+    "gui_v1/icon/item/28029000050.ktx": {
+      "logicalPath": "gui_v1/icon/badge/28029000050.ktx",
+      "originalLogicalPath": "gui_v1/icon/item/28029000050.ktx",
+      "iconId": "28029000050",
+      "evidence": {
+        "inspection": "static marshal code-object disassembly only; client code was not executed",
+        "sourceCodePath": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\tool-probe-20260929\\decoded-script-hits\\1-a6f40c7fc90f0f2f109fcdb386e06708.bin",
+        "clientModule": "evetypes/__init__.py",
+        "sourceCodeSha256": "950c97588f8c6898747007cf7809ce844b0352fc5bda5c9f5a77b27a97298179",
+        "evidenceArtifact": "C:\\Users\\22351\\.codex\\worktrees\\dfaf\\EVEM_Toolkits\\output\\client-ship-assets\\mapping-deep\\thfb\\icon-path-static-evidence.txt",
+        "method": "exact item_data.big_icon_path field, returned directly by get_big_icon_path",
+        "methodLines": [
+          765,
+          769
+        ],
+        "field": "big_icon_path",
+        "requestedClientPath": "gui_v1/icon/badge/28029000050.png",
+        "itemTableSources": [
+          {
+            "itemId": "28029000050",
+            "logicalPath": "staticdata/items/99.sd",
+            "digest": "b8f080055281087ad9208930154c9f4b",
+            "fieldValue": "gui_v1/icon/badge/28029000050.png"
+          }
+        ]
+      },
+      "role": "big-icon",
+      "itemIds": [
+        "28029000050"
+      ],
+      "currentLookup": {
+        "logicalPath": "gui_v1/icon/badge/28029000050.ktx",
+        "packageName": "gui_v1",
+        "relativePath": "icon/badge/28029000050.ktx",
+        "primaryKey": 3733789992,
+        "tableKey": 3733789992,
+        "seed": 163,
+        "usedCollisionFallback": false,
+        "index": 18846,
+        "field0": 1900620,
+        "field1": 118404,
+        "digest": "7fdd3d3e9d7e7f27fc530b2df7bb9678",
+        "status": "native-path-key-match"
+      }
+    }
+  },
+  "summary": {
+    "overrides": 64,
+    "affectedItems": 202,
+    "bigIcons": 50,
+    "implantForegroundComponents": 12,
+    "implantSkillIcons": 2,
+    "unresolvedReferences": 25,
+    "unresolvedItems": 53
+  }
+}

@@ -6,15 +6,21 @@ from dataclasses import dataclass
 from datetime import datetime, timezone as dt_timezone
 from enum import Enum
 from typing import Any, Protocol
+import uuid
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .parser import KillParseError, parse_kill_blob
 from .protocol import KillProtocolError, decode_kill_info_response
 from .models import CollectionPolicy, ProbeCursor, ProbeRun
 from .services import persist_report
+from .worker import LeaseLostError, paused_reason
+
+
+RUN_LEASE_MS = 90 * 1000
 
 
 class ProbeStatus(str, Enum):
@@ -24,6 +30,8 @@ class ProbeStatus(str, Enum):
     RATE_LIMITED = "rate_limited"
     NETWORK_ERROR = "network_error"
     MALFORMED = "malformed"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    LEASE_LOST = "lease_lost"
 
 
 @dataclass(frozen=True)
@@ -116,12 +124,37 @@ class DiscoveryRunner:
         policy: CollectionPolicy | None = None,
         config: DiscoveryConfig | None = None,
         source: str = "kill_api",
+        client_factory=None,
     ):
         self.client = client
         self.cursor = cursor
         self.policy = policy
         self.config = config or DiscoveryConfig()
         self.source = source
+        self.active_run = None
+        self.client_factory = client_factory
+        self.first_empty = None
+
+    def heartbeat(self):
+        run = self.active_run
+        if run is not None and not ProbeRun.objects.filter(
+            pk=run.pk, status=ProbeRun.Status.RUNNING, lease_owner=run.lease_owner,
+        ).update(lease_expires_at_ms=int(timezone.now().timestamp()*1000) + RUN_LEASE_MS):
+            raise LeaseLostError()
+
+    @staticmethod
+    def pause(cursor, reason):
+        if reason in ('rate_limited', 'unauthorized'):
+            cursor.failure_count += 1
+            cursor.pause_reason = reason
+            cursor.cooldown_until_ms = (
+                int(timezone.now().timestamp()*1000) + min(60, 15 * 2**min(cursor.failure_count-1, 2))*60*1000
+                if reason == 'rate_limited' else None
+            )
+
+    @staticmethod
+    def paused_reason(cursor):
+        return paused_reason(cursor)
 
     def _fetch(self, kill_id: int) -> ProbeOutcome:
         try:
@@ -147,24 +180,33 @@ class DiscoveryRunner:
             # timestamp and final-blow fields live in the verified outer map.
             # Pass that map through so reports such as those with no attacker
             # section still retain the victim and last-hit summary.
-            parsed = parse_kill_blob(blob, summary=decoded)
+            # Some transports collect the game's character/corporation proxy
+            # responses alongside the kill response.  Keep that enrichment
+            # explicit and optional; the compact kill blob remains valid with
+            # IDs only when no identity map is available.
+            identity_map = decoded.get("identity_map") if isinstance(decoded, dict) else None
+            parsed = parse_kill_blob(blob, summary=decoded, identity_map=identity_map)
             if parsed.get("kill_id") != kill_id:
                 return ProbeOutcome(ProbeStatus.MALFORMED, error_code="kill_id_mismatch")
             return ProbeOutcome(ProbeStatus.REPORT, payload=parsed)
         except (KillProtocolError, KillParseError, TypeError, ValueError) as exc:
             return ProbeOutcome(ProbeStatus.MALFORMED, error_code=type(exc).__name__)
 
-    def run(self, *, dry_run: bool = False) -> ProbeRun:
+    def run(self, *, dry_run: bool = False, resume: bool = False) -> ProbeRun:
         """Claim a run in a short transaction, then do network I/O outside it.
 
         ``dry_run`` intentionally uses one rollback-only transaction so callers
         can exercise the full path without leaving policy, cursor, report, or
         run rows behind.
         """
+        now_ms = int(timezone.now().timestamp() * 1000)
         if dry_run:
             with transaction.atomic():
                 cursor = ProbeCursor.objects.select_for_update().get(pk=self.cursor.pk)
+                self._recover_orphaned_runs(cursor, now_ms)
                 self._assert_no_running(cursor)
+                if resume:
+                    self._resume(cursor)
                 run = self._create_run(cursor)
                 self._run_locked(run, cursor)
                 transaction.set_rollback(True)
@@ -172,20 +214,51 @@ class DiscoveryRunner:
 
         with transaction.atomic():
             cursor = ProbeCursor.objects.select_for_update().get(pk=self.cursor.pk)
+            self._recover_orphaned_runs(cursor, now_ms)
             self._assert_no_running(cursor)
+            if resume:
+                self._resume(cursor)
             run = self._create_run(cursor)
         try:
             self._run_locked(run, cursor)
         except Exception:
             # This is deliberately a new short transaction; a failed transport
             # must remain observable even when report persistence rolled back.
-            with transaction.atomic():
-                run.status = ProbeRun.Status.FAILED
-                run.stop_reason = run.stop_reason or "failed"
-                run.finished_at_ms = int(timezone.now().timestamp() * 1000)
-                run.save(update_fields=["status", "stop_reason", "finished_at_ms"])
+            ProbeRun.objects.filter(pk=run.pk, status=ProbeRun.Status.RUNNING,
+                                    lease_owner=run.lease_owner).update(
+                status=ProbeRun.Status.FAILED, stop_reason=run.stop_reason or 'failed',
+                finished_at_ms=int(timezone.now().timestamp()*1000),
+                lease_owner='', lease_expires_at_ms=None)
             raise
         return run
+
+    @staticmethod
+    def _resume(cursor):
+        cursor.pause_reason, cursor.cooldown_until_ms, cursor.failure_count = '', None, 0
+        cursor.save(update_fields=['pause_reason', 'cooldown_until_ms', 'failure_count'])
+
+    @staticmethod
+    def _recover_orphaned_runs(cursor: ProbeCursor, now_ms: int) -> int:
+        """Fail expired runs so a crashed worker cannot block the cursor forever."""
+        recovered = ProbeRun.objects.filter(
+            cursor=cursor,
+            status=ProbeRun.Status.RUNNING,
+        ).filter(
+            Q(lease_expires_at_ms__lte=now_ms)
+            | Q(lease_expires_at_ms__isnull=True)
+        ).update(
+            status=ProbeRun.Status.FAILED,
+            stop_reason="lease_expired",
+            error_code="lease_expired",
+            finished_at_ms=now_ms,
+            lease_owner="",
+            lease_expires_at_ms=None,
+        )
+        if recovered and cursor.provisional_empty_id is not None:
+            cursor.next_probe_id = cursor.provisional_empty_id
+            cursor.provisional_empty_id = None
+            cursor.save(update_fields=['next_probe_id', 'provisional_empty_id'])
+        return recovered
 
     @staticmethod
     def _assert_no_running(cursor: ProbeCursor) -> None:
@@ -193,88 +266,111 @@ class DiscoveryRunner:
             raise RuntimeError("probe cursor already has a running run")
 
     def _create_run(self, cursor: ProbeCursor) -> ProbeRun:
+        now_ms = int(timezone.now().timestamp() * 1000)
         return ProbeRun.objects.create(
             cursor=cursor,
             policy=self.policy,
             status=ProbeRun.Status.RUNNING,
-            started_at_ms=int(timezone.now().timestamp() * 1000),
+            started_at_ms=now_ms,
+            lease_owner=uuid.uuid4().hex,
+            lease_expires_at_ms=now_ms + RUN_LEASE_MS,
         )
 
-    def _run_locked(self, run: ProbeRun, cursor: ProbeCursor) -> None:
-        config = self.config
-        # An empty boundary is a per-run observation.  Carrying it across a
-        # restart would stop after one empty response and can move the cursor
-        # backwards repeatedly.
-        cursor.consecutive_empty_count = 0
-        cursor.updated_at_ms = int(timezone.now().timestamp() * 1000)
-        cursor.save(update_fields=["consecutive_empty_count", "updated_at_ms"])
-        next_id = cursor.next_probe_id
-        if next_id is None and cursor.last_success_id is not None:
-            next_id = cursor.last_success_id + 1
-        if next_id is None:
-            next_id = config.start_id
-        if next_id is None:
-            run.status = ProbeRun.Status.STOPPED
-            run.stop_reason = "missing_start_id"
-            run.finished_at_ms = int(timezone.now().timestamp() * 1000)
-            run.save(update_fields=["status", "stop_reason", "finished_at_ms"])
-            return
-        if not 1 <= next_id <= config.MAX_ID:
-            raise ValueError("cursor next_probe_id is outside the signed 64-bit kill-id range")
+    @staticmethod
+    def _owned(run, cursor):
+        # Always take cursor before run, matching claim/recovery lock order.
+        ProbeCursor.objects.select_for_update().get(pk=cursor.pk)
+        owned = ProbeRun.objects.select_for_update().get(pk=run.pk)
+        if owned.status != ProbeRun.Status.RUNNING or owned.lease_owner != run.lease_owner:
+            raise LeaseLostError()
 
-        while run.request_count < config.max_requests:
-            probe_id = next_id
-            if not 1 <= probe_id <= config.MAX_ID:
-                run.stop_reason = "id_limit"
-                break
-            outcome = self._fetch(probe_id)
-            run.request_count += 1
-            if outcome.status is ProbeStatus.REPORT:
-                parsed = outcome.payload
-                report_time = _time_value(parsed.get("kill_time_raw"))
-                if cursor.last_success_kill_time and report_time and report_time < cursor.last_success_kill_time:
-                    run.stop_reason = "time_reversed"
-                    break
+    @transaction.atomic
+    def _record(self, run, cursor, probe_id, outcome):
+        self._owned(run, cursor)
+        run.request_count += 1
+        if outcome.status is ProbeStatus.REPORT:
+            parsed = outcome.payload
+            report_time = _time_value(parsed.get('kill_time_raw'))
+            if cursor.last_success_kill_time and report_time and report_time < cursor.last_success_kill_time:
+                run.stop_reason = 'time_reversed'
+            else:
                 persist_report(parsed, policy=self.policy, source=self.source)
                 run.report_count += 1
+                cursor.pause_reason, cursor.cooldown_until_ms, cursor.failure_count = '', None, 0
                 cursor.last_success_id = probe_id
                 if report_time is not None:
                     cursor.last_success_kill_time = report_time
                 cursor.consecutive_empty_count = 0
-                next_id = probe_id + 1
-                cursor.next_probe_id = next_id
-            elif outcome.status is ProbeStatus.EMPTY:
-                run.empty_count += 1
-                cursor.consecutive_empty_count += 1
-                next_id = probe_id + 1
-                cursor.next_probe_id = next_id
-                if cursor.consecutive_empty_count >= config.empty_threshold:
-                    # Keep the first boundary ID as the safe restart point;
-                    # a later run may observe a newly published report there.
-                    cursor.next_probe_id = probe_id - (config.empty_threshold - 1)
-                    run.stop_reason = "empty_threshold"
-                    break
-            else:
-                run.error_code = outcome.error_code or outcome.status.value
-                run.stop_reason = outcome.status.value
-                break
-            run.save(update_fields=["request_count", "report_count", "empty_count", "error_code", "stop_reason"])
-            cursor.updated_at_ms = int(timezone.now().timestamp() * 1000)
-            cursor.save(update_fields=[
-                "last_success_id", "last_success_kill_time", "consecutive_empty_count", "next_probe_id", "updated_at_ms"
-            ])
+                self.first_empty = None
+                cursor.provisional_empty_id = None
+                cursor.next_probe_id = probe_id + 1
+        elif outcome.status is ProbeStatus.EMPTY:
+            if self.first_empty is None:
+                self.first_empty = probe_id
+                cursor.provisional_empty_id = probe_id
+            run.empty_count += 1
+            cursor.consecutive_empty_count += 1
+            cursor.next_probe_id = probe_id + 1
+            if cursor.consecutive_empty_count >= self.config.empty_threshold:
+                run.stop_reason = 'empty_threshold'
+        else:
+            run.error_code = outcome.status.value
+            run.stop_reason = outcome.status.value
+            self.pause(cursor, run.stop_reason)
+        cursor.updated_at_ms = int(timezone.now().timestamp()*1000)
+        cursor.save()
+        run.save(update_fields=['request_count', 'report_count', 'empty_count', 'error_code', 'stop_reason'])
 
-        if not run.stop_reason:
-            run.stop_reason = "max_requests"
-        run.status = ProbeRun.Status.STOPPED
-        run.finished_at_ms = int(timezone.now().timestamp() * 1000)
-        run.save(update_fields=[
-            "status", "finished_at_ms", "request_count", "report_count", "empty_count", "stop_reason", "error_code"
-        ])
-        cursor.updated_at_ms = int(timezone.now().timestamp() * 1000)
-        cursor.save(update_fields=[
-            "last_success_id", "last_success_kill_time", "consecutive_empty_count", "next_probe_id", "updated_at_ms"
-        ])
+    @transaction.atomic
+    def _finish(self, run, cursor):
+        self._owned(run, cursor)
+        if self.first_empty is not None:
+            cursor.next_probe_id = self.first_empty
+            cursor.provisional_empty_id = None
+            cursor.save(update_fields=['next_probe_id', 'provisional_empty_id'])
+        run.status, run.finished_at_ms = ProbeRun.Status.STOPPED, int(timezone.now().timestamp()*1000)
+        run.lease_owner, run.lease_expires_at_ms = '', None
+        run.save()
+
+    def _run_locked(self, run: ProbeRun, cursor: ProbeCursor) -> None:
+        self.active_run = run
+        paused = self.paused_reason(cursor)
+        if paused:
+            run.stop_reason = paused
+            self._finish(run, cursor)
+            return
+        if self.client_factory:
+            try:
+                self.client = self.client_factory()
+            except Exception:
+                with transaction.atomic():
+                    self._owned(run, cursor)
+                    cursor.pause_reason, cursor.cooldown_until_ms = 'configuration_error', None
+                    cursor.save(update_fields=['pause_reason', 'cooldown_until_ms'])
+                run.stop_reason = 'configuration_error'
+                self._finish(run, cursor)
+                return
+        with transaction.atomic():
+            self._owned(run, cursor)
+            cursor.consecutive_empty_count = 0
+            cursor.save(update_fields=['consecutive_empty_count'])
+        next_id = cursor.next_probe_id
+        if next_id is None and cursor.last_success_id is not None:
+            next_id = cursor.last_success_id + 1
+        if next_id is None:
+            next_id = self.config.start_id
+        if next_id is None:
+            run.stop_reason = 'missing_start_id'
+        while next_id is not None and run.request_count < self.config.max_requests and not run.stop_reason:
+            if not 1 <= next_id <= self.config.MAX_ID:
+                run.stop_reason = 'id_limit'
+                break
+            self.heartbeat()
+            outcome = self._fetch(next_id)
+            self._record(run, cursor, next_id, outcome)
+            next_id = cursor.next_probe_id
+        run.stop_reason = run.stop_reason or 'max_requests'
+        self._finish(run, cursor)
 
 
 def discover(*args, **kwargs):

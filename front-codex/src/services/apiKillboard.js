@@ -1,4 +1,5 @@
 import API_URL from './backendSetting'
+import fetchWithAuth from './fetchWithAuth'
 
 export class KillboardApiError extends Error {
   constructor(message, status) {
@@ -9,7 +10,9 @@ export class KillboardApiError extends Error {
 }
 
 async function request(path, { signal } = {}) {
-  const response = await fetch(`${API_URL}/killboard/${path}`, { signal })
+  const response = await fetchWithAuth(`${API_URL}/killboard/${path}`, {
+    method: 'GET', cache: 'no-store', signal,
+  })
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
     const message = data?.detail || data?.message || data?.error || `请求失败（${response.status}）`
@@ -18,6 +21,7 @@ async function request(path, { signal } = {}) {
   return response.json()
 }
 
+export const getKillboardAccess = ({ signal } = {}) => request('access/', { signal })
 export function listKillReports({ page = 1, pageSize = 20, q = '', shipClass = '', system = '', character = '', corporation = '', from = '', to = '', signal } = {}) {
   const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
   const values = { q, ship_class: shipClass, system, character, corporation, from, to }

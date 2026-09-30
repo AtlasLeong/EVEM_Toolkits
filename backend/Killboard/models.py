@@ -33,6 +33,13 @@ class CollectionPolicy(models.Model):
     enabled = models.BooleanField(default=True, db_index=True)
     min_ship_rank = models.PositiveSmallIntegerField(default=0, validators=[MinValueValidator(0)])
     allowed_class_keys = models.JSONField(default=list)
+    # A strict lower bound for the source's reported total loss value.  NULL
+    # keeps the legacy class-only policies working; when set, reports must be
+    # strictly greater than this value.
+    min_isk_lost = models.DecimalField(
+        max_digits=24, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
 
     class Meta:
         ordering = ['name']
@@ -161,6 +168,12 @@ class ProbeCursor(models.Model):
     last_success_kill_time = models.DateTimeField(null=True, blank=True)
     consecutive_empty_count = models.PositiveIntegerField(default=0)
     next_probe_id = models.BigIntegerField(null=True, blank=True)
+    pause_reason = models.CharField(max_length=64, blank=True, default='')
+    cooldown_until_ms = models.BigIntegerField(null=True, blank=True)
+    failure_count = models.PositiveIntegerField(default=0)
+    candidate_id = models.BigIntegerField(null=True, blank=True)
+    candidate_at_ms = models.BigIntegerField(null=True, blank=True)
+    provisional_empty_id = models.BigIntegerField(null=True, blank=True)
     updated_at_ms = models.BigIntegerField(default=epoch_ms)
 
     class Meta:
@@ -188,6 +201,8 @@ class ProbeRun(models.Model):
     empty_count = models.PositiveIntegerField(default=0)
     stop_reason = models.CharField(max_length=64, blank=True, default='')
     error_code = models.CharField(max_length=64, blank=True, default='')
+    lease_owner = models.CharField(max_length=64, blank=True, default='')
+    lease_expires_at_ms = models.BigIntegerField(null=True, blank=True, db_index=True)
     created_at_ms = models.BigIntegerField(default=epoch_ms, db_index=True)
 
     class Meta:

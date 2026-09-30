@@ -7,6 +7,8 @@ credentials or connects to the live MySQL databases.
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from decimal import Decimal
+
 from django.test import TestCase
 
 from Killboard.models import (
@@ -85,6 +87,7 @@ class KillboardModelTests(TestCase):
             name="battleship_plus",
             min_ship_rank=ship_class.rank,
             allowed_class_keys=[ship_class.key],
+            min_isk_lost=Decimal("20000000000.00"),
         )
         cursor = ProbeCursor.objects.create(name="default", next_probe_id=19748419)
         run = ProbeRun.objects.create(cursor=cursor, policy=policy, status=ProbeRun.Status.QUEUED)
@@ -92,6 +95,11 @@ class KillboardModelTests(TestCase):
         self.assertEqual(run.cursor, cursor)
         self.assertEqual(run.policy, policy)
         self.assertEqual(ShipClass.objects.get(key="battleship"), ship_class)
+        self.assertEqual(policy.min_isk_lost, Decimal("20000000000.00"))
+
+    def test_policy_threshold_is_nullable_and_decimal(self):
+        policy = CollectionPolicy.objects.create(name="all-value", min_ship_rank=0, allowed_class_keys=[])
+        self.assertIsNone(policy.min_isk_lost)
 
     def test_invalid_status_is_rejected_by_model_validation(self):
         item = KillItem(status="salvaged")

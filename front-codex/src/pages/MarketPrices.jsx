@@ -74,7 +74,7 @@ function ItemNav({ rows, selectedId, onSelect, now }) {
     {rows.map(item => {
       const status = quoteStatus(item, now)
       return <button type="button" key={item.item_id} aria-current={selectedId === item.item_id ? 'true' : undefined} className={`market-item-choice${selectedId === item.item_id ? ' active' : ''}`} onClick={() => onSelect(item.item_id)}>
-        <MarketItemIcon itemId={item.item_id} />
+        <MarketItemIcon item={item} />
         <span className="market-choice-content"><span className="market-choice-head"><strong title={item.name}>{item.name}</strong><span className={`market-choice-status ${status.tone}${status.tone === 'success' ? ' sr-only' : ''}`}>{status.label}</span></span>
           <span className="market-choice-quote" title={formatMarketPrice(item.best_sell)}>卖价 <b>{item.best_sell == null ? '暂无报价' : formatCompactMarketPrice(item.best_sell)}</b></span>
         </span>

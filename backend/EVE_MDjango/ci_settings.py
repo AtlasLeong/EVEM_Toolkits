@@ -27,5 +27,6 @@ CHANNEL_LAYERS = {
 }
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'],
-    'DEFAULT_THROTTLE_RATES': {'market_public': '120/hour', 'killboard_public': '120/hour'},
+    'DEFAULT_THROTTLE_RATES': {'market_public': '120/hour', 'killboard_public': '120/hour', 'killboard_private': '120/hour'},
 }
+KILLBOARD_MIN_ISK_LOST = '20000000000.00'

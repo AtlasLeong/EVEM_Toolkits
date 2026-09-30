@@ -311,16 +311,106 @@ def _summary_participant(summary: Mapping) -> dict | None:
     }
 
 
+def _identity_value(identity_map: Mapping, collection: str, identifier: int | None) -> Mapping | str | None:
+    """Return one trusted identity record without guessing from an ID.
+
+    The compact kill report intentionally carries IDs only.  A separate,
+    verified character/corporation response can be supplied by the transport
+    as ``identity_map``.  Keys may be integers (the normal in-memory form) or
+    strings (JSON/cache form), and values may be a name string or a mapping.
+    """
+    if identifier is None:
+        return None
+    records = identity_map.get(collection) if isinstance(identity_map, Mapping) else None
+    if not isinstance(records, Mapping):
+        return None
+    record = records.get(identifier)
+    if record is None:
+        record = records.get(str(identifier))
+    return record if isinstance(record, (Mapping, str)) else None
+
+
+def _identity_name(record: Mapping | str | None, *keys: str) -> str:
+    if isinstance(record, str):
+        return record
+    if not isinstance(record, Mapping):
+        return ""
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _identity_id(record: Mapping | str | None, *keys: str) -> int | None:
+    if not isinstance(record, Mapping):
+        return None
+    for key in keys:
+        value = record.get(key)
+        if value is not None:
+            return _int(value, key)
+    return None
+
+
+def _enrich_identity(
+    participants: list[dict],
+    *,
+    victim_character_id: int | None,
+    victim_name: str,
+    victim_corporation_id: int | None,
+    victim_corporation_name: str,
+    victim_alliance_id: int | None,
+    victim_alliance_name: str,
+    identity_map: Mapping,
+) -> tuple[str, str, str]:
+    """Fill names from explicit identity responses, preserving source names."""
+    def enrich_row(row: dict) -> None:
+        character = _identity_value(identity_map, "characters", row.get("character_id"))
+        if not row.get("character_name"):
+            row["character_name"] = _identity_name(character, "name", "character_name")
+        if row.get("corporation_id") is None:
+            row["corporation_id"] = _identity_id(character, "corporation_id", "corp_id")
+        if row.get("alliance_id") is None:
+            row["alliance_id"] = _identity_id(character, "alliance_id")
+        corporation = _identity_value(identity_map, "corporations", row.get("corporation_id"))
+        if not row.get("corporation_name"):
+            row["corporation_name"] = _identity_name(corporation, "name", "corporation_name")
+        alliance = _identity_value(identity_map, "alliances", row.get("alliance_id"))
+        if not row.get("alliance_name"):
+            row["alliance_name"] = _identity_name(alliance, "name", "alliance_name")
+
+    for participant in participants:
+        enrich_row(participant)
+
+    character = _identity_value(identity_map, "characters", victim_character_id)
+    if not victim_name:
+        victim_name = _identity_name(character, "name", "character_name")
+    if victim_corporation_id is None:
+        victim_corporation_id = _identity_id(character, "corporation_id", "corp_id")
+    if victim_alliance_id is None:
+        victim_alliance_id = _identity_id(character, "alliance_id")
+    corporation = _identity_value(identity_map, "corporations", victim_corporation_id)
+    if not victim_corporation_name:
+        victim_corporation_name = _identity_name(corporation, "name", "corporation_name")
+    alliance = _identity_value(identity_map, "alliances", victim_alliance_id)
+    if not victim_alliance_name:
+        victim_alliance_name = _identity_name(alliance, "name", "alliance_name")
+    return victim_name, victim_corporation_name, victim_alliance_name
+
+
 def parse_kill_blob(
     blob: str | bytes | bytearray,
     *,
     summary: Mapping | None = None,
     metadata: Mapping | None = None,
+    identity_map: Mapping | None = None,
 ) -> dict:
     """Parse one legacy or captured report into safe persistence values.
 
-    Captured reports carry identity and timestamps in the outer MessagePack
-    map; ``summary`` and ``metadata`` are aliases kept for callers/tests.
+    Captured reports carry IDs and timestamps in the outer MessagePack map;
+    ``summary`` and ``metadata`` are aliases kept for callers/tests.  When a
+    transport also captures the game's character/corporation proxy responses,
+    pass them as ``identity_map`` to resolve those IDs without guessing.
     """
     if isinstance(blob, bytearray):
         blob = bytes(blob)
@@ -338,6 +428,8 @@ def parse_kill_blob(
     outer = summary if summary is not None else metadata
     if outer is not None and not isinstance(outer, Mapping):
         _fail("invalid report summary")
+    if identity_map is not None and not isinstance(identity_map, Mapping):
+        _fail("invalid identity map")
     roots = _parse_forest(blob)
     legacy_root = roots[0] if len(roots) == 1 and roots[0].name in {"kill", "killmail", "report"} else None
     if legacy_root is None and not roots:
@@ -400,6 +492,18 @@ def parse_kill_blob(
             else:
                 summary_participant['source_index'] = len(participants)
                 participants.append(summary_participant)
+
+    if identity_map is not None:
+        victim_name, victim_corporation_name, victim_alliance_name = _enrich_identity(
+            participants,
+            victim_character_id=victim_character_id,
+            victim_name=victim_name,
+            victim_corporation_id=victim_corporation_id,
+            victim_corporation_name=victim_corporation_name,
+            victim_alliance_id=victim_alliance_id,
+            victim_alliance_name=victim_alliance_name,
+            identity_map=identity_map,
+        )
 
     kill_time_raw = _text(get("killtime", "kill_time", "time"))
     time_quality = "source" if re.search(r"(?:z|[+-][0-9]{2}:[0-9]{2})$", kill_time_raw, re.I) else "unknown"

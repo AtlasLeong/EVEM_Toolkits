@@ -151,3 +151,12 @@ test('unknown icons render a decorative library fallback without a broken image'
   assert.match(markup, /aria-hidden="true"/)
   assert.match(markup, /market-item-icon-fallback/)
 })
+
+test('market icon consumes API image metadata from the whole item', async () => {
+  const MarketItemIcon = await loadComponent()
+  const markup = renderToStaticMarkup(React.createElement(MarketItemIcon, {
+    item: { item_id: '28007000000', image_url: '/images/game-data/current.png' },
+  }))
+  assert.match(markup, /src="\/images\/game-data\/current.png"/)
+  assert.doesNotMatch(markup, /market-items\/28007000000/)
+})

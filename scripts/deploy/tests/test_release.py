@@ -80,6 +80,22 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(release.ReleaseError):
             release.stage(archive, self.root / 'releases')
 
+    def test_game_capture_and_session_material_are_never_publishable(self):
+        for name in ['backend/capture.pcap', 'frontend/capture.pcapng', 'backend/accounts.dpapi',
+                     'backend/session.json', 'backend/session-01.json', 'backend/account-pool.json',
+                     'frontend/accounts.xlsx']:
+            with self.subTest(name=name):
+                with self.assertRaises(release.ReleaseError):
+                    release.safe_name(name)
+
+    def test_killboard_capability_requires_collector_release_lock(self):
+        backend = self.root/'backend'
+        self.assertFalse(release.requires_killboard_collector(backend))
+        (backend/'Killboard').mkdir(parents=True)
+        (backend/'Killboard/run-collector.sh').write_text('synthetic test runner')
+        self.assertTrue(release.requires_killboard_collector(backend))
+        self.assertTrue(release.requires_killboard_collector(self.root/'old', {'killboard_collector': True}))
+
     def test_duplicate_member_rejected(self):
         archive = self.root / 'duplicate.tar'
         with tarfile.open(archive, 'w') as out:

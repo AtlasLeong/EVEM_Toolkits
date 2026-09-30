@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
 import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
+import useKillboardAccess from '../../hooks/useKillboardAccess'
 
 const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
@@ -38,8 +39,10 @@ export default function AppShell() {
   const navigate = useNavigate()
   const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
   const usageAccess = useTacticalUsageAccess()
+  const killboardAccess = useKillboardAccess()
   const canViewUsage = usageAccess.allowed
-  const availableNavItems = canViewUsage ? [...navItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...navItems.slice(4)] : navItems
+  const killboardNavItems = killboardAccess.allowed ? navItems : navItems.filter(item => item.to !== '/killboard')
+  const availableNavItems = canViewUsage ? [...killboardNavItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...killboardNavItems.slice(4)] : killboardNavItems
   const reduceMotion = useReducedMotion()
   const displayName = userInfo?.userName?.trim() || '已登录用户'
   const [collapsed, setCollapsed] = useState(() => {

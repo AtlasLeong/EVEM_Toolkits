@@ -7,6 +7,7 @@ does not know about accounts, sessions, or transport details.
 from __future__ import annotations
 
 from datetime import datetime, timezone as dt_timezone
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 
@@ -38,10 +39,23 @@ def _policy_allows(parsed: dict, policy: CollectionPolicy | None) -> bool:
         return True
     if not policy.enabled:
         return False
+    threshold = policy.min_isk_lost
+    if threshold is not None:
+        observed = parsed.get("isk_lost")
+        if observed is None or isinstance(observed, bool):
+            return False
+        try:
+            observed = Decimal(str(observed))
+        except (InvalidOperation, TypeError, ValueError):
+            return False
+        if not observed.is_finite() or observed <= threshold:
+            return False
     class_key = str(parsed.get("ship_class_key") or "")
     allowed = set(policy.allowed_class_keys or [])
     if allowed:
         return class_key in allowed
+    if policy.min_ship_rank <= 0:
+        return True
     ship_class = ShipClass.objects.filter(key=class_key, enabled=True).first()
     return ship_class is not None and ship_class.rank >= policy.min_ship_rank
 

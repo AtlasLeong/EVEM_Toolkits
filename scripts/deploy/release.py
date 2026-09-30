@@ -28,6 +28,7 @@ SHA = re.compile(r'^[0-9a-f]{40}$')
 HASH = re.compile(r'^[0-9a-f]{64}$')
 MAX_BYTES = 1024 ** 3
 MARKET_CAPABILITY_FILE = 'Market/management/commands/market_tick.py'
+KILLBOARD_CAPABILITY_FILE = 'Killboard/run-collector.sh'
 MARKET_MSGPACK_VERSION = '1.2.2'
 
 # Run only with the candidate interpreter and its real collector PYTHONPATH.
@@ -87,10 +88,13 @@ def safe_name(name):
     if parts[0] not in COMPONENTS or len(parts) < 2:
         raise ReleaseError('unknown component')
     for part in parts[1:]:
+        lower = part.lower()
         if (part in {'.git', '.venv', 'venv', 'node_modules', '__pycache__', 'logs', 'uploads'}
                 or (part.startswith('.env') and part != '.env.example')
                 or part.startswith(('id_rsa', 'id_ed25519'))
-                or part.endswith(('.pem', '.key', '.sqlite3', '.pyc', '.log'))):
+                or lower.endswith(('.pem', '.key', '.sqlite3', '.pyc', '.log', '.pcap', '.pcapng', '.dpapi'))
+                or (lower.endswith(('.json', '.xlsx', '.xls', '.csv'))
+                    and re.match(r'^(?:sessions?|accounts?)(?:[._-]|$)', lower))):
             raise ReleaseError('persistent or secret data in artifact')
 
 
@@ -216,8 +220,13 @@ def requires_market_collector(backend, state=None):
             or (Path(backend) / MARKET_CAPABILITY_FILE).is_file())
 
 
+def requires_killboard_collector(backend, state=None):
+    return ((state or {}).get('killboard_collector') is True
+            or (Path(backend) / KILLBOARD_CAPABILITY_FILE).is_file())
+
+
 @contextmanager
-def market_collector_lock(root, required=False):
+def market_collector_lock(root, required=False, component='market'):
     """Share the collector's pre-provisioned lock for the entire transaction.
 
     Never create/recreate this file: doing so could split the lock identity or
@@ -227,7 +236,9 @@ def market_collector_lock(root, required=False):
     if not required:
         yield
         return
-    path = Path(root) / 'shared/market/collector.lock'
+    if component not in ('market', 'killboard'):
+        raise ReleaseError('unknown collector lock')
+    path = Path(root) / 'shared' / component / 'collector.lock'
     descriptor = None
     try:
         original = path.lstat()
@@ -266,6 +277,9 @@ def transact(root, old, new, changed, prepare, switch, restart, health, *, marke
         for state in (old, new)
     )
     with market_collector_lock(root, required=required):
+        if any(requires_killboard_collector(state['backend']['path'], state['backend']) for state in (old, new)):
+            with market_collector_lock(root, required=True, component='killboard'):
+                return _transact_locked(root, old, new, changed, prepare, switch, restart, health)
         return _transact_locked(root, old, new, changed, prepare, switch, restart, health)
 
 
@@ -549,6 +563,8 @@ def publish(root, archive=None, rollback=False):
                     new[component]['community_ready'] = True
                 if component == 'backend' and ('backend/' + MARKET_CAPABILITY_FILE) in manifest['files']:
                     new[component]['market_collector'] = True
+                if component == 'backend' and ('backend/' + KILLBOARD_CAPABILITY_FILE) in manifest['files']:
+                    new[component]['killboard_collector'] = True
             def prepare():
                 if 'backend' in changed:
                     prepare_backend(root, staged, manifest, config)

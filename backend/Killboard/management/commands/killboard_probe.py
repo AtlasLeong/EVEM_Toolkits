@@ -7,12 +7,15 @@ captures are read from the repository.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.core.management import BaseCommand, CommandError
 from django.db import transaction
 from django.utils.module_loading import import_string
 
 from Killboard.discovery import DiscoveryConfig, DiscoveryRunner
 from Killboard.models import CollectionPolicy, ProbeCursor, ShipClass
+from Killboard.worker import CollectorPacer
 
 
 DEFAULT_CLASSES = (
@@ -24,6 +27,8 @@ DEFAULT_CLASSES = (
     ("supercarrier", "超级航母", 8),
     ("titan", "泰坦", 9),
 )
+DEFAULT_POLICY = "high_value_all"
+DEFAULT_MIN_ISK_LOST = Decimal("20000000000.00")
 
 
 class Command(BaseCommand):
@@ -32,7 +37,7 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--client", help="Dotted path to a ProbeClient factory/class")
         parser.add_argument("--cursor", default="default")
-        parser.add_argument("--policy", default="battleship_plus")
+        parser.add_argument("--policy", default=DEFAULT_POLICY)
         parser.add_argument("--start-id", type=int)
         parser.add_argument("--step", type=int, default=1)
         parser.add_argument("--neighbor-reprobe", type=int, default=0)
@@ -40,6 +45,10 @@ class Command(BaseCommand):
         parser.add_argument("--max-requests", type=int, default=100)
         parser.add_argument("--source", default="kill_api")
         parser.add_argument("--write", action="store_true", help="Commit cursor and reports")
+        parser.add_argument('--resume', action='store_true', help='Operator-confirmed session refresh; clear pause')
+        parser.add_argument('--rpc-interval', type=float, default=5)
+        parser.add_argument('--rpc-budget', type=int, default=36)
+        parser.add_argument('--max-seconds', type=float, default=210)
 
     def _policy(self, name):
         for key, label, rank in DEFAULT_CLASSES:
@@ -51,18 +60,33 @@ class Command(BaseCommand):
                 ship_class.label = label
                 ship_class.enabled = True
                 ship_class.save(update_fields=["rank", "label", "enabled"])
-        policy, _ = CollectionPolicy.objects.get_or_create(
-            name=name,
-            defaults={
-                "min_ship_rank": 4,
-                "allowed_class_keys": [key for key, _, rank in DEFAULT_CLASSES if rank >= 4],
-                "enabled": True,
-            },
-        )
         allowed = [key for key, _, rank in DEFAULT_CLASSES if rank >= 4]
-        # Only repair the built-in preset.  A named custom policy is operator
+        if name == DEFAULT_POLICY:
+            defaults = {
+                "min_ship_rank": 0,
+                "allowed_class_keys": [],
+                "min_isk_lost": DEFAULT_MIN_ISK_LOST,
+                "enabled": True,
+            }
+        else:
+            defaults = {
+                "min_ship_rank": 4,
+                "allowed_class_keys": allowed,
+                "enabled": True,
+            }
+        policy, _ = CollectionPolicy.objects.get_or_create(name=name, defaults=defaults)
+        # Only repair built-in presets. A named custom policy is operator
         # configuration and must not be silently rewritten by every probe.
-        if name == "battleship_plus" and (
+        if name == DEFAULT_POLICY:
+            changed = []
+            for field, value in (("enabled", True), ("min_ship_rank", 0), ("allowed_class_keys", []),
+                                 ("min_isk_lost", DEFAULT_MIN_ISK_LOST)):
+                if getattr(policy, field) != value:
+                    setattr(policy, field, value)
+                    changed.append(field)
+            if changed:
+                policy.save(update_fields=changed)
+        elif name == "battleship_plus" and (
             policy.min_ship_rank != 4 or policy.allowed_class_keys != allowed
         ):
             policy.min_ship_rank = 4
@@ -87,34 +111,40 @@ class Command(BaseCommand):
                 empty_threshold=options["empty_threshold"],
                 max_requests=options["max_requests"],
             )
+            pacer = CollectorPacer(interval=options['rpc_interval'], max_rpcs=options['rpc_budget'],
+                                   max_seconds=options['max_seconds'])
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
-        client = self._client(options["client"])
-        if options["write"]:
-            policy = self._policy(options["policy"])
-            cursor, _ = ProbeCursor.objects.get_or_create(name=options["cursor"])
-            run = DiscoveryRunner(
-                client,
-                cursor=cursor,
-                policy=policy,
-                config=config,
-                source=options["source"],
-            ).run()
-        else:
+        client = None
+
+        def execute(dry_run=False):
+            nonlocal client
+            policy = self._policy(options['policy'])
+            cursor, _ = ProbeCursor.objects.get_or_create(name=options['cursor'])
+            def load_client():
+                nonlocal client
+                client = self._client(options['client'])
+                if hasattr(client, 'set_before_rpc'):
+                    client.set_before_rpc(pacer)
+                return client
+            runner = DiscoveryRunner(None, cursor=cursor, policy=policy, config=config,
+                                     source=options['source'], client_factory=load_client)
+            pacer.heartbeat = runner.heartbeat
+            return runner.run(dry_run=dry_run, resume=options['resume'])
+
+        try:
+            if options['write']:
+                run = execute()
+            else:
             # Policy, cursor, run and reports all execute in a rollback-only
             # transaction.  DiscoveryRunner uses its dedicated dry-run path so
             # the normal short-transaction lease is not committed underneath.
-            with transaction.atomic():
-                policy = self._policy(options["policy"])
-                cursor, _ = ProbeCursor.objects.get_or_create(name=options["cursor"])
-                run = DiscoveryRunner(
-                    client,
-                    cursor=cursor,
-                    policy=policy,
-                    config=config,
-                    source=options["source"],
-                ).run(dry_run=True)
-                transaction.set_rollback(True)
+                with transaction.atomic():
+                    run = execute(dry_run=True)
+                    transaction.set_rollback(True)
+        finally:
+            if client and hasattr(client, 'close'):
+                client.close()
         mode = "committed" if options["write"] else "dry-run"
         self.stdout.write(
             self.style.SUCCESS(

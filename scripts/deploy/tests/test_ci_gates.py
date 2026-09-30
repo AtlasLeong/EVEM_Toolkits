@@ -43,3 +43,10 @@ class CIGatesTests(unittest.TestCase):
                 self.assertIn(required, content)
         self.assertNotIn('EVE_MDjango.settings', content)
         self.assertNotIn('continue-on-error', content)
+
+    def test_private_killboard_and_shared_data_have_explicit_gates(self):
+        workflow = (Path(__file__).resolve().parents[3] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        for gate in ('Killboard.tests.test_worker', 'Killboard.tests.test_collector_transport',
+                     'GameData.tests', 'makemigrations Killboard',
+                     'scripts/killboard/tests', 'scripts/game_data/client_assets/tests'):
+            self.assertIn(gate, workflow)

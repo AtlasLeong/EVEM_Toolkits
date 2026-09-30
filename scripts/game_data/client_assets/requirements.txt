@@ -1,0 +1,7 @@
+# Exact versions used for the 2026-09-30 reproducibility check (Python 3.11.9).
+# Offline tooling only; not backend/frontend runtime dependencies.
+Pillow==10.1.0
+zstandard==0.25.0
+texture2ddecoder==1.0.6
+xxhash==3.8.1
+cryptography==50.0.1

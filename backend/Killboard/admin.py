@@ -20,7 +20,7 @@ class ShipClassAdmin(admin.ModelAdmin):
 
 @admin.register(CollectionPolicy)
 class CollectionPolicyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'min_ship_rank', 'enabled')
+    list_display = ('name', 'min_ship_rank', 'min_isk_lost', 'enabled')
     list_filter = ('enabled',)
 
 
@@ -53,5 +53,5 @@ class ProbeCursorAdmin(admin.ModelAdmin):
 
 @admin.register(ProbeRun)
 class ProbeRunAdmin(admin.ModelAdmin):
-    list_display = ('id', 'status', 'request_count', 'report_count', 'empty_count', 'stop_reason', 'created_at_ms')
+    list_display = ('id', 'status', 'request_count', 'report_count', 'empty_count', 'stop_reason', 'lease_expires_at_ms', 'created_at_ms')
     list_filter = ('status',)

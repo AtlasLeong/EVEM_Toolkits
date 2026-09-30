@@ -9,7 +9,7 @@ from Killboard.models import CollectionPolicy, KillItem, KillReport, ShipClass
 from Killboard.services import persist_report
 
 
-def parsed_report(*, kill_id=100, ship_class_key="battleship", completeness=None):
+def parsed_report(*, kill_id=100, ship_class_key="battleship", isk_lost=Decimal("123.45"), completeness=None):
     value = {
         "kill_id": kill_id,
         "ship_type_id": 9001,
@@ -21,7 +21,7 @@ def parsed_report(*, kill_id=100, ship_class_key="battleship", completeness=None
         "victim_name": "Victim",
         "kill_time_raw": "2026-09-28T12:00:00+00:00",
         "time_quality": "source",
-        "isk_lost": Decimal("123.45"),
+        "isk_lost": isk_lost,
         "participant_count": 1,
         "participants": [{
             "character_id": 8,
@@ -127,6 +127,47 @@ class KillReportPersistenceTests(TestCase):
             policy=policy,
         )
 
+        self.assertIsNone(report)
+        self.assertFalse(stored)
+
+    def test_value_policy_accepts_any_ship_class_only_above_strict_threshold(self):
+        policy = CollectionPolicy.objects.create(
+            name="high_value_all",
+            min_ship_rank=0,
+            allowed_class_keys=[],
+            min_isk_lost=Decimal("20000000000.00"),
+        )
+
+        below, stored = persist_report(
+            parsed_report(kill_id=108, ship_class_key="frigate", isk_lost=Decimal("19999999999.99")),
+            policy=policy,
+        )
+        self.assertIsNone(below)
+        self.assertFalse(stored)
+
+        equal, stored = persist_report(
+            parsed_report(kill_id=109, ship_class_key="frigate", isk_lost=Decimal("20000000000.00")),
+            policy=policy,
+        )
+        self.assertIsNone(equal)
+        self.assertFalse(stored)
+
+        above, stored = persist_report(
+            parsed_report(kill_id=110, ship_class_key="frigate", isk_lost=Decimal("20000000000.01")),
+            policy=policy,
+        )
+        self.assertTrue(stored)
+        self.assertEqual(above.ship_class_key, "frigate")
+
+    def test_value_policy_rejects_missing_value(self):
+        policy = CollectionPolicy.objects.create(
+            name="high_value_missing",
+            min_ship_rank=0,
+            allowed_class_keys=[],
+            min_isk_lost=Decimal("20000000000.00"),
+        )
+        parsed = parsed_report(kill_id=111, ship_class_key="frigate", isk_lost=None)
+        report, stored = persist_report(parsed, policy=policy)
         self.assertIsNone(report)
         self.assertFalse(stored)
 

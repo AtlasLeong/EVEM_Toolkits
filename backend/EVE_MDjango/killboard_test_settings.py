@@ -33,6 +33,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 MIGRATION_MODULES = {'ActivationCode': None}
 REST_FRAMEWORK = {
-    'DEFAULT_THROTTLE_RATES': {'killboard_public': '120/hour'},
+    'DEFAULT_THROTTLE_RATES': {'killboard_public': '120/hour', 'killboard_private': '120/hour'},
 }
+KILLBOARD_OWNER_EMAIL = 'owner@example.com'
+KILLBOARD_MIN_ISK_LOST = '20000000000.00'
 
