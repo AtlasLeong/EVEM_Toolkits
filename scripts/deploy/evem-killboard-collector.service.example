@@ -14,6 +14,7 @@ EnvironmentFile=/EVEMTK/deploy/shared/killboard/collector.env
 EnvironmentFile=/EVEMTK/deploy/shared/killboard/provision/database.env
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONPATH=/EVEMTK/deploy/shared/market-python
+Environment=KILLBOARD_SESSION_CURSOR_FILE=/EVEMTK/deploy/shared/killboard/session-cursor.json
 ExecStart=/bin/sh /EVEMTK/deploy/current/backend/Killboard/run-collector.sh
 TimeoutStartSec=4min
 NoNewPrivileges=true
@@ -21,4 +22,4 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
 ReadOnlyDirectories=/EVEMTK
-ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock
+ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock /EVEMTK/deploy/shared/killboard/session-cursor.json
