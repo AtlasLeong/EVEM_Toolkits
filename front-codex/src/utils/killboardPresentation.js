@@ -48,9 +48,23 @@ export function killboardCollectionLabel(status) {
   return status.state === 'running' ? '采集运行中' : '采集已就绪'
 }
 
+// Rate-limit/cooldown is an internal collector safety state. Keep the health
+// data available for diagnostics, but do not surface a noisy live badge for a
+// condition that is expected during normal backoff.
+export function shouldShowKillboardLiveStatus(status) {
+  if (!status) return true
+  const reason = status.state === 'cooldown' ? 'rate_limited' : status.stop_reason || status.state
+  return reason !== 'rate_limited' && reason !== 'cooldown'
+}
+
 export function participantShipLabel(row = {}) {
   const name = formatKillboardName(row.ship_name)
   return name || (idLabel(row.ship_type_id) ? '舰船名称待补' : '舰船资料未返回')
+}
+
+function isNpcParticipant(row = {}) {
+  const kind = String(row.identity_kind || row.actor_kind || row.character_type || '').trim().toLowerCase().replace(/[-\s]+/g, '_')
+  return row.is_npc === true || kind === 'npc' || kind === 'non_player' || kind === 'non_player_character'
 }
 
 export function participantIdentity(row = {}) {
@@ -60,13 +74,16 @@ export function participantIdentity(row = {}) {
   const corporationName = String(row.corporation_name || '').trim()
   const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
   const sourceOnly = !characterName && !characterId && Boolean(sourceName)
-  return {
-    name: characterName || sourceName || (characterId ? `角色 ID ${characterId}` : '身份资料未返回'),
+  const npc = !characterName && !sourceName && isNpcParticipant(row)
+  const identity = {
+    name: characterName || sourceName || (npc ? 'NPC' : characterId ? `角色 ID ${characterId}` : '身份资料未返回'),
     nameDetail: characterName && characterId ? `ID ${characterId}` : characterId,
-    corporation: corporationName || (sourceOnly ? '来源记录 · 无角色身份' : corporationId ? `军团 ID ${corporationId}` : '军团资料未返回'),
+    corporation: corporationName || (npc ? '非玩家角色' : sourceOnly ? '来源记录 · 无角色身份' : corporationId ? `军团 ID ${corporationId}` : '军团资料未返回'),
     corporationDetail: corporationName && corporationId ? `ID ${corporationId}` : corporationId,
     named: Boolean(characterName),
   }
+  if (npc) identity.isNpc = true
+  return identity
 }
 
 export function visibleParticipantRows(rows = []) {
@@ -74,7 +91,7 @@ export function visibleParticipantRows(rows = []) {
   return rows.filter(row => {
     if (!row || typeof row !== 'object') return false
     const characterName = String(row.character_name || '').trim()
-    if (characterName) return characterCount++ < 7
+    if (characterName || (!characterName && isNpcParticipant(row))) return characterCount++ < 7
     const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
     return Boolean(sourceName && (row.is_final_blow || row.is_top_damage))
   })

@@ -20,3 +20,10 @@ test('a source highlight can simultaneously carry final-blow and top-damage badg
   assert.match(serialized, /29%/)
   assert.doesNotMatch(serialized, /未知角色|NPC/)
 })
+
+test('explicit NPC participants render the honest NPC label', () => {
+  const tree = module.exports.default({ row: { identity_kind: 'npc', damage: 293464 } })
+  const serialized = JSON.stringify(tree)
+  assert.match(serialized, /NPC/)
+  assert.doesNotMatch(serialized, /角色 ID|身份资料未返回|未知角色/)
+})

@@ -73,7 +73,7 @@ function harness() {
     return tree
   }
   return {
-    calls, format: module.exports.formatKillIsk, render,
+    calls, format: module.exports.formatKillIsk, formatTime: module.exports.formatKillboardTime, render,
     get tree() { return tree },
     get serializedState() { return JSON.stringify(values) },
     async flush() { await settle(); render() },
@@ -175,6 +175,35 @@ test('loss-value rounding carries hundredths using BigInt and promotes 万 to �
   ]) assert.equal(format(value), expected, String(value))
 })
 
+test('killboard timestamps are rendered in explicit Asia/Shanghai 24-hour format', () => {
+  const formatTime = harness().formatTime
+  assert.equal(formatTime('2026-09-30T03:35:37Z'), '2026/9/30 11:35:37')
+  assert.doesNotMatch(formatTime('2026-09-30T03:35:37Z'), /AM|PM|上午|下午/)
+})
+
+test('rate-limit status does not render the live badge while forbidden status does', async () => {
+  const page = harness()
+  await loadPrivate(page, { status: false })
+  page.calls.status[0].resolve({ configured: true, collection_enabled: false, state: 'cooldown', stop_reason: 'rate_limited' })
+  await page.flush()
+  assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-live-pill'))
+  page.refresh()
+  page.calls.status[1].resolve({ configured: true, collection_enabled: false, state: 'configuration_error' })
+  await page.flush()
+  assert.ok(nodes(page.tree).some(node => node.props.className === 'kb-live-pill'))
+  page.unmount()
+})
+
+test('dropped equipment carries a dedicated row class and status', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const equipmentPanel = nodes(page.tree).find(node => typeof node.type === 'function' && node.type.name === 'Equipment')
+  const panel = equipmentPanel.type(equipmentPanel.props)
+  assert.ok(nodes(panel).some(node => node.props.className === 'kb-item kb-item--dropped'))
+  assert.ok(nodes(panel).some(node => String(node.props.className || '').includes('kb-item-status--dropped')))
+  page.unmount()
+})
+
 test('raw participant counts are labelled records, not a proven number of players', async () => {
   const page = harness()
   await loadPrivate(page)
@@ -204,7 +233,7 @@ test('the hero includes victim metadata and redundant stat cards no longer occup
   page.unmount()
 })
 
-test('refresh reloads health and displays a newly persisted cooldown', async () => {
+test('refresh reloads health and hides a newly persisted cooldown badge', async () => {
   const page = harness()
   await loadPrivate(page, { status: false })
   page.calls.status[0].resolve({ configured: true, collection_enabled: true, state: 'ready' })
@@ -216,7 +245,7 @@ test('refresh reloads health and displays a newly persisted cooldown', async () 
   assert.equal(page.calls.status[0].signal.aborted, true)
   page.calls.status[1].resolve({ configured: true, collection_enabled: false, state: 'cooldown', stop_reason: 'rate_limited' })
   await page.flush()
-  assert.match(JSON.stringify(page.tree), /限流冷却中/)
+  assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-live-pill'))
   assert.doesNotMatch(JSON.stringify(page.tree), /采集运行中/)
   page.unmount()
 })

@@ -8,7 +8,7 @@ export default function KillParticipantRow({ row }) {
   const image = shipImage(row)
   const percent = row.damage_pct === null || row.damage_pct === undefined || row.damage_pct === '' ? null : Number(row.damage_pct)
   const damagePercent = Number.isFinite(percent) ? `${percent}%` : ''
-  return <div className="kb-participant kb-participant--with-ship">
+  return <div className={`kb-participant kb-participant--with-ship${identity.isNpc ? ' kb-participant--npc' : ''}`}>
     <div className={`kb-participant-ship${row.is_final_blow ? ' is-final' : ''}`} title={ship}>
       <GameItemImage src={image} alt={ship} width={88} height={56} fallback={<span className="kb-ship-placeholder" aria-hidden="true">{row.is_final_blow ? <Crosshair size={26} /> : <UserRound size={26} />}</span>} />
     </div>

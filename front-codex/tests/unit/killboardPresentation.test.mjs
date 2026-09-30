@@ -3,6 +3,15 @@ import assert from 'node:assert/strict'
 import { participantIdentity, groupEquipmentItems, participantVisibilityNote, visibleParticipantRows, killboardSecurityMeta } from '../../src/utils/killboardPresentation.js'
 import * as presentation from '../../src/utils/killboardPresentation.js'
 
+test('rate-limit health states are hidden while access and configuration failures remain visible', () => {
+  assert.equal(typeof presentation.shouldShowKillboardLiveStatus, 'function')
+  assert.equal(presentation.shouldShowKillboardLiveStatus({ state: 'cooldown', stop_reason: 'rate_limited' }), false)
+  assert.equal(presentation.shouldShowKillboardLiveStatus({ state: 'stopped', stop_reason: 'rate_limited' }), false)
+  assert.equal(presentation.shouldShowKillboardLiveStatus({ state: 'unauthorized' }), true)
+  assert.equal(presentation.shouldShowKillboardLiveStatus({ state: 'configuration_error' }), true)
+  assert.equal(presentation.shouldShowKillboardLiveStatus({ state: 'running' }), true)
+})
+
 test('collection health labels distinguish readiness from running and show safe failure reasons', () => {
   assert.equal(typeof presentation.killboardCollectionLabel, 'function')
   for (const [status, expected] of [
@@ -69,6 +78,12 @@ test('participant identity prefers names and keeps IDs as secondary context', ()
 
 test('participant identity labels missing corporation data explicitly', () => {
   assert.equal(participantIdentity({ character_name: '玩家' }).corporation, '军团资料未返回')
+})
+
+test('explicit NPC participants use an honest fallback without inventing a character name', () => {
+  const identity = participantIdentity({ identity_kind: 'npc', damage: 1234 })
+  assert.deepEqual(identity, { name: 'NPC', nameDetail: '', corporation: '非玩家角色', corporationDetail: '', named: false, isNpc: true })
+  assert.deepEqual(visibleParticipantRows([{ identity_kind: 'npc', damage: 1234 }]), [{ identity_kind: 'npc', damage: 1234 }])
 })
 
 test('equipment slot flags are grouped without guessing unknown ranges', () => {
