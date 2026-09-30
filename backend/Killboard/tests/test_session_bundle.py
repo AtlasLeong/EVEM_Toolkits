@@ -275,6 +275,36 @@ class SessionBundleTests(unittest.TestCase):
                     self.assertEqual(self.session.load_random_session(), bundles[1])
                 choose.assert_called_once()
 
+    def test_round_robin_cursor_selects_next_bundle_and_wraps(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            paths = [Path(temporary) / f'{index}.json' for index in range(3)]
+            cursor = Path(temporary) / 'cursor.json'
+            bundles = [synthetic_bundle(bytes([index])) for index in range(3)]
+            for path, bundle in zip(paths, bundles):
+                self.session.save_session(bundle, path)
+            self.assertEqual(self.session.load_round_robin_session(paths, cursor)['hello']['synthetic'], b'\x00')
+            self.assertEqual(json.loads(cursor.read_text()), 1)
+            self.assertEqual(self.session.load_round_robin_session(paths, cursor)['hello']['synthetic'], b'\x01')
+            self.assertEqual(json.loads(cursor.read_text()), 2)
+            self.assertEqual(self.session.load_round_robin_session(paths, cursor)['hello']['synthetic'], b'\x02')
+            self.assertEqual(json.loads(cursor.read_text()), 0)
+            self.assertEqual(self.session.load_round_robin_session(paths, cursor)['hello']['synthetic'], b'\x00')
+            if os.name == 'posix':
+                self.assertEqual(stat.S_IMODE(cursor.stat().st_mode), 0o600)
+
+    def test_round_robin_cursor_missing_or_malformed_falls_back_to_zero(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            paths = [Path(temporary) / f'{index}.json' for index in range(2)]
+            bundles = [synthetic_bundle(bytes([index])) for index in range(2)]
+            for path, bundle in zip(paths, bundles):
+                self.session.save_session(bundle, path)
+            cursor = Path(temporary) / 'cursor.json'
+            for malformed in ('not-json', '{}', '99', '-1', '1.5', 'true'):
+                cursor.write_text(malformed)
+                selected = self.session.load_round_robin_session(paths, cursor)
+                self.assertEqual(selected['hello']['synthetic'], b'\x00')
+                self.assertEqual(json.loads(cursor.read_text()), 1)
+
     def test_pool_rejects_duplicate_session_material_in_different_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             paths = [Path(temporary) / name for name in ('one.json', 'two.json')]

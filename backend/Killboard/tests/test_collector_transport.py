@@ -572,10 +572,10 @@ class CollectorTransportTests(unittest.TestCase):
                 self.bundle_module.save_session(synthetic_bundle(bytes([index])), path)
             with patch.dict(os.environ, {'KILLBOARD_SESSION_FILES': os.pathsep.join(map(str, paths))}):
                 with patch('Market.collector_protocol.socket.create_connection') as connect:
-                    with patch.object(self.bundle_module.random, 'choice', side_effect=lambda values: values[1]) as choose:
+                    with patch.object(self.transport, 'load_round_robin_session', return_value=synthetic_bundle(b'one')) as choose:
                         client = self.transport.build_client()
                     choose.assert_called_once()
-                    self.assertEqual(client.session.bundle['hello']['synthetic'], b'\x01')
+                    self.assertEqual(client.session.bundle['hello']['synthetic'], b'one')
                     connect.assert_not_called()
                     client.close()
 

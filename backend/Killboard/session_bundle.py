@@ -37,6 +37,7 @@ REQUIRED_METHODS = ('login_sigma', 'request_start_wait', 'get_newbie_info',
 OPTIONAL_METHODS = ('get_public_info', 'get_corp_brief')
 PROFILE_ROUTES = {'get_public_info': 'char_proxy', 'get_corp_brief': 'corp_rec_proxy'}
 MAX_PROFILE_IDS = 512
+DEFAULT_CURSOR_FILE = '/var/lib/evem-killboard/session-cursor.json' if os.name == 'posix' else None
 
 
 class NeedsAuthError(Exception):
@@ -248,6 +249,77 @@ def load_session_pool(paths=None) -> list[dict[str, Any]]:
 def load_random_session(paths=None) -> dict[str, Any]:
     """Choose exactly one bundle per run, never an auth/rate-driven fallback."""
     return random.choice(load_session_pool(paths))
+
+
+def _cursor_path(cursor_path=None) -> Path:
+    """Resolve the private round-robin cursor without deriving a secret path."""
+    if cursor_path is None:
+        cursor_path = os.environ.get('KILLBOARD_SESSION_CURSOR_FILE', '') or DEFAULT_CURSOR_FILE
+        if not cursor_path:
+            cursor_path = str(Path.home() / '.local' / 'state' / 'evem-killboard' / 'session-cursor.json')
+    return _session_path(cursor_path)
+
+
+def _read_cursor(path: Path, pool_size: int) -> int:
+    """Read one bounded integer; absent, invalid or out-of-range means index zero."""
+    try:
+        _reject_link_components(path)
+        info = path.lstat()
+        _check_file_stat(info)
+        if info.st_size > 128:
+            return 0
+        encoded = path.read_text(encoding='utf-8')
+        value = json.loads(encoded)
+        if type(value) is not int or not 0 <= value < pool_size:
+            return 0
+        return value
+    except (FileNotFoundError, OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError,
+            SessionBundleError):
+        return 0
+
+
+def _write_cursor(path: Path, value: int) -> None:
+    """Atomically replace the cursor with owner-only permissions."""
+    try:
+        _reject_link_components(path)
+        parent = path.parent
+        if not parent.is_dir() or parent.is_symlink():
+            raise _invalid()
+        descriptor, temporary = tempfile.mkstemp(prefix='.killboard-cursor-', dir=parent)
+        try:
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                if os.name == 'posix':
+                    os.fchmod(stream.fileno(), 0o600)
+                json.dump(value, stream, separators=(',', ':'))
+                stream.write('\n')
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            temporary = None
+            if os.name == 'posix':
+                os.chmod(path, 0o600)
+        finally:
+            if temporary is not None:
+                try:
+                    os.unlink(temporary)
+                except OSError:
+                    pass
+    except (OSError, ValueError, TypeError):
+        raise _invalid() from None
+
+
+def load_round_robin_session(paths=None, cursor_path=None) -> dict[str, Any]:
+    """Select one session for this run and atomically advance the next index.
+
+    Cursor corruption is treated as a fresh pool (index zero), while an
+    unreadable cursor directory fails closed instead of silently reusing one
+    account forever. The selected bundle remains fixed for the caller's run.
+    """
+    bundles = load_session_pool(paths)
+    path = _cursor_path(cursor_path)
+    index = _read_cursor(path, len(bundles))
+    _write_cursor(path, (index + 1) % len(bundles))
+    return bundles[index]
 
 
 def save_session(bundle: dict[str, Any], path: str | Path) -> Path:

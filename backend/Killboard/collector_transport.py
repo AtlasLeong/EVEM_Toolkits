@@ -22,7 +22,7 @@ from Market.session_bundle import NeedsAuthError as MarketNeedsAuthError
 from .protocol import KillProtocolError, decode_kill_info_response
 from .identity_protocol import IdentityProtocolError, decode_public_info, decode_corp_brief, profile_ids
 from .parser import KillParseError, parse_kill_blob
-from .session_bundle import MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS, load_random_session, validate_session
+from .session_bundle import MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS, load_round_robin_session, validate_session
 
 
 MAX_IDENTITY_CACHE = 4096
@@ -369,6 +369,6 @@ class KillboardClient:
         return self._request('get_kill_info', kill_id, decode)
 
 
-def build_client(*, before_rpc=None, enrich=True) -> KillboardClient:
+def build_client(*, before_rpc=None, enrich=True, cursor_path=None) -> KillboardClient:
     """Management-command factory using explicit ``KILLBOARD_SESSION_FILES``."""
-    return KillboardClient(load_random_session(), before_rpc=before_rpc, enrich=enrich)
+    return KillboardClient(load_round_robin_session(cursor_path=cursor_path), before_rpc=before_rpc, enrich=enrich)

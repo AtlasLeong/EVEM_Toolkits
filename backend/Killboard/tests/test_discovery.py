@@ -6,6 +6,7 @@ import msgpack
 
 from django.core.management import call_command
 from django.test import TestCase
+from unittest.mock import patch
 
 from Killboard.discovery import DiscoveryConfig, DiscoveryRunner, ProbeStatus
 from Killboard.models import CollectionPolicy, KillReport, ProbeCursor, ProbeRun, ShipClass
@@ -100,6 +101,19 @@ class DiscoveryTests(TestCase):
         participant = KillReport.objects.get(kill_id=100).participants.get()
         self.assertEqual(participant.character_name, "击毁者")
         self.assertEqual(participant.corporation_name, "侦察军团")
+
+    def test_rate_limit_backoff_increases_to_fifteen_thirty_and_sixty_minutes(self):
+        cursor = ProbeCursor.objects.create(name="rate-backoff")
+        now = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
+        with patch("Killboard.discovery.timezone.now", return_value=now):
+            for expected_minutes in (15, 30, 60):
+                DiscoveryRunner.pause(cursor, "rate_limited")
+                self.assertEqual(cursor.failure_count, (15, 30, 60).index(expected_minutes) + 1)
+                self.assertEqual(
+                    cursor.cooldown_until_ms,
+                    int(now.timestamp() * 1000) + expected_minutes * 60 * 1000,
+                )
+        self.assertEqual(cursor.pause_reason, "rate_limited")
 
     def test_contiguous_reports_advance_cursor_and_stop_on_empty_hole(self):
         client = FakeClient({
