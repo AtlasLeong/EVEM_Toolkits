@@ -59,7 +59,9 @@ def classify_item(
         return BUCKET_CURRENCY
     if name.strip() in PLANETARY_RESOURCE_NAMES:
         return BUCKET_PLANETARY
-    if subcategory_id == INTERMEDIATE_SUBCATEGORY_ID:
+    # Blueprint rows may reuse the manufacturing subcategory id, but they
+    # belong to the blueprint catalogue rather than the tradeable materials.
+    if subcategory_id == INTERMEDIATE_SUBCATEGORY_ID and category_id != 1700:
         return BUCKET_INTERMEDIATE
     if subcategory_id == MINERAL_SUBCATEGORY_ID or category.strip() in MINERAL_GROUP_NAMES:
         return BUCKET_MINERALS

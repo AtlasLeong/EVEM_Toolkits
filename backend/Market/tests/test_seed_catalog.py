@@ -89,7 +89,7 @@ class MarketCatalogSeedTests(TestCase):
         self.assertGreaterEqual(MarketItem.objects.count(), 5000)
         self.assertTrue(MarketItem.objects.filter(pk=28007000000, name='伊甸币', enabled=False).exists())
 
-    def test_seed_classifies_the_three_operator_buckets_and_can_enable_them(self):
+    def test_seed_classifies_the_four_operator_buckets_and_can_enable_them(self):
         with TemporaryDirectory() as temporary:
             catalog = self._catalog(temporary, [
                 {'item_id': 28007000000, 'item_name': '伊甸币', 'market_group_name_3rd': '货币'},
@@ -135,6 +135,8 @@ class MarketCatalogSeedTests(TestCase):
              'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
             {'item_id': 41006000003, 'item_name': '富勒烯层间石墨', 'category_id': 1200,
              'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41006000004, 'item_name': '中间产物蓝图', 'category_id': 1700,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '蓝图'},
         ]
         with TemporaryDirectory() as temporary:
             catalog = self._catalog(temporary, intermediate_rows)
@@ -145,6 +147,10 @@ class MarketCatalogSeedTests(TestCase):
 
         self.assertEqual(
             set(MarketItem.objects.values_list('market_bucket', flat=True)),
-            {'intermediate'},
+            {'intermediate', 'other'},
         )
         self.assertEqual(MarketItem.objects.filter(enabled=True).count(), 12)
+        self.assertEqual(
+            MarketItem.objects.get(pk=41006000004).market_bucket,
+            'other',
+        )
