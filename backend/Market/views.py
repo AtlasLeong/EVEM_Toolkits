@@ -134,7 +134,7 @@ class PublicCategoriesView(APIView):
 
         # Compatibility for rows created before the logical taxonomy existed.
         # A normal seeded installation enters the branch above as soon as one
-        # of the three selectable buckets is enabled.
+        # of the four selectable buckets is enabled.
         totals = MarketItem.objects.filter(enabled=True).values('category_id').annotate(count=Count('pk'))
         categories = []
         other_count = 0

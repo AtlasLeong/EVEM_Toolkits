@@ -4,8 +4,8 @@
 
 ## 行情页数据含义
 
-- 第一版公开导航固定为三个业务分类：`currency`（货币 · 伊甸币）、`planetary`（行星资源，复用 `PlanetaryResource.planetDBmap.RESOURCE_FIELD_MAP` 的名称）和 `minerals`（矿物，按矿物组/子类归并）。其他目录项进入 `other`。分类计数和公开列表只包含管理员已启用的物品；历史手工目录在重新播种前仍保留按官方 `category_id` 查询的兼容路径。
-- `/api/market/items/?category_id=<业务分类、官方编号或 other>&q=<关键词>` 支持分类与名称/ID 联合筛选；`/api/market/categories/` 在启用业务目录后返回三个固定分类及数量。旧版 `/api/market/items/<id>/history/` 保持分页结构不变。
+- 公开导航固定为四个业务分类：`currency`（货币 · 伊甸币）、`planetary`（行星资源，复用 `PlanetaryResource.planetDBmap.RESOURCE_FIELD_MAP` 的名称）、`minerals`（矿物，按矿物组/子类归并）和 `intermediate`（中间产物，官方 `subcategory_id=1200012`）。其他目录项进入 `other`。分类计数和公开列表只包含管理员已启用的物品；历史手工目录在重新播种前仍保留按官方 `category_id` 查询的兼容路径。
+- `/api/market/items/?category_id=<业务分类、官方编号或 other>&q=<关键词>` 支持分类与名称/ID 联合筛选；`/api/market/categories/` 在启用业务目录后返回四个固定分类及数量。旧版 `/api/market/items/<id>/history/` 保持分页结构不变。
 - 每个快照仍保存最低卖价/最高买价，同时保存卖价从低到高前 5 档、买价从高到低前 5 档。公开物品、历史和走势接口仅在快照确实含有档位时返回 `sell_prices` / `buy_prices`，旧快照的响应形状保持兼容。
 - `/api/market/items/<id>/series/?days=1|7|30` 按采集时间升序返回最多 240 个真实快照点，`count` 是时间范围内抽样前的快照总数。空盘口一侧为 `null`，图线遇到缺口断开，不把缺失价当零。涨跌额和百分比分别由区间内该侧首末两个有效观测计算；不足两个有效观测显示“样本不足”。
 - 最低卖价和最高买价是采集时可见盘口，不是成交价格或成交量；走势图也不保证覆盖每次市场变动。页面应区分未采集、空盘口、超过两小时的旧报价和接口不可用。没有真实历史数据时显示空状态，绝不伪造趋势。
@@ -40,7 +40,7 @@ py -3.11 scripts\market\export_session_bundle.py --source $source --output $outp
 4. 将 `scripts/deploy/requirements-market.txt` 中的固定版本依赖安装到独立只读 `/EVEMTK/deploy/shared/market-python`，不是网站 venv；验证候选网站 Python 加相同 `PYTHONPATH` 可以导入 `Market.session_bundle` 和 `Market.collector_protocol`。该目标目录由 root/发布身份控制，采集身份只读。
 5. 对现有数据库做可恢复备份，用现有发布/迁移身份应用 `Market` 迁移并运行 `market_seed_catalog`。然后创建仅能对 Market 的物品、配置、运行、快照、最新价表进行必要 SELECT/INSERT/UPDATE 的 MySQL 用户；不要用该受限账号执行迁移。数据库凭据放在 root 限制访问的 `/EVEMTK/deploy/shared/market/database.env`，以 `MARKET_DB_NAME/USER/PASSWORD/HOST/PORT` 五项供 systemd `EnvironmentFile` 读取。
 6. 从**专用测试账号在游戏中完成登录与市场操作**的授权抓包导出会话模板，通过受控通道安装为 `/EVEMTK/deploy/shared/market/session-01.json`、`session-02.json` 等，归 `evem-market` 所有、0600，目录仅发布与采集身份可进入；systemd 的 `EnvironmentFile` 只写 `MARKET_SESSION_FILES=/EVEMTK/deploy/shared/market/session-01.json:/EVEMTK/deploy/shared/market/session-02.json`。不要把聊天中的明文账号列表写入服务器配置；额外账号无需导入。先在隔离模式查询一个确认过的物品并写/读真实 MySQL，检查过期会话、断网、重启和回滚。
-   发布后可用 `python manage.py market_seed_catalog --enable-buckets=currency,planetary,minerals` 启用这三类目录；该命令不会覆盖既有管理员启停状态或人工分类。
+   发布后可用 `python manage.py market_seed_catalog --enable-buckets=currency,planetary,minerals,intermediate` 启用四类目录；该命令不会覆盖既有管理员启停状态或人工分类。中间产物分类由随附目录中 `subcategory_id=1200012` 的 12 个官方条目组成：六元复合物、富勒化合物、酚合成物、多晶碳化硅纤维、强化碳纤维、铁磁胶体、碳化钛、碳化晶体、纳米晶体管、PPD富勒烯纤维、富勒二茂铁、富勒烯层间石墨（ID 以目录为准）。
 7. 发布网站，再安装并启动 `evem-market-collector.service`/`.timer`（仓库中提供示例）。目标服务器的 systemd 219 不支持 `ProtectSystem=strict`，示例改用 `ProtectSystem=full` 加 `ReadOnlyDirectories=/EVEMTK`；安装前须在目标机器运行 `systemd-analyze verify` 并核对实际生效的限制。systemd 使用 `EVE_MDjango.market_worker_settings`，不会读取网站 `.env`、URL 或 WebSocket 设置。timer 每分钟只检查到期/手动任务；真正采集结束后才随机安排下一轮。确认服务用户、锁 ACL、`TimeoutStartSec=10min`、计时器和线上 API 状态；没有专用会话时保持 timer **未启用**。
 
 ### 默认数据库备份与隔离恢复演练

@@ -66,7 +66,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--enable-buckets',
             default='',
-            help='Enable a comma-separated list of logical buckets (currency, planetary, minerals).',
+            help='Enable a comma-separated list of logical buckets (currency, planetary, minerals, intermediate).',
         )
 
     def handle(self, *args, **options):

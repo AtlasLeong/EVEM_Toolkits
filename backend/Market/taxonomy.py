@@ -1,7 +1,7 @@
 """Stable market buckets used by the public terminal and collector.
 
-The upstream catalog has many official category/group ids.  The terminal only
-needs three operator-facing buckets for the first market release, so the
+The upstream catalog has many official category/group ids.  The terminal uses
+a small set of operator-facing buckets, so the
 mapping lives here instead of being duplicated in the API and seed command.
 """
 
@@ -13,19 +13,22 @@ from typing import Any
 BUCKET_CURRENCY = 'currency'
 BUCKET_PLANETARY = 'planetary'
 BUCKET_MINERALS = 'minerals'
+BUCKET_INTERMEDIATE = 'intermediate'
 BUCKET_OTHER = 'other'
 
-PRIMARY_BUCKETS = (BUCKET_CURRENCY, BUCKET_PLANETARY, BUCKET_MINERALS)
+PRIMARY_BUCKETS = (BUCKET_CURRENCY, BUCKET_PLANETARY, BUCKET_MINERALS, BUCKET_INTERMEDIATE)
 BUCKET_CHOICES = (
     (BUCKET_CURRENCY, '货币 · 伊甸币'),
     (BUCKET_PLANETARY, '行星资源'),
     (BUCKET_MINERALS, '矿物'),
+    (BUCKET_INTERMEDIATE, '中间产物'),
     (BUCKET_OTHER, '其他'),
 )
 BUCKET_LABELS = dict(BUCKET_CHOICES)
 
 EDEN_CURRENCY_ITEM_ID = 28_007_000_000
 MINERAL_SUBCATEGORY_ID = 1_200_000
+INTERMEDIATE_SUBCATEGORY_ID = 1_200_012
 MINERAL_GROUP_NAMES = frozenset({'矿物', '矿物-复数'})
 
 try:
@@ -56,6 +59,10 @@ def classify_item(
         return BUCKET_CURRENCY
     if name.strip() in PLANETARY_RESOURCE_NAMES:
         return BUCKET_PLANETARY
+    # Blueprint rows may reuse the manufacturing subcategory id, but they
+    # belong to the blueprint catalogue rather than the tradeable materials.
+    if subcategory_id == INTERMEDIATE_SUBCATEGORY_ID and category_id != 1700:
+        return BUCKET_INTERMEDIATE
     if subcategory_id == MINERAL_SUBCATEGORY_ID or category.strip() in MINERAL_GROUP_NAMES:
         return BUCKET_MINERALS
     return BUCKET_OTHER
