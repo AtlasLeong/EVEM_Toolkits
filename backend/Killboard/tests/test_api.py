@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.test import TestCase
@@ -152,10 +153,11 @@ class KillboardApiTests(TestCase):
                             ship_type_id=10500000408, source_index=index + 1)
             for index in range(30)
         ])
-        # Authentication, report, participants, equipment and one batched
-        # system-security lookup; participant ship enrichment must not add a
-        # query per row.
-        with self.assertNumQueries(5):
+        # Authentication, report, participants and equipment; an installed
+        # TacticalBoard catalog adds one batched system-security lookup.
+        # Participant ship enrichment must not add a query per row.
+        expected_queries = 5 if apps.is_installed('TacticalBoard') else 4
+        with self.assertNumQueries(expected_queries):
             response = self.client.get('/api/killboard/reports/19748417/')
         self.assertEqual(response.status_code, 200)
         by_ship = {row['ship_type_id']: row['ship_name'] for row in response.data['participants']}
