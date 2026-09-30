@@ -22,6 +22,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 try:
+    from cryptography.exceptions import InvalidTag
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 except ImportError:  # pragma: no cover - deployment must provide this dependency
     try:
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - deployment must provide this dependenc
     except ImportError:  # pragma: no cover - deployment must provide this dependency
         _CryptoAES = None
     AESGCM = None
+    InvalidTag = ValueError
 
 
 NS = {
@@ -247,8 +249,8 @@ def read_manifest(path: str | Path, *, key: str | None = None) -> list[dict[str,
         return accounts
     except AccountPoolError:
         raise
-    except (OSError, UnicodeError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
-        raise AccountPoolError("account manifest cannot be decrypted") from exc
+    except (OSError, UnicodeError, ValueError, KeyError, TypeError, json.JSONDecodeError, InvalidTag):
+        raise AccountPoolError("account manifest cannot be decrypted") from None
 
 
 def main() -> int:
