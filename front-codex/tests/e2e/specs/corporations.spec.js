@@ -572,7 +572,12 @@ test("管理员审核申请必须看到说明，通过后待审列表刷新", as
   ).toBeVisible();
   await page.getByLabel("审核意见", { exact: true }).fill("已在游戏内核实。");
   await page.getByRole("button", { name: "批准申请", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("审核已完成");
+  await expect(page.getByRole("status")).toContainText(
+    "已获得管理权，公开主页还需完善资料",
+  );
+  await expect(
+    page.getByRole("link", { name: "去我的军团完善资料", exact: true }),
+  ).toHaveAttribute("href", /\/corporations\/manage\?id=2/);
   expect(decisions[0].decision).toBe("approve");
 });
 
