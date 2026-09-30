@@ -113,6 +113,43 @@ def atomic_json(path, value):
             os.unlink(temporary)
 
 
+def validate_game_catalog(source, files):
+    """Verify immutable catalog hashes, not only the outer artifact manifest."""
+    pointer_name = 'backend/GameData/data/current.json'
+    if pointer_name not in files:
+        return  # Older application releases do not contain the shared catalog.
+    if source.getmember(pointer_name).size > 4 * 1024 ** 2:
+        raise ReleaseError('oversized game catalog pointer')
+    try:
+        pointer = json.load(source.extractfile(pointer_name))
+    except (ValueError, TypeError):
+        raise ReleaseError('invalid game catalog pointer') from None
+    if not isinstance(pointer, dict):
+        raise ReleaseError('invalid game catalog pointer')
+    revision, versions = pointer.get('revision'), pointer.get('versions')
+    hashes, current_hash = pointer.get('version_hashes'), pointer.get('catalog_sha256')
+    if (type(pointer.get('schema_version')) is not int or pointer['schema_version'] != 1
+            or not isinstance(revision, str) or not HASH.fullmatch(revision)
+            or not isinstance(versions, list) or not versions or len(versions) > len(files)
+            or any(not isinstance(value, str) or not HASH.fullmatch(value) for value in versions)
+            or len(set(versions)) != len(versions) or revision not in versions
+            or not isinstance(hashes, dict) or not isinstance(current_hash, str)
+            or not HASH.fullmatch(current_hash) or hashes.get(revision) != current_hash):
+        raise ReleaseError('invalid game catalog pointer')
+    for version in versions:
+        # Only validated hexadecimal revisions may contribute to an archive path.
+        name = f'backend/GameData/data/versions/{version}.json'
+        expected = hashes.get(version)
+        if name not in files or not isinstance(expected, str) or not HASH.fullmatch(expected):
+            raise ReleaseError('game catalog revision or checksum missing')
+        actual = hashlib.sha256()
+        with source.extractfile(name) as stream:
+            for chunk in iter(lambda: stream.read(1024 ** 2), b''):
+                actual.update(chunk)
+        if actual.hexdigest() != expected:
+            raise ReleaseError('game catalog checksum mismatch')
+
+
 def validate(archive):
     """Validate inventory, types and checksums BEFORE creating any release files."""
     with tarfile.open(archive, 'r:*') as source:
@@ -152,6 +189,7 @@ def validate(archive):
                 raise ReleaseError('artifact checksum mismatch: ' + name)
         if manifest['dependencies'] != files['backend/requirements.txt']:
             raise ReleaseError('dependency checksum mismatch')
+        validate_game_catalog(source, files)
         return manifest
 
 

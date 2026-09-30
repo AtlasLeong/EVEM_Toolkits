@@ -20,7 +20,9 @@ def build(repo, dist, output):
     sha = git('rev-parse', 'HEAD').decode().strip()
     files = {}
     # Read committed blobs, never a recursive copy of the live working directory.
-    with tarfile.open(fileobj=io.BytesIO(git('archive', '--format=tar', 'HEAD', 'backend'))) as source:
+    # Git archive honors core.autocrlf. Hash-addressed catalogs and executable
+    # scripts must retain committed bytes on Windows as well as Linux.
+    with tarfile.open(fileobj=io.BytesIO(git('-c', 'core.autocrlf=false', 'archive', '--format=tar', 'HEAD', 'backend'))) as source:
         for member in source.getmembers():
             if member.isdir():
                 continue

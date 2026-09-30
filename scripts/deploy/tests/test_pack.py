@@ -48,6 +48,31 @@ class PackTests(unittest.TestCase):
             self.assertEqual(archive.extractfile('backend/.release-sha').read().decode(), self.sha)
             self.assertEqual(json.load(archive.extractfile('frontend/deploy-version.json')), {'sha': self.sha})
 
+    def test_autocrlf_cannot_change_committed_immutable_catalog_bytes(self):
+        self.git('config', 'core.autocrlf', 'true')
+        revision = 'a' * 64
+        data = self.root / 'backend/GameData/data'
+        versions = data / 'versions'
+        versions.mkdir(parents=True)
+        blob = (json.dumps({'schema_version': 1, 'revision': revision,
+                            'items': {'1': {'name': 'Exact catalog'}}}) + '\n').encode()
+        (versions / f'{revision}.json').write_bytes(blob)
+        pointer = {'schema_version': 1, 'revision': revision, 'versions': [revision],
+                   'catalog_sha256': pack.digest(blob), 'version_hashes': {revision: pack.digest(blob)}}
+        (data / 'current.json').write_bytes((json.dumps(pointer) + '\n').encode())
+        self.git('add', 'backend/GameData')
+        self.git('-c', 'user.name=CI', '-c', 'user.email=ci@example.invalid', 'commit', '-qm', 'catalog')
+        path = f'backend/GameData/data/versions/{revision}.json'
+        committed = subprocess.check_output(['git', 'show', 'HEAD:' + path], cwd=self.root)
+        self.assertEqual(committed, blob)
+        pack.build(self.root, self.dist, self.output)
+        with tarfile.open(self.output) as archive:
+            packaged = archive.extractfile(path).read()
+            declared = json.load(archive.extractfile('backend/GameData/data/current.json'))
+        self.assertEqual(packaged, committed)
+        self.assertEqual(pack.digest(packaged), declared['catalog_sha256'])
+        self.assertEqual(self.git('config', '--get', 'core.autocrlf').strip(), 'true')
+
     def test_dirty_source_rejected_instead_of_mislabeled_commit(self):
         (self.root / 'backend/manage.py').write_text('changed')
         with self.assertRaisesRegex(pack.ReleaseError, 'dirty'):

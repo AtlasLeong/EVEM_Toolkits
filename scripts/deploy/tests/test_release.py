@@ -50,6 +50,57 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((target / 'frontend/index.html').read_bytes(), b'hello')
         self.assertEqual(json.loads((target / 'manifest.json').read_text()), manifest)
 
+    def catalog_files(self):
+        current, historical = 'd' * 64, 'e' * 64
+        blobs = {revision: (json.dumps({'schema_version': 1, 'revision': revision,
+                                      'items': {}}) + '\n').encode()
+                 for revision in (current, historical)}
+        pointer = {'schema_version': 1, 'revision': current, 'versions': [historical, current],
+                   'catalog_sha256': digest(blobs[current]),
+                   'version_hashes': {revision: digest(blob) for revision, blob in blobs.items()}}
+        files = {f'backend/GameData/data/versions/{revision}.json': blob for revision, blob in blobs.items()}
+        files['backend/GameData/data/current.json'] = json.dumps(pointer).encode()
+        return pointer, files
+
+    def test_verified_current_and_historical_catalogs_are_publishable(self):
+        _, files = self.catalog_files()
+        archive, manifest = self.bundle(changes=files)
+        self.assertEqual(release.validate(archive), manifest)
+
+    def test_valid_outer_manifest_cannot_bless_line_ending_corruption_in_catalogs(self):
+        pointer, original = self.catalog_files()
+        for revision in pointer['versions']:
+            with self.subTest(revision=revision):
+                files = dict(original)
+                path = f'backend/GameData/data/versions/{revision}.json'
+                files[path] = files[path].replace(b'\n', b'\r\n')
+                archive, _ = self.bundle(changes=files)
+                releases = self.root / ('releases-' + revision)
+                with self.assertRaisesRegex(release.ReleaseError, 'catalog checksum'):
+                    release.stage(archive, releases)
+                self.assertFalse(releases.exists())
+
+    def test_invalid_catalog_pointer_or_missing_declared_revision_is_rejected(self):
+        pointer, original = self.catalog_files()
+        cases = [
+            {'schema_version': True}, {'revision': '../outside'}, {'versions': '../outside'},
+            {'versions': [pointer['revision'], pointer['revision']]},
+            {'versions': ['f' * 64]}, {'version_hashes': {}},
+            {'catalog_sha256': 'f' * 64},
+        ]
+        for changed in cases:
+            with self.subTest(changed=changed):
+                files = dict(original)
+                files['backend/GameData/data/current.json'] = json.dumps({**pointer, **changed}).encode()
+                archive, _ = self.bundle(changes=files)
+                with self.assertRaisesRegex(release.ReleaseError, 'catalog'):
+                    release.validate(archive)
+        files = dict(original)
+        del files[f"backend/GameData/data/versions/{pointer['versions'][0]}.json"]
+        archive, _ = self.bundle(changes=files)
+        with self.assertRaisesRegex(release.ReleaseError, 'catalog'):
+            release.validate(archive)
+
     def test_tampered_bytes_rejected_without_release(self):
         archive, _ = self.bundle(extra={'frontend/index.html': b'tampered'})
         with self.assertRaisesRegex(release.ReleaseError, 'checksum'):
