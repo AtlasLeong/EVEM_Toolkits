@@ -152,7 +152,10 @@ class KillboardApiTests(TestCase):
                             ship_type_id=10500000408, source_index=index + 1)
             for index in range(30)
         ])
-        with self.assertNumQueries(4):
+        # Authentication, report, participants, equipment and one batched
+        # system-security lookup; participant ship enrichment must not add a
+        # query per row.
+        with self.assertNumQueries(5):
             response = self.client.get('/api/killboard/reports/19748417/')
         self.assertEqual(response.status_code, 200)
         by_ship = {row['ship_type_id']: row['ship_name'] for row in response.data['participants']}
