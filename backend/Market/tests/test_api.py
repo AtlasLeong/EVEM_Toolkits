@@ -12,7 +12,16 @@ class PublicMarketRoutingTests(TestCase):
         response = self.client.get('/api/market/items/')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {'count': 0, 'results': []})
+        self.assertEqual(response.json(), {
+            'count': 0,
+            'results': [],
+            'market_scope': {
+                'key': 'jita_h4',
+                'protocol_scope': 8,
+                'label': '吉他海四',
+                'description': '吉他 IV - 月 4 · 加达里海军装配厂',
+            },
+        })
 
 
 class PublicMarketItemsTests(TestCase):
@@ -47,10 +56,22 @@ class PublicMarketItemsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {
             'count': 1,
+            'market_scope': {
+                'key': 'jita_h4',
+                'protocol_scope': 8,
+                'label': '吉他海四',
+                'description': '吉他 IV - 月 4 · 加达里海军装配厂',
+            },
             'results': [{
                 'item_id': '123456789012', 'name': 'Tritanium', 'category': 'Mineral',
                 'category_id': None, 'subcategory_id': None,
-                'scope': 'global', 'best_buy': '9.25', 'best_sell': '10.50',
+                'scope': 'global', 'market_scope': {
+                    'key': 'jita_h4',
+                    'protocol_scope': 8,
+                    'label': '吉他海四',
+                    'description': '吉他 IV - 月 4 · 加达里海军装配厂',
+                },
+                'best_buy': '9.25', 'best_sell': '10.50',
                 'observed_at': datetime.fromtimestamp(observed_at_ms / 1000, timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'status': 'fresh',
             }],

@@ -22,6 +22,7 @@
 .market-focus .market-terminal-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .market-focus.market-page--immersive .market-terminal-heading h1 { margin: 0; font-size: 17px; white-space: nowrap; }
 .market-focus .market-header-category { color: #63706e; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-focus .market-header-scope { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border: 1px solid #b8cbc1; border-radius: 999px; background: #f1f6f1; color: #2e6257; font-size: 11px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
 .market-focus .market-header-divider { flex: 0 0 auto; color: #74827d; }
 .market-focus .market-terminal-action { min-height: 34px; padding: 6px 12px; border-color: #cdd7d0; background: #fff; color: #283632; font-weight: 600; }
 .market-focus .market-terminal-action:last-child { border-color: #17333d; background: #17333d; color: #eef7f6; }

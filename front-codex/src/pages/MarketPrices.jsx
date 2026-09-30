@@ -7,6 +7,7 @@ import { LoadingBar } from '../components/ui/Primitives'
 import { getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
 import { marketRefetchInterval } from '../utils/marketPolling'
 import { formatCompactMarketPrice } from '../utils/marketPrice'
+import { marketScopeLabel } from '../utils/marketScope'
 import MarketItemIcon from '../components/MarketItemIcon'
 import MarketTrendChart from './MarketTrendChart'
 import '../styles/market.css'
@@ -29,9 +30,7 @@ export function formatMarketTime(value) {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
-export function marketScopeLabel(value) {
-  return value === 'global' ? '市场范围 8' : value || '—'
-}
+export { marketScopeLabel }
 
 function ageLabel(value, now = Date.now()) {
   const elapsed = now - new Date(value).getTime()
@@ -137,11 +136,13 @@ export default function MarketPricesPage() {
   const rows = itemsQuery.data?.results || []
   const total = itemsQuery.data?.count ?? 0
   const selected = rows.find(item => item.item_id === selectedId) || rows[0] || null
+  const listMarketScope = itemsQuery.data?.market_scope || selected?.market_scope || selected?.scope
   const seriesQuery = useQuery({
     queryKey: ['market-series', selected?.item_id, days],
     queryFn: ({ signal }) => getMarketSeries(selected.item_id, days, { signal }),
     enabled: Boolean(selected), ...queryOptions,
   })
+  const marketScope = seriesQuery.data?.market_scope || listMarketScope
   const points = seriesQuery.data?.points || []
   const showBuy = viewMode !== 'sell'
   const showSell = viewMode !== 'buy'
@@ -166,7 +167,7 @@ export default function MarketPricesPage() {
 
   return <div className="page-stack market-page market-page--immersive market-terminal market-focus">
     <header className="market-terminal-header">
-      <div className="market-terminal-heading"><Activity size={18} aria-hidden="true" /><h1>市场价格</h1><ChevronRight className="market-header-divider" size={15} aria-hidden="true" /><span className="market-header-category">{selected?.category || '行情工作台'}</span></div>
+      <div className="market-terminal-heading"><Activity size={18} aria-hidden="true" /><h1>市场价格</h1><ChevronRight className="market-header-divider" size={15} aria-hidden="true" /><span className="market-header-category">{selected?.category || '行情工作台'}</span><span className="market-header-scope" data-testid="market-scope">价格范围：{marketScopeLabel(marketScope)}</span></div>
       <div className="market-header-actions">{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>
     </header>
 
@@ -186,7 +187,7 @@ export default function MarketPricesPage() {
 
       <main className="market-terminal-main">
         {selected ? <>
-          <div className="market-instrument-head"><div><div className="market-instrument-title"><h2>{selected.name}</h2><span className="market-instrument-category">{selected.category || '未分类'}</span></div><p>报价观测 <span aria-hidden="true">·</span> {marketScopeLabel(selected.scope)} <span aria-hidden="true">·</span> ISK</p></div></div>
+          <div className="market-instrument-head"><div><div className="market-instrument-title"><h2>{selected.name}</h2><span className="market-instrument-category">{selected.category || '未分类'}</span></div><p>报价观测 <span aria-hidden="true">·</span> 价格范围：{marketScopeLabel(marketScope)} <span aria-hidden="true">·</span> ISK</p></div></div>
           <div className="market-focus-toolbar">
             <div className="market-view-modes" role="group" aria-label="走势显示方式">{[['both', '双边走势'], ['sell', '只看卖价'], ['buy', '只看买价']].map(([mode, label]) => <button type="button" key={mode} className={viewMode === mode ? 'active' : ''} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>{label}</button>)}</div>
             <div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div>
@@ -201,7 +202,7 @@ export default function MarketPricesPage() {
       </main>
 
       <aside className="market-terminal-summary" aria-label="当前物品报价摘要">
-        <div className="market-terminal-section-head"><strong>报价档位</strong><span>ISK · 各侧前 5 档</span></div>
+        <div className="market-terminal-section-head"><strong>报价档位</strong><span>价格范围：{marketScopeLabel(marketScope)} · ISK · 各侧前 5 档</span></div>
         {selected ? <>
           <section className="market-depth-panel" aria-label="报价档位">
             <div className="market-depth-grid"><PriceLadder title="卖价档位" values={selected.sell_prices} tone="sell" /><PriceLadder title="买价档位" values={selected.buy_prices} tone="buy" /></div>

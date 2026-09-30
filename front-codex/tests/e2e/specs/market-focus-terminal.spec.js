@@ -9,10 +9,11 @@ const ids = ['28007000000', '41000000000', '41000000002', '41000000003', '420010
 async function openMarket(page, { missingLast = false, brokenImage = false, hugePrices = false } = {}) {
   await page.clock.setFixedTime(new Date('2026-09-27T02:40:00Z'))
   if (brokenImage) await page.route('**/images/market-items/28007000000.webp', route => route.abort())
+  const marketScope = { key: 'jita_h4', protocol_scope: 8, label: '吉他海四', description: '吉他 IV - 月 4 · 加达里海军装配厂' }
   await installApiMock(page, ({ url }) => {
     if (url.pathname === '/api/market/categories/') return json([{ id: 'currency', label: '货币 · 伊甸币', count: 1 }, { id: 'planetary', label: '行星资源', count: 34 }, { id: 'minerals', label: '矿物', count: 10 }])
-    if (url.pathname === '/api/market/items/') return json({ count: 8, results: names.map((name, index) => ({
-      name, item_id: ids[index], category: index ? '矿物' : '货币', scope: 'global', status: 'fresh', observed_at: end,
+    if (url.pathname === '/api/market/items/') return json({ count: 8, market_scope: marketScope, results: names.map((name, index) => ({
+      name, item_id: ids[index], category: index ? '矿物' : '货币', scope: 'global', market_scope: marketScope, status: 'fresh', observed_at: end,
       best_sell: '21897981.37', best_buy: '20600001.00', sell_prices: ['21897981.37', '21900000', '21910000', '22000000', '22100000'],
       buy_prices: hugePrices ? ['9999999999999999.99'] : ['21000009.00', '21000005.00', '21000003.00', '21000002.00', '21000001.00'],
     })) })
@@ -25,7 +26,7 @@ async function openMarket(page, { missingLast = false, brokenImage = false, huge
       points[28].best_sell = missingLast ? null : '21897981.37'
       const entry = value => value === null ? null : { value, observed_at: end }
       const side = current => ({ current: entry(current), range: { high: entry('22114350'), low: entry('20310000') }, month: { high: entry('23400000'), low: entry('19800000') } })
-      return json({ count: 29, points, stats: { sell: side(points[28].best_sell), buy: side(points[28].best_buy) }, change: {} })
+      return json({ count: 29, market_scope: marketScope, points, stats: { sell: side(points[28].best_sell), buy: side(points[28].best_buy) }, change: {} })
     }
   })
   await page.goto('/market')
@@ -42,6 +43,8 @@ test('default focus mode uses genuine icons and a single chart with compact quot
   await expect.poll(() => icon.evaluate(image => image.complete && image.naturalWidth)).toBe(128)
   await expect(page.locator('.market-quote-card')).toHaveCount(0)
   await expect(page.locator('.market-terminal-summary')).toContainText('报价档位')
+  await expect(page.getByText('价格范围：吉他海四').first()).toBeVisible()
+  await expect(page.locator('.market-terminal-summary')).toContainText('吉他海四')
   await expect(page.locator('.market-terminal')).not.toContainText('实时盘口')
   await expect(page.locator('.market-terminal')).not.toContainText('盘口深度')
   await expect(page.locator('.market-trend-stats dt')).toHaveText(['当前', '区间高', '区间低', '30天高', '30天低'])

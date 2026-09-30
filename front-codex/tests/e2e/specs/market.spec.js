@@ -308,7 +308,7 @@ test('market administration searches the server catalog and enables a seeded ite
   await page.goto('/market/admin')
   await expect(page.getByText('共 5000 件目录物品')).toBeVisible()
   await expect(page.getByRole('row', { name: /测试舰船/ })).toContainText('已停用')
-  await expect(page.getByRole('row', { name: /测试舰船/ })).toContainText('市场范围 8')
+  await expect(page.getByRole('row', { name: /测试舰船/ })).toContainText('吉他海四')
   await expect(page.locator('.market-capacity')).toContainText('当前启用 0 件')
   await page.getByRole('searchbox', { name: '搜索目录物品' }).fill('  测试 舰船  ')
   await expect.poll(() => requests.some(value => value.method === 'GET' && value.path === '/api/market/admin/items/' && value.search === '?q=%E6%B5%8B%E8%AF%95+%E8%88%B0%E8%88%B9&page=1')).toBeTruthy()

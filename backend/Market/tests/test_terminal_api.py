@@ -10,6 +10,20 @@ from Market.models import CollectionRun, MarketItem, PriceSnapshot
 
 
 class MarketCategoryApiTests(TestCase):
+    def test_items_expose_the_confirmed_jita_market_scope(self):
+        MarketItem.objects.create(id=106, name='吉他测试物品')
+
+        body = self.client.get('/api/market/items/').json()
+
+        expected_scope = {
+            'key': 'jita_h4',
+            'protocol_scope': 8,
+            'label': '吉他海四',
+            'description': '吉他 IV - 月 4 · 加达里海军装配厂',
+        }
+        self.assertEqual(body['market_scope'], expected_scope)
+        self.assertEqual(body['results'][0]['market_scope'], expected_scope)
+
     def test_logical_categories_are_stable_and_filterable(self):
         MarketItem.objects.create(id=101, name='伊甸币', market_bucket='currency')
         MarketItem.objects.create(id=102, name='光泽合金', market_bucket='planetary')
@@ -79,6 +93,16 @@ class MarketSeriesApiTests(TestCase):
             best_sell=Decimal(sell) if sell is not None else None,
             observed_at_ms=self.now_ms + offset_ms,
         )
+
+    def test_series_exposes_the_confirmed_jita_market_scope(self):
+        body = self.client.get('/api/market/items/77/series/').json()
+
+        self.assertEqual(body['market_scope'], {
+            'key': 'jita_h4',
+            'protocol_scope': 8,
+            'label': '吉他海四',
+            'description': '吉他 IV - 月 4 · 加达里海军装配厂',
+        })
 
     def test_series_is_chronological_and_changes_skip_null_quotes(self):
         self.add_snapshot(-3 * 60 * 60 * 1000, buy='10.00', sell='20.00')
@@ -198,6 +222,12 @@ class MarketSeriesApiTests(TestCase):
     def test_series_handles_no_data_and_rejects_invalid_window_or_hidden_item(self):
         self.assertEqual(self.client.get('/api/market/items/77/series/').json(), {
             'count': 0, 'points': [],
+            'market_scope': {
+                'key': 'jita_h4',
+                'protocol_scope': 8,
+                'label': '吉他海四',
+                'description': '吉他 IV - 月 4 · 加达里海军装配厂',
+            },
             'change': {'best_buy': {'absolute': None, 'percent': None},
                        'best_sell': {'absolute': None, 'percent': None}},
             'stats': {

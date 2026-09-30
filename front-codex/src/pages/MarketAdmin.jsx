@@ -123,7 +123,7 @@ function CatalogPanel({ search, onSearchChange, items, count, page, onPageChange
       <label>物品 ID<input className="text-input" required inputMode="numeric" value={form.item_id} onChange={event => setForm(value => ({ ...value, item_id: event.target.value }))} /></label>
       <label>物品名称<input className="text-input" required value={form.name} onChange={event => setForm(value => ({ ...value, name: event.target.value }))} /></label>
       <label>物品类别<input className="text-input" value={form.category} onChange={event => setForm(value => ({ ...value, category: event.target.value }))} /></label>
-      <label>市场范围<select className="text-input" value={form.scope} onChange={event => setForm(value => ({ ...value, scope: event.target.value }))}><option value="global">市场范围 8</option></select></label>
+      <label>市场范围<select className="text-input" value={form.scope} onChange={event => setForm(value => ({ ...value, scope: event.target.value }))}><option value="global">吉他海四</option></select></label>
       <button type="submit" className="primary-btn" disabled={pending}>添加采集物品</button>
       </form>
     </details>
