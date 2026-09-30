@@ -23,6 +23,23 @@ class PublicMarketRoutingTests(TestCase):
             },
         })
 
+    def test_categories_expose_enabled_intermediate_products(self):
+        MarketItem.objects.create(
+            id=41005000100, name='六元复合物', category='中间产物-复数',
+            category_id=1200, subcategory_id=1200012,
+            market_bucket='intermediate', enabled=True,
+        )
+
+        response = self.client.get('/api/market/categories/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [
+            {'id': 'currency', 'label': '货币 · 伊甸币', 'count': 0},
+            {'id': 'planetary', 'label': '行星资源', 'count': 0},
+            {'id': 'minerals', 'label': '矿物', 'count': 0},
+            {'id': 'intermediate', 'label': '中间产物', 'count': 1},
+        ])
+
 
 class PublicMarketItemsTests(TestCase):
     def test_top_five_levels_are_exposed_when_a_snapshot_contains_them(self):

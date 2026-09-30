@@ -108,3 +108,43 @@ class MarketCatalogSeedTests(TestCase):
             28007000000: 'currency', 42001000000: 'planetary', 41000000000: 'minerals',
         })
         self.assertTrue(MarketItem.objects.filter(enabled=True).count() == 3)
+
+    def test_seed_classifies_intermediate_products_and_can_enable_them(self):
+        intermediate_rows = [
+            {'item_id': 41005000100, 'item_name': '六元复合物', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000200, 'item_name': '富勒化合物', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000300, 'item_name': '酚合成物', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000400, 'item_name': '多晶碳化硅纤维', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000500, 'item_name': '强化碳纤维', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000700, 'item_name': '铁磁胶体', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000800, 'item_name': '碳化钛', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005000900, 'item_name': '碳化晶体', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41005001000, 'item_name': '纳米晶体管', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41006000001, 'item_name': 'PPD富勒烯纤维', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41006000002, 'item_name': '富勒二茂铁', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+            {'item_id': 41006000003, 'item_name': '富勒烯层间石墨', 'category_id': 1200,
+             'subcategory_id': 1200012, 'market_group_name_3rd': '中间产物-复数'},
+        ]
+        with TemporaryDirectory() as temporary:
+            catalog = self._catalog(temporary, intermediate_rows)
+            call_command(
+                'market_seed_catalog', catalog=str(catalog),
+                enable_buckets='intermediate', stdout=StringIO(),
+            )
+
+        self.assertEqual(
+            set(MarketItem.objects.values_list('market_bucket', flat=True)),
+            {'intermediate'},
+        )
+        self.assertEqual(MarketItem.objects.filter(enabled=True).count(), 12)
