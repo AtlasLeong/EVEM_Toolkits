@@ -23,6 +23,25 @@ export function reportSourceNote(report) {
   return report?.source === 'local-preview' ? '本地布局示例 · 非真实采集报告' : ''
 }
 
+export function killboardCollectionLabel(status) {
+  if (!status) return '采集状态未知'
+  const reason = status.state === 'cooldown' ? 'rate_limited' : status.stop_reason || status.state
+  if (status.state === 'unauthorized') return '认证失效 · 采集暂停'
+  if (status.state === 'configuration_error') return '配置错误 · 采集暂停'
+  if (reason === 'rate_limited' || reason === 'cooldown') {
+    return status.state === 'cooldown' || status.collection_enabled !== true ? '限流冷却中' : '上次采集触发限流'
+  }
+  if (reason === 'unauthorized') return '上次采集认证失效'
+  if (reason === 'configuration_error') return '上次采集配置错误'
+  if (reason === 'network_error') return '上次采集网络异常'
+  if (reason === 'malformed') return '上次采集格式异常'
+  if (reason === 'time_reversed') return '报告时间顺序异常'
+  if (reason === 'lease_expired' || reason === 'lease_lost') return '上次采集中断'
+  if (status.state === 'failed') return '上次采集失败'
+  if (status.configured !== true || status.collection_enabled !== true) return '只读归档'
+  return status.state === 'running' ? '采集运行中' : '采集已就绪'
+}
+
 export function participantShipLabel(row = {}) {
   const name = typeof row.ship_name === 'string' ? row.ship_name.trim() : ''
   return name || (idLabel(row.ship_type_id) ? '舰船名称待补' : '舰船资料未返回')

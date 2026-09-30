@@ -3,6 +3,33 @@ import assert from 'node:assert/strict'
 import { participantIdentity, groupEquipmentItems, participantVisibilityNote, visibleParticipantRows, killboardSecurityMeta } from '../../src/utils/killboardPresentation.js'
 import * as presentation from '../../src/utils/killboardPresentation.js'
 
+test('collection health labels distinguish readiness from running and show safe failure reasons', () => {
+  assert.equal(typeof presentation.killboardCollectionLabel, 'function')
+  for (const [status, expected] of [
+    [null, '采集状态未知'],
+    [{ configured: false, collection_enabled: false, state: 'not_configured' }, '只读归档'],
+    [{ configured: true, collection_enabled: true, state: 'ready' }, '采集已就绪'],
+    [{ configured: true, collection_enabled: true, state: 'stopped', stop_reason: 'empty_threshold' }, '采集已就绪'],
+    [{ configured: true, collection_enabled: true, state: 'running' }, '采集运行中'],
+    [{ configured: true, collection_enabled: false, state: 'cooldown', stop_reason: 'cooldown' }, '限流冷却中'],
+    [{ configured: true, collection_enabled: false, state: 'unauthorized' }, '认证失效 · 采集暂停'],
+    [{ configured: true, collection_enabled: false, state: 'configuration_error' }, '配置错误 · 采集暂停'],
+    [{ configured: true, collection_enabled: true, state: 'stopped', stop_reason: 'network_error' }, '上次采集网络异常'],
+    [{ configured: true, collection_enabled: true, state: 'stopped', stop_reason: 'malformed' }, '上次采集格式异常'],
+    [{ configured: true, collection_enabled: true, state: 'failed', stop_reason: 'lease_expired' }, '上次采集中断'],
+    [{ configured: true, collection_enabled: true, state: 'failed', stop_reason: 'SECRET REMOTE TEXT' }, '上次采集失败'],
+  ]) assert.equal(presentation.killboardCollectionLabel(status), expected, JSON.stringify(status))
+})
+
+test('historical rejection reasons cannot claim collection remains paused after readiness returns', () => {
+  for (const [stopReason, expected] of [
+    ['rate_limited', '上次采集触发限流'], ['cooldown', '上次采集触发限流'],
+    ['unauthorized', '上次采集认证失效'], ['configuration_error', '上次采集配置错误'],
+  ]) assert.equal(presentation.killboardCollectionLabel({
+    configured: true, collection_enabled: true, state: 'stopped', stop_reason: stopReason,
+  }), expected)
+})
+
 test('participant ships show exact API hull names and explicit missing-name fallback', () => {
   assert.equal(typeof presentation.participantShipLabel, 'function')
   assert.equal(presentation.participantShipLabel({ ship_type_id: '10500000601', ship_name: '元帅级' }), '元帅级')

@@ -21,4 +21,4 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
 ReadOnlyDirectories=/EVEMTK
-ReadWritePaths=/EVEMTK/deploy/shared/killboard/collector.lock
+ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock

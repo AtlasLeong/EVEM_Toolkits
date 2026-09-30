@@ -64,6 +64,8 @@ class WorkerContractTests(unittest.TestCase):
         runner = (ROOT/'backend/Killboard/run-collector.sh').read_text()
         self.assertIn('current/backend/Killboard/run-collector.sh', unit)
         self.assertIn('shared/market-python', unit)
+        self.assertIn('ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock', unit)
+        self.assertNotIn('ReadWritePaths=', unit)
         self.assertIn('EVE_MDjango.killboard_worker_settings', runner)
         self.assertIn('--max-seconds 210', runner)
         self.assertIn('OnUnitActiveSec=5min', timer)
