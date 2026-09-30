@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     'TacticalCollaboration',
     'Starsea',
     'Market',
+    'Killboard',
 ]
 
 MIDDLEWARE = [
@@ -213,6 +214,8 @@ REST_FRAMEWORK = {
         'minute': '1/minute',
         'custom': '5/day',
         'market_public': '120/hour',
+        'killboard_public': '120/hour',
+        'killboard_private': '120/hour',
     }
 }
 
@@ -242,6 +245,11 @@ AUTH_USER_MODEL = 'Authentication.EVEMUser'
 FEEDBACK_UPLOAD_ROOT = config('FEEDBACK_UPLOAD_ROOT', default=None)
 COMMUNITY_UPLOAD_ROOT = config('COMMUNITY_UPLOAD_ROOT', default=None)
 STARSEA_UPLOAD_ROOT = config('STARSEA_UPLOAD_ROOT', default=None)
+# The private killboard allowlist is deployment configuration.  Blank means
+# fail closed until the operator explicitly supplies the owner account.
+KILLBOARD_OWNER_EMAIL = config('KILLBOARD_OWNER_EMAIL', default='')
+KILLBOARD_COLLECTION_ENABLED = str(config('KILLBOARD_COLLECTION_ENABLED', default='false')).lower() in {'1', 'true', 'yes'}
+KILLBOARD_MIN_ISK_LOST = config('KILLBOARD_MIN_ISK_LOST', default='20000000000.00')
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

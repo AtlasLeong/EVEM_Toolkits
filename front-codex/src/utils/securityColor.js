@@ -30,3 +30,49 @@ export function getSecurityTextColor(value) {
   if (level < 0.8) return '#356348'
   return '#315d7b'
 }
+
+const KILLBOARD_SECURITY_COLORS = Object.freeze({
+  high: '#77e6e0',
+  low: '#f5b95d',
+  nullsec: '#ff7d72',
+  unknown: '#9fb4b9',
+})
+
+function reportSecurityValue(report = {}) {
+  const target = report && typeof report === 'object' ? report : {}
+  const candidates = [
+    target.security_status,
+    target.system_security,
+    target.system_security_status,
+    target.solarsystem_security,
+    target.solar_system_security,
+    target.security,
+    target.system?.security_status,
+    target.solarsystem?.security_status,
+  ]
+  for (const candidate of candidates) {
+    const normalized = normalizedSecurityValue(candidate)
+    if (normalized !== null) return normalized
+  }
+  return null
+}
+
+/**
+ * A semantic, dark-theme-safe security presentation for the killboard.
+ * The label is always rendered alongside the color band so security never
+ * relies on color alone. Keep this mapping separate from the light map colors.
+ */
+export function killboardSecurityMeta(report = {}) {
+  const value = reportSecurityValue(report)
+  if (value === null) {
+    return { value: null, valueLabel: '未知', zoneLabel: '安等未知', band: 'unknown', className: 'is-unknown', color: KILLBOARD_SECURITY_COLORS.unknown }
+  }
+  const valueLabel = value.toFixed(2)
+  if (value <= 0) {
+    return { value, valueLabel, zoneLabel: '零安', band: 'nullsec', className: 'is-nullsec', color: KILLBOARD_SECURITY_COLORS.nullsec }
+  }
+  if (value < 0.5) {
+    return { value, valueLabel, zoneLabel: '低安', band: 'low', className: 'is-low', color: KILLBOARD_SECURITY_COLORS.low }
+  }
+  return { value, valueLabel, zoneLabel: '高安', band: 'high', className: 'is-high', color: KILLBOARD_SECURITY_COLORS.high }
+}

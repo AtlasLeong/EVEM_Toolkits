@@ -40,6 +40,17 @@ front-codex/output/
 backend/.tactical-local.sqlite3*
 backend/.tactical-universe.json
 backend/.starsea-local.sqlite3*
+backend/.killboard-preview.sqlite3*
 front-codex/test-results-starsea*/
 front-codex/test-results-corp*/
+
+# Private client research inputs and generated extraction evidence (not web assets)
+output/client-ship-assets/
+
+# Replayable capture/session material must never enter source or web artifacts.
+*.pcap
+*.pcapng
+*.dpapi
+**/session.json
+**/session-*.json
 

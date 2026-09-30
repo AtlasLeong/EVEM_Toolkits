@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import time
 
 from rest_framework import serializers
+from GameData.registry import image_metadata
 
 
 STALE_AFTER_MS = 2 * 60 * 60 * 1000
@@ -50,6 +51,10 @@ def item_payload(item, now_ms=None):
         'observed_at': utc_iso(observed_at_ms),
         'status': status,
     }
+    image = image_metadata(item.pk)
+    if image:
+        payload.update(image_url=image['path'], image_role=image['imageRole'],
+                       image_warning=image['compositeWarning'], source_revision=image['sourceVersion'])
     sell_prices = price_levels(snapshot, 'sell_prices')
     buy_prices = price_levels(snapshot, 'buy_prices')
     # Keep the pre-top-five response shape for old snapshots while making new
