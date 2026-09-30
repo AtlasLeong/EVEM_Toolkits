@@ -47,6 +47,11 @@ class SharedRegistryTests(SimpleTestCase):
             '11004320024': {'name': '普通武器', 'image_status': 'verified', 'client_category_id': 11},
         }, 'assets': {}}))
 
+    def test_npc_identity_covers_both_client_npc_categories(self):
+        registry = self.subject()
+        self.assertEqual(registry.npc_identity(55100000009)['name'], '* 艾玛海关 将军¹⁰')
+        self.assertEqual(registry.npc_identity(56000171040)['name'], '科尔')
+
     def subject(self):
         import importlib.util
         self.assertIsNotNone(importlib.util.find_spec('GameData.registry'), 'The common catalog must be independent of Killboard')

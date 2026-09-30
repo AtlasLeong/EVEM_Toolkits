@@ -6,12 +6,12 @@ Recover the NPC labels shown by the EVE Echoes client for anonymous killmail par
 
 ## Evidence and decision
 
-The KM participant payload uses `w` as the weapon/unit type ID. The client item catalog contains exact no-icon NPC entries such as `56000171040 -> 科尔`, `56000171030 -> 克尔鲁姆`, and `56000771040 -> 深眠者`. The current parser persists `weapon_type_id` but the serializer never resolves it, which is why the UI shows unknown identities. The ship name and image continue to come from `s` (`ship_type_id`).
+The KM participant payload uses `w` as the weapon/unit type ID. The client item catalog contains exact no-icon NPC entries in client categories 55 (`NPC Units`) and 56 (`Fleet Combat Unit`), such as `56000171040 -> 科尔`, `56000171030 -> 克尔鲁姆`, and `56000771040 -> 深眠者`. The current parser persists `weapon_type_id` but the serializer never resolves it, which is why the UI shows unknown identities. The ship name and image continue to come from `s` (`ship_type_id`).
 
 ## Data flow
 
 1. Keep the raw `weapon_type_id` unchanged as the provenance key.
-2. Add a GameData lookup that returns an NPC identity only when the exact client record is marked as a no-icon NPC identity entry; ordinary weapon/module rows remain ordinary equipment.
+2. Add a GameData lookup that returns an NPC identity only when the exact client record is marked as a no-icon NPC-unit entry in category 55 or 56. This automatically covers all current client mappings (and newly shipped records in a refreshed catalog); ordinary weapon/module rows remain ordinary equipment.
 3. In participant serialization, prefer verified player identity, then verified camouflage identity, then the exact NPC weapon mapping. Set `identity_kind` to `npc` and expose `npc_source_type_id` when the latter is used.
 4. Preserve the existing honest fallback for rows with no verified identity.
 5. Add focused tests for known NPC weapon IDs, ordinary weapon IDs, and player/camouflage precedence.

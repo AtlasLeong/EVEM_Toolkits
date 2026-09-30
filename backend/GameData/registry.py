@@ -15,6 +15,7 @@ REVISION = re.compile(r'^[0-9a-f]{64}$')
 IMAGE_PATH = re.compile(r'^/images/game-items/[0-9a-f]{64}\.png$')
 logger = logging.getLogger(__name__)
 _pointer, _signature, _checked_at = {}, None, 0.0
+NPC_CLIENT_CATEGORIES = frozenset((55, 56))
 
 
 @lru_cache(maxsize=1)
@@ -237,9 +238,9 @@ def npc_identity(type_id, version=None, *, catalog=None):
 
     NPC attackers do not have a character identity in KM.  The client renders
     their label from the weapon/unit type record instead.  Only the explicit
-    maintained NPC overrides or catalog rows with the verified category 56,
-    no-icon signature are accepted; numeric prefixes and missing identities
-    are never enough on their own.
+    maintained NPC overrides or catalog rows with the verified NPC-unit
+    categories 55/56 and no-icon signature are accepted; numeric prefixes and
+    missing identities are never enough on their own.
     """
     key = item_key(type_id)
     if not key:
@@ -247,17 +248,22 @@ def npc_identity(type_id, version=None, *, catalog=None):
     row = item_record(type_id, version, catalog=catalog)
     if not isinstance(row, dict):
         return None
-    if row.get('image_status') != 'no-icon-reference' or row.get('client_category_id') != 56:
+    if (row.get('image_status') != 'no-icon-reference' or
+            row.get('client_category_id') not in NPC_CLIENT_CATEGORIES):
         return None
     if catalog is None and version is None:
         override = _display_snapshot().get('npc', {}).get(key)
         if isinstance(override, dict) and override.get('name'):
-            return {**override, 'source_type_id': key, 'identity_kind': 'npc'}
+            return {**override, 'source_type_id': key, 'identity_kind': 'npc',
+                    'client_category_id': row.get('client_category_id'),
+                    'client_group_id': row.get('client_group_id')}
     name = row.get('name') or ''
     if not name or '\ufffd' in name:
         return None
     return {'name': name, 'source_type_id': key, 'identity_kind': 'npc',
-            'source': 'client static fleet-combat-unit label'}
+            'client_category_id': row.get('client_category_id'),
+            'client_group_id': row.get('client_group_id'),
+            'source': 'client static NPC/fleet-combat-unit label'}
 
 
 def find_items(*, ids=None, query='', kind='', page=1, page_size=50, version=None, catalog=None, display=None):
