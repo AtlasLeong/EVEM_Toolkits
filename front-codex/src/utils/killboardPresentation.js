@@ -73,8 +73,8 @@ export function participantIdentity(row = {}) {
   const characterName = String(row.character_name || '').trim()
   const corporationName = String(row.corporation_name || '').trim()
   const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
-  const sourceOnly = !characterName && !characterId && Boolean(sourceName)
-  const npc = !characterName && !sourceName && isNpcParticipant(row)
+  const npc = !characterName && isNpcParticipant(row)
+  const sourceOnly = !npc && !characterName && !characterId && Boolean(sourceName)
   const identity = {
     name: characterName || sourceName || (npc ? 'NPC' : characterId ? `角色 ID ${characterId}` : '身份资料未返回'),
     nameDetail: characterName && characterId ? `ID ${characterId}` : characterId,
@@ -87,11 +87,13 @@ export function participantIdentity(row = {}) {
 }
 
 export function visibleParticipantRows(rows = []) {
-  let characterCount = 0
+  let renderableCount = 0
   return rows.filter(row => {
     if (!row || typeof row !== 'object') return false
     const characterName = String(row.character_name || '').trim()
-    if (characterName || (!characterName && isNpcParticipant(row))) return characterCount++ < 7
+    const hasShipEvidence = Boolean(idLabel(row.ship_type_id) || String(row.ship_name || '').trim())
+    const hasWeaponEvidence = Boolean(idLabel(row.weapon_type_id))
+    if (characterName || isNpcParticipant(row) || hasShipEvidence || hasWeaponEvidence) return renderableCount++ < 7
     const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
     return Boolean(sourceName && (row.is_final_blow || row.is_top_damage))
   })

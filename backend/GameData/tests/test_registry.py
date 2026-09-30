@@ -35,6 +35,18 @@ class SharedRegistryTests(SimpleTestCase):
         self.assertRegex(row['name_localization']['table_sha256'], r'^[0-9a-f]{64}$')
         self.assertNotIn('C:', str(row['name_localization']))
 
+    def test_npc_identity_requires_the_exact_client_npc_record(self):
+        registry = self.subject()
+        valid = {'items': {'56000171040': {
+            'name': '科尔', 'image_status': 'no-icon-reference',
+            'client_category_id': 56,
+        }}, 'assets': {}}
+        self.assertEqual(registry.npc_identity(56000171040, catalog=valid)['name'], '科尔')
+        self.assertIsNone(registry.npc_identity(56000171040, catalog={'items': {}, 'assets': {}}))
+        self.assertIsNone(registry.npc_identity(11004320024, catalog={'items': {
+            '11004320024': {'name': '普通武器', 'image_status': 'verified', 'client_category_id': 11},
+        }, 'assets': {}}))
+
     def subject(self):
         import importlib.util
         self.assertIsNotNone(importlib.util.find_spec('GameData.registry'), 'The common catalog must be independent of Killboard')

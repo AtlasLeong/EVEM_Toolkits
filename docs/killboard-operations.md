@@ -4,7 +4,7 @@
 
 Only the configured active owner can discover the navigation entry or read reports. The API is authoritative; a 403 clears private page state and latches until a fresh capability-verified mount. Public GameData exposes static game metadata/images, never captured account sessions or reports.
 
-The collection policy is strictly greater than 20,000,000,000 ISK, independent of ship class. Source damage-row counts are labelled as records, not as verified players. Only the first seven positively identified character rows are presented; missing identity does not prove an NPC. Equipment retains its original dropped/destroyed state and verified slot mapping.
+The collection policy is strictly greater than 20,000,000,000 ISK, independent of ship class. Source damage-row counts are labelled as records, not as verified players. The collector enriches only the first seven positively identified character rows; missing identity does not prove an NPC. The frontend may additionally render up to seven participant rows with explicit NPC identity or verified ship/weapon evidence, while continuing to label unresolved identity honestly. Equipment retains its original dropped/destroyed state and verified slot mapping.
 
 ## Private worker
 

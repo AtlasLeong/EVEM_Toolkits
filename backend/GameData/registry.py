@@ -31,7 +31,7 @@ def _display_snapshot():
         payload = json.loads((DATA_ROOT / 'display.json').read_text(encoding='utf-8'))
         if payload.get('schema_version') != 1 or not isinstance(payload.get('provenance'), dict):
             raise ValueError('Invalid display snapshot')
-        for field in ('items', 'locations', 'camouflage'):
+        for field in ('items', 'locations', 'camouflage', 'npc'):
             if not isinstance(payload.get(field, {}), dict):
                 raise ValueError('Invalid display snapshot field')
         return payload
@@ -230,6 +230,34 @@ def camouflaged_identity(faction_id, feat_score, version=None, *, catalog=None):
         table = {**_display_snapshot().get('camouflage', {}), **(table if isinstance(table, dict) else {})}
     row = table.get(f'{faction_key}:{score_key}') if isinstance(table, dict) else None
     return dict(row) if isinstance(row, dict) else None
+
+
+def npc_identity(type_id, version=None, *, catalog=None):
+    """Resolve an exact client NPC identity from a KM weapon/unit type ID.
+
+    NPC attackers do not have a character identity in KM.  The client renders
+    their label from the weapon/unit type record instead.  Only the explicit
+    maintained NPC overrides or catalog rows with the verified category 56,
+    no-icon signature are accepted; numeric prefixes and missing identities
+    are never enough on their own.
+    """
+    key = item_key(type_id)
+    if not key:
+        return None
+    row = item_record(type_id, version, catalog=catalog)
+    if not isinstance(row, dict):
+        return None
+    if row.get('image_status') != 'no-icon-reference' or row.get('client_category_id') != 56:
+        return None
+    if catalog is None and version is None:
+        override = _display_snapshot().get('npc', {}).get(key)
+        if isinstance(override, dict) and override.get('name'):
+            return {**override, 'source_type_id': key, 'identity_kind': 'npc'}
+    name = row.get('name') or ''
+    if not name or '\ufffd' in name:
+        return None
+    return {'name': name, 'source_type_id': key, 'identity_kind': 'npc',
+            'source': 'client static fleet-combat-unit label'}
 
 
 def find_items(*, ids=None, query='', kind='', page=1, page_size=50, version=None, catalog=None, display=None):

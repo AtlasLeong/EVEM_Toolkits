@@ -7,6 +7,50 @@ from Killboard.serializers import item_payload, participant_payload, report_payl
 
 
 class KillboardSerializerDisplayTests(SimpleTestCase):
+    def test_anonymous_npc_weapon_identity_is_resolved_from_client_catalog(self):
+        row = SimpleNamespace(
+            character_id=None, character_name='', corporation_id=None, corporation_name='',
+            alliance_id=None, alliance_name='', damage=53084, damage_pct=Decimal('29'),
+            is_final_blow=True, is_top_damage=True, ship_type_id=10500000601,
+            weapon_type_id=56000171040, camouflaged_faction_id=None,
+            feat_score=None, is_source_summary=False,
+        )
+
+        payload = participant_payload(row)
+
+        self.assertEqual(payload['display_name'], '科尔')
+        self.assertEqual(payload['identity_kind'], 'npc')
+        self.assertEqual(payload['npc_source_type_id'], '56000171040')
+
+    def test_named_player_identity_wins_over_npc_weapon_fallback(self):
+        row = SimpleNamespace(
+            character_id=1001, character_name='真实玩家', corporation_id=2001, corporation_name='玩家军团',
+            alliance_id=None, alliance_name='', damage=1, damage_pct=Decimal('1'),
+            is_final_blow=False, is_top_damage=False, ship_type_id=10500000601,
+            weapon_type_id=56000171040, camouflaged_faction_id=None,
+            feat_score=None, is_source_summary=False,
+        )
+
+        payload = participant_payload(row)
+
+        self.assertEqual(payload['display_name'], '真实玩家')
+        self.assertEqual(payload['identity_kind'], 'character')
+        self.assertIsNone(payload['npc_source_type_id'])
+
+    def test_ordinary_weapon_does_not_become_npc(self):
+        row = SimpleNamespace(
+            character_id=None, character_name='', corporation_id=None, corporation_name='',
+            alliance_id=None, alliance_name='', damage=1, damage_pct=Decimal('1'),
+            is_final_blow=False, is_top_damage=False, ship_type_id=10500000601,
+            weapon_type_id=11004320024, camouflaged_faction_id=None,
+            feat_score=None, is_source_summary=False,
+        )
+
+        payload = participant_payload(row)
+
+        self.assertNotEqual(payload['identity_kind'], 'npc')
+        self.assertIsNone(payload['npc_source_type_id'])
+
     def test_source_camouflage_is_named_without_inventing_a_character(self):
         row = SimpleNamespace(
             character_id=None, character_name='', corporation_id=None, corporation_name='',

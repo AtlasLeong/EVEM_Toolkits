@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from GameData.registry import camouflaged_identity, item_name, location_record
+from GameData.registry import camouflaged_identity, item_name, location_record, npc_identity
 
 from .catalog import ship_name
 from .image_catalog import image_metadata, image_url
@@ -58,14 +58,17 @@ def report_payload(report, security=None):
 def participant_payload(row):
     camouflage = camouflaged_identity(getattr(row, 'camouflaged_faction_id', None),
                                       getattr(row, 'feat_score', None))
-    display_name = row.character_name or (camouflage or {}).get('name', '')
+    npc = None if row.character_name or camouflage else npc_identity(getattr(row, 'weapon_type_id', None))
+    display_name = row.character_name or (camouflage or {}).get('name', '') or (npc or {}).get('name', '')
     identity_kind = 'character' if row.character_name else ((camouflage or {}).get('identity_kind', '')
-                                                             if camouflage else ('source' if row.is_source_summary else ''))
+                                                             if camouflage else ((npc or {}).get('identity_kind', '')
+                                                                                 if npc else ('source' if row.is_source_summary else '')))
     return {
         'character_id': _string(row.character_id),
         'character_name': row.character_name or '',
         'display_name': display_name,
         'identity_kind': identity_kind,
+        'npc_source_type_id': (npc or {}).get('source_type_id'),
         'corporation_id': _string(row.corporation_id),
         'corporation_name': row.corporation_name or '',
         'alliance_id': _string(row.alliance_id),

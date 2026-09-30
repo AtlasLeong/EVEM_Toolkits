@@ -64,5 +64,34 @@
       "identity_kind": "camouflaged",
       "source": "client combat-log camouflage label"
     }
+  },
+  "npc": {
+    "56000171000": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56000171020": {"name": "克尔鲁姆", "source": "client static fleet-combat-unit label"},
+    "56000171022": {"name": "克尔鲁姆", "source": "client static fleet-combat-unit label"},
+    "56000171030": {"name": "克尔鲁姆", "source": "client static fleet-combat-unit label"},
+    "56000171040": {"name": "科尔", "source": "client static fleet-combat-unit label"},
+    "56000171042": {"name": "科尔", "source": "client static fleet-combat-unit label"},
+    "56000751010": {"name": "冬眠者", "source": "client static fleet-combat-unit label"},
+    "56000751011": {"name": "冬眠者", "source": "client static fleet-combat-unit label"},
+    "56000751020": {"name": "冬眠者", "source": "client static fleet-combat-unit label"},
+    "56000751022": {"name": "冬眠者", "source": "client static fleet-combat-unit label"},
+    "56000751040": {"name": "冬眠者", "source": "client static fleet-combat-unit label"},
+    "56000751042": {"name": "冬眠者", "source": "client static fleet-combat-unit label"},
+    "56000771011": {"name": "深眠者", "source": "client static fleet-combat-unit label"},
+    "56000771022": {"name": "深眠者", "source": "client static fleet-combat-unit label"},
+    "56000771040": {"name": "深眠者", "source": "client static fleet-combat-unit label"},
+    "56000771042": {"name": "深眠者", "source": "client static fleet-combat-unit label"},
+    "56001171001": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56001171002": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56001171011": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56001171030": {"name": "克尔鲁姆", "source": "client static fleet-combat-unit label"},
+    "56001171040": {"name": "科尔", "source": "client static fleet-combat-unit label"},
+    "56001241001": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56001241002": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56001241011": {"name": "克尔利伊", "source": "client static fleet-combat-unit label"},
+    "56001241020": {"name": "克尔鲁姆", "source": "client static fleet-combat-unit label"},
+    "56001241030": {"name": "克尔鲁姆", "source": "client static fleet-combat-unit label"},
+    "56001241040": {"name": "科尔", "source": "client static fleet-combat-unit label"}
   }
 }
