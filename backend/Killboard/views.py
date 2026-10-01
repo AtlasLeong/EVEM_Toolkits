@@ -172,7 +172,7 @@ def _strategy_summary(value):
         )
     return {
         'phase': state.get('phase') if state.get('phase') in ('locate', 'scan') else 'unknown',
-        'newest_candidate_id': str(frontier) if frontier else None,
+        'newest_candidate_id': str(frontier) if frontier and _bounded_integer(state.get('last_boundary_at_ms')) else None,
         'historical_next_id': str(min(pair[0] for pair in ranges)) if ranges else None,
         'pending_range_count': len(ranges),
         'pending_id_count': sum(upper - lower + 1 for lower, upper in ranges),

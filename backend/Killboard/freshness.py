@@ -285,7 +285,11 @@ class FreshnessRunner(DiscoveryRunner):
                 self._record_fresh(run, cursor, state, probe_id, outcome, phase, history)
             self.pending_id = None
         run.stop_reason = run.stop_reason or 'max_requests'
-        if run.stop_reason == 'caught_up':
+        if (run.report_count and run.stop_reason in
+                ('caught_up', 'max_requests', 'locate_budget', 'waiting_visibility', 'budget_exhausted')):
+            # Backoff tracks consecutive upstream failures, not whether the
+            # entire historical backlog fits inside a healthy bounded round.
+            # Never reset it mid-round before an enrichment error is known.
             cursor.failure_count = 0
             cursor.save(update_fields=['failure_count'])
         self._finish(run, cursor)

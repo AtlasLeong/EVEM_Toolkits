@@ -119,6 +119,7 @@ class KillboardApiTests(TestCase):
         cursor = ProbeCursor.objects.create(name='latest', next_probe_id=20044044, strategy_state={
             'version': 1, 'phase': 'locate', 'frontier': 20044043, 'history_start': 20044044,
             'search': {'lower': 20044043, 'upper': None, 'step': 1024},
+            'last_boundary_at_ms': 1790870000000,
             'pending_ranges': [[20044044, 20045043], [20046000, 20046002]],
             'deferred_ids': {'20044044': 1790870000000, 'PRIVATE': 'PRIVATE'},
             'coverage_verified': True, 'password': 'PRIVATE PASSWORD',

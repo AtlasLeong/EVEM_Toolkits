@@ -105,6 +105,8 @@ class FreshnessTests(TestCase):
 
     def test_verified_base_with_deferred_failure_retains_pending_enrichment(self):
         cursor = self.cursor()
+        cursor.failure_count, cursor.cooldown_until_ms = 2, 1
+        cursor.save()
         client = PrefixClient(101)
         original_fetch = FreshnessRunner._fetch
         def partial(runner, kill_id, **kwargs):
@@ -119,6 +121,7 @@ class FreshnessTests(TestCase):
         self.assertTrue(KillReport.objects.filter(kill_id=101).exists())
         self.assertEqual(run.stop_reason, 'rate_limited')
         self.assertEqual(cursor.strategy_state['pending_ranges'], [[101, 101]])
+        self.assertEqual(cursor.failure_count, 3)
 
     def test_dry_run_rolls_back_every_state_row(self):
         cursor = self.cursor()
@@ -234,3 +237,21 @@ class FreshnessTests(TestCase):
         run = self.run_pass(cursor, client)
         self.assertEqual(run.stop_reason, 'invalid_strategy_state')
         self.assertEqual(client.calls, [])
+
+    def test_a_healthy_bounded_round_resets_consecutive_failures_without_needing_full_coverage(self):
+        cursor = self.cursor()
+        cursor.failure_count = 2
+        cursor.pause_reason = 'rate_limited'
+        cursor.cooldown_until_ms = 1
+        cursor.save()
+        run = self.run_pass(cursor, PrefixClient(1000), maximum=4)
+        cursor.refresh_from_db()
+        self.assertEqual(run.stop_reason, 'max_requests')
+        self.assertEqual(cursor.failure_count, 0)
+        self.assertEqual(cursor.pause_reason, '')
+
+    def test_seed_is_not_advertised_as_a_located_latest_candidate(self):
+        from Killboard.views import _strategy_summary
+        cursor = self.cursor()
+        state = _validated_state(cursor, None)
+        self.assertIsNone(_strategy_summary(state)['newest_candidate_id'])
