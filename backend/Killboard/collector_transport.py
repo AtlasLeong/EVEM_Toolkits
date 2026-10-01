@@ -282,7 +282,7 @@ class KillboardClient:
         if self._closed:
             raise CollectorError('network_error', 'client_closed')
 
-    def _request(self, method, item_id, decoder):
+    def _request(self, method, item_id, decoder, *, optional=False):
         self._check_ready()
         try:
             if self.session.sock is None:
@@ -290,11 +290,23 @@ class KillboardClient:
             result = self.session._rpc(method, item_id=item_id)
             return decoder(result)
         except CollectorError as exc:
+            # Optional identity endpoints are allowed to drift independently
+            # of the KM endpoint.  The response frame has already been
+            # consumed, so a semantic shape error is safe to skip; transport,
+            # auth and throttle failures still stop the run immediately.
+            if optional and exc.code == 'malformed':
+                raise
             self._stop(exc)
         except (MarketNeedsAuthError, market.ProtocolError) as exc:
-            self._stop(_transport_error(exc))
-        except (KillProtocolError, IdentityProtocolError, KillParseError):
-            self._stop(CollectorError('malformed'))
+            failure = _transport_error(exc)
+            if optional and failure.code == 'malformed':
+                raise failure from None
+            self._stop(failure)
+        except (KillProtocolError, IdentityProtocolError, KillParseError) as exc:
+            failure = CollectorError('malformed', type(exc).__name__)
+            if optional:
+                raise failure from None
+            self._stop(failure)
         except BaseException:
             # Pacer budget/cancellation propagate unchanged but stop reuse.
             self.close()
@@ -311,7 +323,15 @@ class KillboardClient:
         missing = [value for value in identifiers if value not in self._queried[collection]]
         missing = missing[:max(0, MAX_IDENTITY_CACHE - len(self._queried[collection]))]
         if missing:
-            rows = self._request(method, missing, lambda value: decoder(value, missing))
+            try:
+                rows = self._request(method, missing, lambda value: decoder(value, missing), optional=True)
+            except CollectorError as exc:
+                if exc.code != 'malformed':
+                    raise
+                # Keep the valid KM and any other identity rows already
+                # decoded in this run.  Cache the attempted IDs so one drifted
+                # endpoint cannot multiply requests for every participant.
+                rows = {}
             self._queried[collection].update(missing)
             self._identities[collection].update(rows)
         return copy.deepcopy({value: self._identities[collection][value] for value in identifiers

@@ -369,6 +369,30 @@ class CollectorTransportTests(unittest.TestCase):
         self.assertEqual([sent_rpc(raw)[3][0] for raw in wire.sent[1:]],
                          [*self.bundle_module.REQUIRED_METHODS, 'get_public_info', 'get_corp_brief', 'get_kill_info'])
 
+    def test_malformed_optional_corporation_profile_keeps_kill_and_connection_usable(self):
+        """A drifted optional identity response must not discard a valid KM."""
+        report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101,
+                           'isk_lost': '20000000000.01'})
+        next_report = envelope({'kill_blob': '<other/>', 'kill_id': 101, 'victim_character_id': 101,
+                                'isk_lost': '20000000000.01'})
+        wire = WireSocket(
+            successful_login()
+            + response(5, report)
+            + response(6, [character()])
+            + response(7, {'unexpected': 'profile-shape'})
+            + response(8, next_report)
+        )
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with self.transport.KillboardClient(with_profiles()) as client:
+                first = client.get_kill_info(100)
+                second = client.get_kill_info(101)
+
+        self.assertEqual(first['kill_id'], 100)
+        self.assertEqual(first['identity_map']['characters'][101]['name'], 'Synthetic pilot')
+        self.assertEqual(second['kill_id'], 101)
+        self.assertEqual([sent_rpc(raw)[3][0] for raw in wire.sent[-2:]],
+                         ['get_corp_brief', 'get_kill_info'])
+
     def test_enrich_false_keeps_known_report_smoke_to_auth4_plus_km_only(self):
         wire = WireSocket(successful_login() + response(5, envelope({'kill_blob': '<other/>', 'kill_id': 100})))
         with patch('Market.collector_protocol.socket.create_connection', return_value=wire):

@@ -74,6 +74,10 @@ class NetworkFailure(Exception):
     code = "network_error"
 
 
+class CodedFailure(Exception):
+    code = "malformed"
+
+
 class DiscoveryTests(TestCase):
     def setUp(self):
         ShipClass.objects.create(key="battleship", label="Battleship", rank=4)
@@ -240,6 +244,20 @@ class DiscoveryTests(TestCase):
         run = cursor.runs.get()
         self.assertEqual(run.status, run.Status.FAILED)
         self.assertEqual(run.stop_reason, "failed")
+
+    def test_coded_failure_keeps_stable_transport_code_in_audit(self):
+        cursor = ProbeCursor.objects.create(name="coded-failed", next_probe_id=100)
+        with self.assertRaises(CodedFailure):
+            DiscoveryRunner(
+                FakeClient({100: CodedFailure("shape drift")}),
+                cursor=cursor,
+                policy=self.policy,
+                config=DiscoveryConfig(max_requests=1),
+            ).run()
+
+        run = cursor.runs.get()
+        self.assertEqual(run.error_code, "malformed")
+        self.assertEqual(run.events.get().error_code, "malformed")
 
     def test_dry_run_rolls_back_run_cursor_and_reports(self):
         cursor = ProbeCursor.objects.create(name="dry", next_probe_id=100)
