@@ -233,6 +233,22 @@ test('the hero includes victim metadata and redundant stat cards no longer occup
   page.unmount()
 })
 
+test('report index also removes client localization wrappers from ship names', async () => {
+  const page = harness()
+  page.render()
+  const report = { ...privateReport(), ship_name: '{drone_affix:突击型} {drone:钢铁守卫}' }
+  page.calls.list[0].resolve({ results: [report], count: 1 })
+  page.calls.detail[0].resolve(report)
+  page.calls.status[0].resolve({})
+  await page.flush()
+  const rowNode = nodes(page.tree).find(node => typeof node.type === 'function' && node.type.name === 'ReportRow')
+  assert.ok(rowNode)
+  const tree = JSON.stringify(rowNode.type(rowNode.props))
+  assert.match(tree, /突击型 钢铁守卫/)
+  assert.doesNotMatch(tree, /\{drone(?:_affix)?:/)
+  page.unmount()
+})
+
 test('the hero exposes a copyable in-game KM tag and visible exact ISK value', async () => {
   const page = harness()
   await loadPrivate(page)

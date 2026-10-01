@@ -62,8 +62,9 @@ function itemStatusLabel(value) {
 
 function ReportRow({ report, active, onSelect }) {
   const security = killboardSecurityMeta(report)
-  return <button type="button" className={`kb-report-row${active ? ' is-active' : ''}`} onClick={() => onSelect(report.kill_id)} aria-current={active ? 'true' : undefined} aria-label={`${report.ship_name || '未知舰船'}，${report.system_name || '未知星系'}，${security.zoneLabel} ${security.valueLabel}`}>
-    <span className="kb-report-row-top"><strong>{report.ship_name || '未知舰船'}</strong><span className="kb-status-chip">{classLabel(report)}</span></span>
+  const shipName = formatKillboardName(report.ship_name) || '未知舰船'
+  return <button type="button" className={`kb-report-row${active ? ' is-active' : ''}`} onClick={() => onSelect(report.kill_id)} aria-current={active ? 'true' : undefined} aria-label={`${shipName}，${report.system_name || '未知星系'}，${security.zoneLabel} ${security.valueLabel}`}>
+    <span className="kb-report-row-top"><strong>{shipName}</strong><span className="kb-status-chip">{classLabel(report)}</span></span>
     <span className="kb-report-row-meta"><span>{report.victim_name || '未知目标'} · {report.system_name || '未知星系'}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></span>
     <span className="kb-report-row-bottom"><time>{formatKillboardTime(report.kill_time_display, report.kill_time_raw)}</time><b title={exactIsk(report.isk_lost)}>{formatKillIsk(report.isk_lost)} ISK</b></span>
   </button>
