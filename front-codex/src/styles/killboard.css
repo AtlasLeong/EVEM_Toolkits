@@ -245,9 +245,9 @@
 /* Report hero: a three-column composition keeps the hull artwork prominent,
    gives the metadata a real reading column, and removes the heavy framed
    image treatment that clipped wide silhouettes. */
-.kb-hero { display:grid; grid-template-columns:minmax(150px, 180px) minmax(0, 1fr) minmax(190px, 235px); align-items:center; gap:20px; }
-.kb-hero .kb-asset--ship { width:100%; height:118px; border:0; border-radius:0; background:transparent; }
-.kb-hero .kb-asset--ship img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 10px 16px rgb(0 0 0 / 28%)); }
+.kb-hero { display:grid; grid-template-columns:minmax(190px, 260px) minmax(0, 1fr) minmax(190px, 235px); align-items:center; gap:20px; }
+.kb-hero .kb-asset--ship { width:100%; height:132px; overflow:visible; border:0; border-radius:0; background:transparent; }
+.kb-hero .kb-asset--ship img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; filter:drop-shadow(0 10px 16px rgb(0 0 0 / 28%)); }
 .kb-hero-value { display:grid; justify-items:end; gap:5px; min-width:0; }
 .kb-hero-value strong { margin:0; white-space:nowrap; }
 .kb-hero-value .kb-hero-exact { color:#aac0c2; font-size:10px; font-variant-numeric:tabular-nums; white-space:nowrap; }
@@ -258,8 +258,8 @@
   .kb-workspace { grid-template-columns:220px minmax(0,1fr); }
   .kb-main { padding:14px; }
   .kb-hero { min-height:124px; padding:15px 17px; }
-  .kb-hero { grid-template-columns:minmax(120px, 142px) minmax(0, 1fr) minmax(165px, 205px); gap:14px; }
-  .kb-hero .kb-asset--ship { width:100%; height:88px; }
+  .kb-hero { grid-template-columns:minmax(160px, 190px) minmax(0, 1fr) minmax(165px, 205px); gap:14px; }
+  .kb-hero .kb-asset--ship { width:100%; height:100px; }
   .kb-hero h2 { font-size:27px; }
   .kb-content-grid .kb-panel { padding:14px; }
   .kb-participant--with-ship { grid-template-columns:72px minmax(0,1fr) auto; column-gap:9px; }

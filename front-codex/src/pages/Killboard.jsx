@@ -232,7 +232,7 @@ export default function KillboardPage() {
   const security = killboardSecurityMeta(current)
   return <div className="page-stack kb-page">
     <header className="kb-header">
-      <div><div className="kb-brandline"><Swords size={18} aria-hidden="true" /><span>EVE ECHOES / KILL INTELLIGENCE</span></div><h1>击毁情报</h1><p>{reportSourceNote(current) || '仅收录价值大于 200 亿 ISK 的最新报告，保留星系安等与可验证的掉落信息。'}</p></div>
+      <div><div className="kb-brandline"><Swords size={18} aria-hidden="true" /><span>EVE ECHOES / KILL INTELLIGENCE</span></div><h1>击毁情报</h1>{reportSourceNote(current) ? <p>{reportSourceNote(current)}</p> : null}</div>
       <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />00地区</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div>{(forbidden || shouldShowKillboardLiveStatus(status)) ? <span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span> : null}<button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
     </header>
     <div className="kb-workspace">

@@ -230,6 +230,7 @@ test('the hero includes victim metadata and redundant stat cards no longer occup
   assert.match(JSON.stringify(hero), /REGION/)
   assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-stat-grid'))
   assert.doesNotMatch(JSON.stringify(page.tree), /火力记录|最后一击资料未返回/)
+  assert.doesNotMatch(JSON.stringify(page.tree), /仅收录价值大于 200 亿 ISK 的最新报告，保留星系安等与可验证的掉落信息。/)
   page.unmount()
 })
 
@@ -258,6 +259,13 @@ test('the hero exposes a copyable in-game KM tag and visible exact ISK value', a
   const copyButton = nodes(page.tree).find(node => node.props['aria-label'] === '复制 KM')
   assert.ok(copyButton)
   page.unmount()
+})
+
+test('hero artwork has an uncropped, wider containment stage', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-hero\s*\{[^}]*grid-template-columns:minmax\(190px, 260px\)/)
+  assert.match(css, /\.kb-hero \.kb-asset--ship\s*\{[^}]*height:132px;[^}]*overflow:visible/)
+  assert.match(css, /\.kb-hero \.kb-asset--ship img\s*\{[^}]*object-fit:contain;[^}]*object-position:center/)
 })
 
 test('refresh reloads health and hides a newly persisted cooldown badge', async () => {
