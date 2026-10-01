@@ -16,6 +16,7 @@ from django.db.models import Max, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied, Throttled, ValidationError
+from Authentication.access import is_viewer_allowed
 
 from TacticalBoard.models import BoardRegions, BoardStargates, BoardSystems
 from .models import (AuditLog, Board, CommandReceipt, ConnectionLease, Force, ForceSource, Invite,
@@ -76,8 +77,13 @@ def integer(value, low=1, high=2147483647):
 
 
 def active_user(user):
-    if not getattr(user, 'is_authenticated', False) or not get_user_model().objects.filter(pk=user.pk, is_active=True).exists():
+    if not getattr(user, 'is_authenticated', False):
         raise PermissionDenied('账号不可用。')
+    current = get_user_model().objects.filter(pk=user.pk, is_active=True).values('email').first()
+    if current is None:
+        raise PermissionDenied('账号不可用。')
+    if not is_viewer_allowed(current['email']):
+        raise PermissionDenied('当前账号暂无查看权限。')
 
 
 def locked_org(organization_id):

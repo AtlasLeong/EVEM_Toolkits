@@ -77,6 +77,9 @@ jobs:
         run: python -m pip install -r scripts/deploy/requirements-ci.txt -r backend/requirements-tactical.txt -r scripts/deploy/requirements-market.txt
       - name: Tactical fixture safety tests (no remote access)
         run: python -m unittest discover -s scripts/tactical/tests -v 2>&1 | tee ci-evidence/tactical-safety-tests.log
+      - name: Viewer allowlist, middleware and refresh-token policy (isolated)
+        working-directory: backend
+        run: python manage.py test Authentication.test_viewer_access --settings=EVE_MDjango.viewer_access_test_settings --noinput
       - name: License, activation, feedback, community and deployment-version tests (isolated SQLite)
         working-directory: backend
         run: |

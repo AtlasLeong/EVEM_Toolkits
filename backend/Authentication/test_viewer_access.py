@@ -2,11 +2,14 @@ from unittest.mock import Mock, patch
 
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from rest_framework.request import Request
+from rest_framework.exceptions import PermissionDenied
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from Authentication.access import is_viewer_allowed
 from Authentication.permissions import IsAllowlistedViewer
 from Authentication.middleware import ViewerAccessMiddleware
 from Authentication.views import LoginView
+from Authentication.serializers import AllowlistedTokenRefreshSerializer
 
 
 class ViewerAllowlistTests(SimpleTestCase):
@@ -80,3 +83,19 @@ class ViewerAllowlistTests(SimpleTestCase):
             object(),
         )
         self.assertEqual(middleware(request), 'next')
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_refresh_rejects_other_emails_and_tokens_without_an_email(self):
+        for email in (None, 'other@example.com'):
+            token = RefreshToken()
+            if email is not None:
+                token['email'] = email
+            with self.subTest(email=email), self.assertRaises(PermissionDenied):
+                AllowlistedTokenRefreshSerializer().validate({'refresh': str(token)})
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_refresh_allows_the_viewer(self):
+        token = RefreshToken()
+        token['email'] = '2235102484@qq.com'
+        result = AllowlistedTokenRefreshSerializer().validate({'refresh': str(token)})
+        self.assertIn('access', result)

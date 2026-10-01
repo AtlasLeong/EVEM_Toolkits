@@ -1,5 +1,6 @@
 import API_URL from "./backendSetting";
 import fetchWithAuth from "./fetchWithAuth";
+import { VIEWER_ACCESS_ENABLED } from "../utils/viewerAccess";
 
 export { ACTIVITY_OPTIONS as ACTIVITIES } from "../utils/corporationActivity.js";
 export const CORPORATION_TYPES = {
@@ -47,7 +48,7 @@ async function checked(response) {
 const request = async (path, options = {}, privateRequest = true) =>
   (
     await checked(
-      await (privateRequest ? fetchWithAuth : fetch)(`${base}${path}`, options),
+      await (privateRequest || VIEWER_ACCESS_ENABLED ? fetchWithAuth : fetch)(`${base}${path}`, options),
     )
   ).json();
 const send = (path, body, method = "POST") =>
@@ -55,19 +56,19 @@ const send = (path, body, method = "POST") =>
 export const listCorporations = (params) =>
   request(`corporations/?${new URLSearchParams(params)}`, {}, false);
 export const getCommunityRegions = async () => {
-  const response = await fetch(`${API_URL}/regions`);
+  const response = await fetchWithAuth(`${API_URL}/regions`);
   if (!response.ok) throw new Error("星域目录暂时不可用");
   return response.json();
 };
 export const getCommunityConstellations = async (regionID) => {
-  const response = await fetch(
+  const response = await fetchWithAuth(
     `${API_URL}/constellations?${new URLSearchParams({ regionID })}`,
   );
   if (!response.ok) throw new Error("星座目录暂时不可用");
   return response.json();
 };
 export const getCommunitySolarSystems = async (constellationID) => {
-  const response = await fetch(
+  const response = await fetchWithAuth(
     `${API_URL}/solarsystem?${new URLSearchParams({ constellationID })}`,
   );
   if (!response.ok) throw new Error("星系目录暂时不可用");
@@ -102,7 +103,7 @@ export function uploadCorporationMedia(id, file, requestId) {
   return request(`corporations/${id}/media/`, { method: "POST", body });
 }
 
-// Never send an Authorization header or draw arbitrary client-supplied remote images.
+// Authorize only validated same-origin API media; never arbitrary remote URLs.
 export function communityMediaUrl(value) {
   if (!value) return null;
   const origin = new URL(base, window.location.origin);
@@ -122,7 +123,7 @@ export async function fetchCommunityImage(value, isPrivate = false) {
   const url = communityMediaUrl(value);
   if (!url) return null;
   const response = await checked(
-    await (isPrivate ? fetchWithAuth : fetch)(url),
+    await (isPrivate || VIEWER_ACCESS_ENABLED ? fetchWithAuth : fetch)(url),
   );
   if (
     !/^image\/(png|jpeg|webp)(?:;|$)/i.test(

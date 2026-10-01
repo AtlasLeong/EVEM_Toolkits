@@ -242,9 +242,14 @@ class TacticalConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def authenticate(self, raw_token):
         from rest_framework_simplejwt.authentication import JWTAuthentication
+        from rest_framework.exceptions import PermissionDenied
+        from Authentication.access import is_viewer_allowed
         auth = JWTAuthentication()
         token = auth.get_validated_token(raw_token)
-        return auth.get_user(token), float(token['exp'])
+        user = auth.get_user(token)
+        if not is_viewer_allowed(getattr(user, 'email', '')):
+            raise PermissionDenied('当前账号暂无查看权限。')
+        return user, float(token['exp'])
 
     @database_sync_to_async
     def admit(self):

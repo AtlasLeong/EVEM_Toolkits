@@ -1,28 +1,29 @@
 import API_URL from "./backendSetting";
+import fetchWithAuth from "./fetchWithAuth";
 
 export async function getBoardSystems() {
-  const res = await fetch(`${API_URL}/boardsystems`);
+  const res = await fetchWithAuth(`${API_URL}/boardsystems`);
   if (!res.ok) throw Error("Failed getting Board systems");
   const data = await res.json();
   return data;
 }
 
 export async function getBoardStarGate() {
-  const res = await fetch(`${API_URL}/boardstargate`);
+  const res = await fetchWithAuth(`${API_URL}/boardstargate`);
   if (!res.ok) throw Error("Failed getting Board stargate");
   const data = await res.json();
   return data;
 }
 
 export async function getConstellations() {
-  const res = await fetch(`${API_URL}/boardconstellations`);
+  const res = await fetchWithAuth(`${API_URL}/boardconstellations`);
   if (!res.ok) throw Error("Failed getting Constellations");
   const data = await res.json();
   return data;
 }
 
 export async function getRegions() {
-  const res = await fetch(`${API_URL}/boardregions`);
+  const res = await fetchWithAuth(`${API_URL}/boardregions`);
   if (!res.ok) throw Error("Failed getting Regions");
   const data = await res.json();
   return data;
@@ -35,7 +36,7 @@ export async function postJumpInfo({
   dict_road,
   inHighSecurity,
 }) {
-  const res = await fetch(`${API_URL}/jumppath`, {
+  const res = await fetchWithAuth(`${API_URL}/jumppath`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

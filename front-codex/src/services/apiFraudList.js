@@ -7,7 +7,7 @@ async function parseError(response, fallback) {
 }
 
 export async function searchFraud(fraudNumber) {
-  const res = await fetch(`${API_URL}/fraudsearch`, {
+  const res = await fetchWithAuth(`${API_URL}/fraudsearch`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

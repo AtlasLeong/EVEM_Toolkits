@@ -327,7 +327,8 @@ class ReleaseTests(unittest.TestCase):
         for path in (self.root / 'releases', self.root / 'current', self.root / 'shared/assets', Path(config['uploads'])):
             self.assertIn(str(path), gate)
 
-    def http_health(self, state, ready_status=200, ready_body=None, tactical_ws=False):
+    def http_health(self, state, ready_status=200, ready_body=None, tactical_ws=False,
+                    api_status=200, api_body=None, api_headers=None):
         calls = []
         class Response(io.BytesIO):
             status = 200
@@ -341,6 +342,9 @@ class ReleaseTests(unittest.TestCase):
             if route in ('/deploy-version.json', '/api/deploy-version/'):
                 component = 'frontend' if route == '/deploy-version.json' else 'backend'
                 return Response(json.dumps({'sha': state[component]['sha']}).encode())
+            if route == '/api/boardregions' and api_status != 200:
+                raise HTTPError(request.full_url, api_status, 'fixture failure', api_headers or {},
+                                io.BytesIO(json.dumps(api_body).encode()))
             return Response(b'[]' if route == '/api/boardregions' else b'<html></html>')
         with patch.object(release, 'command') as service, patch.object(release.time, 'sleep'), \
              patch.object(release.urllib.request, 'urlopen', side_effect=get), \
@@ -352,6 +356,47 @@ class ReleaseTests(unittest.TestCase):
         else:
             socket_probe.assert_not_called()
         return calls
+
+    def private_backend(self, state):
+        backend = Path(state['backend']['path'])
+        (backend / 'Authentication').mkdir(parents=True, exist_ok=True)
+        (backend / 'Authentication/middleware.py').write_text('# viewer gate capability', encoding='utf-8')
+        self.community_backend(backend)
+
+    def test_private_api_gate_is_healthy_only_with_expected_bearer_denial_and_ready_database(self):
+        state = self.state()
+        self.private_backend(state)
+        denial = {'detail': 'Authentication credentials were not provided.'}
+        calls = self.http_health(state, api_status=401, api_body=denial,
+                                 api_headers={'WWW-Authenticate': 'Bearer'})
+        self.assertIn('/api/community/ready/', calls)
+        for ready_status in (404, 503):
+            with self.subTest(ready_status=ready_status), self.assertRaises(release.ReleaseError):
+                self.http_health(state, ready_status=ready_status, api_status=401,
+                                 api_body=denial, api_headers={'WWW-Authenticate': 'Bearer'})
+
+    def test_private_api_does_not_accept_unrelated_denials_or_server_errors(self):
+        state = self.state()
+        self.private_backend(state)
+        for status, body, headers in (
+            (401, {'detail': 'Authentication credentials were not provided.'}, {}),
+            (401, {'detail': 'proxy error'}, {'WWW-Authenticate': 'Bearer'}),
+            (403, {'detail': 'Authentication credentials were not provided.'}, {'WWW-Authenticate': 'Bearer'}),
+            (500, None, {}),
+        ):
+            with self.subTest(status=status, body=body, headers=headers), self.assertRaises(release.ReleaseError):
+                self.http_health(state, api_status=status, api_body=body, api_headers=headers)
+
+    def test_historical_api_without_viewer_gate_still_requires_200(self):
+        with self.assertRaises(release.ReleaseError):
+            self.http_health(self.state(), api_status=401,
+                             api_body={'detail': 'Authentication credentials were not provided.'},
+                             api_headers={'WWW-Authenticate': 'Bearer'})
+
+    def test_public_mode_of_gate_capable_backend_still_uses_api_200(self):
+        state = self.state()
+        self.private_backend(state)
+        self.assertIn('/api/boardregions', self.http_health(state))
 
     def test_tactical_release_health_is_opt_in_and_checks_upgrade(self):
         self.http_health(self.state(), tactical_ws=True)

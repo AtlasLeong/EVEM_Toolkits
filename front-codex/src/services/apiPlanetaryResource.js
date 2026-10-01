@@ -11,7 +11,7 @@ async function parseApiError(response, fallback) {
 }
 
 export async function getPlanetResources() {
-  const res = await fetch(`${API_URL}/planetresources`)
+  const res = await fetchWithAuth(`${API_URL}/planetresources`)
   if (!res.ok) {
     throw new Error('Error to fetch Planet Resource')
   }
@@ -19,7 +19,7 @@ export async function getPlanetResources() {
 }
 
 export async function searchPlanetResources(searchForm) {
-  const res = await fetch(`${API_URL}/searchplanetresource`, {
+  const res = await fetchWithAuth(`${API_URL}/searchplanetresource`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

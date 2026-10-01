@@ -1,7 +1,8 @@
 import API_URL from "./backendSetting";
+import fetchWithAuth from "./fetchWithAuth";
 
 export async function getBazaarNameList() {
-  const res = await fetch(`${API_URL}/bazaarnamelist`);
+  const res = await fetchWithAuth(`${API_URL}/bazaarnamelist`);
   if (!res.ok) {
     throw new Error("Error to fetch bazaar name list");
   }
@@ -10,7 +11,7 @@ export async function getBazaarNameList() {
 }
 
 export async function getBazaarDate(bazaarName, server) {
-  const res = await fetch(`${API_URL}/bazaardate`, {
+  const res = await fetchWithAuth(`${API_URL}/bazaardate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -25,7 +26,7 @@ export async function getBazaarDate(bazaarName, server) {
 }
 
 export async function getBazaarInfo(bazaarName, server, selectDate) {
-  const res = await fetch(
+  const res = await fetchWithAuth(
     `${API_URL}/bazaarinfo?bazaarName=${bazaarName}&server=${server}&selectDate=${selectDate}`
   );
   if (!res.ok) {
@@ -36,7 +37,7 @@ export async function getBazaarInfo(bazaarName, server, selectDate) {
 }
 
 export async function getBazaarChart(bazaarList) {
-  const res = await fetch(`${API_URL}/bazaarchart`, {
+  const res = await fetchWithAuth(`${API_URL}/bazaarchart`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -51,7 +52,7 @@ export async function getBazaarChart(bazaarList) {
 }
 
 export async function getBazaarBox(bazaarName) {
-  const res = await fetch(`${API_URL}/bazaarbox?bazaarName=${bazaarName}`);
+  const res = await fetchWithAuth(`${API_URL}/bazaarbox?bazaarName=${bazaarName}`);
   if (!res.ok) {
     throw new Error("Error to fetch bazaar box");
   }

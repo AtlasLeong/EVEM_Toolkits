@@ -5,7 +5,7 @@ const production = Boolean(import.meta.env?.PROD)
 const publicAccessValue = String(import.meta.env?.VITE_VIEWER_PUBLIC_ACCESS_ENABLED ?? 'false').trim().toLowerCase()
 
 // Local development and e2e previews stay usable without a production login.
-export const VIEWER_ACCESS_ENABLED = production && ['0', 'false', 'no', 'off'].includes(publicAccessValue)
+export const VIEWER_ACCESS_ENABLED = production && !['1', 'true', 'yes', 'on'].includes(publicAccessValue)
 
 const configuredEmails = String(import.meta.env?.VITE_VIEWER_ALLOWLIST_EMAILS ?? '2235102484@qq.com')
   .split(',')
