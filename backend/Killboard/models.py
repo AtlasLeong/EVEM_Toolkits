@@ -180,6 +180,7 @@ class ProbeCursor(models.Model):
     candidate_id = models.BigIntegerField(null=True, blank=True)
     candidate_at_ms = models.BigIntegerField(null=True, blank=True)
     provisional_empty_id = models.BigIntegerField(null=True, blank=True)
+    strategy_state = models.JSONField(default=dict, blank=True)
     updated_at_ms = models.BigIntegerField(default=epoch_ms)
 
     class Meta:
@@ -207,6 +208,7 @@ class ProbeRun(models.Model):
     empty_count = models.PositiveIntegerField(default=0)
     stop_reason = models.CharField(max_length=64, blank=True, default='')
     error_code = models.CharField(max_length=64, blank=True, default='')
+    diagnostics = models.JSONField(default=dict, blank=True)
     lease_owner = models.CharField(max_length=64, blank=True, default='')
     lease_expires_at_ms = models.BigIntegerField(null=True, blank=True, db_index=True)
     created_at_ms = models.BigIntegerField(default=epoch_ms, db_index=True)
@@ -233,6 +235,7 @@ class ProbeEvent(models.Model):
     error_code = models.CharField(max_length=64, blank=True, default='')
     observed_at_ms = models.BigIntegerField(default=epoch_ms, db_index=True)
     duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    diagnostics = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-observed_at_ms', '-id']

@@ -47,6 +47,7 @@ class CIGatesTests(unittest.TestCase):
     def test_private_killboard_and_shared_data_have_explicit_gates(self):
         workflow = (Path(__file__).resolve().parents[3] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         for gate in ('Killboard.tests.test_worker', 'Killboard.tests.test_collector_transport',
+                     'Killboard.tests.test_freshness', 'Killboard.tests.test_serializers',
                      'GameData.tests', 'makemigrations Killboard',
                      'scripts/killboard/tests', 'scripts/game_data/client_assets/tests'):
             self.assertIn(gate, workflow)

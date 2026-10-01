@@ -414,18 +414,25 @@ class CollectorTransportTests(unittest.TestCase):
         self.assertEqual(first['kill_id'], 100)
         self.assertEqual(second['kill_id'], 101)
 
-    def test_optional_profile_bad_wire_frame_still_stops_immediately(self):
+    def test_optional_profile_bad_wire_frame_preserves_verified_base_and_stops_immediately(self):
         report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101,
                            'isk_lost': '20000000000.01'})
         wire = WireSocket(successful_login() + response(5, report)
                           + frame(3, {'seq': 6, 'content': pack([2, [], [0, 0, 6], []])}))
         with patch('Market.collector_protocol.socket.create_connection', return_value=wire) as connect:
             client = self.transport.KillboardClient(with_profiles())
-            with self.assertRaises(self.transport.CollectorError):
-                client.get_kill_info(100)
-            with self.assertRaises(self.transport.CollectorError):
+            try:
+                result = client.get_kill_info(100)
+            except self.transport.CollectorError:
+                self.fail('Malformed identity wire discarded the independently verified base KM.')
+            self.assertIsInstance(result, self.transport.BaseReportResult)
+            self.assertEqual(result.decoded['kill_id'], 100)
+            self.assertEqual(result.stop_code, 'malformed')
+            with self.assertRaises(self.transport.CollectorError) as caught:
                 client.get_kill_info(101)
+            self.assertEqual(caught.exception.code, 'malformed')
             connect.assert_called_once()
+        self.assertEqual(client.audit_snapshot()['failure_rpc_method'], 'get_public_info')
         self.assertTrue(wire.closed)
 
     def test_enrich_false_keeps_known_report_smoke_to_auth4_plus_km_only(self):
@@ -511,19 +518,66 @@ class CollectorTransportTests(unittest.TestCase):
                 self.assertEqual(client.get_kill_info(100)['identity_map']['characters'][101]['name'],
                                  'Synthetic pilot')
 
-    def test_throttle_during_enrichment_latches_and_never_returns_partial_report(self):
+    def test_throttle_during_enrichment_returns_verified_base_then_latches(self):
         self.assertTrue(hasattr(self.transport.KillboardClient, 'get_public_info'), 'identity enrichment is missing')
         report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101})
         wire = WireSocket(successful_login() + response(5, report) + response(6, throttle()))
         with patch('Market.collector_protocol.socket.create_connection', return_value=wire) as connect:
             client = self.transport.KillboardClient(with_profiles())
-            for _ in range(2):
-                with self.assertRaises(self.transport.CollectorError) as caught:
-                    client.get_kill_info(100)
-                self.assertEqual(caught.exception.code, 'rate_limited')
+            result = client.get_kill_info(100)
+            self.assertEqual(result.decoded['kill_id'], 100)
+            self.assertEqual(result.stop_code, 'rate_limited')
+            with self.assertRaises(self.transport.CollectorError) as caught:
+                client.get_kill_info(101)
+            self.assertEqual(caught.exception.code, 'rate_limited')
             connect.assert_called_once()
         self.assertEqual(len(wire.sent), 7)
         self.assertTrue(wire.closed)
+
+    def test_audit_identifies_actual_auth_method_and_excludes_private_details(self):
+        wire = WireSocket(frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
+                          + response(1, throttle()))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            client = self.transport.KillboardClient(synthetic_bundle(), session_slot='B')
+            with self.assertRaises(self.transport.CollectorError):
+                client.get_kill_info(100)
+        self.assertEqual(client.audit_snapshot(), {
+            'session_slot': 'B', 'rpc_count': 1, 'last_rpc_method': 'login_sigma',
+            'failure_rpc_method': 'login_sigma', 'stage': 'authentication',
+            'error_code': 'rate_limited',
+        })
+
+    def test_audit_identifies_identity_failure_and_preserves_completed_profiles(self):
+        report = envelope({'kill_blob': '<other/>', 'kill_id': 100,
+                           'victim_character_id': 101, 'victim_corporation_id': 201})
+        wire = WireSocket(successful_login() + response(5, report)
+                          + response(6, [character()]) + response(7, throttle()))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            client = self.transport.KillboardClient(with_profiles(), session_slot='C')
+            result = client.get_kill_info(100)
+        self.assertEqual(result.stop_code, 'rate_limited')
+        self.assertEqual(result.decoded['identity_map']['characters'][101]['name'], 'Synthetic pilot')
+        self.assertEqual(client.audit_snapshot()['failure_rpc_method'], 'get_corp_brief')
+        self.assertEqual(client.audit_snapshot()['stage'], 'identity')
+        self.assertEqual(client.audit_snapshot()['rpc_count'], 7)
+
+    def test_audit_sets_rpc_method_before_pacer_and_counts_only_sent_rpc(self):
+        class BudgetStop(Exception):
+            code = 'budget_exhausted'
+        wire = WireSocket(successful_login())
+        observed = []
+        client = None
+        def pace():
+            observed.append(client.audit_snapshot()['last_rpc_method'])
+            if len(observed) == 5:
+                raise BudgetStop()
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            client = self.transport.KillboardClient(synthetic_bundle(), before_rpc=pace)
+            with self.assertRaises(BudgetStop):
+                client.get_kill_info(100)
+        self.assertEqual(observed[-1], 'get_kill_info')
+        self.assertEqual(client.audit_snapshot()['rpc_count'], 4)
+        self.assertEqual(client.audit_snapshot()['failure_rpc_method'], 'get_kill_info')
 
     def test_mismatched_kill_id_stops_before_any_identity_rpc(self):
         report = envelope({'kill_blob': '<other/>', 'kill_id': 101, 'victim_character_id': 1000})
@@ -631,12 +685,43 @@ class CollectorTransportTests(unittest.TestCase):
                 self.bundle_module.save_session(synthetic_bundle(bytes([index])), path)
             with patch.dict(os.environ, {'KILLBOARD_SESSION_FILES': os.pathsep.join(map(str, paths))}):
                 with patch('Market.collector_protocol.socket.create_connection') as connect:
-                    with patch.object(self.transport, 'load_round_robin_session', return_value=synthetic_bundle(b'one')) as choose:
+                    with patch.object(self.transport, 'load_round_robin_session', return_value=(synthetic_bundle(b'one'), 'B')) as choose:
                         client = self.transport.build_client()
-                    choose.assert_called_once()
+                    choose.assert_called_once_with(cursor_path=None, with_slot=True)
                     self.assertEqual(client.session.bundle['hello']['synthetic'], b'one')
+                    self.assertEqual(client.audit_snapshot()['session_slot'], 'B')
                     connect.assert_not_called()
                     client.close()
+
+    def test_per_call_locator_override_does_not_spend_optional_identity_rpcs(self):
+        report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101})
+        wire = WireSocket(successful_login() + response(5, report))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            client = self.transport.KillboardClient(with_profiles())
+            self.assertEqual(decode_kill_info_response(client.get_kill_info(100, enrich=False))['kill_id'], 100)
+            self.assertTrue(client.enrich)
+        self.assertEqual(len(wire.sent), 6)
+
+    def test_identity_network_or_auth_stop_returns_verified_base_and_never_reconnects(self):
+        report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101})
+        for code in ('network_error', 'unauthorized'):
+            with self.subTest(code=code):
+                wire = WireSocket(successful_login() + response(5, report)
+                                  + (response(6, {'error': {'code': code}}) if code == 'unauthorized' else b''),
+                                  timeout_when_empty=True)
+                with patch('Market.collector_protocol.socket.create_connection', return_value=wire) as connect:
+                    client = self.transport.KillboardClient(with_profiles())
+                    result = client.get_kill_info(100)
+                    self.assertEqual(result.decoded['kill_id'], 100)
+                    self.assertEqual(result.stop_code, code)
+                    with self.assertRaises(self.transport.CollectorError):
+                        client.get_kill_info(101)
+                    connect.assert_called_once()
+
+    def test_invalid_audit_ordinal_is_rejected_before_connecting(self):
+        for value in ('account@email.test', 'secret.json', 'a', 'ABC', 2, None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.transport.KillboardClient(synthetic_bundle(), session_slot=value)
 
 
 if __name__ == '__main__':

@@ -308,7 +308,7 @@ def _write_cursor(path: Path, value: int) -> None:
         raise _invalid() from None
 
 
-def load_round_robin_session(paths=None, cursor_path=None) -> dict[str, Any]:
+def load_round_robin_session(paths=None, cursor_path=None, *, with_slot=False):
     """Select one session for this run and atomically advance the next index.
 
     Cursor corruption is treated as a fresh pool (index zero), while an
@@ -319,6 +319,12 @@ def load_round_robin_session(paths=None, cursor_path=None) -> dict[str, Any]:
     path = _cursor_path(cursor_path)
     index = _read_cursor(path, len(bundles))
     _write_cursor(path, (index + 1) % len(bundles))
+    if with_slot:
+        ordinal, slot = index + 1, ''
+        while ordinal:
+            ordinal, remainder = divmod(ordinal - 1, 26)
+            slot = chr(65 + remainder) + slot
+        return bundles[index], slot
     return bundles[index]
 
 

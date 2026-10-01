@@ -147,6 +147,36 @@ test('participant note distinguishes hidden named players from unnamed damage no
   assert.equal(participantVisibilityNote(rows), '展示前 7 条可识别角色；另有 1 名角色和 1 条未命名火力记录未展开。')
 })
 
+test('participant note counts visible NPC and source records without claiming zero shown roles', () => {
+  const rows = [
+    ...Array.from({ length: 8 }, (_, index) => ({ identity_kind: 'npc', display_name: `NPC${index}` })),
+    { damage: 100 },
+  ]
+  assert.equal(participantVisibilityNote(rows), '展示 7 条参战记录（含 NPC 或来源记录）；另有 2 条记录未展开。')
+  assert.equal(participantVisibilityNote(rows.slice(0, 7)), '')
+})
+
+test('collector audit labels use fixed readable classifiers and never echo remote text', () => {
+  assert.equal(typeof presentation.collectorAuditLabel, 'function')
+  assert.equal(presentation.collectorAuditLabel('rate_limited'), '请求过于频繁')
+  assert.equal(presentation.collectorAuditLabel('identity'), '身份补全')
+  assert.equal(presentation.collectorAuditLabel('authentication'), '会话认证')
+  assert.equal(presentation.collectorAuditLabel('filtered_value'), '低于收录价值')
+  assert.equal(presentation.collectorAuditLabel('waiting_visibility'), '等待报告可见后再查')
+  assert.equal(presentation.collectorAuditLabel('locate_budget'), '边界定位预算用尽')
+  assert.equal(presentation.collectorAuditLabel('PRIVATE REMOTE ERROR'), '未知')
+})
+
+test('collector counts distinguish parsed KM from actual database insertions', () => {
+  assert.equal(typeof presentation.collectorRunCounts, 'function')
+  assert.deepEqual(presentation.collectorRunCounts({ request_count: 5, report_count: 4, empty_count: 1,
+    diagnostics: { rpc_count: 8, created_count: 1, updated_count: 0, filtered_value_count: 3 } }), {
+    requests: 5, parsed: 4, empty: 1, rpc: 8, created: 1, updated: 0,
+    filteredValue: 3, filteredNpc: 0, deferred: 0,
+  })
+  assert.equal(presentation.collectorRunCounts({ report_count: 4 }).created, null)
+})
+
 test('switching reports never displays another report detail under the new selection', () => {
   const previous = { kill_id: '1', participants: [{ character_name: 'Previous' }] }
   const summary = { kill_id: '2', ship_name: 'Next' }

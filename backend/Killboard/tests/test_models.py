@@ -17,12 +17,27 @@ from Killboard.models import (
     KillParticipant,
     KillReport,
     ProbeCursor,
+    ProbeEvent,
     ProbeRun,
     ShipClass,
 )
 
 
 class KillboardModelTests(TestCase):
+    def test_strategy_and_audit_json_are_independent_and_round_trip(self):
+        first = ProbeCursor.objects.create(name='audit-first')
+        second = ProbeCursor.objects.create(name='audit-second')
+        self.assertEqual(first.strategy_state, {})
+        first.strategy_state['phase'] = 'bracket'
+        first.save()
+        second.refresh_from_db()
+        self.assertEqual(second.strategy_state, {})
+        run = ProbeRun.objects.create(cursor=first, diagnostics={'session_slot': 'A'})
+        event = ProbeEvent.objects.create(run=run, status='report', diagnostics={'disposition': 'created'})
+        run.refresh_from_db()
+        event.refresh_from_db()
+        self.assertEqual(run.diagnostics, {'session_slot': 'A'})
+        self.assertEqual(event.diagnostics, {'disposition': 'created'})
     def test_kill_report_id_is_unique_and_related_rows_are_supported(self):
         report = KillReport.objects.create(
             kill_id=19748417,

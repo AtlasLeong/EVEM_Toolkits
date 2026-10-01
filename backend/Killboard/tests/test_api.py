@@ -115,6 +115,75 @@ class KillboardApiTests(TestCase):
         self.client.force_authenticate(self.other)
         self.assertEqual(self.client.get('/api/killboard/collector/logs/').status_code, 403)
 
+    def test_collector_logs_expose_only_safe_diagnostics_and_actual_persistence_counts(self):
+        cursor = ProbeCursor.objects.create(name='latest', next_probe_id=20044044, strategy_state={
+            'version': 1, 'phase': 'locate', 'frontier': 20044043, 'history_start': 20044044,
+            'search': {'lower': 20044043, 'upper': None, 'step': 1024},
+            'pending_ranges': [[20044044, 20045043], [20046000, 20046002]],
+            'deferred_ids': {'20044044': 1790870000000, 'PRIVATE': 'PRIVATE'},
+            'coverage_verified': True, 'password': 'PRIVATE PASSWORD',
+        })
+        run = ProbeRun.objects.create(cursor=cursor, request_count=5, report_count=4, empty_count=1,
+                                      diagnostics={'session_slot': 'B', 'rpc_count': 8,
+                                                   'stage': 'identity', 'failure_rpc_method': 'get_public_info',
+                                                   'created_count': 1, 'filtered_value_count': 3,
+                                                   'strategy': 'latest_first', 'phase': 'locate',
+                                                   'password': 'PRIVATE PASSWORD'})
+        ProbeEvent.objects.create(run=run, kill_id=20044043, status='report',
+                                  diagnostics={'session_slot': 'B', 'stage': 'kill_report',
+                                               'last_rpc_method': 'get_kill_info', 'disposition': 'created',
+                                               'response': 'PRIVATE BODY'})
+        response = self.client.get('/api/killboard/collector/logs/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Cache-Control'], 'no-store, private')
+        diagnostics = response.data['runs'][0]['diagnostics']
+        self.assertEqual(diagnostics['session_slot'], 'B')
+        self.assertEqual(diagnostics['created_count'], 1)
+        self.assertEqual(response.data['events'][0]['diagnostics']['disposition'], 'created')
+        strategy = response.data['cursor']['strategy']
+        self.assertFalse(strategy['coverage_verified'])
+        self.assertEqual(strategy['pending_id_count'], 1003)
+        self.assertEqual(strategy['pending_range_count'], 2)
+        self.assertEqual(strategy['newest_candidate_id'], '20044043')
+        self.assertEqual(strategy['historical_next_id'], '20044044')
+        self.assertEqual(strategy['deferred_id_count'], 1)
+        self.assertNotIn('PRIVATE', str(response.data))
+        self.assertEqual(self.client.post('/api/killboard/collector/logs/').status_code, 405)
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.client.get('/api/killboard/collector/logs/').status_code, 403)
+        self.assertEqual(APIClient().get('/api/killboard/collector/logs/').status_code, 401)
+
+    def test_collector_logs_reject_unrecognized_diagnostic_values_and_remote_error_text(self):
+        cursor = ProbeCursor.objects.create(name='latest', strategy_state={'phase': 'PRIVATE PHASE',
+                                                                         'pending_ranges': 'PRIVATE DATA'})
+        ProbeRun.objects.create(cursor=cursor, stop_reason='PRIVATE BODY', error_code='PRIVATE BODY',
+                                diagnostics={'session_slot': '/private/key', 'rpc_count': 'PRIVATE DATA',
+                                             'stage': 'PRIVATE METHOD', 'failure_rpc_method': 'PRIVATE METHOD',
+                                             'error_code': 'PRIVATE BODY', 'created_count': -1})
+        response = self.client.get('/api/killboard/collector/logs/')
+        self.assertNotIn('PRIVATE', str(response.data))
+        self.assertEqual(response.data['runs'][0]['stop_reason'], 'unknown_error')
+        self.assertNotIn('session_slot', response.data['runs'][0]['diagnostics'])
+
+    def test_collector_audit_json_wrong_types_fail_closed_without_server_error(self):
+        cursor = ProbeCursor.objects.create(name='latest', strategy_state={'phase': [],
+                                                                          'pending_ranges': [[True, 2], [0, 5], [2, 1]]})
+        ProbeRun.objects.create(cursor=cursor, diagnostics={'stage': {}, 'last_rpc_method': [],
+                                                           'error_code': {}, 'disposition': []})
+        response = self.client.get('/api/killboard/collector/logs/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['runs'][0]['diagnostics'], {})
+        self.assertEqual(response.data['cursor']['strategy']['pending_id_count'], 0)
+
+    def test_collector_logs_ignore_oversized_decimal_deferred_ids(self):
+        ProbeCursor.objects.create(name='latest', strategy_state={
+            'deferred_ids': {'9' * 5000: 1, '9' * 20: 1},
+        })
+        self.client.raise_request_exception = False
+        response = self.client.get('/api/killboard/collector/logs/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['cursor']['strategy']['deferred_id_count'], 0)
+
     def test_owner_check_reloads_active_email_and_fails_closed_when_setting_missing(self):
         self.client.force_authenticate(self.owner)
         get_user_model().objects.filter(pk=self.owner.pk).update(email='changed@example.com')

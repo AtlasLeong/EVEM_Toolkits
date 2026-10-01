@@ -35,8 +35,9 @@ function exactIsk(value) {
   return `${grouped}${fraction ? `.${fraction}` : ''} ISK`
 }
 
-export function formatKillboardTime(value, raw = '') {
-  const candidate = value || raw
+export function formatKillboardTime(value, raw = '', source = '') {
+  let candidate = value || raw
+  if ((source === 'kill_api' || source.startsWith('kill_api_')) && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(candidate)) candidate += 'Z'
   if (candidate) {
     const date = new Date(candidate)
     if (!Number.isNaN(date.getTime())) return date.toLocaleString('zh-CN', {
@@ -70,7 +71,7 @@ function ReportRow({ report, active, onSelect }) {
   return <button type="button" className={`kb-report-row${active ? ' is-active' : ''}`} onClick={() => onSelect(report.kill_id)} aria-current={active ? 'true' : undefined} aria-label={`${shipName}，${report.system_name || '未知星系'}，${security.zoneLabel} ${security.valueLabel}`}>
     <span className="kb-report-row-top"><strong>{shipName}</strong><span className="kb-status-chip">{classLabel(report)}</span></span>
     <span className="kb-report-row-meta"><span>{report.victim_name || '未知目标'} · {report.system_name || '未知星系'}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></span>
-    <span className="kb-report-row-bottom"><time>{formatKillboardTime(report.kill_time_display, report.kill_time_raw)}</time><b title={exactIsk(report.isk_lost)}>{formatKillIsk(report.isk_lost)} ISK</b></span>
+    <span className="kb-report-row-bottom"><time>{formatKillboardTime(report.kill_time_display, report.kill_time_raw, report.source)}</time><b title={exactIsk(report.isk_lost)}>{formatKillIsk(report.isk_lost)} ISK</b></span>
   </button>
 }
 
@@ -132,6 +133,7 @@ export default function KillboardPage() {
   const contentRef = useRef(null)
   const revoked = useRef(false)
   const requests = useRef(new Set())
+  const activeRequests = useRef(new Set())
 
   function revokeAccess() {
     // Latch synchronously: already queued successes must not restore private data.
@@ -154,6 +156,7 @@ export default function KillboardPage() {
     if (revoked.current) return undefined
     const controller = new AbortController()
     requests.current.add(controller)
+    activeRequests.current.add(controller)
     let alive = true
     setLoading(true)
     listKillReports({ page: 1, pageSize: 30, ...filters, signal: controller.signal }).then(data => {
@@ -166,14 +169,15 @@ export default function KillboardPage() {
       if (!alive || revoked.current || err.name === 'AbortError') return
       if (err.status === 403) revokeAccess()
       else setError(err.message || '击毁情报暂时无法加载')
-    }).finally(() => { if (alive && !revoked.current) setLoading(false) })
-    return () => { alive = false; controller.abort(); requests.current.delete(controller) }
+    }).finally(() => { activeRequests.current.delete(controller); if (alive && !revoked.current) setLoading(false) })
+    return () => { alive = false; controller.abort(); requests.current.delete(controller); activeRequests.current.delete(controller) }
   }, [filters, refreshKey])
 
   useEffect(() => {
     if (revoked.current) return undefined
     const controller = new AbortController()
     requests.current.add(controller)
+    activeRequests.current.add(controller)
     let alive = true
     getKillboardStatus({ signal: controller.signal }).then(statusData => {
       if (alive && !revoked.current) setStatus(statusData)
@@ -181,8 +185,8 @@ export default function KillboardPage() {
       if (!alive || revoked.current || err.name === 'AbortError') return
       if (err.status === 403) revokeAccess()
       else setStatus(null)
-    })
-    return () => { alive = false; controller.abort(); requests.current.delete(controller) }
+    }).finally(() => activeRequests.current.delete(controller))
+    return () => { alive = false; controller.abort(); requests.current.delete(controller); activeRequests.current.delete(controller) }
   }, [refreshKey])
 
   useEffect(() => {
@@ -190,6 +194,7 @@ export default function KillboardPage() {
     if (!selectedId) { setSelected(null); return undefined }
     const controller = new AbortController()
     requests.current.add(controller)
+    activeRequests.current.add(controller)
     let alive = true
     setDetailLoading(true)
     getKillReport(selectedId, { signal: controller.signal }).then(data => {
@@ -198,9 +203,25 @@ export default function KillboardPage() {
       if (!alive || revoked.current || err.name === 'AbortError') return
       if (err.status === 403) revokeAccess()
       else setError(err.message || '详情加载失败')
-    }).finally(() => { if (alive && !revoked.current) setDetailLoading(false) })
-    return () => { alive = false; controller.abort(); requests.current.delete(controller) }
-  }, [selectedId])
+    }).finally(() => { activeRequests.current.delete(controller); if (alive && !revoked.current) setDetailLoading(false) })
+    return () => { alive = false; controller.abort(); requests.current.delete(controller); activeRequests.current.delete(controller) }
+  }, [selectedId, refreshKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || forbidden) return undefined
+    // These calls only read our stored API data; they never trigger game RPCs.
+    const refreshWhenVisible = () => {
+      if (!revoked.current && document.visibilityState === 'visible' && activeRequests.current.size === 0) setRefreshKey(value => value + 1)
+    }
+    const timer = window.setInterval(refreshWhenVisible, 180000)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [forbidden])
 
   useEffect(() => {
     if (!revoked.current && killId && killId !== selectedId) setSelectedId(killId)
@@ -256,7 +277,19 @@ export default function KillboardPage() {
       <main className="kb-main" aria-busy={detailLoading}>
         {error ? <div className={`kb-error${forbidden ? ' is-forbidden' : ''}`} role="alert"><AlertTriangle size={17} /><div><strong>{forbidden ? '访问受限' : '加载失败'}</strong><span>{error}</span></div>{!forbidden ? <button type="button" onClick={() => setError('')} aria-label="关闭错误"><X size={15} /></button> : null}</div> : null}
         {current ? <>
-          <section className="kb-hero kb-panel"><VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} /><div className="kb-hero-copy"><span className="kb-eyebrow">报告 {current.kill_id} · {classLabel(current)}</span><h2>{formatKillboardName(current.ship_name) || '未知舰船'}</h2><div className="kb-hero-victim"><strong>{current.victim_name || '目标身份未返回'}</strong><span>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</span></div><div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div></div><div className="kb-hero-value"><span>估算损失</span><strong>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><small className="kb-hero-exact">{exactIsk(current.isk_lost)}</small><time>{formatKillboardTime(current.kill_time_display, current.kill_time_raw)}</time><button className="kb-copy-km" type="button" onClick={copyCurrentKillTag} aria-label="复制 KM" title="复制游戏内击毁报告标签"><Copy size={14} />{copyState || '复制 KM'}</button></div></section>
+          <section className="kb-hero kb-panel">
+            <VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} />
+            <div className="kb-hero-copy">
+              <span className="kb-eyebrow">报告 {current.kill_id} · {classLabel(current)}</span><h2>{formatKillboardName(current.ship_name) || '未知舰船'}</h2>
+              <div className="kb-hero-victim"><strong>{current.victim_name || '目标身份未返回'}</strong><span>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</span></div>
+              <div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div>
+            </div>
+            <div className="kb-hero-value">
+              <span>估算损失</span><strong>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><small className="kb-hero-exact">{exactIsk(current.isk_lost)}</small>
+              <time>{formatKillboardTime(current.kill_time_display, current.kill_time_raw, current.source)}</time>
+              <button className="kb-copy-km" type="button" onClick={copyCurrentKillTag} aria-label="复制 KM" title="复制游戏内击毁报告标签"><Copy size={14} />{copyState || '复制 KM'}</button>
+            </div>
+          </section>
           {compactDetail ? <div className="kb-detail-tabs" role="tablist" aria-label="报告详情"><button type="button" role="tab" id="kb-tab-people" aria-controls="kb-panel-people" aria-selected={activePanel === 'people'} tabIndex={activePanel === 'people' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('people')}>人员</button><button type="button" role="tab" id="kb-tab-equipment" aria-controls="kb-panel-equipment" aria-selected={activePanel === 'equipment'} tabIndex={activePanel === 'equipment' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('equipment')}>装备</button></div> : null}
           <div className={`kb-content-grid${compactDetail ? ' is-compact' : ''}`} ref={contentRef}><Participants report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'people'} /><Equipment report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'equipment'} /></div>
         </> : <EmptyState title="选择一份报告查看详情">左侧索引展示价值大于 200 亿 ISK 的最新击毁报告。</EmptyState>}

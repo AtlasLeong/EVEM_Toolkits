@@ -32,6 +32,19 @@ function nodes(tree) {
 function harness() {
   const values = [], refs = [], previousDeps = [], cleanups = [], effects = []
   const calls = { list: [], detail: [], status: [] }
+  const timers = new Map(), windowEvents = new Map(), documentEvents = new Map()
+  let timerId = 0
+  const document = {
+    visibilityState: 'visible',
+    addEventListener: (name, listener) => documentEvents.set(name, listener),
+    removeEventListener: name => documentEvents.delete(name),
+  }
+  const window = {
+    setInterval: (callback, milliseconds) => { timers.set(++timerId, { callback, milliseconds }); return timerId },
+    clearInterval: id => timers.delete(id),
+    addEventListener: (name, listener) => windowEvents.set(name, listener),
+    removeEventListener: name => windowEvents.delete(name),
+  }
   let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = '1', tree
   const request = (kind, options) => {
     const call = { ...deferred(), signal: options.signal }
@@ -54,7 +67,7 @@ function harness() {
         previousDeps[index] = dependencies
       }
     },
-    useParams: () => ({ killId }), useNavigate: () => () => {}, AbortController,
+    useParams: () => ({ killId }), useNavigate: () => () => {}, AbortController, window, document,
     listKillReports: options => request('list', options),
     getKillReport: (_id, options) => request('detail', options),
     getKillboardStatus: options => request('status', options),
@@ -79,6 +92,10 @@ function harness() {
     async flush() { await settle(); render() },
     refresh() { nodes(tree).find(node => node.props.className === 'kb-action').props.onClick(); render() },
     route(id) { killId = id; render(); render() },
+    tick() { for (const timer of timers.values()) timer.callback(); render() },
+    focus() { windowEvents.get('focus')?.(); render() },
+    visibility(value) { document.visibilityState = value; documentEvents.get('visibilitychange')?.(); render() },
+    get intervals() { return [...timers.values()].map(timer => timer.milliseconds) },
     unmount() { cleanups.forEach(cleanup => cleanup?.()) },
   }
 }
@@ -179,6 +196,71 @@ test('killboard timestamps are rendered in explicit Asia/Shanghai 24-hour format
   const formatTime = harness().formatTime
   assert.equal(formatTime('2026-09-30T03:35:37Z'), '2026/9/30 11:35:37')
   assert.doesNotMatch(formatTime('2026-09-30T03:35:37Z'), /AM|PM|上午|下午/)
+})
+
+test('known game-source raw timestamp fallback also treats naive protocol time as UTC', () => {
+  const formatTime = harness().formatTime
+  assert.equal(formatTime(null, '2026-09-30T12:58:02', 'kill_api_latest'), '2026/9/30 20:58:02')
+})
+
+test('hero forwards game source when only the raw kill time is available', async () => {
+  const page = harness()
+  page.render()
+  const report = { ...privateReport(), source: 'kill_api_latest', kill_time_raw: '2026-09-30T12:58:02' }
+  page.calls.list[0].resolve({ results: [report], count: 1 })
+  page.calls.detail[0].resolve(report)
+  page.calls.status[0].resolve({})
+  await page.flush()
+  assert.match(JSON.stringify(page.tree), /2026\/9\/30 20:58:02/)
+  page.unmount()
+})
+
+test('manual refresh reloads the same selected KM detail and fences superseded responses', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.refresh()
+  assert.equal(page.calls.detail.length, 2)
+  const superseded = page.calls.detail[1]
+  page.refresh()
+  assert.equal(page.calls.detail.length, 3)
+  assert.equal(superseded.signal.aborted, true)
+  page.calls.detail[2].resolve({ ...privateReport(), victim_name: 'NEW VICTIM' })
+  await page.flush()
+  superseded.resolve({ ...privateReport(), victim_name: 'STALE VICTIM' })
+  await page.flush()
+  assert.match(JSON.stringify(page.tree), /NEW VICTIM/)
+  assert.doesNotMatch(JSON.stringify(page.tree), /STALE VICTIM/)
+  page.unmount()
+})
+
+test('backend polling and focus refresh are visibility bounded and skip overlapping requests', async () => {
+  const page = harness()
+  page.render()
+  assert.deepEqual(page.intervals, [180000])
+  page.tick()
+  page.focus()
+  assert.equal(page.calls.list.length, 1)
+  page.calls.list[0].resolve({ results: [privateReport()], count: 1 })
+  page.calls.detail[0].resolve(privateReport())
+  page.calls.status[0].resolve({})
+  await page.flush()
+  page.visibility('hidden')
+  page.tick()
+  page.focus()
+  assert.equal(page.calls.list.length, 1)
+  page.visibility('visible')
+  assert.equal(page.calls.list.length, 2)
+  assert.equal(page.calls.detail.length, 2)
+  page.tick()
+  assert.equal(page.calls.list.length, 2)
+  page.calls.list[1].resolve({ results: [privateReport()], count: 1 })
+  page.calls.detail[1].resolve(privateReport())
+  page.calls.status[1].resolve({})
+  await page.flush()
+  page.tick()
+  assert.equal(page.calls.list.length, 3)
+  page.unmount()
+  assert.deepEqual(page.intervals, [])
 })
 
 test('rate-limit status does not render the live badge while forbidden status does', async () => {

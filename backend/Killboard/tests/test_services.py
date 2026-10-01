@@ -50,6 +50,22 @@ def parsed_report(*, kill_id=100, ship_class_key="battleship", isk_lost=Decimal(
 
 
 class KillReportPersistenceTests(TestCase):
+    def test_equal_completeness_base_refresh_preserves_enriched_participant_names(self):
+        original = parsed_report(completeness='partial')
+        original['participants'][0].update(corporation_id=9, corporation_name='Known corp',
+                                           alliance_id=10, alliance_name='Known alliance')
+        persist_report(original)
+        incoming = parsed_report(completeness='partial')
+        incoming['participants'][0].update(character_name='', corporation_id=9,
+                                           corporation_name='', alliance_id=None, alliance_name='')
+        updated, created = persist_report(incoming)
+        participant = updated.participants.get()
+        self.assertFalse(created)
+        self.assertEqual(participant.character_name, 'Pilot')
+        self.assertEqual(participant.corporation_name, 'Known corp')
+        self.assertEqual(participant.alliance_id, 10)
+        self.assertEqual(participant.alliance_name, 'Known alliance')
+
     def test_source_combat_metadata_survives_database_round_trip(self):
         from Killboard.parser import parse_kill_blob
         parsed = parse_kill_blob('<attackers><a s=8 w=9 d=100 cf=500019 fs=3141.37/></attackers>',
