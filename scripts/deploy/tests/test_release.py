@@ -327,7 +327,8 @@ class ReleaseTests(unittest.TestCase):
         for path in (self.root / 'releases', self.root / 'current', self.root / 'shared/assets', Path(config['uploads'])):
             self.assertIn(str(path), gate)
 
-    def http_health(self, state, ready_status=200, ready_body=None, tactical_ws=False):
+    def http_health(self, state, ready_status=200, ready_body=None, tactical_ws=False,
+                    data_status=200, data_body=None, data_headers=None):
         calls = []
         class Response(io.BytesIO):
             status = 200
@@ -338,6 +339,9 @@ class ReleaseTests(unittest.TestCase):
                 if ready_status != 200:
                     raise HTTPError(request.full_url, ready_status, 'fixture failure', {}, None)
                 return Response(json.dumps(ready_body or {'status': 'ok'}).encode())
+            if route == '/api/boardregions' and data_status != 200:
+                raise HTTPError(request.full_url, data_status, 'fixture failure',
+                                data_headers or {}, io.BytesIO(json.dumps(data_body or {}).encode()))
             if route in ('/deploy-version.json', '/api/deploy-version/'):
                 component = 'frontend' if route == '/deploy-version.json' else 'backend'
                 return Response(json.dumps({'sha': state[component]['sha']}).encode())
@@ -352,6 +356,30 @@ class ReleaseTests(unittest.TestCase):
         else:
             socket_probe.assert_not_called()
         return calls
+
+    def test_viewer_gate_health_accepts_only_exact_expected_anonymous_denial(self):
+        state = self.state()
+        gate = Path(state['backend']['path']) / 'Authentication/middleware.py'
+        gate.parent.mkdir(parents=True, exist_ok=True)
+        gate.write_text('# verified gate capability')
+        denial = {'detail': 'Authentication credentials were not provided.'}
+        calls = self.http_health(state, data_status=401, data_body=denial,
+                                 data_headers={'WWW-Authenticate': 'Bearer'})
+        self.assertIn('/api/deploy-version/', calls)
+        for status, body, headers in (
+            (500, denial, {'WWW-Authenticate': 'Bearer'}),
+            (403, denial, {'WWW-Authenticate': 'Bearer'}),
+            (401, {'detail': 'unexpected failure'}, {'WWW-Authenticate': 'Bearer'}),
+            (401, denial, {}),
+        ):
+            with self.subTest(status=status, body=body, headers=headers), self.assertRaises(release.ReleaseError):
+                self.http_health(state, data_status=status, data_body=body, data_headers=headers)
+
+    def test_old_backend_cannot_skip_data_health_with_unauthorized_response(self):
+        with self.assertRaises(release.ReleaseError):
+            self.http_health(self.state(), data_status=401,
+                             data_body={'detail': 'Authentication credentials were not provided.'},
+                             data_headers={'WWW-Authenticate': 'Bearer'})
 
     def test_tactical_release_health_is_opt_in_and_checks_upgrade(self):
         self.http_health(self.state(), tactical_ws=True)

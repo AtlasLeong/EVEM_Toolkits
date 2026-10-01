@@ -20,6 +20,7 @@ import tarfile
 import tempfile
 import time
 import urllib.request
+from urllib.error import HTTPError
 from urllib.parse import urlsplit
 
 
@@ -510,9 +511,23 @@ def probe_tactical_websocket(origin):
 
 
 def health(config, state):
-    def get(url):
+    def get(url, *, viewer_gate=False):
         request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache'})
-        with urllib.request.urlopen(request, timeout=10) as response:
+        try:
+            response = urllib.request.urlopen(request, timeout=10)
+        except HTTPError as error:
+            # Data APIs deliberately deny anonymous access in a gated release.
+            # Accept only the exact installed middleware contract, never an
+            # arbitrary 401/403 or a denied asset/version/readiness endpoint.
+            if (not viewer_gate or error.code != 401 or error.fp is None
+                    or (error.headers or {}).get('WWW-Authenticate', '') != 'Bearer'):
+                raise
+            with error:
+                if json.loads(error.read(2048)) == {
+                        'detail': 'Authentication credentials were not provided.'}:
+                    return b''
+            raise
+        with response:
             if response.status != 200:
                 raise ReleaseError('health HTTP status failed')
             return response.read(2 * 1024 ** 2)
@@ -524,7 +539,8 @@ def health(config, state):
             html = get(origin + '/').decode('utf-8')
             for asset in re.findall(r'''(?:src|href)=["'](/assets/[^"']+)["']''', html):
                 get(origin + asset)
-            get(origin + '/api/boardregions')
+            gate = Path(state['backend']['path']) / 'Authentication/middleware.py'
+            get(origin + '/api/boardregions', viewer_gate=gate.is_file())
             for component, route in [('frontend', '/deploy-version.json'), ('backend', '/api/deploy-version/')]:
                 expected = state[component]['sha']
                 # Only bootstrap entries with explicit legacy=True can omit version proof.
