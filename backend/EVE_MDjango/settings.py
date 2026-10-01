@@ -91,15 +91,18 @@ def parse_csv(value):
 def parse_email_allowlist(value):
     return tuple(item.casefold() for item in parse_csv(value) if '@' in item)
 
-# Keep the initial production rollout private. Opening the product later is an
-# explicit switch, so a blank or omitted email variable cannot unlock it.
-VIEWER_ALLOWLIST_ENABLED = str(config('VIEWER_ALLOWLIST_ENABLED', default='true' if not DEBUG else 'false')).strip().lower() in {
+# Keep the initial production rollout private. A legacy
+# ``VIEWER_ALLOWLIST_ENABLED=false`` value may already exist on a server from
+# the previous open deployment, so it must not silently reopen the product.
+# Opening production later requires the new, explicit public-access switch.
+VIEWER_PUBLIC_ACCESS_ENABLED = str(config('VIEWER_PUBLIC_ACCESS_ENABLED', default='false')).strip().lower() in {
     '1', 'true', 'yes', 'on',
 }
+VIEWER_ALLOWLIST_ENABLED = not VIEWER_PUBLIC_ACCESS_ENABLED
 VIEWER_EMAIL_ALLOWLIST = parse_email_allowlist(
-    config('VIEWER_EMAIL_ALLOWLIST', default='2235102484@qq.com' if VIEWER_ALLOWLIST_ENABLED else '')
+    config('VIEWER_EMAIL_ALLOWLIST', default='2235102484@qq.com')
 )
-if VIEWER_ALLOWLIST_ENABLED and not VIEWER_EMAIL_ALLOWLIST and not DEBUG:
+if VIEWER_ALLOWLIST_ENABLED and not VIEWER_EMAIL_ALLOWLIST:
     raise RuntimeError('VIEWER_EMAIL_ALLOWLIST must contain at least one email when viewer access is enabled.')
 
 ALLOWED_HOSTS = parse_csv(config('ALLOWED_HOSTS', default='*' if DEBUG else 'localhost,127.0.0.1'))
@@ -137,6 +140,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'Authentication.middleware.ViewerAccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 

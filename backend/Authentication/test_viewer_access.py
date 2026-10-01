@@ -1,10 +1,11 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from rest_framework.request import Request
 
 from Authentication.access import is_viewer_allowed
 from Authentication.permissions import IsAllowlistedViewer
+from Authentication.middleware import ViewerAccessMiddleware
 from Authentication.views import LoginView
 
 
@@ -47,3 +48,35 @@ class ViewerAllowlistTests(SimpleTestCase):
         response = LoginView.as_view()(request)
         self.assertEqual(response.status_code, 403)
         get_user.assert_not_called()
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_api_middleware_rejects_anonymous_data_requests(self):
+        request = RequestFactory().get('/api/game-data/items/')
+        response = ViewerAccessMiddleware(lambda _request: 'next')(request)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response['WWW-Authenticate'], 'Bearer')
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_api_middleware_leaves_auth_and_health_routes_public(self):
+        factory = RequestFactory()
+        for path in ('/api/user/login', '/api/deploy-version/', '/api/community/ready/'):
+            request = factory.get(path)
+            self.assertEqual(ViewerAccessMiddleware(lambda _request: 'next')(request), 'next')
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_api_middleware_allows_only_the_allowlisted_authenticated_user(self):
+        middleware = ViewerAccessMiddleware(lambda _request: 'next')
+        middleware.authentication = Mock()
+        request = RequestFactory().get('/api/game-data/items/')
+
+        middleware.authentication.authenticate.return_value = (
+            type('User', (), {'is_authenticated': True, 'email': 'other@example.com'})(),
+            object(),
+        )
+        self.assertEqual(middleware(request).status_code, 403)
+
+        middleware.authentication.authenticate.return_value = (
+            type('User', (), {'is_authenticated': True, 'email': '2235102484@qq.com'})(),
+            object(),
+        )
+        self.assertEqual(middleware(request), 'next')

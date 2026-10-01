@@ -11,7 +11,7 @@ def is_viewer_allowed(email):
     """Return whether an account may view the currently gated product.
 
     Production is fail-closed when the allowlist switch is enabled. To open
-    the product later, set ``VIEWER_ALLOWLIST_ENABLED=false`` explicitly.
+    the product later, set ``VIEWER_PUBLIC_ACCESS_ENABLED=true`` explicitly.
     """
     if not getattr(settings, 'VIEWER_ALLOWLIST_ENABLED', False):
         return True

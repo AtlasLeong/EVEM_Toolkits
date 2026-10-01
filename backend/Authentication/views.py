@@ -10,16 +10,21 @@ from rest_framework.exceptions import Throttled
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import EVEMUser, EmailVerificationCode
 from .access import is_viewer_allowed
-from .serializers import UserTokenObtainPairSerializer
+from .serializers import AllowlistedTokenRefreshSerializer, UserTokenObtainPairSerializer
 from .throttle import DailyThrottle, MinuteThrottle
 
 logger = logging.getLogger(__name__)
 
 EMAIL_PATTERN = r"[^@]+@[^@]+\.[^@]+"
 PASSWORD_PATTERN = r"^[A-Za-z0-9@._-]+$"
+
+
+class AllowlistedTokenRefreshView(TokenRefreshView):
+    serializer_class = AllowlistedTokenRefreshSerializer
 
 
 def clean_expired_verifications():

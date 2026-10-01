@@ -1,5 +1,8 @@
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework.exceptions import PermissionDenied
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+
+from .access import is_viewer_allowed
 
 
 # 调用simple-jwt方法，将RefreshToken重新序列化，加入userName
@@ -14,3 +17,13 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['email'] = user.email
 
         return token
+
+
+class AllowlistedTokenRefreshSerializer(TokenRefreshSerializer):
+    """Reject refresh tokens issued for an account outside the gate."""
+
+    def validate(self, attrs):
+        refresh = self.token_class(attrs['refresh'])
+        if not is_viewer_allowed(refresh.get('email', '')):
+            raise PermissionDenied('当前账号暂无查看权限。')
+        return super().validate(attrs)
