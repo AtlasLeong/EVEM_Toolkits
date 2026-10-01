@@ -21,6 +21,7 @@ GRANTS = {
     'Killboard_killitem': 'SELECT, INSERT, UPDATE, DELETE',
     'Killboard_probecursor': 'SELECT, INSERT, UPDATE',
     'Killboard_proberun': 'SELECT, INSERT, UPDATE',
+    'Killboard_probeevent': 'SELECT, INSERT',
 }
 
 

@@ -217,3 +217,29 @@ class ProbeRun(models.Model):
 
     def __str__(self):
         return f'Probe {self.pk or "new"} ({self.status})'
+
+
+class ProbeEvent(models.Model):
+    """A compact, non-sensitive audit row for one collector request.
+
+    The event deliberately stores only the probe id and outcome.  Session
+    cookies, credentials, response bodies and transport headers never belong
+    in the killboard database.
+    """
+
+    run = models.ForeignKey(ProbeRun, on_delete=models.CASCADE, related_name='events')
+    kill_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    status = models.CharField(max_length=24, db_index=True)
+    error_code = models.CharField(max_length=64, blank=True, default='')
+    observed_at_ms = models.BigIntegerField(default=epoch_ms, db_index=True)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-observed_at_ms', '-id']
+        indexes = [
+            models.Index(fields=['run', '-observed_at_ms'], name='kb_probeevent_run_time'),
+            models.Index(fields=['status', '-observed_at_ms'], name='kb_probeevent_status_time'),
+        ]
+
+    def __str__(self):
+        return f'Probe event {self.pk or "new"} ({self.status})'

@@ -13,7 +13,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 
 from .access import KillboardOwnerPermission, can_view_killboard
-from .models import KillReport, ProbeCursor, ProbeRun, ShipClass
+from .models import KillReport, ProbeCursor, ProbeEvent, ProbeRun, ShipClass
 from .worker import paused_reason
 from .serializers import detail_payload, report_payload
 from .security import system_security_map
@@ -182,4 +182,64 @@ class StatusView(PrivateKillboardView):
             'cooldown_until_ms': cursor.cooldown_until_ms if cursor else None,
             'stop_reason': latest_run.stop_reason if latest_run else None,
             'last_success_id': str(cursor.last_success_id) if cursor and cursor.last_success_id else None,
+        })
+
+
+class CollectorLogsView(PrivateKillboardView):
+    """Read-only collector health and audit data for the configured owner."""
+
+    def get(self, request):
+        cursor = ProbeCursor.objects.filter(name='latest').first()
+        configured = bool(getattr(settings, 'KILLBOARD_COLLECTION_ENABLED', False))
+        latest_report = KillReport.objects.order_by('-collected_at_ms', '-kill_id').first()
+        runs = []
+        events = []
+        if cursor is not None:
+            run_rows = ProbeRun.objects.filter(cursor=cursor).order_by('-created_at_ms', '-id')[:30]
+            runs = [
+                {
+                    'id': row.pk,
+                    'status': row.status,
+                    'created_at_ms': row.created_at_ms,
+                    'started_at_ms': row.started_at_ms,
+                    'finished_at_ms': row.finished_at_ms,
+                    'request_count': row.request_count,
+                    'report_count': row.report_count,
+                    'empty_count': row.empty_count,
+                    'stop_reason': row.stop_reason,
+                    'error_code': row.error_code,
+                }
+                for row in run_rows
+            ]
+            event_rows = ProbeEvent.objects.filter(run__cursor=cursor).order_by(
+                '-observed_at_ms', '-id',
+            )[:100]
+            events = [
+                {
+                    'id': row.pk,
+                    'run_id': row.run_id,
+                    'kill_id': str(row.kill_id) if row.kill_id is not None else None,
+                    'status': row.status,
+                    'error_code': row.error_code,
+                    'observed_at_ms': row.observed_at_ms,
+                    'duration_ms': row.duration_ms,
+                }
+                for row in event_rows
+            ]
+        return Response({
+            'configured': configured,
+            'collection_enabled': bool(configured and cursor and cursor.next_probe_id and not paused_reason(cursor)),
+            'latest_kill_id': str(latest_report.kill_id) if latest_report else None,
+            'latest_report_collected_at_ms': latest_report.collected_at_ms if latest_report else None,
+            'cursor': {
+                'name': cursor.name if cursor else 'latest',
+                'last_success_id': str(cursor.last_success_id) if cursor and cursor.last_success_id else None,
+                'next_probe_id': str(cursor.next_probe_id) if cursor and cursor.next_probe_id else None,
+                'pause_reason': cursor.pause_reason if cursor else '',
+                'cooldown_until_ms': cursor.cooldown_until_ms if cursor else None,
+                'failure_count': cursor.failure_count if cursor else 0,
+                'updated_at_ms': cursor.updated_at_ms if cursor else None,
+            },
+            'runs': runs,
+            'events': events,
         })

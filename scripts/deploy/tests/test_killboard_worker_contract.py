@@ -53,7 +53,7 @@ class WorkerContractTests(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('kb_provision', ROOT/'scripts/deploy/killboard_mysql_worker_provision.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(len(module.GRANTS), 7)
+        self.assertEqual(len(module.GRANTS), 8)
         for table, privileges in module.GRANTS.items():
             self.assertTrue(table.startswith('Killboard_'))
             self.assertLessEqual(set(privileges.split(', ')), {'SELECT', 'INSERT', 'UPDATE', 'DELETE'})
@@ -70,5 +70,7 @@ class WorkerContractTests(unittest.TestCase):
         self.assertNotIn('ReadWritePaths=', unit)
         self.assertIn('EVE_MDjango.killboard_worker_settings', runner)
         self.assertIn('--max-seconds 210', runner)
-        self.assertIn('OnUnitActiveSec=5min', timer)
+        self.assertIn('--rpc-jitter 3', runner)
+        self.assertIn('OnUnitActiveSec=30min', timer)
+        self.assertIn('RandomizedDelaySec=5min', timer)
         self.assertNotIn('OnUnitInactiveSec', timer)

@@ -28,6 +28,7 @@ const MarketPricesPage = lazy(() => import('./pages/MarketPrices'))
 const MarketAdminPage = lazy(() => import('./pages/MarketAdmin'))
 const TacticalUsagePage = lazy(() => import('./pages/TacticalUsage'))
 const KillboardPage = lazy(() => import('./pages/Killboard'))
+const KillboardCollectorAdminPage = lazy(() => import('./pages/KillboardCollectorAdmin'))
 const pageFallback = label => <div className="loading-bar" aria-label={label}><span /></div>
 const starseaRoute = page => <Suspense fallback={pageFallback('加载星海见闻')}>{page}</Suspense>
 const corporationRoute = page => <Suspense fallback={pageFallback('加载军团页面')}>{page}</Suspense>
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
             <Route path="/killboard" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
             <Route path="/killboard/:killId" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
+            <Route path="/killboard/admin" element={<RequireKillboardAccess>{appRoute(<KillboardCollectorAdminPage />)}</RequireKillboardAccess>} />
             <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
             <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
             <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />

@@ -47,6 +47,8 @@ class Command(BaseCommand):
         parser.add_argument("--write", action="store_true", help="Commit cursor and reports")
         parser.add_argument('--resume', action='store_true', help='Operator-confirmed session refresh; clear pause')
         parser.add_argument('--rpc-interval', type=float, default=5)
+        parser.add_argument('--rpc-jitter', type=float, default=0,
+                            help='Maximum additional random delay between RPCs (seconds)')
         parser.add_argument('--rpc-budget', type=int, default=36)
         parser.add_argument('--max-seconds', type=float, default=210)
 
@@ -111,8 +113,8 @@ class Command(BaseCommand):
                 empty_threshold=options["empty_threshold"],
                 max_requests=options["max_requests"],
             )
-            pacer = CollectorPacer(interval=options['rpc_interval'], max_rpcs=options['rpc_budget'],
-                                   max_seconds=options['max_seconds'])
+            pacer = CollectorPacer(interval=options['rpc_interval'], jitter=options['rpc_jitter'],
+                                   max_rpcs=options['rpc_budget'], max_seconds=options['max_seconds'])
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
         client = None

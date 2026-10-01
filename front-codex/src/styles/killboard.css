@@ -107,6 +107,7 @@
 .kb-content-grid { flex:1 1 auto; min-height:0; align-items:stretch; grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 .kb-content-grid > .kb-panel { min-height:0; height:100%; display:flex; flex-direction:column; overflow:hidden; }
 .kb-participant-list,.kb-item-list { flex:1 1 auto; min-height:0; overflow:auto; align-content:start; padding-right:5px; scrollbar-width:thin; scrollbar-color:#41616a transparent; }
+.kb-item-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 12px; }
 .kb-participant { align-items:flex-start; min-height:64px; }
 .kb-participant--with-ship { display:grid; grid-template-columns:30px minmax(0,1fr) auto; column-gap:9px; row-gap:5px; }
 .kb-participant-ship { display:flex; align-items:center; grid-column:2 / -1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#c9dddf; font-size:12px; line-height:18px; }
@@ -123,6 +124,11 @@
 .kb-hero .kb-hero-copy { flex:1 1 auto; min-width:0; }
 .kb-hero h2 { margin-top:4px; }
 .kb-slot-tabs { display:flex; flex-wrap:wrap; gap:5px; margin:-2px 0 5px; }
+.kb-equipment-controls { display:flex; align-items:flex-start; gap:7px; margin:-2px 0 5px; }
+.kb-equipment-controls .kb-slot-tabs { flex:1 1 auto; min-width:0; margin:0; }
+.kb-drop-filter { display:inline-flex; align-items:center; gap:4px; flex:0 0 auto; border:1px solid #4b7778; border-radius:999px; padding:5px 8px; color:#9cb5b7; background:#15303a; cursor:pointer; font:inherit; font-size:10px; }
+.kb-drop-filter.is-active { border-color:#77e6e0; color:#ecf9f7; background:#285c5a; }
+.kb-drop-filter b,.kb-slot-tabs em { color:#8de0ca; font-size:10px; font-style:normal; }
 .kb-slot-tabs button { border:1px solid #355761; border-radius:999px; padding:5px 8px; color:#9cb5b7; background:#15303a; cursor:pointer; font:inherit; font-size:10px; }
 .kb-slot-tabs button:hover:not(:disabled),.kb-slot-tabs button.is-active { border-color:var(--kb-cyan); color:#ecf9f7; background:#204852; }
 .kb-slot-tabs button:disabled { cursor:not-allowed; opacity:.38; }
@@ -169,6 +175,7 @@
   .kb-content-grid { flex:0 0 auto; }
   .kb-content-grid { grid-template-columns:1fr; }
   .kb-content-grid > .kb-panel { height:360px; }
+  .kb-item-list { grid-template-columns:1fr; }
   .kb-hero .kb-asset--ship { align-self:center; }
 }
 

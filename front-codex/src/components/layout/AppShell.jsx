@@ -42,7 +42,8 @@ export default function AppShell() {
   const killboardAccess = useKillboardAccess()
   const canViewUsage = usageAccess.allowed
   const killboardNavItems = killboardAccess.allowed ? navItems : navItems.filter(item => item.to !== '/killboard')
-  const availableNavItems = canViewUsage ? [...killboardNavItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...killboardNavItems.slice(4)] : killboardNavItems
+  const ownerNavItems = killboardAccess.allowed ? [...killboardNavItems.slice(0, 3), { to: '/killboard/admin', label: '击毁采集后台', icon: Swords }, ...killboardNavItems.slice(3)] : killboardNavItems
+  const availableNavItems = canViewUsage ? [...ownerNavItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...ownerNavItems.slice(4)] : ownerNavItems
   const reduceMotion = useReducedMotion()
   const displayName = userInfo?.userName?.trim() || '已登录用户'
   const [collapsed, setCollapsed] = useState(() => {

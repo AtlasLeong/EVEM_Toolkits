@@ -34,3 +34,4 @@ export function listKillReports({ page = 1, pageSize = 20, q = '', shipClass = '
 export const getKillReport = (killId, { signal } = {}) => request(`reports/${encodeURIComponent(killId)}/`, { signal })
 export const listKillboardFilters = ({ signal } = {}) => request('filters/', { signal })
 export const getKillboardStatus = ({ signal } = {}) => request('status/', { signal })
+export const getKillboardCollectorLogs = ({ signal } = {}) => request('collector/logs/', { signal })

@@ -42,10 +42,12 @@ test('killboard API exposes access, detail, filters and status routes', async ()
   await api.getKillReport('19748417')
   await api.listKillboardFilters()
   await api.getKillboardStatus()
+  await api.getKillboardCollectorLogs()
   assert.deepEqual(urls, [
     'http://local-test/api/killboard/access/',
     'http://local-test/api/killboard/reports/19748417/',
     'http://local-test/api/killboard/filters/',
     'http://local-test/api/killboard/status/',
+    'http://local-test/api/killboard/collector/logs/',
   ])
 })

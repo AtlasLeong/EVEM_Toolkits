@@ -6,7 +6,7 @@ from django.test import override_settings
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from Killboard.models import KillItem, KillParticipant, KillReport, ShipClass
+from Killboard.models import CollectionPolicy, KillItem, KillParticipant, KillReport, ProbeCursor, ProbeEvent, ProbeRun, ShipClass
 
 
 @override_settings(KILLBOARD_OWNER_EMAIL='owner@example.com')
@@ -98,6 +98,22 @@ class KillboardApiTests(TestCase):
         other = self.client.get('/api/killboard/access/')
         self.assertEqual(other.status_code, 200)
         self.assertEqual(other.data, {'can_view_killboard': False})
+
+    def test_owner_can_read_collector_logs_but_other_accounts_cannot(self):
+        cursor = ProbeCursor.objects.create(name='latest', next_probe_id=19748418,
+                                            last_success_id=19748417, pause_reason='rate_limited',
+                                            failure_count=2)
+        run = ProbeRun.objects.create(cursor=cursor, status=ProbeRun.Status.STOPPED,
+                                      request_count=2, report_count=1, empty_count=1,
+                                      stop_reason='rate_limited', error_code='rate_limited')
+        ProbeEvent.objects.create(run=run, kill_id=19748418, status='rate_limited', error_code='rate_limited')
+        response = self.client.get('/api/killboard/collector/logs/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['cursor']['pause_reason'], 'rate_limited')
+        self.assertEqual(response.data['runs'][0]['request_count'], 2)
+        self.assertEqual(response.data['events'][0]['status'], 'rate_limited')
+        self.client.force_authenticate(self.other)
+        self.assertEqual(self.client.get('/api/killboard/collector/logs/').status_code, 403)
 
     def test_owner_check_reloads_active_email_and_fails_closed_when_setting_missing(self):
         self.client.force_authenticate(self.owner)

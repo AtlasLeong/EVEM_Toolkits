@@ -73,6 +73,14 @@ class WorkerTests(TestCase):
             call_command('killboard_probe', start_id=100, max_requests=1, write=True)
         self.assertTrue(getattr(client, 'closed', False))
 
+    def test_probe_command_accepts_rpc_jitter(self):
+        from Killboard.models import ProbeRun
+        client = FakeClient({100: None})
+        with patch('Killboard.management.commands.killboard_probe.Command._client', return_value=client):
+            call_command('killboard_probe', cursor='jitter', start_id=100, max_requests=1,
+                         rpc_jitter=2, write=True)
+        self.assertTrue(ProbeRun.objects.filter(cursor__name='jitter').exists())
+
     def test_probe_command_passes_active_policy_value_threshold_to_supported_client(self):
         from decimal import Decimal
         from Killboard.models import CollectionPolicy
@@ -133,6 +141,19 @@ class WorkerTests(TestCase):
         with self.assertRaises(BudgetExhaustedError):
             pacer()
         self.assertEqual(clock.sleeps, [5])
+
+    def test_pacer_adds_bounded_random_delay_between_rpcs(self):
+        from Killboard.worker import CollectorPacer
+        clock = Clock()
+        values = iter((0.75, 1.25))
+        pacer = CollectorPacer(interval=5, jitter=2, max_rpcs=3, max_seconds=100,
+                               clock=clock.now, sleep=clock.sleep,
+                               random_delay=lambda maximum: next(values))
+        pacer()
+        pacer()
+        self.assertEqual(clock.sleeps, [5.75])
+        pacer()
+        self.assertEqual(clock.sleeps, [5.75, 6.25])
 
     def test_pacer_deadline_reserves_request_timeout(self):
         from Killboard.worker import CollectorPacer, BudgetExhaustedError
@@ -265,3 +286,16 @@ class WorkerTests(TestCase):
         with patch('Killboard.management.commands.killboard_probe.Command._client') as factory:
             call_command('killboard_probe', cursor='invalid', write=True)
         factory.assert_not_called()
+
+    def test_unexpected_transport_failure_is_audited_without_exception_text(self):
+        from Killboard.models import ProbeEvent, ProbeRun
+        cursor = ProbeCursor.objects.create(name='audit-failure', next_probe_id=100)
+        with self.assertRaises(ValueError):
+            DiscoveryRunner(FakeClient({100: ValueError('private credential material')}), cursor=cursor,
+                            config=DiscoveryConfig(max_requests=1)).run()
+        run = ProbeRun.objects.get(cursor=cursor)
+        self.assertEqual(run.status, 'failed')
+        event = ProbeEvent.objects.get(run=run)
+        self.assertEqual(event.kill_id, 100)
+        self.assertEqual(event.status, 'failed')
+        self.assertNotIn('private', event.error_code)

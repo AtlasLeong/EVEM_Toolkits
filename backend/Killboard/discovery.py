@@ -7,6 +7,7 @@ from datetime import datetime, timezone as dt_timezone
 from enum import Enum
 from typing import Any, Protocol
 import uuid
+import re
 
 from django.conf import settings
 from django.db import transaction
@@ -15,7 +16,7 @@ from django.utils import timezone
 
 from .parser import KillParseError, parse_kill_blob
 from .protocol import KillProtocolError, decode_kill_info_response
-from .models import CollectionPolicy, ProbeCursor, ProbeRun
+from .models import CollectionPolicy, ProbeCursor, ProbeEvent, ProbeRun
 from .services import persist_report
 from .worker import LeaseLostError, paused_reason
 
@@ -101,6 +102,12 @@ def _exception_status(exc: Exception) -> ProbeStatus:
     return ProbeStatus.MALFORMED
 
 
+def _safe_error_code(value: str | None) -> str:
+    """Keep audit rows to stable classifier codes, never exception text."""
+    value = str(value or '').strip().lower()
+    return value[:64] if re.fullmatch(r'[a-z0-9_.-]{1,64}', value) else ''
+
+
 def _time_value(raw: str | None):
     if not raw:
         return None
@@ -134,6 +141,7 @@ class DiscoveryRunner:
         self.active_run = None
         self.client_factory = client_factory
         self.first_empty = None
+        self.pending_id = None
 
     def heartbeat(self):
         run = self.active_run
@@ -221,14 +229,19 @@ class DiscoveryRunner:
             run = self._create_run(cursor)
         try:
             self._run_locked(run, cursor)
-        except Exception:
+        except Exception as exc:
             # This is deliberately a new short transaction; a failed transport
             # must remain observable even when report persistence rolled back.
-            ProbeRun.objects.filter(pk=run.pk, status=ProbeRun.Status.RUNNING,
-                                    lease_owner=run.lease_owner).update(
-                status=ProbeRun.Status.FAILED, stop_reason=run.stop_reason or 'failed',
-                finished_at_ms=int(timezone.now().timestamp()*1000),
-                lease_owner='', lease_expires_at_ms=None)
+            with transaction.atomic():
+                failed = ProbeRun.objects.filter(pk=run.pk, status=ProbeRun.Status.RUNNING,
+                                                lease_owner=run.lease_owner).update(
+                    status=ProbeRun.Status.FAILED, stop_reason=run.stop_reason or 'failed',
+                    error_code=type(exc).__name__[:64],
+                    finished_at_ms=int(timezone.now().timestamp()*1000),
+                    lease_owner='', lease_expires_at_ms=None)
+                if failed:
+                    ProbeEvent.objects.create(run=run, kill_id=self.pending_id, status='failed',
+                                              error_code=type(exc).__name__[:64])
             raise
         return run
 
@@ -320,6 +333,13 @@ class DiscoveryRunner:
         cursor.updated_at_ms = int(timezone.now().timestamp()*1000)
         cursor.save()
         run.save(update_fields=['request_count', 'report_count', 'empty_count', 'error_code', 'stop_reason'])
+        ProbeEvent.objects.create(
+            run=run,
+            kill_id=probe_id,
+            status=outcome.status.value,
+            error_code=_safe_error_code(outcome.error_code) or (outcome.status.value if outcome.status is not ProbeStatus.REPORT else ''),
+            observed_at_ms=cursor.updated_at_ms,
+        )
 
     @transaction.atomic
     def _finish(self, run, cursor):
@@ -366,8 +386,10 @@ class DiscoveryRunner:
                 run.stop_reason = 'id_limit'
                 break
             self.heartbeat()
+            self.pending_id = next_id
             outcome = self._fetch(next_id)
             self._record(run, cursor, next_id, outcome)
+            self.pending_id = None
             next_id = cursor.next_probe_id
         run.stop_reason = run.stop_reason or 'max_requests'
         self._finish(run, cursor)

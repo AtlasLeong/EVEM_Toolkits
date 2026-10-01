@@ -204,6 +204,36 @@ test('dropped equipment carries a dedicated row class and status', async () => {
   page.unmount()
 })
 
+test('equipment panel exposes a dropped-only quick filter and per-slot drop counts', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const equipmentPanel = nodes(page.tree).find(node => typeof node.type === 'function' && node.type.name === 'Equipment')
+  const panel = equipmentPanel.type({ ...equipmentPanel.props, report: {
+    ...privateReport(),
+    items: [
+      { type_id: '1', name: 'HIGH DROP', slot: 'high', status: 'dropped' },
+      { type_id: '2', name: 'HIGH LOST', slot: 'high', status: 'destroyed' },
+      { type_id: '3', name: 'LOW DROP', slot: 'low', status: 'mixed' },
+    ],
+  } })
+  const rendered = nodes(panel)
+  const dropToggle = rendered.find(node => node.props['aria-label'] === '只看已掉落装备')
+  assert.ok(dropToggle)
+  assert.equal(dropToggle.props['aria-pressed'], false)
+  const slotTabs = rendered.filter(node => node.props['aria-pressed'] !== undefined)
+  assert.match(JSON.stringify(slotTabs), /高槽/)
+  assert.match(JSON.stringify(slotTabs), /低槽/)
+  assert.match(JSON.stringify(slotTabs), /dropItems|2|1/)
+  page.unmount()
+})
+
+test('equipment list uses a compact multi-column layout with independent scrolling', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-item-list\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)/)
+  assert.match(css, /\.kb-item-list\s*\{[^}]*overflow:auto/)
+  assert.match(css, /\.kb-item--dropped\s*\{[^}]*background:/)
+})
+
 test('raw participant counts are labelled records, not a proven number of players', async () => {
   const page = harness()
   await loadPrivate(page)
