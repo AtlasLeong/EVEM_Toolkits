@@ -60,7 +60,7 @@ function harness() {
     getKillboardStatus: options => request('status', options),
     ...presentation,
   }
-  for (const name of ['Activity', 'AlertTriangle', 'Database', 'Layers3', 'LoaderCircle', 'RefreshCw', 'Search', 'Swords', 'X', 'KillParticipantRow', 'GameItemImage']) dependencies[name] = name
+  for (const name of ['Activity', 'AlertTriangle', 'Copy', 'Database', 'Layers3', 'LoaderCircle', 'RefreshCw', 'Search', 'Swords', 'X', 'KillParticipantRow', 'GameItemImage']) dependencies[name] = name
   const module = { exports: {} }
   new Function(...Object.keys(dependencies), 'module', 'exports', compiled.code)(...Object.values(dependencies), module, module.exports)
   const render = () => {
@@ -230,6 +230,17 @@ test('the hero includes victim metadata and redundant stat cards no longer occup
   assert.match(JSON.stringify(hero), /REGION/)
   assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-stat-grid'))
   assert.doesNotMatch(JSON.stringify(page.tree), /火力记录|最后一击资料未返回/)
+  page.unmount()
+})
+
+test('the hero exposes a copyable in-game KM tag and visible exact ISK value', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const serialized = JSON.stringify(page.tree)
+  assert.match(serialized, /复制 KM|复制击毁报告/)
+  assert.match(serialized, /229,307,984,742 ISK/)
+  const copyButton = nodes(page.tree).find(node => node.props['aria-label'] === '复制 KM')
+  assert.ok(copyButton)
   page.unmount()
 })
 

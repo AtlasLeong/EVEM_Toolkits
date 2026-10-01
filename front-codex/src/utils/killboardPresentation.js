@@ -14,9 +14,61 @@ function idLabel(value) {
 }
 
 // Legacy records may still carry client localization wrappers. Only remove
-// recognized wrappers, never the tier text inside them or arbitrary braces.
+// recognized wrappers, never arbitrary braces that may be meaningful source
+// text. These tokens are emitted by the client item/localization pipeline.
+const CLIENT_NAME_WRAPPER_TOKENS = Object.freeze([
+  'attr', 'item', 'blueprint', 'drone', 'drone_affix', 'item_name',
+  'module', 'module_affix', 'nanocore', 'ship', 'ship_postfix',
+  'skill_level', 'skill_name', 'skin', 'skin_duration',
+])
+
+const CLIENT_NAME_WRAPPER_RE = new RegExp(`\\{(?:${CLIENT_NAME_WRAPPER_TOKENS.join('|')}):([^{}]+)\\}`, 'g')
+
 export function formatKillboardName(value) {
-  return String(value || '').replace(/\{(?:module|module_affix):([^{}]+)\}/g, '$1').replace(/\s+/g, ' ').trim()
+  return String(value || '').replace(CLIENT_NAME_WRAPPER_RE, '$1').replace(/\s+/g, ' ').trim()
+}
+
+function escapeAttribute(value) {
+  return String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character])
+}
+
+export function killboardTouchTag(killId) {
+  const id = idLabel(killId).trim()
+  if (!id) return ''
+  return `<touch func="show_km_detail" kill_id="${escapeAttribute(id)}">击毁报告</touch>`
+}
+
+// Clipboard access is deliberately isolated here so the page can expose a
+// resilient one-click action without coupling the presentation layer to a
+// browser-only global during SSR/tests.
+export async function copyKillboardTag(killId, clipboard = globalThis?.navigator?.clipboard, documentRef = globalThis?.document) {
+  const tag = killboardTouchTag(killId)
+  if (!tag) return false
+  if (clipboard && typeof clipboard.writeText === 'function') {
+    try {
+      await clipboard.writeText(tag)
+      return true
+    } catch {
+      // Fall through to the legacy DOM path for older/embedded browsers.
+    }
+  }
+  if (!documentRef || typeof documentRef.createElement !== 'function' || !documentRef.body) return false
+  try {
+    const textarea = documentRef.createElement('textarea')
+    textarea.value = tag
+    textarea.setAttribute?.('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    documentRef.body.appendChild(textarea)
+    textarea.select?.()
+    const copied = typeof documentRef.execCommand === 'function' && documentRef.execCommand('copy')
+    documentRef.body.removeChild?.(textarea)
+    return copied === true
+  } catch {
+    return false
+  }
 }
 
 export function selectedReport(selectedId, detail, summary) {

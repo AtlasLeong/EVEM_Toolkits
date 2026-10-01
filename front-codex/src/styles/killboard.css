@@ -241,11 +241,25 @@
 .kb-detail-tabs { display:flex; gap:4px; margin:10px 0; padding:4px; border:1px solid var(--kb-border); border-radius:9px; background:#10232c; }
 .kb-detail-tabs button { flex:1; border:0; border-radius:6px; padding:8px 12px; color:var(--kb-muted); background:transparent; cursor:pointer; font:inherit; font-size:13px; }
 .kb-detail-tabs button[aria-selected="true"] { color:#effcf9; background:#24525a; box-shadow:inset 0 0 0 1px #67c9c5; }
+
+/* Report hero: a three-column composition keeps the hull artwork prominent,
+   gives the metadata a real reading column, and removes the heavy framed
+   image treatment that clipped wide silhouettes. */
+.kb-hero { display:grid; grid-template-columns:minmax(150px, 180px) minmax(0, 1fr) minmax(190px, 235px); align-items:center; gap:20px; }
+.kb-hero .kb-asset--ship { width:100%; height:118px; border:0; border-radius:0; background:transparent; }
+.kb-hero .kb-asset--ship img { width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 10px 16px rgb(0 0 0 / 28%)); }
+.kb-hero-value { display:grid; justify-items:end; gap:5px; min-width:0; }
+.kb-hero-value strong { margin:0; white-space:nowrap; }
+.kb-hero-value .kb-hero-exact { color:#aac0c2; font-size:10px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.kb-copy-km { display:inline-flex; align-items:center; justify-content:center; gap:6px; margin-top:3px; border:1px solid #3c7278; border-radius:7px; padding:7px 10px; color:#d9f3ef; background:#173844; cursor:pointer; font:inherit; font-size:11px; }
+.kb-copy-km:hover { border-color:var(--kb-cyan); background:#21515a; }
+.kb-copy-km:focus-visible { outline:2px solid #77e6e0; outline-offset:2px; }
 @media (min-width:761px) and (max-width:1179px) {
   .kb-workspace { grid-template-columns:220px minmax(0,1fr); }
   .kb-main { padding:14px; }
   .kb-hero { min-height:124px; padding:15px 17px; }
-  .kb-hero .kb-asset--ship { width:142px; height:88px; }
+  .kb-hero { grid-template-columns:minmax(120px, 142px) minmax(0, 1fr) minmax(165px, 205px); gap:14px; }
+  .kb-hero .kb-asset--ship { width:100%; height:88px; }
   .kb-hero h2 { font-size:27px; }
   .kb-content-grid .kb-panel { padding:14px; }
   .kb-participant--with-ship { grid-template-columns:72px minmax(0,1fr) auto; column-gap:9px; }
@@ -253,11 +267,13 @@
   .kb-participant-stats { min-width:94px; }
 }
 @media (max-width:760px) {
-  .kb-hero .kb-asset--ship { width:160px; height:98px; align-self:center; }
+  .kb-hero { display:flex; align-items:flex-start; flex-direction:column; gap:10px; }
+  .kb-hero .kb-asset--ship { width:100%; max-width:250px; height:110px; align-self:center; }
   .kb-hero h2 { font-size:28px; }
   .kb-content-grid .kb-panel { padding:15px; }
   .kb-participant--with-ship { grid-template-columns:72px minmax(0,1fr) auto; }
   .kb-participant-ship,.kb-participant-ship img { width:72px; height:48px; }
   .kb-participant-main strong { font-size:14px; }
   .kb-participant-stats { min-width:90px; }
+  .kb-hero-value { width:100%; justify-items:start; text-align:left; }
 }

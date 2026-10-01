@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, AlertTriangle, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
+import { Activity, AlertTriangle, Copy, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getKillReport, getKillboardStatus, listKillReports } from '../services/apiKillboard'
-import { equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
+import { copyKillboardTag, equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
 import KillParticipantRow from '../components/killboard/KillParticipantRow'
 import GameItemImage from '../components/GameItemImage'
 import '../styles/killboard.css'
@@ -117,6 +117,7 @@ export default function KillboardPage() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [compactDetail, setCompactDetail] = useState(false)
   const [activePanel, setActivePanel] = useState('people')
+  const [copyState, setCopyState] = useState('')
   const contentRef = useRef(null)
   const revoked = useRef(false)
   const requests = useRef(new Set())
@@ -221,6 +222,12 @@ export default function KillboardPage() {
     navigate(`/killboard/${id}`)
   }
 
+  async function copyCurrentKillTag() {
+    if (revoked.current || !current?.kill_id) return
+    const copied = await copyKillboardTag(current.kill_id)
+    setCopyState(copied ? '已复制' : '复制失败')
+  }
+
   const security = killboardSecurityMeta(current)
   return <div className="page-stack kb-page">
     <header className="kb-header">
@@ -238,7 +245,7 @@ export default function KillboardPage() {
       <main className="kb-main" aria-busy={detailLoading}>
         {error ? <div className={`kb-error${forbidden ? ' is-forbidden' : ''}`} role="alert"><AlertTriangle size={17} /><div><strong>{forbidden ? '访问受限' : '加载失败'}</strong><span>{error}</span></div>{!forbidden ? <button type="button" onClick={() => setError('')} aria-label="关闭错误"><X size={15} /></button> : null}</div> : null}
         {current ? <>
-          <section className="kb-hero kb-panel"><VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} /><div className="kb-hero-copy"><span className="kb-eyebrow">报告 {current.kill_id} · {classLabel(current)}</span><h2>{formatKillboardName(current.ship_name) || '未知舰船'}</h2><div className="kb-hero-victim"><strong>{current.victim_name || '目标身份未返回'}</strong><span>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</span></div><div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div></div><div className="kb-hero-value"><span>估算损失</span><strong title={exactIsk(current.isk_lost)}>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><time>{formatKillboardTime(current.kill_time_display, current.kill_time_raw)}</time></div></section>
+          <section className="kb-hero kb-panel"><VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} /><div className="kb-hero-copy"><span className="kb-eyebrow">报告 {current.kill_id} · {classLabel(current)}</span><h2>{formatKillboardName(current.ship_name) || '未知舰船'}</h2><div className="kb-hero-victim"><strong>{current.victim_name || '目标身份未返回'}</strong><span>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</span></div><div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div></div><div className="kb-hero-value"><span>估算损失</span><strong>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><small className="kb-hero-exact">{exactIsk(current.isk_lost)}</small><time>{formatKillboardTime(current.kill_time_display, current.kill_time_raw)}</time><button className="kb-copy-km" type="button" onClick={copyCurrentKillTag} aria-label="复制 KM" title="复制游戏内击毁报告标签"><Copy size={14} />{copyState || '复制 KM'}</button></div></section>
           {compactDetail ? <div className="kb-detail-tabs" role="tablist" aria-label="报告详情"><button type="button" role="tab" id="kb-tab-people" aria-controls="kb-panel-people" aria-selected={activePanel === 'people'} tabIndex={activePanel === 'people' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('people')}>人员</button><button type="button" role="tab" id="kb-tab-equipment" aria-controls="kb-panel-equipment" aria-selected={activePanel === 'equipment'} tabIndex={activePanel === 'equipment' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('equipment')}>装备</button></div> : null}
           <div className={`kb-content-grid${compactDetail ? ' is-compact' : ''}`} ref={contentRef}><Participants report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'people'} /><Equipment report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'equipment'} /></div>
         </> : <EmptyState title="选择一份报告查看详情">左侧索引展示价值大于 200 亿 ISK 的最新击毁报告。</EmptyState>}

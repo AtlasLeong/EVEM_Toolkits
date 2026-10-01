@@ -199,6 +199,34 @@ test('legacy equipment names unwrap only recognized tokens while retaining tier 
   assert.equal(presentation.formatKillboardName('常规 甲型 模块'), '常规 甲型 模块')
 })
 
+test('all confirmed client localization wrappers are removed while unknown wrappers remain', () => {
+  const value = '{attr:属性} {item:装备} {blueprint:蓝图} {drone:钢铁守卫} {drone_affix:突击型} {item_name:名称} {module:模块} {module_affix:前缀} {nanocore:纳米核心} {ship:舰船} {ship_postfix:后缀} {skill_level:等级} {skill_name:技能} {skin:涂装} {skin_duration:时限} {future:保留}'
+  assert.equal(presentation.formatKillboardName(value), '属性 装备 蓝图 钢铁守卫 突击型 名称 模块 前缀 纳米核心 舰船 后缀 等级 技能 涂装 时限 {future:保留}')
+})
+
+test('killboard touch tag is deterministic and rejects an empty kill id', () => {
+  assert.equal(typeof presentation.killboardTouchTag, 'function')
+  assert.equal(presentation.killboardTouchTag('19748418'), '<touch func="show_km_detail" kill_id="19748418">击毁报告</touch>')
+  assert.equal(presentation.killboardTouchTag(19748418), '<touch func="show_km_detail" kill_id="19748418">击毁报告</touch>')
+  assert.equal(presentation.killboardTouchTag(''), '')
+})
+
+test('copy helper uses clipboard API and falls back to document execCommand', async () => {
+  const writes = []
+  assert.equal(await presentation.copyKillboardTag('19748418', { writeText: value => { writes.push(value); return Promise.resolve() } }), true)
+  assert.deepEqual(writes, ['<touch func="show_km_detail" kill_id="19748418">击毁报告</touch>'])
+
+  let copied = ''
+  const body = { appendChild(node) { node.parentNode = body }, removeChild() {} }
+  const doc = {
+    body,
+    createElement() { return { style: {}, select() {}, setAttribute() {}, value: '' } },
+    execCommand(command) { copied = command; return true },
+  }
+  assert.equal(await presentation.copyKillboardTag('19748418', null, doc), true)
+  assert.equal(copied, 'copy')
+})
+
 test('verified expanded client slots include mechanical and defence rigs but not adjacent unknown slots', () => {
   for (const [slot, expected] of [[100, 'rig'], [107, 'rig'], [111, 'rig'], [108, 'other'], [109, 'other'], [110, 'rig'], [2001, 'low'], [2004, 'low'], [3001, 'mid'], [4004, 'high']]) {
     assert.equal(presentation.slotGroup(slot), expected, String(slot))
