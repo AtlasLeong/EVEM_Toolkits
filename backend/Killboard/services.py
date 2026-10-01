@@ -15,6 +15,8 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from GameData.registry import npc_identity
+
 from .models import CollectionPolicy, KillItem, KillParticipant, KillReport, ShipClass
 
 
@@ -75,6 +77,45 @@ def _parse_time(raw: str | None):
 def _hash_payload(parsed: dict) -> str:
     encoded = json.dumps(parsed, sort_keys=True, default=str, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+_NPC_PLAYER_EVIDENCE_FIELDS = (
+    "character_id", "character_name", "corporation_id", "corporation_name",
+    "alliance_id", "alliance_name", "camouflaged_faction_id", "is_source_summary",
+)
+
+
+def _has_identity_evidence(participant: dict, field: str) -> bool:
+    """Return whether a participant field carries positive player evidence."""
+    value = participant.get(field)
+    if value is None or value is False:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    return value != ""
+
+
+def _is_proven_npc_only(participants) -> bool:
+    """Identify reports whose every participant is an exact client NPC unit.
+
+    KM participant data is intentionally treated as uncertain unless every row
+    has a resolvable NPC weapon/unit type and no player or camouflage evidence.
+    This predicate is conservative: malformed, unknown, missing-weapon, mixed,
+    or empty participant sections are all retained for later review.
+    """
+    if not isinstance(participants, list) or not participants:
+        return False
+    for participant in participants:
+        if not isinstance(participant, dict):
+            return False
+        if any(_has_identity_evidence(participant, field) for field in _NPC_PLAYER_EVIDENCE_FIELDS):
+            return False
+        weapon_type_id = participant.get("weapon_type_id")
+        if weapon_type_id is None or weapon_type_id == "":
+            return False
+        if not npc_identity(weapon_type_id):
+            return False
+    return True
 
 
 def _set_if_present(report: KillReport, parsed: dict, field: str, *, preserve_blank=True):
@@ -140,6 +181,8 @@ def persist_report(
     ship.  A lower completeness result never overwrites an existing record.
     """
 
+    if _is_proven_npc_only(parsed.get("participants")):
+        return None, False
     if not _policy_allows(parsed, policy):
         return None, False
     kill_id = int(parsed["kill_id"])

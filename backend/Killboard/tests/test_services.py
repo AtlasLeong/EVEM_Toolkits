@@ -1,6 +1,7 @@
 """Red tests for report persistence and collection-policy handling."""
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.test import override_settings
@@ -97,6 +98,72 @@ class KillReportPersistenceTests(TestCase):
         self.assertFalse(stored)
         self.assertIsNone(filtered)
         self.assertFalse(KillReport.objects.filter(kill_id=101).exists())
+
+    @patch("Killboard.services.npc_identity", return_value={"name": "科尔", "identity_kind": "npc"})
+    def test_npc_only_report_is_not_persisted(self, npc_identity):
+        parsed = parsed_report(kill_id=112)
+        parsed["participants"] = [{
+            "weapon_type_id": 56000171040,
+            "ship_type_id": 56000170001,
+            "damage": 123,
+            "damage_pct": Decimal("100"),
+            "is_final_blow": True,
+            "is_top_damage": True,
+            "source_index": 0,
+        }]
+        parsed["participant_count"] = 1
+
+        report, stored = persist_report(parsed, policy=self.policy)
+
+        self.assertIsNone(report)
+        self.assertFalse(stored)
+        self.assertFalse(KillReport.objects.filter(kill_id=112).exists())
+        npc_identity.assert_called_once_with(56000171040)
+
+    @patch("Killboard.services.npc_identity", return_value={"name": "科尔", "identity_kind": "npc"})
+    def test_uncertain_or_mixed_report_is_retained(self, npc_identity):
+        parsed = parsed_report(kill_id=113)
+        parsed["participants"] = [
+            {
+                "weapon_type_id": 56000171040,
+                "ship_type_id": 56000170001,
+                "damage": 123,
+                "damage_pct": Decimal("50"),
+                "source_index": 0,
+            },
+            {
+                "character_id": 8,
+                "character_name": "Pilot",
+                "corporation_id": 9,
+                "corporation_name": "Corp",
+                "damage": 123,
+                "damage_pct": Decimal("50"),
+                "is_final_blow": True,
+                "source_index": 1,
+            },
+        ]
+        parsed["participant_count"] = 2
+
+        report, stored = persist_report(parsed, policy=self.policy)
+
+        self.assertTrue(stored)
+        self.assertEqual(report.kill_id, 113)
+        self.assertEqual(report.participants.count(), 2)
+        self.assertEqual(npc_identity.call_count, 1)
+
+    @patch("Killboard.services.npc_identity", return_value={"name": "科尔", "identity_kind": "npc"})
+    def test_npc_only_refresh_does_not_replace_existing_report(self, npc_identity):
+        existing, _ = persist_report(parsed_report(kill_id=114), policy=self.policy)
+        incoming = parsed_report(kill_id=114)
+        incoming["participants"] = [{"weapon_type_id": 56000171040, "source_index": 0}]
+        incoming["participant_count"] = 1
+
+        report, stored = persist_report(incoming, policy=self.policy)
+
+        self.assertIsNone(report)
+        self.assertFalse(stored)
+        self.assertEqual(KillReport.objects.get(kill_id=114).pk, existing.pk)
+        self.assertEqual(KillReport.objects.get(kill_id=114).participants.count(), 1)
 
     def test_lower_completeness_cannot_replace_complete_report(self):
         complete, _ = persist_report(
