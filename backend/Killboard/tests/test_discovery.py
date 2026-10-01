@@ -259,6 +259,19 @@ class DiscoveryTests(TestCase):
         self.assertEqual(run.error_code, "malformed")
         self.assertEqual(run.events.get().error_code, "malformed")
 
+    def test_untrusted_exception_code_is_not_written_to_audit(self):
+        for index, code in enumerate(('private_token_marker', ['private-marker'])):
+            with self.subTest(index=index):
+                failure = RuntimeError('private text')
+                failure.code = code
+                cursor = ProbeCursor.objects.create(name=f'untrusted-code-{index}', next_probe_id=100)
+                with self.assertRaises(RuntimeError):
+                    DiscoveryRunner(FakeClient({100: failure}), cursor=cursor, policy=self.policy,
+                                    config=DiscoveryConfig(max_requests=1)).run()
+                run = cursor.runs.get()
+                self.assertEqual(run.error_code, 'runtimeerror')
+                self.assertEqual(run.events.get().error_code, 'runtimeerror')
+
     def test_dry_run_rolls_back_run_cursor_and_reports(self):
         cursor = ProbeCursor.objects.create(name="dry", next_probe_id=100)
         runner = DiscoveryRunner(

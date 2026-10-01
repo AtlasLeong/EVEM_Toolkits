@@ -393,6 +393,41 @@ class CollectorTransportTests(unittest.TestCase):
         self.assertEqual([sent_rpc(raw)[3][0] for raw in wire.sent[-2:]],
                          ['get_corp_brief', 'get_kill_info'])
 
+    def test_structured_optional_profile_error_does_not_latch_session(self):
+        """A structured malformed profile response must not poison later KM probes."""
+        report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101,
+                           'isk_lost': '20000000000.01'})
+        next_report = envelope({'kill_blob': '<other/>', 'kill_id': 101, 'victim_character_id': 101,
+                                'isk_lost': '20000000000.01'})
+        wire = WireSocket(
+            successful_login()
+            + response(5, report)
+            + response(6, [character()])
+            + response(7, {'error': {'code': 'profile_shape'}})
+            + response(8, next_report)
+        )
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with self.transport.KillboardClient(with_profiles()) as client:
+                first = client.get_kill_info(100)
+                second = client.get_kill_info(101)
+
+        self.assertEqual(first['kill_id'], 100)
+        self.assertEqual(second['kill_id'], 101)
+
+    def test_optional_profile_bad_wire_frame_still_stops_immediately(self):
+        report = envelope({'kill_blob': '<other/>', 'kill_id': 100, 'victim_character_id': 101,
+                           'isk_lost': '20000000000.01'})
+        wire = WireSocket(successful_login() + response(5, report)
+                          + frame(3, {'seq': 6, 'content': pack([2, [], [0, 0, 6], []])}))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire) as connect:
+            client = self.transport.KillboardClient(with_profiles())
+            with self.assertRaises(self.transport.CollectorError):
+                client.get_kill_info(100)
+            with self.assertRaises(self.transport.CollectorError):
+                client.get_kill_info(101)
+            connect.assert_called_once()
+        self.assertTrue(wire.closed)
+
     def test_enrich_false_keeps_known_report_smoke_to_auth4_plus_km_only(self):
         wire = WireSocket(successful_login() + response(5, envelope({'kill_blob': '<other/>', 'kill_id': 100})))
         with patch('Market.collector_protocol.socket.create_connection', return_value=wire):

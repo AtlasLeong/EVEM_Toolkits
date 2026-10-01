@@ -3,7 +3,9 @@
 Reuse the verified Market framing and four captured authentication calls, with
 a Killboard-specific bundle validator. One factory instance is one run: choose
 one session before connecting, connect lazily, then permanently stop on any
-auth, rate, network or malformed failure. There is no reconnect, credential
+auth, rate, network or malformed wire/KM failure. Semantic shape drift in
+optional identity responses may be skipped after the full frame is consumed.
+There is no reconnect, credential
 rotation, PCAP/DPAPI reader, automatic scan or network work at import time.
 """
 
@@ -93,11 +95,19 @@ class KillboardSession(market.MarketSession):
             raise ValueError('Invalid Killboard RPC callback.')
         self.before_rpc = callback
 
-    def _rpc(self, method, item_id=None, region_id=None):
+    def _rpc(self, method, item_id=None, region_id=None, *, allow_malformed=False):
         self._check_session_ready()
         try:
             return self._perform_rpc(method, item_id, region_id)
         except BaseException as exc:
+            # Profile endpoints are optional and their semantic response
+            # shape can drift without invalidating the already-consumed
+            # frame.  Keep the socket usable for later KM probes in that one
+            # case; auth, transport and throttling failures still latch.
+            if (allow_malformed and method in OPTIONAL_METHODS and self.sock is not None
+                    and isinstance(exc, CollectorError) and exc.code == 'malformed'
+                    and exc.reason != 'unsupported_rpc'):
+                raise CollectorError('malformed', 'optional_identity') from None
             self._latch_failure(exc)
             raise
 
@@ -287,26 +297,22 @@ class KillboardClient:
         try:
             if self.session.sock is None:
                 self.session.__enter__()
-            result = self.session._rpc(method, item_id=item_id)
+            result = self.session._rpc(method, item_id=item_id, allow_malformed=optional)
             return decoder(result)
         except CollectorError as exc:
             # Optional identity endpoints are allowed to drift independently
             # of the KM endpoint.  The response frame has already been
             # consumed, so a semantic shape error is safe to skip; transport,
             # auth and throttle failures still stop the run immediately.
-            if optional and exc.code == 'malformed':
+            if optional and exc.code == 'malformed' and exc.reason == 'optional_identity':
                 raise
             self._stop(exc)
         except (MarketNeedsAuthError, market.ProtocolError) as exc:
-            failure = _transport_error(exc)
-            if optional and failure.code == 'malformed':
-                raise failure from None
-            self._stop(failure)
+            self._stop(_transport_error(exc))
         except (KillProtocolError, IdentityProtocolError, KillParseError) as exc:
-            failure = CollectorError('malformed', type(exc).__name__)
-            if optional:
-                raise failure from None
-            self._stop(failure)
+            if optional and isinstance(exc, IdentityProtocolError):
+                raise CollectorError('malformed', 'optional_identity') from None
+            self._stop(CollectorError('malformed', type(exc).__name__))
         except BaseException:
             # Pacer budget/cancellation propagate unchanged but stop reuse.
             self.close()
@@ -326,7 +332,7 @@ class KillboardClient:
             try:
                 rows = self._request(method, missing, lambda value: decoder(value, missing), optional=True)
             except CollectorError as exc:
-                if exc.code != 'malformed':
+                if exc.code != 'malformed' or exc.reason != 'optional_identity':
                     raise
                 # Keep the valid KM and any other identity rows already
                 # decoded in this run.  Cache the attempted IDs so one drifted

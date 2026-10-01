@@ -232,7 +232,9 @@ class DiscoveryRunner:
         except Exception as exc:
             # This is deliberately a new short transaction; a failed transport
             # must remain observable even when report persistence rolled back.
-            error_code = str(getattr(exc, 'code', '') or type(exc).__name__)[:64]
+            code = getattr(exc, 'code', None)
+            error_code = (code if isinstance(code, str) and code in {status.value for status in ProbeStatus}
+                          else _safe_error_code(type(exc).__name__) or 'failed')
             with transaction.atomic():
                 failed = ProbeRun.objects.filter(pk=run.pk, status=ProbeRun.Status.RUNNING,
                                                 lease_owner=run.lease_owner).update(
