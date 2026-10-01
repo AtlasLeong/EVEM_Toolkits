@@ -81,7 +81,7 @@ def _hash_payload(parsed: dict) -> str:
 
 _NPC_PLAYER_EVIDENCE_FIELDS = (
     "character_id", "character_name", "corporation_id", "corporation_name",
-    "alliance_id", "alliance_name", "camouflaged_faction_id", "is_source_summary",
+    "alliance_id", "alliance_name", "camouflaged_faction_id",
 )
 
 
@@ -100,6 +100,8 @@ def _is_proven_npc_only(participants) -> bool:
 
     KM participant data is intentionally treated as uncertain unless every row
     has a resolvable NPC weapon/unit type and no player or camouflage evidence.
+    ``is_source_summary`` is provenance only: the parser sets it on an
+    anonymous final-blow summary, so it cannot independently prove a player.
     This predicate is conservative: malformed, unknown, missing-weapon, mixed,
     or empty participant sections are all retained for later review.
     """

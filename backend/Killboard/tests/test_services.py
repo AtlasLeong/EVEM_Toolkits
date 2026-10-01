@@ -165,6 +165,34 @@ class KillReportPersistenceTests(TestCase):
         self.assertEqual(KillReport.objects.get(kill_id=114).pk, existing.pk)
         self.assertEqual(KillReport.objects.get(kill_id=114).participants.count(), 1)
 
+    @patch("Killboard.services.npc_identity", return_value={"name": "科尔", "identity_kind": "npc"})
+    def test_parser_npc_summary_is_not_persisted(self, npc_identity):
+        from Killboard.parser import parse_kill_blob
+
+        parsed = parse_kill_blob(
+            '<other data="opaque" />',
+            summary={
+                "kill_id": 115,
+                "ship_type_id": 56000170001,
+                "ship_name": "NPC target",
+                "ship_class": "battleship",
+                "final_character_id": None,
+                "final_ship_type_id": 56000170001,
+                "final_weapon_type_id": 56000171040,
+                "final_damage_done": 100,
+                "isk_lost": "123.45",
+            },
+        )
+        self.assertEqual(len(parsed["participants"]), 1)
+        self.assertTrue(parsed["participants"][0]["is_source_summary"])
+        self.assertIsNone(parsed["participants"][0]["character_id"])
+
+        report, stored = persist_report(parsed)
+
+        self.assertIsNone(report)
+        self.assertFalse(stored)
+        self.assertFalse(KillReport.objects.filter(kill_id=115).exists())
+
     def test_lower_completeness_cannot_replace_complete_report(self):
         complete, _ = persist_report(
             parsed_report(completeness="complete"), policy=self.policy, source="fake"
