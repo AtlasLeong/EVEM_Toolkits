@@ -57,7 +57,12 @@ test("real local preview supports UI login, claim review, edits, upload, withdra
   await expect(page.getByText("私密沙盒联系", { exact: true })).toBeVisible();
   await page.getByLabel("审核意见", { exact: true }).fill("本地核验通过");
   await page.getByRole("button", { name: "批准申请", exact: true }).click();
-  await expect(page.getByText("审核已完成", { exact: true })).toBeVisible();
+  await expect(page.locator("p.corp-success")).toContainText(
+    "已获得管理权，公开主页还需完善资料",
+  );
+  await expect(
+    page.getByRole("link", { name: "去我的军团完善资料", exact: true }),
+  ).toBeVisible();
   await chooseRole(page, "演示军团管理员");
   await page.getByRole("button", { name: new RegExp(name) }).click();
   await page.getByRole("button", { name: "创建资料草稿", exact: true }).click();

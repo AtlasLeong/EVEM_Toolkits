@@ -1,0 +1,2 @@
+# Offline encrypted account-import tests only; never a password login worker.
+pycryptodome==3.23.0

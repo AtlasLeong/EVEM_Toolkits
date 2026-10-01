@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from 'react'
 import { Activity, ArrowLeft, Crosshair, LockKeyhole, RefreshCw, Users } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import { AuthContext } from '../context/AuthContext'
 import { getTacticalUsageOverview } from '../services/apiTacticalUsage'
 import '../styles/tacticalUsage.css'
@@ -11,6 +11,10 @@ const time = value => {
   const date = new Date(value)
   return value && Number.isFinite(date.getTime()) ? date.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—'
 }
+const date = value => {
+  const parsed = new Date(value)
+  return value && Number.isFinite(parsed.getTime()) ? parsed.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' }) : '—'
+}
 
 function StatCard({ label, value, hint, icon: Icon }) {
   return <article className="tactical-usage-stat">
@@ -20,23 +24,30 @@ function StatCard({ label, value, hint, icon: Icon }) {
   </article>
 }
 
-function PrivateOverview() {
+function PrivateOverview({ identity }) {
   const [revision, setRevision] = useState(0)
   const [state, setState] = useState({ loading: true, data: null, error: null })
   useEffect(() => {
     let current = true
     const controller = new AbortController()
+    const deny = event => {
+      if (event.detail?.identity !== identity) return
+      current = false
+      controller.abort()
+      setState({ loading: false, data: null, error: { status: 403 } })
+    }
+    window.addEventListener('tactical-usage:denied', deny)
     setState({ loading: true, data: null, error: null })
     getTacticalUsageOverview({ signal: controller.signal }).then(
       data => { if (current) setState({ loading: false, data, error: null }) },
       error => {
         if (!current) return
         setState({ loading: false, data: null, error })
-        if ([401, 403].includes(error.status)) window.dispatchEvent(new Event('tactical-usage:denied'))
+        if ([401, 403].includes(error.status)) window.dispatchEvent(new CustomEvent('tactical-usage:denied', { detail: { identity } }))
       },
     )
-    return () => { current = false; controller.abort() }
-  }, [revision])
+    return () => { current = false; controller.abort(); window.removeEventListener('tactical-usage:denied', deny) }
+  }, [revision, identity])
   const { data, loading, error } = state
   const denied = error && [401, 403].includes(error.status)
   const totals = data?.totals
@@ -79,11 +90,10 @@ function PrivateOverview() {
 
       <section className="tactical-usage-panel" aria-labelledby="tactical-usage-periods">
         <div className="tactical-usage-panel-head"><div><h2 id="tactical-usage-periods">实际操作情况</h2><p>上报、部署调整、情报提交等成功操作；不包含邀请、审批或仅打开页面。</p></div><span className="tactical-usage-tag">按账号去重</span></div>
-        <div className="tactical-usage-table-wrap"><table>
-          <caption className="sr-only">按北京时间统计今日、近 7 天与近 30 天的实际操作人数及次数</caption>
+        <div className="tactical-usage-table-wrap"><table aria-label="按北京时间统计今日、近 7 天与近 30 天的实际操作人数及次数">
           <thead><tr><th scope="col">统计时段</th><th scope="col">操作人数</th><th scope="col">操作次数</th><th scope="col">有操作的组织</th></tr></thead>
           <tbody>{data.periods.map(period => <tr key={period.key}>
-            <th scope="row"><strong>{PERIODS[period.key] || period.key}</strong><span>{time(period.start_at)} 起</span></th>
+            <th scope="row"><strong>{PERIODS[period.key] || period.key}</strong><span title={time(period.start_at)}>{date(period.start_at)} 起</span></th>
             <td>{number(period.operation_users)}<small>人</small></td><td>{number(period.operations)}<small>次</small></td><td>{number(period.active_organizations)}<small>个</small></td>
           </tr>)}</tbody>
         </table></div>
@@ -106,7 +116,14 @@ function PrivateOverview() {
 
 export default function TacticalUsagePage() {
   const { isAuthenticated, userInfo } = useContext(AuthContext)
+  const access = useOutletContext()
   if (!isAuthenticated || userInfo?.userId == null) return <div className="tactical-usage-status" role="alert">请先登录后查看。</div>
+  // Persist the capability denial through lazy loading: an event alone can be
+  // missed before this page mounts, letting a previously authorized read render.
+  if (access?.identity === userInfo.userId && access.denied) return <section className="tactical-usage-page">
+    <h1>战术板使用概况</h1>
+    <div className="tactical-usage-status" role="alert"><h2>无权访问</h2><p>此后台仅向指定账号开放，普通管理员也无法访问。</p><Link className="ghost-btn" to="/tactical">返回战术板</Link></div>
+  </section>
   // Account changes unmount all private state before new requests can complete.
-  return <PrivateOverview key={userInfo.userId} />
+  return <PrivateOverview key={userInfo.userId} identity={userInfo.userId} />
 }

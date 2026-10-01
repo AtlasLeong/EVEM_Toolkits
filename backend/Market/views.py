@@ -20,6 +20,7 @@ from .serializers import (
     item_payload, price_levels, run_payload, utc_iso,
 )
 from .worker import MAX_ITEMS_PER_RUN
+from .scope import market_scope_payload
 from .taxonomy import (
     BUCKET_LABELS, BUCKET_OTHER, PRIMARY_BUCKETS, is_primary_bucket,
 )
@@ -55,13 +56,15 @@ def page_parameters(request):
     return page, min(requested_size, 100)
 
 
-def paged_response(queryset, request, project):
+def paged_response(queryset, request, project, **metadata):
     page, page_size = page_parameters(request)
     offset = (page - 1) * page_size
-    return Response({
+    body = {
         'count': queryset.count(),
         'results': [project(row) for row in queryset[offset:offset + page_size]],
-    })
+    }
+    body.update(metadata)
+    return Response(body)
 
 
 def require_item_id_range(item_id):
@@ -133,7 +136,7 @@ class PublicCategoriesView(APIView):
 
         # Compatibility for rows created before the logical taxonomy existed.
         # A normal seeded installation enters the branch above as soon as one
-        # of the three selectable buckets is enabled.
+        # of the four selectable buckets is enabled.
         totals = MarketItem.objects.filter(enabled=True).values('category_id').annotate(count=Count('pk'))
         categories = []
         other_count = 0
@@ -163,7 +166,7 @@ class PublicItemsView(APIView):
         items = MarketItem.objects.filter(enabled=True).select_related('latest_price__snapshot')
         items = filter_items_by_category(items, request.query_params.get('category_id'))
         items = filter_items_by_query(items, request.query_params.get('q', ''), include_scope=True)
-        return paged_response(items, request, item_payload)
+        return paged_response(items, request, item_payload, market_scope=market_scope_payload())
 
 
 class PublicHistoryView(APIView):
@@ -373,6 +376,7 @@ class PublicSeriesView(APIView):
         return Response({
             'count': selected_count,
             'points': points,
+            'market_scope': market_scope_payload(),
             'change': {
                 'best_buy': series_change(states['buy']['first']['value'], states['buy']['last_valid']['value']) if states['buy']['first'] is not None and states['buy']['last_valid'] is not None else {'absolute': None, 'percent': None},
                 'best_sell': series_change(states['sell']['first']['value'], states['sell']['last_valid']['value']) if states['sell']['first'] is not None and states['sell']['last_valid'] is not None else {'absolute': None, 'percent': None},

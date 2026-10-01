@@ -12,14 +12,20 @@ export default function useTacticalUsageAccess() {
     if (identity == null) { setAccess(null); return undefined }
     const controller = new AbortController()
     let current = true
-    const deny = () => {
+    const deny = event => {
+      if (event.detail?.identity !== identity) return
       current = false
       controller.abort()
-      setAccess({ identity, allowed: false })
+      setAccess({ identity, allowed: false, denied: true })
     }
     window.addEventListener('tactical-usage:denied', deny)
     getTacticalUsageAccess({ signal: controller.signal }).then(
-      result => { if (current) setAccess({ identity, allowed: result.can_view_usage === true }) },
+      result => {
+        if (!current) return
+        if (result.can_view_usage === false) {
+          window.dispatchEvent(new CustomEvent('tactical-usage:denied', { detail: { identity } }))
+        } else setAccess({ identity, allowed: result.can_view_usage === true })
+      },
       () => { if (current) setAccess({ identity, allowed: false }) },
     )
     return () => {
@@ -30,5 +36,6 @@ export default function useTacticalUsageAccess() {
   }, [identity])
 
   // Do not wait for an effect to hide the old account's navigation.
-  return identity != null && access?.identity === identity && access.allowed === true
+  const matches = identity != null && access?.identity === identity
+  return { identity, allowed: matches && access.allowed === true, denied: matches && access.denied === true }
 }

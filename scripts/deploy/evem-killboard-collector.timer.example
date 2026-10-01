@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the EVEM Killboard collector every thirty minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+RandomizedDelaySec=5min
+AccuracySec=15s
+Persistent=true
+Unit=evem-killboard-collector.service
+
+[Install]
+WantedBy=timers.target

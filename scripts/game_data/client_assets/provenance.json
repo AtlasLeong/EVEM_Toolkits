@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "scope": "offline reviewed tooling; not client packages, credentials or a material redistribution licence",
+  "decoder": {
+    "distribution": "external file only; no upstream decoder code is vendored",
+    "upstreamRepository": "https://github.com/liubairun/NeoXtractor-IDXWPK",
+    "upstreamCommit": "5b85425c7d5bb880d4a8775a82ef45dd6edac975",
+    "upstreamPath": "core/wpk/decryption.py",
+    "sha256": "54e92c24ca00d0880ff027192974edb7026dac1d5e04207adebd48aaaadd063c",
+    "originalLocalPath": "output/client-ship-assets/tool-probe-20260929/decryption.py",
+    "licenceReview": "No LICENSE/NOTICE was present in the pinned upstream recursive tree; source is not redistributed. Any future decoder revision requires review and a new explicit pin."
+  },
+  "maintainedSources": [
+    {
+      "path": "safe_fsd.py",
+      "originalPath": "output/client-ship-assets/tool-probe-20260929/safe_fsd.py",
+      "originalSha256": "fcb3deaa7ef8eecc0b079a7cd6c96a933b14195d903ad0697b9214ea5eddf61f",
+      "method": "Data-only pickletools whitelist and checked FSD offsets; no unpickle or client imports."
+    },
+    {
+      "path": "path_key_lookup.py",
+      "originalPath": "output/client-ship-assets/mapping-deep/native/path_key_lookup.py",
+      "originalSha256": "02c5c4e98498b2bb493e4df7db2480bd6c146ef4994ba86bdf4c9b7cd6ff28be",
+      "method": "Reimplemented read-only THFB lookup from static native evidence; no native execution.",
+      "nativeEvidence": "split_pkgname_filename 0x2a0d034; filepath_normalized 0x2a0d2c4; path hashing 0x2a5a318; xxhash32 0x2a48094; seed/table loader 0x2a4b6e0"
+    },
+    {
+      "path": "verified_assets.py",
+      "originalPath": "output/client-ship-assets/mapping-deep/verified_assets.py",
+      "originalSha256": "3ba85cc1a3037dae94604bbffa471bc8d47c4b9213f051dfff20b15898e6d31f",
+      "changes": "Explicit client/APK/decoder roots; no sys.path or research-directory imports; pinned decoder loader.",
+      "method": "Bounded IDX/WPK reads, declared length and content MD5, bounded wrappers, strict single-face ASTC KTX, PNG pixel roundtrip."
+    }
+  ],
+  "routingSnapshot": {
+    "thxSha256": "d8875d0979ba063f06e54d86bf18ccb3a0c371d9457ba3c4a7b297bd043f0733",
+    "maintainedPath": "routing/d8875d0979ba063f06e54d86bf18ccb3a0c371d9457ba3c4a7b297bd043f0733.json",
+    "maintainedSha256": "e0143cc5a3638438f3ca25218e42125d6a98735d6976adac12e185405e3201a1",
+    "originalPath": "output/client-ship-assets/mapping-deep/thfb/verified-icon-path-overrides.json",
+    "originalSha256": "122c5fdd331b7aacc6fdcfd9cadbf7be9bf0d109dbb48cc1827e58e0d35a84c8",
+    "changes": "Line-ending normalization only. Original static evidence, item-ID scopes and component warnings preserved."
+  },
+  "classificationEvidence": {
+    "maintainedSummary": "README.md#classification-and-future-ships",
+    "originalPath": "output/client-ship-assets/mapping-deep/native/item-icon-semantics.md",
+    "originalSha256": "bd744dbb46318c60d7935065bd746d6e2f020a7e657f1471835e240bc7c41cc0",
+    "disassemblyPath": "output/client-ship-assets/mapping-deep/native/icon-inheritance-disassembly.txt",
+    "disassemblySha256": "9c5b82d643f25fe033fbbf84024edd65c71fe01718bfa2eba64da4c512568641",
+    "facts": ["group_id = type_id // 1000000", "category_id = type_id // 1000000000", "Exact item-ID lookup uses key modulo 101; no generic base-type image inheritance was proven."]
+  }
+}

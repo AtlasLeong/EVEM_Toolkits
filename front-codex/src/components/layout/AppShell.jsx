@@ -1,14 +1,16 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory } from 'lucide-react'
+import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
 import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
+import useKillboardAccess from '../../hooks/useKillboardAccess'
 
 const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
   { to: '/market', label: '市场价格', icon: ChartNoAxesCombined },
   { to: '/manufacturing', label: '制造估价', icon: Factory },
+  { to: '/killboard', label: '击毁情报', icon: Swords },
   { to: '/starmap', label: '星系导航', icon: Compass },
   { to: '/tactical', label: '战术板', icon: Crosshair },
   { to: '/fraudlist', label: '防诈名单', icon: Shield },
@@ -17,7 +19,7 @@ const navItems = [
   { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/market', '/manufacturing', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/market', '/manufacturing', '/killboard', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))
@@ -37,8 +39,12 @@ export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
-  const canViewUsage = useTacticalUsageAccess()
-  const availableNavItems = canViewUsage ? [...navItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...navItems.slice(4)] : navItems
+  const usageAccess = useTacticalUsageAccess()
+  const killboardAccess = useKillboardAccess()
+  const canViewUsage = usageAccess.allowed
+  const killboardNavItems = killboardAccess.allowed ? navItems : navItems.filter(item => item.to !== '/killboard')
+  const ownerNavItems = killboardAccess.allowed ? [...killboardNavItems.slice(0, 4), { to: '/killboard/admin', label: '击毁采集后台', icon: Swords }, ...killboardNavItems.slice(4)] : killboardNavItems
+  const availableNavItems = canViewUsage ? [...ownerNavItems.slice(0, 5), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...ownerNavItems.slice(5)] : ownerNavItems
   const reduceMotion = useReducedMotion()
   const displayName = userInfo?.userName?.trim() || '已登录用户'
   const [collapsed, setCollapsed] = useState(() => {
@@ -183,7 +189,7 @@ export default function AppShell() {
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
               className="page-wrapper"
             >
-              <Outlet />
+              <Outlet context={usageAccess} />
             </motion.div>
           </div>
         </main>

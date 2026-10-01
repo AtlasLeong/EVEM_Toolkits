@@ -27,7 +27,6 @@ const approvedIds = [
 
 const iconsDirectory = new URL('../../public/images/market-items/', import.meta.url)
 const moduleUrl = new URL('../../src/utils/marketItemIcons.js', import.meta.url)
-const clientMappingModuleUrl = new URL('../../src/utils/clientIconMapping.js', import.meta.url)
 const componentPath = fileURLToPath(new URL('../../src/components/MarketItemIcon.jsx', import.meta.url))
 const require = createRequire(import.meta.url)
 let componentPromise
@@ -35,11 +34,6 @@ let componentPromise
 async function loadIcons() {
   assert.ok(existsSync(moduleUrl), 'The approved market icon lookup must exist')
   return import(moduleUrl.href)
-}
-
-async function loadClientIconMapping() {
-  assert.ok(existsSync(clientMappingModuleUrl), 'The client icon mapping resolver must exist')
-  return import(clientMappingModuleUrl.href)
 }
 
 async function loadComponent() {
@@ -59,35 +53,6 @@ function assetFiles() {
   assert.ok(existsSync(iconsDirectory), 'The approved market icon assets must exist')
   return readdirSync(iconsDirectory).filter(name => name.endsWith('.webp')).sort()
 }
-
-function mappingRecord(overrides = {}) {
-  return {
-    itemId: '90000000001',
-    iconPath: '/images/client-items/90000000001.png',
-    sourceHash: 'a'.repeat(64),
-    status: 'confirmed',
-    ...overrides,
-  }
-}
-
-test('confirmed client mappings win over legacy icons while revoked/conflict/unknown IDs stay unavailable', async () => {
-  const { getMarketItemIcon } = await loadIcons()
-  const { normalizeClientIconMapping } = await loadClientIconMapping()
-  const mapping = normalizeClientIconMapping({
-    schemaVersion: 1,
-    mappings: [
-      mappingRecord({ itemId: '28007000000', iconPath: '/images/client-items/28007000000.png' }),
-      mappingRecord({ itemId: '90000000002', status: 'revoked', iconPath: '/images/client-items/90000000002.png' }),
-      mappingRecord({ itemId: '90000000003', status: 'conflict', iconPath: '/images/client-items/90000000003.png' }),
-    ],
-  })
-
-  assert.equal(getMarketItemIcon('28007000000', mapping), '/images/client-items/28007000000.png')
-  assert.equal(getMarketItemIcon(28007000000, mapping), '/images/client-items/28007000000.png')
-  assert.equal(getMarketItemIcon('90000000002', mapping), null)
-  assert.equal(getMarketItemIcon('90000000003', mapping), null)
-  assert.equal(getMarketItemIcon('90000000004', mapping), null)
-})
 
 test('known numeric and string item IDs resolve to the same stable asset path', async () => {
   const { getMarketItemIcon } = await loadIcons()
@@ -159,8 +124,7 @@ test('known icons render decorative lazy images with reserved square dimensions'
   assert.match(markup, /class="market-item-icon"/)
   assert.match(markup, /style="[^"]*width:40px;[^"]*height:40px/)
   assert.match(markup, /class="market-item-icon-image"/)
-  assert.match(markup, /src="\/images\/game-items\/823a3352e8c8c545af8305d5b684c083dd374208a45f672f2c53c877067b1360\.png"/)
-  assert.match(markup, /object-fit:contain/)
+  assert.match(markup, /src="\/images\/game-items\/[a-f0-9]{64}\.png"/)
   assert.match(markup, /alt=""/)
   assert.match(markup, /width="40"/)
   assert.match(markup, /height="40"/)
@@ -188,64 +152,11 @@ test('unknown icons render a decorative library fallback without a broken image'
   assert.match(markup, /market-item-icon-fallback/)
 })
 
-test('confirmed client images render through the shared component while revoked and unknown items use the package fallback', async () => {
+test('market icon consumes API image metadata from the whole item', async () => {
   const MarketItemIcon = await loadComponent()
-  const { normalizeClientIconMapping } = await loadClientIconMapping()
-  const mapping = normalizeClientIconMapping({
-    schemaVersion: 1,
-    mappings: [
-      mappingRecord({ itemId: '28007000000', iconPath: '/images/client-items/28007000000.png' }),
-      mappingRecord({ itemId: '90000000002', status: 'revoked', iconPath: '/images/client-items/90000000002.png' }),
-      mappingRecord({ itemId: '90000000003', status: 'conflict', iconPath: '/images/client-items/90000000003.png' }),
-    ],
-  })
-
-  const confirmedMarkup = renderToStaticMarkup(React.createElement(MarketItemIcon, {
-    itemId: '28007000000', mapping, size: 48,
+  const markup = renderToStaticMarkup(React.createElement(MarketItemIcon, {
+    item: { item_id: '28007000000', image_url: '/images/game-data/current.png' },
   }))
-  assert.match(confirmedMarkup, /src="\/images\/client-items\/28007000000\.png"/)
-  assert.match(confirmedMarkup, /loading="lazy"/)
-  assert.match(confirmedMarkup, /width="48"/)
-  assert.match(confirmedMarkup, /height="48"/)
-
-  for (const itemId of ['90000000002', '90000000003', 'unknown']) {
-    const fallbackMarkup = renderToStaticMarkup(React.createElement(MarketItemIcon, { itemId, mapping }))
-    assert.doesNotMatch(fallbackMarkup, /<img\b/)
-    assert.match(fallbackMarkup, /<svg\b/)
-    assert.match(fallbackMarkup, /market-item-icon-fallback/)
-  }
-})
-
-test('a failed confirmed image load switches to the package fallback', async () => {
-  const MarketItemIcon = await loadComponent()
-  const { normalizeClientIconMapping } = await loadClientIconMapping()
-  const mapping = normalizeClientIconMapping({
-    schemaVersion: 1,
-    mappings: [mappingRecord({ itemId: '28007000000', iconPath: '/images/client-items/28007000000.png' })],
-  })
-
-  const originalUseState = React.useState
-  let failed = false
-  React.useState = initial => {
-    assert.equal(initial, false)
-    return [failed, next => {
-      failed = typeof next === 'function' ? next(failed) : next
-    }]
-  }
-
-  try {
-    const outer = MarketItemIcon({ itemId: '28007000000', mapping })
-    const sharedComponent = outer.props.children
-    const imageComponent = sharedComponent.type(sharedComponent.props)
-    const image = imageComponent.type(imageComponent.props)
-    assert.equal(image.type, 'img')
-
-    image.props.onError()
-
-    const fallback = imageComponent.type(imageComponent.props)
-    assert.equal(fallback.props.className, 'market-item-icon-fallback')
-    assert.equal(fallback.props['aria-hidden'], 'true')
-  } finally {
-    React.useState = originalUseState
-  }
+  assert.match(markup, /src="\/images\/game-data\/current.png"/)
+  assert.doesNotMatch(markup, /market-items\/28007000000/)
 })

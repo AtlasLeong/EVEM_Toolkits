@@ -1,0 +1,2 @@
+# Private account-pool import/decryption utility only; not a Django web dependency.
+pycryptodome==3.23.0

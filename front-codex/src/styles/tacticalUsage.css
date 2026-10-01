@@ -54,7 +54,8 @@
   .tactical-usage-resources { gap: 14px; padding: 16px; }
   .tactical-usage-resources > div { flex-direction: column; gap: 6px; }
   .tactical-usage-panel-head { padding: 18px 16px; }
-  .tactical-usage-panel th, .tactical-usage-panel td { padding: 14px 12px; }
+  .tactical-usage-panel th, .tactical-usage-panel td { padding: 14px 8px; }
+  .tactical-usage-panel thead th { white-space: normal; font-size: 12px; }
   .tactical-usage-panel td { font-size: 19px; }
 }
 @media (prefers-reduced-motion: reduce) { .tactical-usage-page * { scroll-behavior: auto; } }

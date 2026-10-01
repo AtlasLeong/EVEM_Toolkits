@@ -28,6 +28,7 @@ SHA = re.compile(r'^[0-9a-f]{40}$')
 HASH = re.compile(r'^[0-9a-f]{64}$')
 MAX_BYTES = 1024 ** 3
 MARKET_CAPABILITY_FILE = 'Market/management/commands/market_tick.py'
+KILLBOARD_CAPABILITY_FILE = 'Killboard/run-collector.sh'
 MARKET_MSGPACK_VERSION = '1.2.2'
 
 # Run only with the candidate interpreter and its real collector PYTHONPATH.
@@ -87,10 +88,13 @@ def safe_name(name):
     if parts[0] not in COMPONENTS or len(parts) < 2:
         raise ReleaseError('unknown component')
     for part in parts[1:]:
+        lower = part.lower()
         if (part in {'.git', '.venv', 'venv', 'node_modules', '__pycache__', 'logs', 'uploads'}
                 or (part.startswith('.env') and part != '.env.example')
                 or part.startswith(('id_rsa', 'id_ed25519'))
-                or part.endswith(('.pem', '.key', '.sqlite3', '.pyc', '.log'))):
+                or lower.endswith(('.pem', '.key', '.sqlite3', '.pyc', '.log', '.pcap', '.pcapng', '.dpapi'))
+                or (lower.endswith(('.json', '.xlsx', '.xls', '.csv'))
+                    and re.match(r'^(?:sessions?|accounts?)(?:[._-]|$)', lower))):
             raise ReleaseError('persistent or secret data in artifact')
 
 
@@ -107,6 +111,43 @@ def atomic_json(path, value):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def validate_game_catalog(source, files):
+    """Verify immutable catalog hashes, not only the outer artifact manifest."""
+    pointer_name = 'backend/GameData/data/current.json'
+    if pointer_name not in files:
+        return  # Older application releases do not contain the shared catalog.
+    if source.getmember(pointer_name).size > 4 * 1024 ** 2:
+        raise ReleaseError('oversized game catalog pointer')
+    try:
+        pointer = json.load(source.extractfile(pointer_name))
+    except (ValueError, TypeError):
+        raise ReleaseError('invalid game catalog pointer') from None
+    if not isinstance(pointer, dict):
+        raise ReleaseError('invalid game catalog pointer')
+    revision, versions = pointer.get('revision'), pointer.get('versions')
+    hashes, current_hash = pointer.get('version_hashes'), pointer.get('catalog_sha256')
+    if (type(pointer.get('schema_version')) is not int or pointer['schema_version'] != 1
+            or not isinstance(revision, str) or not HASH.fullmatch(revision)
+            or not isinstance(versions, list) or not versions or len(versions) > len(files)
+            or any(not isinstance(value, str) or not HASH.fullmatch(value) for value in versions)
+            or len(set(versions)) != len(versions) or revision not in versions
+            or not isinstance(hashes, dict) or not isinstance(current_hash, str)
+            or not HASH.fullmatch(current_hash) or hashes.get(revision) != current_hash):
+        raise ReleaseError('invalid game catalog pointer')
+    for version in versions:
+        # Only validated hexadecimal revisions may contribute to an archive path.
+        name = f'backend/GameData/data/versions/{version}.json'
+        expected = hashes.get(version)
+        if name not in files or not isinstance(expected, str) or not HASH.fullmatch(expected):
+            raise ReleaseError('game catalog revision or checksum missing')
+        actual = hashlib.sha256()
+        with source.extractfile(name) as stream:
+            for chunk in iter(lambda: stream.read(1024 ** 2), b''):
+                actual.update(chunk)
+        if actual.hexdigest() != expected:
+            raise ReleaseError('game catalog checksum mismatch')
 
 
 def validate(archive):
@@ -148,6 +189,7 @@ def validate(archive):
                 raise ReleaseError('artifact checksum mismatch: ' + name)
         if manifest['dependencies'] != files['backend/requirements.txt']:
             raise ReleaseError('dependency checksum mismatch')
+        validate_game_catalog(source, files)
         return manifest
 
 
@@ -216,8 +258,13 @@ def requires_market_collector(backend, state=None):
             or (Path(backend) / MARKET_CAPABILITY_FILE).is_file())
 
 
+def requires_killboard_collector(backend, state=None):
+    return ((state or {}).get('killboard_collector') is True
+            or (Path(backend) / KILLBOARD_CAPABILITY_FILE).is_file())
+
+
 @contextmanager
-def market_collector_lock(root, required=False):
+def market_collector_lock(root, required=False, component='market'):
     """Share the collector's pre-provisioned lock for the entire transaction.
 
     Never create/recreate this file: doing so could split the lock identity or
@@ -227,7 +274,9 @@ def market_collector_lock(root, required=False):
     if not required:
         yield
         return
-    path = Path(root) / 'shared/market/collector.lock'
+    if component not in ('market', 'killboard'):
+        raise ReleaseError('unknown collector lock')
+    path = Path(root) / 'shared' / component / 'collector.lock'
     descriptor = None
     try:
         original = path.lstat()
@@ -266,6 +315,9 @@ def transact(root, old, new, changed, prepare, switch, restart, health, *, marke
         for state in (old, new)
     )
     with market_collector_lock(root, required=required):
+        if any(requires_killboard_collector(state['backend']['path'], state['backend']) for state in (old, new)):
+            with market_collector_lock(root, required=True, component='killboard'):
+                return _transact_locked(root, old, new, changed, prepare, switch, restart, health)
         return _transact_locked(root, old, new, changed, prepare, switch, restart, health)
 
 
@@ -549,6 +601,8 @@ def publish(root, archive=None, rollback=False):
                     new[component]['community_ready'] = True
                 if component == 'backend' and ('backend/' + MARKET_CAPABILITY_FILE) in manifest['files']:
                     new[component]['market_collector'] = True
+                if component == 'backend' and ('backend/' + KILLBOARD_CAPABILITY_FILE) in manifest['files']:
+                    new[component]['killboard_collector'] = True
             def prepare():
                 if 'backend' in changed:
                     prepare_backend(root, staged, manifest, config)

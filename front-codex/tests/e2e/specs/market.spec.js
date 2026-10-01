@@ -51,6 +51,29 @@ test('terminal filters categories, switches items and retains selection on refre
   await expect(page.getByRole('heading', { name: '测试舰船' })).toBeVisible()
 })
 
+test('market exposes the intermediate product category from the catalog', async ({ page }) => {
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([
+      { id: 'currency', label: '货币 · 伊甸币', count: 0 },
+      { id: 'planetary', label: '行星资源', count: 0 },
+      { id: 'minerals', label: '矿物', count: 0 },
+      { id: 'intermediate', label: '中间产物', count: 1 },
+    ])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{
+      item_id: '41005000100', name: '六元复合物', category: '中间产物-复数',
+      category_id: 1200, subcategory_id: 1200012, market_bucket: 'intermediate',
+      scope: 'global', best_sell: '56006', best_buy: '55000', observed_at: freshSample, status: 'fresh',
+    }] })
+    if (url.pathname.endsWith('/series/')) return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '56006', best_buy: '55000' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.getByRole('button', { name: /中间产物 1/ })).toBeVisible()
+  await page.getByRole('button', { name: /中间产物 1/ }).click()
+  await expect(page.getByRole('heading', { name: '六元复合物' })).toBeVisible()
+})
+
 test('market terminal hides internal ids and explanatory footnotes', async ({ page }) => {
   await installApiMock(page, ({ url }) => {
     if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
@@ -308,7 +331,7 @@ test('market administration searches the server catalog and enables a seeded ite
   await page.goto('/market/admin')
   await expect(page.getByText('共 5000 件目录物品')).toBeVisible()
   await expect(page.getByRole('row', { name: /测试舰船/ })).toContainText('已停用')
-  await expect(page.getByRole('row', { name: /测试舰船/ })).toContainText('市场范围 8')
+  await expect(page.getByRole('row', { name: /测试舰船/ })).toContainText('吉他海四')
   await expect(page.locator('.market-capacity')).toContainText('当前启用 0 件')
   await page.getByRole('searchbox', { name: '搜索目录物品' }).fill('  测试 舰船  ')
   await expect.poll(() => requests.some(value => value.method === 'GET' && value.path === '/api/market/admin/items/' && value.search === '?q=%E6%B5%8B%E8%AF%95+%E8%88%B0%E8%88%B9&page=1')).toBeTruthy()

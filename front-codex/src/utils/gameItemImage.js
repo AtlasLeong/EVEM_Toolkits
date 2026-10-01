@@ -1,4 +1,4 @@
-import scopedImages from '../data/game-item-images.json'
+import scopedImages from '../data/game-item-images.js'
 import { getMarketItemIcon } from './marketItemIcons.js'
 
 function usableUrl(value) {
