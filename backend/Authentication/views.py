@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import EVEMUser, EmailVerificationCode
+from .access import is_viewer_allowed
 from .serializers import UserTokenObtainPairSerializer
 from .throttle import DailyThrottle, MinuteThrottle
 
@@ -52,6 +53,9 @@ class RegisterView(APIView):
         email = (request.data.get('email') or '').strip()
         email_verification_code = (request.data.get('verificationCode') or '').strip()
         eve_id = (request.data.get('eve_id') or '').strip()
+
+        if not is_viewer_allowed(email):
+            return Response({'error': '当前仅允许指定账号访问。'}, status=status.HTTP_403_FORBIDDEN)
 
         email_db_code = EmailVerificationCode.objects.filter(email=email).values_list('code', flat=True).first()
         if not email_db_code:
@@ -112,6 +116,9 @@ class EmailVerification(APIView):
         email = (request.data.get('email') or '').strip()
         clean_expired_verifications()
 
+        if not is_viewer_allowed(email):
+            return Response({'error': '当前仅允许指定账号访问。'}, status=status.HTTP_403_FORBIDDEN)
+
         if not re.match(EMAIL_PATTERN, email):
             logger.warning('Rejected verification email request with invalid email: %s', email)
             return Response({'error': 'Enter a valid email.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -144,6 +151,8 @@ class SignUpCheck(APIView):
         accept_email = (request.data.get('email') or '').strip()
 
         if accept_email:
+            if not is_viewer_allowed(accept_email):
+                return Response({'duplicate': 'email', 'message': '当前仅允许指定账号访问'}, status=status.HTTP_403_FORBIDDEN)
             if not re.match(EMAIL_PATTERN, accept_email):
                 return Response({'duplicate': 'email', 'message': '邮箱格式错误'}, status=status.HTTP_200_OK)
 
@@ -171,6 +180,9 @@ class LoginView(APIView):
 
         if not all([email, password]):
             return Response({'error': 'All fields must be filled and not empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not is_viewer_allowed(email):
+            return Response({'error': '当前仅允许指定账号访问。'}, status=status.HTTP_403_FORBIDDEN)
 
         try:
             user = EVEMUser.objects.get(email=email)
@@ -223,6 +235,8 @@ class ForgetPasswordEmailCheck(APIView):
         accept_email = (request.data.get('email') or '').strip()
 
         if accept_email:
+            if not is_viewer_allowed(accept_email):
+                return Response({'duplicate': 'error', 'message': '当前仅允许指定账号访问'}, status=status.HTTP_403_FORBIDDEN)
             if not re.match(EMAIL_PATTERN, accept_email):
                 return Response({'duplicate': 'error', 'message': '邮箱格式错误'}, status=status.HTTP_200_OK)
 

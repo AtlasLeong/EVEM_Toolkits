@@ -11,5 +11,6 @@ class UserTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         # 添加额外的数据到令牌中
         token['userName'] = user.username
+        token['email'] = user.email
 
         return token

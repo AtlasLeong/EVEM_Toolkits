@@ -3,6 +3,7 @@ import { lazy, Suspense, useContext, useEffect } from 'react'
 import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
+import { isViewerAllowed, VIEWER_ACCESS_ENABLED } from './utils/viewerAccess'
 const LoginPage = lazy(() => import('./pages/Login'))
 const InfoCenterPage = lazy(() => import('./pages/InfoCenter'))
 const FraudListPage = lazy(() => import('./pages/FraudList'))
@@ -24,7 +25,10 @@ const StarseaMinePage = lazy(() => import('./pages/StarseaMine'))
 const StarseaEditorPage = lazy(() => import('./pages/StarseaEditor'))
 const StarseaReviewPage = lazy(() => import('./pages/StarseaReview'))
 const MarketPricesPage = lazy(() => import('./pages/MarketPrices'))
+const ManufacturingEstimatorPage = lazy(() => import('./pages/ManufacturingEstimator'))
 const MarketAdminPage = lazy(() => import('./pages/MarketAdmin'))
+const TacticalUsagePage = lazy(() => import('./pages/TacticalUsage'))
+const IconVerificationPage = import.meta.env.DEV ? lazy(() => import('./pages/IconVerification')) : null
 const pageFallback = label => <div className="loading-bar" aria-label={label}><span /></div>
 const starseaRoute = page => <Suspense fallback={pageFallback('加载星海见闻')}>{page}</Suspense>
 const corporationRoute = page => <Suspense fallback={pageFallback('加载军团页面')}>{page}</Suspense>
@@ -46,18 +50,43 @@ function RequireAuth({ children }) {
   return children
 }
 
+function RequireViewerAccess({ children }) {
+  const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
+  const location = useLocation()
+
+  if (!VIEWER_ACCESS_ENABLED) return children
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!isViewerAllowed(userInfo?.email)) {
+    return <Navigate to="/access-denied" replace />
+  }
+  return children
+}
+
+function AccessDeniedPage() {
+  const { logout } = useContext(AuthContext)
+  return (
+    <main className="access-denied-page" role="alert">
+      <p className="eyebrow">EVEM TOOLKITS</p>
+      <h1>暂未开放查看权限</h1>
+      <p>当前账号不在查看白名单中，请切换到已获授权的账号。</p>
+      <button type="button" onClick={logout}>切换账号</button>
+    </main>
+  )
+}
+
 export default function App() {
   return (
     <div className="site-frame">
       <ScrollToTop />
       <div className="site-content">
         <Routes>
-          <Route element={<AppShell />}>
+          <Route element={<RequireViewerAccess><AppShell /></RequireViewerAccess>}>
             <Route index element={<Navigate replace to="/market" />} />
             <Route path="/infocenter" element={appRoute(<InfoCenterPage />)} />
             <Route path="/fraudlist" element={appRoute(<FraudListPage />)} />
             <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
             <Route path="/market" element={appRoute(<MarketPricesPage />)} />
+            <Route path="/manufacturing" element={appRoute(<ManufacturingEstimatorPage />)} />
             <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
             <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
             <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
@@ -74,6 +103,7 @@ export default function App() {
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
             <Route path="/starmap" element={<TacticalBoardPage />} />
             <Route path="/tactical" element={appRoute(<TacticalCollaborationPage />)} />
+            <Route path="/tactical/usage" element={<RequireAuth>{appRoute(<TacticalUsagePage />)}</RequireAuth>} />
             <Route
               path="/usersetting"
               element={
@@ -103,6 +133,7 @@ export default function App() {
             />
           </Route>
           {import.meta.env.DEV && IconVerificationPage && <Route path="/dev/icon-verification" element={appRoute(<IconVerificationPage />)} />}
+          <Route path="/access-denied" element={<AccessDeniedPage />} />
           <Route path="/login" element={appRoute(<LoginPage />)} />
           <Route path="/fraudlogin" element={appRoute(<FraudAdminLoginPage />)} />
           <Route path="*" element={<Navigate replace to="/market" />} />

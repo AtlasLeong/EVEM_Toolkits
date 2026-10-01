@@ -1,12 +1,14 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined } from 'lucide-react'
+import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
+import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 
 const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
   { to: '/market', label: '市场价格', icon: ChartNoAxesCombined },
+  { to: '/manufacturing', label: '制造估价', icon: Factory },
   { to: '/starmap', label: '星系导航', icon: Compass },
   { to: '/tactical', label: '战术板', icon: Crosshair },
   { to: '/fraudlist', label: '防诈名单', icon: Shield },
@@ -15,7 +17,7 @@ const navItems = [
   { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
 ]
 
-const routeOrder = ['/fraudlist', '/planetary', '/market', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
+const routeOrder = ['/fraudlist', '/planetary', '/market', '/manufacturing', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
 
 function routeIndex(pathname) {
   const idx = routeOrder.findIndex((path) => pathname.startsWith(path))
@@ -35,6 +37,8 @@ export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
+  const canViewUsage = useTacticalUsageAccess()
+  const availableNavItems = canViewUsage ? [...navItems.slice(0, 4), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...navItems.slice(4)] : navItems
   const reduceMotion = useReducedMotion()
   const displayName = userInfo?.userName?.trim() || '已登录用户'
   const [collapsed, setCollapsed] = useState(() => {
@@ -87,10 +91,10 @@ export default function AppShell() {
       </header>
       <nav id="mobile-navigation" className={`mobile-nav${mobileNavOpen ? ' is-open' : ''}`} aria-label="移动主导航" aria-hidden={!mobileNavOpen}>
         <div className="mobile-nav-links">
-          {navItems.map((item) => {
+          {availableNavItems.map((item) => {
             const Icon = item.icon
             return (
-              <NavLink key={item.to} to={item.to} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink key={item.to} to={item.to} end={item.to === '/tactical'} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                 <Icon size={17} aria-hidden="true" />
                 <span>{item.label}</span>
               </NavLink>
@@ -121,12 +125,13 @@ export default function AppShell() {
           </button>
           </div>
           <nav id="primary-navigation" className="nav-row" aria-label="主导航">
-            {navItems.map((item) => {
+            {availableNavItems.map((item) => {
               const Icon = item.icon
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  end={item.to === '/tactical'}
                   aria-label={item.label}
                   title={collapsed ? item.label : undefined}
                   className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}

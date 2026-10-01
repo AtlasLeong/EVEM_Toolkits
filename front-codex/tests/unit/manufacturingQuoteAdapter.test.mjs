@@ -55,7 +55,7 @@ test('normalizes item IDs as strings and preserves quote states, including absen
   assert.deepEqual(JSON.parse(JSON.stringify(normalized['105'])), { item_id: '105', status: 'absent' })
 })
 
-test('fetches each ID through the compatible public q filter without credentials', async () => {
+test('fetches each ID through the compatible q filter without anonymous credentials', async () => {
   const api = fixture()
   const calls = []
   const fetchImpl = async (url, options) => {
@@ -81,7 +81,7 @@ test('fetches each ID through the compatible public q filter without credentials
   assert.equal(new URL(calls[0].url).searchParams.get('page_size'), '100')
   assert.equal(new URL(calls[0].url).searchParams.get('q'), '1')
   assert.equal(new URL(calls.at(-1).url).searchParams.get('q'), '101')
-  assert.equal(calls[0].options.credentials, 'omit')
+  assert.equal(calls[0].options.credentials, undefined)
   assert.equal(calls[0].options.headers, undefined)
   assert.equal(quotes['1'].status, 'fresh')
   assert.equal(quotes['101'].best_sell, '10.00')

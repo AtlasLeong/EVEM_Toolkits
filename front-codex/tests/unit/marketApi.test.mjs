@@ -35,28 +35,28 @@ function fixture(fetchImpl, authenticated = false) {
 
 const response = (value, status = 200) => ({ ok: status < 400, status, json: async () => value })
 
-test('public search is anonymous and encodes the query', async () => {
+test('market search sends the viewer token and encodes the query', async () => {
   const calls = []
   const api = fixture((url, options) => {
     calls.push({ url, options })
     return Promise.resolve(response({ count: 0, results: [] }))
-  })
+  }, true)
   await api.listMarketItems({ q: '  测试 舰船  ', page: 2 })
   assert.equal(calls.length, 1)
   assert.equal(calls[0].url, 'http://local-test/api/market/items/?q=%E6%B5%8B%E8%AF%95+%E8%88%B0%E8%88%B9&page=2')
-  assert.equal(calls[0].options?.headers?.Authorization, undefined)
+  assert.match(calls[0].options?.headers?.Authorization, /^Bearer /)
 })
 
-test('public category navigation filters enabled items without an auth header', async () => {
+test('market category navigation sends an auth header', async () => {
   const calls = []
   const api = fixture((url, options) => {
     calls.push({ url, options })
     return Promise.resolve(response([]))
-  })
+  }, true)
   await api.listMarketCategories({ signal: new AbortController().signal })
   await api.listMarketItems({ categoryId: 'other', q: '  舰  ', page: 2 })
   assert.equal(calls[0].url, 'http://local-test/api/market/categories/')
-  assert.equal(calls[0].options?.headers?.Authorization, undefined)
+  assert.match(calls[0].options?.headers?.Authorization, /^Bearer /)
   assert.equal(calls[1].url, 'http://local-test/api/market/items/?q=%E8%88%B0&page=2&category_id=other')
 })
 

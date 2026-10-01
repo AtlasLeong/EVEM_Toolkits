@@ -1,4 +1,5 @@
 import API_URL from './backendSetting'
+import fetchWithAuth from './fetchWithAuth'
 
 /**
  * The public market list endpoint caps a page at one hundred records.  The
@@ -127,7 +128,6 @@ async function fetchOneQuote(itemId, { apiUrl, fetchImpl, signal }) {
   try {
     response = await fetchImpl(buildItemsUrl(apiUrl, itemId), {
       signal,
-      credentials: 'omit',
     })
   } catch (cause) {
     throw new ManufacturingMarketError('行情请求失败，请稍后重试。', undefined, {
@@ -170,14 +170,15 @@ async function mapWithConcurrency(values, worker, concurrency) {
 
 /**
  * Fetch read-only public market quotes for manufacturing purchase leaves.
- * `fetchImpl` and `apiUrl` are injectable for tests and local previews.  No
- * Authorization header, account token, or cookie is sent by this adapter.
+ * `fetchImpl` and `apiUrl` are injectable for tests and local previews. The
+ * default transport carries the current viewer session to the protected
+ * market API; injected test transports remain deliberately isolated.
  */
 export async function fetchManufacturingQuotes(itemIds, options = {}) {
   const requested = normalizeItemIds(itemIds)
   if (requested.length === 0) return {}
 
-  const fetchImpl = options.fetchImpl ?? options.fetch ?? globalThis.fetch
+  const fetchImpl = options.fetchImpl ?? options.fetch ?? fetchWithAuth
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch implementation is required')
   const concurrency = Number(options.concurrency ?? DEFAULT_QUOTE_CONCURRENCY)
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) {

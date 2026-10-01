@@ -10,7 +10,10 @@ export class MarketApiError extends Error {
 }
 
 async function request(path, { admin = false, ...options } = {}) {
-  const response = await (admin ? fetchWithAuth : fetch)(`${API_URL}/market/${path}`, options)
+  // Market data is protected by the viewer allowlist in production. Keeping
+  // one authenticated transport for both read and admin calls also prevents
+  // an anonymous request from silently bypassing the backend gate.
+  const response = await fetchWithAuth(`${API_URL}/market/${path}`, options)
   if (!response.ok) {
     const data = await response.json().catch(() => ({}))
     const fields = data && typeof data === 'object' ? data : {}

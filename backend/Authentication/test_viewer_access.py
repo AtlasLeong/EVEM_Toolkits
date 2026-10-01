@@ -1,0 +1,49 @@
+from unittest.mock import patch
+
+from django.test import RequestFactory, SimpleTestCase, override_settings
+from rest_framework.request import Request
+
+from Authentication.access import is_viewer_allowed
+from Authentication.permissions import IsAllowlistedViewer
+from Authentication.views import LoginView
+
+
+class ViewerAllowlistTests(SimpleTestCase):
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_allowlist_is_case_insensitive_and_rejects_other_accounts(self):
+        self.assertTrue(is_viewer_allowed(' 2235102484@QQ.COM '))
+        self.assertFalse(is_viewer_allowed('other@example.com'))
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=False, VIEWER_EMAIL_ALLOWLIST=[])
+    def test_disabled_allowlist_restores_open_access(self):
+        self.assertTrue(is_viewer_allowed('other@example.com'))
+        anonymous = Request(RequestFactory().get('/api/market/items/'))
+        self.assertTrue(IsAllowlistedViewer().has_permission(anonymous, None))
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_market_permission_requires_the_allowed_authenticated_user(self):
+        factory = RequestFactory()
+        permission = IsAllowlistedViewer()
+
+        anonymous = Request(factory.get('/api/market/items/'))
+        self.assertFalse(permission.has_permission(anonymous, None))
+
+        denied = Request(factory.get('/api/market/items/'))
+        denied.user = type('User', (), {'is_authenticated': True, 'email': 'other@example.com'})()
+        self.assertFalse(permission.has_permission(denied, None))
+
+        allowed = Request(factory.get('/api/market/items/'))
+        allowed.user = type('User', (), {'is_authenticated': True, 'email': '2235102484@qq.com'})()
+        self.assertTrue(permission.has_permission(allowed, None))
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    @patch('Authentication.views.EVEMUser.objects.get')
+    def test_login_rejects_non_allowlisted_email_before_password_check(self, get_user):
+        request = RequestFactory().post(
+            '/api/user/login',
+            {'login_email': 'other@example.com', 'login_password': 'secret'},
+            format='json',
+        )
+        response = LoginView.as_view()(request)
+        self.assertEqual(response.status_code, 403)
+        get_user.assert_not_called()

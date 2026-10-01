@@ -88,6 +88,19 @@ DEBUG = parse_debug_flag(config('DEBUG', default=True))
 def parse_csv(value):
     return [item.strip() for item in str(value).split(',') if item.strip()]
 
+def parse_email_allowlist(value):
+    return tuple(item.casefold() for item in parse_csv(value) if '@' in item)
+
+# Keep the initial production rollout private. Opening the product later is an
+# explicit switch, so a blank or omitted email variable cannot unlock it.
+VIEWER_ALLOWLIST_ENABLED = str(config('VIEWER_ALLOWLIST_ENABLED', default='true' if not DEBUG else 'false')).strip().lower() in {
+    '1', 'true', 'yes', 'on',
+}
+VIEWER_EMAIL_ALLOWLIST = parse_email_allowlist(
+    config('VIEWER_EMAIL_ALLOWLIST', default='2235102484@qq.com' if VIEWER_ALLOWLIST_ENABLED else '')
+)
+if VIEWER_ALLOWLIST_ENABLED and not VIEWER_EMAIL_ALLOWLIST and not DEBUG:
+    raise RuntimeError('VIEWER_EMAIL_ALLOWLIST must contain at least one email when viewer access is enabled.')
 
 ALLOWED_HOSTS = parse_csv(config('ALLOWED_HOSTS', default='*' if DEBUG else 'localhost,127.0.0.1'))
 

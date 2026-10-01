@@ -30,5 +30,6 @@ export function getUserInfo() {
   return {
     userName: decodedToken.userName || decodedToken.username || null,
     userId: decodedToken.user_id || decodedToken.userId || null,
+    ...(decodedToken.email ? { email: decodedToken.email } : {}),
   }
 }

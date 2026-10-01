@@ -12,6 +12,8 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from Authentication.permissions import IsAllowlistedViewer
+
 from .models import CollectionRun, MarketConfig, MarketConfigAudit, MarketItem, PriceSnapshot, epoch_ms
 from .serializers import (
     ConfigPatchSerializer, ItemCreateSerializer, ItemPatchSerializer, admin_item_payload,
@@ -107,8 +109,8 @@ def filter_items_by_category(items, raw_category_id):
 
 
 class PublicCategoriesView(APIView):
-    authentication_classes = []
-    permission_classes = []
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAllowlistedViewer]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'market_public'
 
@@ -152,8 +154,8 @@ class PublicCategoriesView(APIView):
 
 
 class PublicItemsView(APIView):
-    authentication_classes = []
-    permission_classes = []
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAllowlistedViewer]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'market_public'
 
@@ -165,8 +167,8 @@ class PublicItemsView(APIView):
 
 
 class PublicHistoryView(APIView):
-    authentication_classes = []
-    permission_classes = []
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAllowlistedViewer]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'market_public'
 
@@ -273,8 +275,8 @@ def _public_series_stats(states):
 
 
 class PublicSeriesView(APIView):
-    authentication_classes = []
-    permission_classes = []
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAllowlistedViewer]
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'market_public'
 
