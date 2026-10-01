@@ -8,7 +8,10 @@ const ids = ['28007000000', '41000000000', '41000000002', '41000000003', '420010
 
 async function openMarket(page, { missingLast = false, brokenImage = false, hugePrices = false } = {}) {
   await page.clock.setFixedTime(new Date('2026-09-27T02:40:00Z'))
-  if (brokenImage) await page.route('**/images/market-items/28007000000.webp', route => route.abort())
+  // Market items now resolve through the verified client-image library. Keep
+  // the broken-image scenario pointed at the published asset so the fallback
+  // contract remains covered after the catalog migration.
+  if (brokenImage) await page.route('**/images/game-items/823a3352e8c8c545af8305d5b684c083dd374208a45f672f2c53c877067b1360.png', route => route.abort())
   const marketScope = { key: 'jita_h4', protocol_scope: 8, label: '吉他海四', description: '吉他 IV - 月 4 · 加达里海军装配厂' }
   await installApiMock(page, ({ url }) => {
     if (url.pathname === '/api/market/categories/') return json([{ id: 'currency', label: '货币 · 伊甸币', count: 1 }, { id: 'planetary', label: '行星资源', count: 34 }, { id: 'minerals', label: '矿物', count: 10 }])
@@ -39,8 +42,10 @@ test('default focus mode uses genuine icons and a single chart with compact quot
   await expect(page.getByRole('button', { name: '只看卖价', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.market-trend-panel')).toHaveCount(1)
   const icon = page.locator('.market-item-choice').first().locator('img')
-  await expect(icon).toHaveAttribute('src', '/images/market-items/28007000000.webp')
-  await expect.poll(() => icon.evaluate(image => image.complete && image.naturalWidth)).toBe(128)
+  await expect(icon).toHaveAttribute('src', '/images/game-items/823a3352e8c8c545af8305d5b684c083dd374208a45f672f2c53c877067b1360.png')
+  // The client crop keeps a transparent 156×128 canvas; the component still
+  // reserves a square 40px slot so this aspect ratio never shifts the row.
+  await expect.poll(() => icon.evaluate(image => image.complete && image.naturalWidth)).toBe(156)
   await expect(page.locator('.market-quote-card')).toHaveCount(0)
   await expect(page.locator('.market-terminal-summary')).toContainText('报价档位')
   await expect(page.getByText('价格范围：吉他海四').first()).toBeVisible()
