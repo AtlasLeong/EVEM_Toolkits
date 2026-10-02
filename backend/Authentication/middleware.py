@@ -17,6 +17,9 @@ _PUBLIC_API_PATHS = frozenset({
     '/api/user/forgetemailcheck',
     '/api/user/forgetPassword',
     '/api/user/token/refresh',
+    # 独立脚本通过激活码和机器标识校验，不使用站内登录令牌。
+    '/api/activationcode/validate-code/',
+    '/api/license/validate-code/',
 })
 
 
