@@ -89,14 +89,14 @@ test('market exposes component and damaged structure buckets with category switc
     if (method === 'GET' && url.pathname === '/api/market/items/') {
       const categoryId = url.searchParams.get('category_id')
       if (categoryId === 'structures') return json({ count: 16, results: [
-        { item_id: '42000000001', name: '艾玛4级受损结构', category: '受损结构', market_bucket: 'structures', scope: 'jita_h4', best_sell: '1200000', best_buy: '1100000', observed_at: freshSample, status: 'fresh' },
+        { item_id: '44000000004', name: '艾玛4级受损结构', category: '艾玛受损结构-复数', market_bucket: 'structures', scope: 'global', best_sell: '1200000', best_buy: '1100000', observed_at: freshSample, status: 'fresh' },
       ] })
       if (categoryId === 'components') return json({ count: 58, results: [
-        { item_id: '41007000001', name: '旗舰船只维护舱', category: '组件', market_bucket: 'components', scope: 'jita_h4', best_sell: '250000', best_buy: '210000', observed_at: freshSample, status: 'fresh' },
-        { item_id: '41007000002', name: '建筑建造组件', category: '组件', market_bucket: 'components', scope: 'jita_h4', best_sell: '180000', best_buy: '160000', observed_at: freshSample, status: 'fresh' },
+        { item_id: '27011000000', name: '旗舰船只维护舱', category: '旗舰组件-复数', market_bucket: 'components', scope: 'global', best_sell: '250000', best_buy: '210000', observed_at: freshSample, status: 'fresh' },
+        { item_id: '27000000000', name: '建筑建造组件', category: '建筑基础组件-复数', market_bucket: 'components', scope: 'global', best_sell: '180000', best_buy: '160000', observed_at: freshSample, status: 'fresh' },
       ] })
       return json({ count: 1, results: [
-        { item_id: '28007000000', name: '伊甸币', category: '货币', market_bucket: 'currency', scope: 'jita_h4', best_sell: '1', best_buy: '1', observed_at: freshSample, status: 'fresh' },
+        { item_id: '28007000000', name: '伊甸币', category: '货币', market_bucket: 'currency', scope: 'global', best_sell: '1', best_buy: '1', observed_at: freshSample, status: 'fresh' },
       ] })
     }
     if (method === 'GET' && url.pathname.endsWith('/series/')) return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '250000', best_buy: '210000' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })

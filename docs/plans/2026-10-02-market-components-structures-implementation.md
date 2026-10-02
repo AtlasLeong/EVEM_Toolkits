@@ -13,7 +13,6 @@
 ### Task 1: Add failing taxonomy and seed tests
 
 **Files:**
-- Modify: `backend/Market/tests/test_taxonomy.py`
 - Modify: `backend/Market/tests/test_seed_catalog.py`
 - Modify: `backend/Market/tests/test_api.py`
 - Modify: `backend/Market/tests/test_terminal_api.py`
@@ -24,7 +23,7 @@ Assert that a representative drone, flagship, construction, advanced, and person
 
 **Step 2: Run the focused tests to verify failure**
 
-Run `python manage.py test Market.tests.test_taxonomy Market.tests.test_seed_catalog Market.tests.test_api Market.tests.test_terminal_api --settings=EVE_MDjango.ci_settings --noinput`.
+From `backend`, run `python manage.py test Market.tests.test_seed_catalog Market.tests.test_api Market.tests.test_terminal_api --settings=EVE_MDjango.ci_settings --noinput`.
 
 Expected: failures because the new bucket constants/classification do not exist.
 

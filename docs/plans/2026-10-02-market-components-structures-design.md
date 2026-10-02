@@ -4,7 +4,7 @@
 
 ## Goal
 
-Expose all 58 tradeable component items from the official component subcategory and 16 curated faction structure items in the market terminal, while preserving the existing low-concurrency, randomized account-pool collector.
+Expose all 58 tradeable component items from the six official component groups and 16 curated faction structure items in the market terminal, while preserving the existing low-concurrency, randomized account-pool collector.
 
 ## Scope
 
@@ -24,6 +24,7 @@ Expose all 58 tradeable component items from the official component subcategory 
 
 - No parallel quote requests are introduced.
 - The existing 35–51 minute randomized schedule and run lease remain unchanged.
+- With the current 57 enabled items plus 74 new items, 131 items require four bounded batches for a conservative full-coverage estimate of 140–204 minutes plus collection time; this is not a per-item 35–51 minute refresh guarantee.
 - Adding 74 enabled items adds roughly 74 seconds of active query time across at least two bounded runs at the one-second pace; the 40-item per-run cap keeps each individual session bounded, while the existing 35–51 minute schedule controls wall-clock load.
 - Blueprint rows are excluded by the `category_id != 1700` guard and structure rows are restricted to the explicit allowlist.
 

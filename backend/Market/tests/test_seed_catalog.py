@@ -256,3 +256,42 @@ class MarketCatalogSeedTests(TestCase):
             MarketItem.objects.filter(category_id=1700, market_bucket__in=['components', 'structures']).count(),
             0,
         )
+        catalog_path = Path(__file__).resolve().parents[1] / 'data' / 'market_catalog.json'
+        with catalog_path.open(encoding='utf-8') as source:
+            rows = json.load(source)
+        expected_components = {
+            row['item_id'] for row in rows
+            if '组件' in row['market_group_name_3rd'] and row['category_id'] != 1700
+        }
+        expected_structures = {
+            44000000004, 44000000011, 44000000012, 44000000015,
+            44010000004, 44010000011, 44010000012, 44010000015,
+            44020000004, 44020000011, 44020000012, 44020000015,
+            44030000004, 44030000011, 44030000012, 44030000015,
+        }
+        self.assertEqual(
+            set(MarketItem.objects.filter(market_bucket='components').values_list('id', flat=True)),
+            expected_components,
+        )
+        self.assertEqual(
+            set(MarketItem.objects.filter(market_bucket='structures').values_list('id', flat=True)),
+            expected_structures,
+        )
+        self.assertEqual(
+            set(MarketItem.objects.filter(enabled=True).values_list('id', flat=True)),
+            expected_components | expected_structures,
+        )
+
+    def test_incremental_enable_preserves_old_toggles_and_manual_buckets(self):
+        MarketItem.objects.create(id=28007000000, name='伊甸币', market_bucket='currency', enabled=False)
+        MarketItem.objects.create(id=41000000000, name='三钛合金', market_bucket='minerals', enabled=True)
+        MarketItem.objects.create(id=27011000000, name='人工分类组件', market_bucket='minerals', enabled=False)
+
+        call_command('market_seed_catalog', enable_buckets='components,structures', stdout=StringIO())
+
+        self.assertFalse(MarketItem.objects.get(pk=28007000000).enabled)
+        self.assertTrue(MarketItem.objects.get(pk=41000000000).enabled)
+        manual = MarketItem.objects.get(pk=27011000000)
+        self.assertEqual(manual.market_bucket, 'minerals')
+        self.assertEqual(manual.name, '人工分类组件')
+        self.assertFalse(manual.enabled)

@@ -41,7 +41,8 @@ EDEN_CURRENCY_ITEM_ID = 28_007_000_000
 MINERAL_SUBCATEGORY_ID = 1_200_000
 INTERMEDIATE_SUBCATEGORY_ID = 1_200_012
 BLUEPRINT_CATEGORY_ID = 1_700
-COMPONENT_SUBCATEGORY_ID = 1_200_050
+# Building components share broad building subcategories with unrelated items.
+# Use exact component groups rather than one manufacturing subcategory.
 COMPONENT_GROUP_NAMES = frozenset({
     '高级舰船组件-复数',
     '个人堡垒组件-复数',
