@@ -29,6 +29,8 @@ class MarketCategoryApiTests(TestCase):
         MarketItem.objects.create(id=102, name='光泽合金', market_bucket='planetary')
         MarketItem.objects.create(id=103, name='三钛合金', market_bucket='minerals')
         MarketItem.objects.create(id=106, name='六元复合物', market_bucket='intermediate')
+        MarketItem.objects.create(id=107, name='旗舰组件', market_bucket='components')
+        MarketItem.objects.create(id=108, name='艾玛受损结构', market_bucket='structures')
         MarketItem.objects.create(id=104, name='未分类', market_bucket='other')
         MarketItem.objects.create(id=105, name='隐藏行星资源', market_bucket='planetary', enabled=False)
 
@@ -40,13 +42,13 @@ class MarketCategoryApiTests(TestCase):
             {'id': 'planetary', 'label': '行星资源', 'count': 1},
             {'id': 'minerals', 'label': '矿物', 'count': 1},
             {'id': 'intermediate', 'label': '中间产物', 'count': 1},
-            {'id': 'components', 'label': '组件', 'count': 0},
-            {'id': 'structures', 'label': '受损结构', 'count': 0},
+            {'id': 'components', 'label': '组件', 'count': 1},
+            {'id': 'structures', 'label': '受损结构', 'count': 1},
             {'id': 'other', 'label': '其他', 'count': 1},
         ])
         for bucket, expected in [
             ('currency', '101'), ('planetary', '102'), ('minerals', '103'),
-            ('intermediate', '106'),
+            ('intermediate', '106'), ('components', '107'), ('structures', '108'),
         ]:
             with self.subTest(bucket=bucket):
                 result = self.client.get('/api/market/items/', {'category_id': bucket}).json()
