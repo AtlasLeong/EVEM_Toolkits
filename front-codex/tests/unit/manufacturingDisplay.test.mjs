@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import { fileURLToPath } from 'node:url'
 import { formatCompactIsk } from '../../src/utils/manufacturingDisplay.js'
 
 test('formats exact values below ten thousand without a compact suffix', () => {
@@ -16,4 +18,9 @@ test('formats hundred-million values as hundred-million ISK', () => {
 
 test('keeps absent quotes readable', () => {
   assert.equal(formatCompactIsk(null), '待补价格')
+})
+
+test('prioritizes the manufacturing target and expanded first-level tree images only', async () => {
+  const source = await fs.readFile(fileURLToPath(new URL('../../src/pages/ManufacturingEstimator.jsx', import.meta.url)), 'utf8')
+  assert.match(source, /priority=\{path === '0' \|\| path\.split\('\.'\)\.length === 2 \? 'high' : undefined\}/)
 })

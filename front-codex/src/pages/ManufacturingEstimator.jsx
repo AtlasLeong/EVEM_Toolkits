@@ -45,7 +45,7 @@ function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, exp
     <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`} role="treeitem" aria-selected={selected} aria-expanded={hasChildren ? expanded : undefined}>
       <div className="manufacturing-tree-row" data-testid="manufacturing-tree-row" data-selected={selected ? 'true' : 'false'}>
         <button type="button" className="manufacturing-tree-select" aria-label={`查看 ${node.name}`} onClick={() => onSelect(node.itemId)}>
-          <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" priority={path === '0' ? 'high' : undefined} />
+          <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" priority={path === '0' || path.split('.').length === 2 ? 'high' : undefined} />
           <span className="manufacturing-tree-copy">
             <strong>{node.name}</strong>
             <small>{formatQuantity(node.quantity)} 件 · {node.kind === 'recipe' && !buying ? `自造 · ${CATEGORY_LABELS[node.category] || '制造'}` : '购买'}</small>
