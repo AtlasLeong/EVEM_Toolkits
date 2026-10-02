@@ -67,6 +67,20 @@ class ViewerAllowlistTests(SimpleTestCase):
             self.assertEqual(ViewerAccessMiddleware(lambda _request: 'next')(request), 'next')
 
     @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_activation_validation_routes_remain_public_for_script_clients(self):
+        factory = RequestFactory()
+        for path in ('/api/activationcode/validate-code/', '/api/license/validate-code/'):
+            request = factory.post(path, {}, content_type='application/json')
+            self.assertEqual(ViewerAccessMiddleware(lambda _request: 'next')(request), 'next')
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
+    def test_activation_code_management_routes_remain_protected(self):
+        request = RequestFactory().post('/api/activationcode/generate-code/', {}, content_type='application/json')
+        response = ViewerAccessMiddleware(lambda _request: 'next')(request)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response['WWW-Authenticate'], 'Bearer')
+
+    @override_settings(VIEWER_ALLOWLIST_ENABLED=True, VIEWER_EMAIL_ALLOWLIST=['2235102484@qq.com'])
     def test_api_middleware_allows_only_the_allowlisted_authenticated_user(self):
         middleware = ViewerAccessMiddleware(lambda _request: 'next')
         middleware.authentication = Mock()
