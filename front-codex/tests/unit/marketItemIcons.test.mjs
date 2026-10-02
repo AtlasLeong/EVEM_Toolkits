@@ -132,6 +132,15 @@ test('known icons render decorative lazy images with reserved square dimensions'
   assert.match(markup, /decoding="async"/)
 })
 
+test('known icons forward high priority to eager image loading', async () => {
+  const MarketItemIcon = await loadComponent()
+  const markup = renderToStaticMarkup(React.createElement(MarketItemIcon, {
+    itemId: 28007000000, priority: 'high',
+  }))
+  assert.match(markup, /loading="eager"/)
+  assert.match(markup, /fetchpriority="high"/)
+})
+
 test('icon callers can provide a size and an additional outer class', async () => {
   const MarketItemIcon = await loadComponent()
   const markup = renderToStaticMarkup(React.createElement(MarketItemIcon, {

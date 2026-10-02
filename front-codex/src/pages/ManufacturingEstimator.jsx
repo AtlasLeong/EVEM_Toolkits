@@ -45,7 +45,7 @@ function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, exp
     <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`} role="treeitem" aria-selected={selected} aria-expanded={hasChildren ? expanded : undefined}>
       <div className="manufacturing-tree-row" data-testid="manufacturing-tree-row" data-selected={selected ? 'true' : 'false'}>
         <button type="button" className="manufacturing-tree-select" aria-label={`查看 ${node.name}`} onClick={() => onSelect(node.itemId)}>
-          <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" />
+          <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" priority={path === '0' ? 'high' : undefined} />
           <span className="manufacturing-tree-copy">
             <strong>{node.name}</strong>
             <small>{formatQuantity(node.quantity)} 件 · {node.kind === 'recipe' && !buying ? `自造 · ${CATEGORY_LABELS[node.category] || '制造'}` : '购买'}</small>
@@ -215,7 +215,7 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
           return <section key={group.category} className="manufacturing-target-group" data-testid={`manufacturing-target-group-${group.category}`} aria-label={group.label}>
           <div className="manufacturing-target-group-heading"><strong>{group.label}</strong><span>{group.count}</span></div>
           <div className="manufacturing-target-options" role="listbox" aria-label={`${group.label}目标`} onKeyDown={handleOptionKeyDown}>
-            {group.recipes.map(recipe => <button role="option" aria-selected={recipe.productId === selectedId} aria-label={recipe.name} key={recipe.productId} type="button" tabIndex={recipe.productId === tabStop.productId ? 0 : -1} onFocus={() => setActiveOptionId(recipe.productId)} onClick={() => chooseTarget(recipe.productId)}><MarketItemIcon itemId={recipe.productId} size={28} /><span className="manufacturing-target-copy"><strong>{recipe.name}</strong><small>产出 {recipe.outputNum} 件</small></span>{recipe.productId === selectedId ? <Check size={15} aria-hidden="true" /> : null}</button>)}
+            {group.recipes.map(recipe => <button role="option" aria-selected={recipe.productId === selectedId} aria-label={recipe.name} key={recipe.productId} type="button" tabIndex={recipe.productId === tabStop.productId ? 0 : -1} onFocus={() => setActiveOptionId(recipe.productId)} onClick={() => chooseTarget(recipe.productId)}><MarketItemIcon itemId={recipe.productId} size={28} priority={recipe.productId === selectedId ? 'high' : undefined} /><span className="manufacturing-target-copy"><strong>{recipe.name}</strong><small>产出 {recipe.outputNum} 件</small></span>{recipe.productId === selectedId ? <Check size={15} aria-hidden="true" /> : null}</button>)}
           </div>
         </section>
         }) : <p className="manufacturing-empty">没有匹配目标</p>}
@@ -226,7 +226,7 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
   return <>
     <div ref={pickerRef} className={`manufacturing-target-picker${open ? ' is-open' : ''}`} aria-label="制造目标">
       <div className="manufacturing-target-label"><h3>制造目标</h3><button type="button" className="manufacturing-change-target" aria-label="切换制造目标" aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}>切换目标</button></div>
-      {selected ? <button type="button" className="manufacturing-selected-target" aria-label={`当前制造目标：${selected.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}><MarketItemIcon itemId={selected.productId} size={40} /><span className="manufacturing-target-copy"><strong>{selected.name}</strong><small>{CATEGORY_LABELS[selected.category]}配方 · 产出 {selected.outputNum} 件</small></span><ChevronDown size={15} aria-hidden="true" /></button> : null}
+      {selected ? <button type="button" className="manufacturing-selected-target" aria-label={`当前制造目标：${selected.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}><MarketItemIcon itemId={selected.productId} size={40} priority="high" /><span className="manufacturing-target-copy"><strong>{selected.name}</strong><small>{CATEGORY_LABELS[selected.category]}配方 · 产出 {selected.outputNum} 件</small></span><ChevronDown size={15} aria-hidden="true" /></button> : null}
     </div>
     {targetDialog}
   </>

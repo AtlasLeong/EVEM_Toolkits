@@ -80,6 +80,15 @@ test('shared images preserve dimensions, non-square proportions, and descriptive
   assert.match(markup, /decoding="async"/)
 })
 
+test('high priority images opt into eager loading and high fetch priority', async () => {
+  const { default: GameItemImage } = await load('../../src/components/GameItemImage.jsx')
+  const markup = renderToStaticMarkup(React.createElement(GameItemImage, {
+    item: { item_id: '10100000101' }, alt: '狮鹫级', width: 40, height: 40, priority: 'high',
+  }))
+  assert.match(markup, /loading="eager"/)
+  assert.match(markup, /fetchpriority="high"/)
+})
+
 test('failed loads use the supplied fallback and a different source gets a fresh keyed instance', async () => {
   const { default: GameItemImage } = await load('../../src/components/GameItemImage.jsx')
   const originalUseState = React.useState

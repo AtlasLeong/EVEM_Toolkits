@@ -1,7 +1,7 @@
 import { Package } from 'lucide-react'
 import GameItemImage from './GameItemImage'
 
-export default function MarketItemIcon({ item, itemId, src, size = 40, className = '', mapping }) {
+export default function MarketItemIcon({ item, itemId, src, size = 40, className = '', mapping, priority }) {
   const imageItem = item || { item_id: itemId }
 
   return (
@@ -12,6 +12,7 @@ export default function MarketItemIcon({ item, itemId, src, size = 40, className
     >
       {/* A new item gets a fresh load attempt, even after the previous image failed. */}
       <GameItemImage item={imageItem} src={src} mapping={mapping} imageClassName="market-item-icon-image" width={size} height={size}
+        priority={priority}
         fallback={<Package className="market-item-icon-fallback" size={Math.round(size / 2)} aria-hidden="true" />} />
     </span>
   )
