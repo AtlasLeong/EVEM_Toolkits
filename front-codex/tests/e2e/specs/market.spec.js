@@ -74,6 +74,49 @@ test('market exposes the intermediate product category from the catalog', async 
   await expect(page.getByRole('heading', { name: '六元复合物' })).toBeVisible()
 })
 
+test('market exposes component and damaged structure buckets with category switching', async ({ page }) => {
+  const requests = []
+  await installApiMock(page, ({ method, url }) => {
+    requests.push(`${method} ${url.pathname}${url.search}`)
+    if (method === 'GET' && url.pathname === '/api/market/categories/') return json([
+      { id: 'currency', label: '货币 · 伊甸币', count: 1 },
+      { id: 'planetary', label: '行星资源', count: 34 },
+      { id: 'minerals', label: '矿物', count: 10 },
+      { id: 'intermediate', label: '中间产物', count: 12 },
+      { id: 'components', label: '组件', count: 58 },
+      { id: 'structures', label: '受损结构', count: 16 },
+    ])
+    if (method === 'GET' && url.pathname === '/api/market/items/') {
+      const categoryId = url.searchParams.get('category_id')
+      if (categoryId === 'structures') return json({ count: 16, results: [
+        { item_id: '42000000001', name: '艾玛4级受损结构', category: '受损结构', market_bucket: 'structures', scope: 'jita_h4', best_sell: '1200000', best_buy: '1100000', observed_at: freshSample, status: 'fresh' },
+      ] })
+      if (categoryId === 'components') return json({ count: 58, results: [
+        { item_id: '41007000001', name: '旗舰船只维护舱', category: '组件', market_bucket: 'components', scope: 'jita_h4', best_sell: '250000', best_buy: '210000', observed_at: freshSample, status: 'fresh' },
+        { item_id: '41007000002', name: '建筑建造组件', category: '组件', market_bucket: 'components', scope: 'jita_h4', best_sell: '180000', best_buy: '160000', observed_at: freshSample, status: 'fresh' },
+      ] })
+      return json({ count: 1, results: [
+        { item_id: '28007000000', name: '伊甸币', category: '货币', market_bucket: 'currency', scope: 'jita_h4', best_sell: '1', best_buy: '1', observed_at: freshSample, status: 'fresh' },
+      ] })
+    }
+    if (method === 'GET' && url.pathname.endsWith('/series/')) return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '250000', best_buy: '210000' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+    return undefined
+  })
+
+  await page.goto('/market')
+  await expect(page.getByRole('button', { name: /组件 58/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /受损结构 16/ })).toBeVisible()
+
+  await page.getByRole('button', { name: /组件 58/ }).click()
+  await expect.poll(() => requests.some(value => value.includes('category_id=components'))).toBeTruthy()
+  await expect(page.getByRole('heading', { name: '旗舰船只维护舱' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /建筑建造组件/ })).toBeVisible()
+
+  await page.getByRole('button', { name: /受损结构 16/ }).click()
+  await expect.poll(() => requests.some(value => value.includes('category_id=structures'))).toBeTruthy()
+  await expect(page.getByRole('heading', { name: '艾玛4级受损结构' })).toBeVisible()
+})
+
 test('market terminal hides internal ids and explanatory footnotes', async ({ page }) => {
   await installApiMock(page, ({ url }) => {
     if (url.pathname === '/api/market/categories/') return json([{ id: 1000, label: '舰船', count: 1 }])
