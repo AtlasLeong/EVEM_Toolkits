@@ -8,6 +8,7 @@ from django.test import override_settings
 
 from Killboard.models import CollectionPolicy, KillItem, KillReport, ShipClass
 from Killboard.services import persist_report
+from Killboard.serializers import detail_payload, participant_payload, report_payload
 
 
 def parsed_report(*, kill_id=100, ship_class_key="battleship", isk_lost=Decimal("123.45"), completeness=None):
@@ -50,6 +51,127 @@ def parsed_report(*, kill_id=100, ship_class_key="battleship", isk_lost=Decimal(
 
 
 class KillReportPersistenceTests(TestCase):
+    def ticker_report(self):
+        parsed = parsed_report(completeness='partial')
+        parsed.update(victim_corporation_id=202, victim_corporation_name='双子王的暗卫喵',
+                      victim_corporation_ticker='GCG1')
+        parsed['participants'][0].update(corporation_id=201, corporation_name='罗德骑士团',
+                                         corporation_ticker='KOFR')
+        return parsed
+
+    def test_verified_tickers_survive_database_and_all_payload_round_trips(self):
+        report, created = persist_report(self.ticker_report())
+        report.refresh_from_db()
+        row = report.participants.get()
+        self.assertTrue(created)
+        self.assertEqual(getattr(report, 'victim_corporation_ticker', None), 'GCG1')
+        self.assertEqual(getattr(row, 'corporation_ticker', None), 'KOFR')
+        self.assertEqual(report_payload(report).get('victim_corporation_ticker'), 'GCG1')
+        self.assertEqual(participant_payload(row).get('corporation_ticker'), 'KOFR')
+        detail = detail_payload(report)
+        self.assertEqual(detail.get('victim_corporation_ticker'), 'GCG1')
+        self.assertEqual(detail['participants'][0].get('corporation_ticker'), 'KOFR')
+
+    def test_same_corporation_partial_refresh_preserves_known_tickers(self):
+        for missing_id in (False, True):
+            with self.subTest(missing_id=missing_id):
+                original = self.ticker_report()
+                original['kill_id'] = 120 + int(missing_id)
+                persist_report(original)
+                incoming = self.ticker_report()
+                incoming['kill_id'] = original['kill_id']
+                incoming['victim_corporation_ticker'] = ''
+                incoming['victim_corporation_name'] = ''
+                incoming['participants'][0]['corporation_ticker'] = ''
+                if missing_id:
+                    incoming['victim_corporation_id'] = None
+                    incoming['participants'][0]['corporation_id'] = None
+                report, created = persist_report(incoming)
+                self.assertFalse(created)
+                self.assertEqual(getattr(report, 'victim_corporation_ticker', None), 'GCG1')
+                self.assertEqual(report.victim_corporation_name, '双子王的暗卫喵')
+                self.assertEqual(getattr(report.participants.get(), 'corporation_ticker', None), 'KOFR')
+
+    def test_inferred_victim_corporation_id_stays_associated_with_verified_name_and_ticker(self):
+        from Killboard.parser import parse_kill_blob
+
+        persist_report(self.ticker_report())
+        incoming = parse_kill_blob(
+            '<other data="opaque"/>',
+            summary={'kill_id': 100, 'victim_character_id': 7},
+            identity_map={
+                'characters': {7: {'name': 'Victim', 'corporation_id': 203}},
+                'corporations': {203: {'name': 'New victim corp', 'ticker': 'BBB'}},
+            },
+        )
+        report, _ = persist_report(incoming)
+        report.refresh_from_db()
+        self.assertEqual(
+            (incoming['victim_corporation_id'], report.victim_corporation_id,
+             report.victim_corporation_name, report.victim_corporation_ticker),
+            (203, 203, 'New victim corp', 'BBB'),
+        )
+
+    def test_confirmed_changed_victim_corporation_without_name_clears_old_name(self):
+        from Killboard.parser import parse_kill_blob
+
+        persist_report(self.ticker_report())
+        incoming = parse_kill_blob(
+            '<other data="opaque"/>',
+            summary={'kill_id': 100, 'victim_character_id': 7, 'victim_corporation_id': 203},
+            identity_map={'corporations': {203: {'ticker': 'BBB'}}},
+        )
+        report, _ = persist_report(incoming)
+        report.refresh_from_db()
+        self.assertEqual(report.victim_corporation_id, 203)
+        self.assertEqual(report.victim_corporation_name, '')
+        self.assertEqual(report.victim_corporation_ticker, 'BBB')
+
+    def test_changed_corporation_with_missing_ticker_clears_stale_ticker(self):
+        persist_report(self.ticker_report())
+        incoming = self.ticker_report()
+        incoming.update(victim_corporation_id=203, victim_corporation_ticker='')
+        incoming['participants'][0].update(corporation_id=204, corporation_ticker='')
+        report, _ = persist_report(incoming)
+        self.assertEqual(report.victim_corporation_id, 203)
+        self.assertEqual(getattr(report, 'victim_corporation_ticker', None), '')
+        row = report.participants.get()
+        self.assertEqual(row.corporation_id, 204)
+        self.assertEqual(getattr(row, 'corporation_ticker', None), '')
+
+    def test_changed_corporation_retains_new_verified_ticker(self):
+        persist_report(self.ticker_report())
+        incoming = self.ticker_report()
+        incoming.update(victim_corporation_id=203, victim_corporation_ticker='NEWV')
+        incoming['participants'][0].update(corporation_id=204, corporation_ticker='NEWP')
+        report, _ = persist_report(incoming)
+        self.assertEqual(getattr(report, 'victim_corporation_ticker', None), 'NEWV')
+        self.assertEqual(getattr(report.participants.get(), 'corporation_ticker', None), 'NEWP')
+
+    def test_invalid_ticker_refresh_preserves_same_corp_and_clears_changed_corp(self):
+        from Killboard.parser import parse_kill_blob
+
+        for index, ticker in enumerate((123, 'X' * 256)):
+            with self.subTest(ticker_type=type(ticker).__name__):
+                original = self.ticker_report()
+                original['kill_id'] = 130 + index
+                persist_report(original)
+                for changed in (False, True):
+                    victim_corp = 203 if changed else 202
+                    participant_corp = 204 if changed else 201
+                    incoming = parse_kill_blob(
+                        f'<attackers><a c=8 r={participant_corp} d=123/></attackers>',
+                        summary={'kill_id': original['kill_id'], 'victim_character_id': 7,
+                                 'victim_corporation_id': victim_corp},
+                        identity_map={'corporations': {
+                            victim_corp: {'name': 'Victim corp', 'ticker': ticker},
+                            participant_corp: {'name': 'Participant corp', 'ticker': ticker},
+                        }},
+                    )
+                    report, _ = persist_report(incoming)
+                    self.assertEqual(report.victim_corporation_ticker, '' if changed else 'GCG1')
+                    self.assertEqual(report.participants.get().corporation_ticker, '' if changed else 'KOFR')
+
     def test_equal_completeness_base_refresh_preserves_enriched_participant_names(self):
         original = parsed_report(completeness='partial')
         original['participants'][0].update(corporation_id=9, corporation_name='Known corp',

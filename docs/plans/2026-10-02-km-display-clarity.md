@@ -86,7 +86,23 @@ untracked CLI QA harness/evidence under `front-codex/output/playwright/km-clarit
 
 - [x] Root-cause evidence and delegated design decisions documented.
 - [x] Reused isolated worktree, fresh branch, baseline frontend 515/515 passes.
-- [ ] Backend tickers: red/green, spec review, quality review.
-- [ ] Participant/group presentation: red/green, spec review, quality review.
-- [ ] Real browser image geometry and visual QA verified.
+- [x] Backend tickers: red/green, spec review, quality review.
+- [x] Participant/group presentation: red/green, spec review, quality review.
+- [x] Real browser image geometry and visual QA verified.
 - [ ] Complete regression suite and production release verified.
+
+## Verification before release
+
+- Backend: 278 explicit Killboard + GameData tests passed; migration drift check clean.
+- Frontend: 522 unit tests passed; production build and bundle budget passed.
+- Deployment safety: 199 tests passed (14 platform/environment-dependent skips).
+- Independent spec and quality reviews passed after two display-boundary fixes
+  and a parser-to-persistence corporation-association regression fix.
+- Browser CLI: real complete PNGs for Naglfar Guard, Noctis II and Hades at
+  1440x960, 1024x768 and 390x844. All nine image bounds fit both the artwork
+  stage and hero, use contain, have no page horizontal overflow and have no
+  temporary debugging stylesheet. Desktop/tablet/mobile screenshots inspected.
+- Drop filter shows only high/low/other for the mixed synthetic fixture; changing
+  KM restores all five groups. No missing-identity/NPC captions in the page.
+- Browser fixture is explicitly marked local-preview and remains ignored output,
+  not a production report or a replacement for live-source verification.

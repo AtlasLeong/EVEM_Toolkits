@@ -8,6 +8,18 @@ from Killboard.serializers import item_payload, participant_payload, report_payl
 
 
 class KillboardSerializerDisplayTests(SimpleTestCase):
+    def test_missing_corporation_ticker_is_an_additive_blank_payload_field(self):
+        report = self.time_report('kill_api', None)
+        self.assertEqual(report_payload(report).get('victim_corporation_ticker'), '')
+        row = SimpleNamespace(
+            character_id=None, character_name='', corporation_id=None, corporation_name='',
+            alliance_id=None, alliance_name='', damage=None, damage_pct=None,
+            is_final_blow=False, is_top_damage=False, ship_type_id=None,
+            weapon_type_id=None, camouflaged_faction_id=None,
+            feat_score=None, is_source_summary=False,
+        )
+        self.assertEqual(participant_payload(row).get('corporation_ticker'), '')
+
     def time_report(self, source, point):
         return SimpleNamespace(
             kill_id=19748417, ship_type_id=None, ship_name='', ship_class_key='',

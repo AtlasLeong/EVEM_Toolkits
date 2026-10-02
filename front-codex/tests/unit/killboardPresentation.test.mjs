@@ -39,25 +39,25 @@ test('historical rejection reasons cannot claim collection remains paused after 
   }), expected)
 })
 
-test('participant ships show exact API hull names and explicit missing-name fallback', () => {
+test('participant ships show exact API hull names without diagnostic placeholders', () => {
   assert.equal(typeof presentation.participantShipLabel, 'function')
   assert.equal(presentation.participantShipLabel({ ship_type_id: '10500000601', ship_name: '元帅级' }), '元帅级')
   assert.equal(presentation.participantShipLabel({ ship_type_id: '10500000408', ship_name: ' 万王宝座级海军型 ' }), '万王宝座级海军型')
-  assert.equal(presentation.participantShipLabel({ ship_type_id: '999', ship_name: '' }), '舰船名称待补')
-  assert.equal(presentation.participantShipLabel({ ship_type_id: null }), '舰船资料未返回')
-  assert.equal(presentation.participantShipLabel(), '舰船资料未返回')
+  assert.equal(presentation.participantShipLabel({ ship_type_id: '999', ship_name: '' }), '')
+  assert.equal(presentation.participantShipLabel({ ship_type_id: null }), '')
+  assert.equal(presentation.participantShipLabel(), '')
 })
 
-test('participant identity prefers names and keeps IDs as secondary context', () => {
+test('participant identity prefers names and never promotes opaque IDs to display names', () => {
   assert.deepEqual(participantIdentity({
     character_id: '10004587459',
     character_name: '',
     corporation_id: '1000001680',
     corporation_name: '',
   }), {
-    name: '角色 ID 10004587459',
+    name: '参战舰船',
     nameDetail: '10004587459',
-    corporation: '军团 ID 1000001680',
+    corporation: '',
     corporationDetail: '1000001680',
     named: false,
   })
@@ -73,16 +73,16 @@ test('participant identity prefers names and keeps IDs as secondary context', ()
     corporationDetail: 'ID 1000000263',
     named: true,
   })
-  assert.equal(participantIdentity({ character_name: '萨沙少尉' }).corporation, '军团资料未返回')
+  assert.equal(participantIdentity({ character_name: '萨沙少尉' }).corporation, '')
 })
 
-test('participant identity labels missing corporation data explicitly', () => {
-  assert.equal(participantIdentity({ character_name: '玩家' }).corporation, '军团资料未返回')
+test('participant identity omits missing corporation copy', () => {
+  assert.equal(participantIdentity({ character_name: '玩家' }).corporation, '')
 })
 
 test('explicit NPC participants use an honest fallback without inventing a character name', () => {
   const identity = participantIdentity({ identity_kind: 'npc', damage: 1234 })
-  assert.deepEqual(identity, { name: 'NPC', nameDetail: '', corporation: '非玩家角色', corporationDetail: '', named: false, isNpc: true })
+  assert.deepEqual(identity, { name: 'NPC', nameDetail: '', corporation: '', corporationDetail: '', named: false, isNpc: true })
   assert.deepEqual(visibleParticipantRows([{ identity_kind: 'npc', damage: 1234 }]), [{ identity_kind: 'npc', damage: 1234 }])
 })
 
@@ -144,7 +144,7 @@ test('participant note distinguishes hidden named players from unnamed damage no
     ...Array.from({ length: 8 }, (_, index) => ({ character_name: `玩家${index + 1}` })),
     { character_name: '', damage: 100 },
   ]
-  assert.equal(participantVisibilityNote(rows), '展示前 7 条可识别角色；另有 1 名角色和 1 条未命名火力记录未展开。')
+  assert.equal(participantVisibilityNote(rows), '展示 7 条参战记录；另有 2 条记录未展开。')
 })
 
 test('participant note counts visible NPC and source records without claiming zero shown roles', () => {
@@ -152,8 +152,26 @@ test('participant note counts visible NPC and source records without claiming ze
     ...Array.from({ length: 8 }, (_, index) => ({ identity_kind: 'npc', display_name: `NPC${index}` })),
     { damage: 100 },
   ]
-  assert.equal(participantVisibilityNote(rows), '展示 7 条参战记录（含 NPC 或来源记录）；另有 2 条记录未展开。')
+  assert.equal(participantVisibilityNote(rows), '展示 7 条参战记录；另有 2 条记录未展开。')
   assert.equal(participantVisibilityNote(rows.slice(0, 7)), '')
+})
+
+test('ordinary unnamed participant rows use their actual hull or source name', () => {
+  const row = { character_id: '11', corporation_id: '22', ship_name: '混乱风暴发射器', is_top_damage: true }
+  assert.equal(participantIdentity(row).name, '混乱风暴发射器')
+  assert.equal(participantIdentity(row).corporation, '')
+  assert.equal(participantIdentity({ ...row, display_name: '古斯塔斯列兵', identity_kind: 'camouflaged' }).name, '古斯塔斯列兵')
+  assert.equal(participantIdentity({ ...row, display_name: '科尔', identity_kind: 'npc' }).name, '科尔')
+  assert.equal(participantIdentity({ ...row, character_name: '真实玩家', display_name: '科尔' }).name, '真实玩家')
+  assert.equal(participantIdentity({ ...row, display_name: '   ', ship_name: '混乱风暴发射器' }).name, '混乱风暴发射器')
+})
+
+test('corporation display uses only supplied names and actual English tags', () => {
+  assert.equal(typeof presentation.corporationLabel, 'function')
+  assert.equal(presentation.corporationLabel('罗德骑士团', 'KOFR'), '[KOFR] 罗德骑士团')
+  assert.equal(presentation.corporationLabel('罗德骑士团', ''), '罗德骑士团')
+  assert.equal(presentation.corporationLabel('', ''), '')
+  assert.equal(participantIdentity({ character_name: '刀功料理', corporation_name: '罗德骑士团', corporation_ticker: 'KOFR' }).corporation, '[KOFR] 罗德骑士团')
 })
 
 test('collector audit labels use fixed readable classifiers and never echo remote text', () => {
@@ -263,7 +281,7 @@ test('verified expanded client slots include mechanical and defence rigs but not
   }
   assert.equal(typeof presentation.equipmentSlotLabel, 'function')
   assert.equal(presentation.equipmentSlotLabel('原始槽位 100'), '改装件')
-  assert.equal(presentation.equipmentSlotLabel('原始槽位 108'), '槽位待确认')
+  assert.equal(presentation.equipmentSlotLabel('原始槽位 108'), '其他')
 })
 
 test('source-only named highlights remain visible separately from the first seven character rows', () => {
@@ -277,6 +295,6 @@ test('source-only named highlights remain visible separately from the first seve
   assert.deepEqual(visible.map(row => row.display_name || row.character_name), ['混乱风暴发射器', '玩家1', '玩家2', '玩家3', '玩家4', '玩家5', '玩家6', '玩家7'])
   const identity = participantIdentity(rows[0])
   assert.equal(identity.name, '混乱风暴发射器')
-  assert.equal(identity.corporation, '来源记录 · 无角色身份')
+  assert.equal(identity.corporation, '')
   assert.equal(presentation.participantIdentity({ ship_name: '元帅级', identity_kind: 'source', is_final_blow: true }).name, '元帅级')
 })

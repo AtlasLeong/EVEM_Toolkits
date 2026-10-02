@@ -92,6 +92,20 @@ function harness() {
     async flush() { await settle(); render() },
     refresh() { nodes(tree).find(node => node.props.className === 'kb-action').props.onClick(); render() },
     route(id) { killId = id; render(); render() },
+    component(node) {
+      const stateOffset = stateIndex, refOffset = refIndex, effectOffset = effectIndex
+      return {
+        render(props = node.props) {
+          stateIndex = stateOffset; refIndex = refOffset; effectIndex = effectOffset
+          const subtree = node.type(props)
+          for (const { index, callback } of effects.splice(0)) {
+            cleanups[index]?.()
+            cleanups[index] = callback()
+          }
+          return subtree
+        },
+      }
+    },
     tick() { for (const timer of timers.values()) timer.callback(); render() },
     focus() { windowEvents.get('focus')?.(); render() },
     visibility(value) { document.visibilityState = value; documentEvents.get('visibilitychange')?.(); render() },
@@ -309,6 +323,57 @@ test('equipment panel exposes a dropped-only quick filter and per-slot drop coun
   page.unmount()
 })
 
+test('all equipment is separated in high mid low rig other order and filters omit empty sections', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const node = nodes(page.tree).find(node => typeof node.type === 'function' && node.type.name === 'Equipment')
+  const component = page.component(node)
+  const report = { ...privateReport(), items: [
+    { name: 'RIG LOST', slot: 'rig', status: 'destroyed' },
+    { name: 'LOW DROP', slot: 'low', status: 'mixed', quantity_dropped: 1 },
+    { name: 'HIGH DROP', slot: 'high', status: 'dropped' },
+    { name: 'OTHER LOST', slot: 'unknown', status: 'destroyed' },
+    { name: 'MID LOST', slot: 'mid', status: 'destroyed' },
+    { name: 'HIGH LOST', slot: 'high', status: 'destroyed' },
+  ] }
+  const props = { ...node.props, report }
+  let panel = component.render(props)
+  const sections = tree => nodes(tree).filter(item => item.props.className === 'kb-equipment-group')
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['high', 'mid', 'low', 'rig', 'other'])
+  for (const section of sections(panel)) assert.ok(nodes(section).some(item => item.type === 'h4'))
+  assert.match(JSON.stringify(sections(panel)[1]), /掉落 0 项/)
+  assert.match(JSON.stringify(sections(panel)[0]), /高槽|HIGH DROP|HIGH LOST/)
+  nodes(panel).find(item => item.props['aria-label'] === '只看已掉落装备').props.onClick()
+  panel = component.render(props)
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['high', 'low'])
+  assert.doesNotMatch(JSON.stringify(panel), /OTHER LOST|MID LOST|RIG LOST|HIGH LOST/)
+  const lowTab = nodes(panel).find(item => item.type === 'button' && JSON.stringify(item.children).includes('低槽'))
+  lowTab.props.onClick()
+  panel = component.render(props)
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['low'])
+  const next = { ...props, report: { ...report, kill_id: '2' } }
+  component.render(next)
+  panel = component.render(next)
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['high', 'mid', 'low', 'rig', 'other'])
+  page.unmount()
+})
+
+test('the hero identifies corporation tag and hull class without diagnostic identity copy', async () => {
+  const page = harness()
+  page.render()
+  const report = { ...privateReport(), victim_corporation_name: '罗德骑士团', victim_corporation_ticker: 'KOFR', ship_class_label: '突击航空母舰' }
+  page.calls.list[0].resolve({ results: [report], count: 1 })
+  page.calls.detail[0].resolve(report)
+  page.calls.status[0].resolve({})
+  await page.flush()
+  const hero = nodes(page.tree).find(node => node.props.className === 'kb-hero kb-panel')
+  assert.match(JSON.stringify(hero), /\[KOFR\] 罗德骑士团/)
+  assert.ok(nodes(hero).some(node => node.props.className === 'kb-hull-class' && JSON.stringify(node.children).includes('突击航空母舰')))
+  assert.ok(nodes(hero).some(node => node.props.className === 'kb-hero-corporation'))
+  assert.doesNotMatch(JSON.stringify(hero), /军团资料未返回|目标身份未返回/)
+  page.unmount()
+})
+
 test('equipment list uses a compact multi-column layout with independent scrolling', () => {
   const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
   assert.match(css, /\.kb-item-list\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)/)
@@ -373,11 +438,20 @@ test('the hero exposes a copyable in-game KM tag and visible exact ISK value', a
   page.unmount()
 })
 
-test('hero artwork has an uncropped, wider containment stage', () => {
+test('hero artwork constrains its grid track instead of trusting object fit alone', () => {
   const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
   assert.match(css, /\.kb-hero\s*\{[^}]*grid-template-columns:minmax\(190px, 260px\)/)
-  assert.match(css, /\.kb-hero \.kb-asset--ship\s*\{[^}]*height:132px;[^}]*overflow:visible/)
+  assert.match(css, /\.kb-hero \.kb-asset--ship\s*\{[^}]*grid-template-rows:minmax\(0,1fr\)/)
   assert.match(css, /\.kb-hero \.kb-asset--ship img\s*\{[^}]*object-fit:contain;[^}]*object-position:center/)
+})
+
+test('equipment category dividers span the scroll area and category items keep the column layout', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-equipment-group\s*\{[^}]*grid-column:1\s*\/\s*-1/)
+  assert.match(css, /\.kb-equipment-group-items\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
+  assert.match(css, /@container kb-equipment \(max-width:560px\)/)
+  assert.match(css, /@container kb-participants \(max-width:450px\)/)
+  assert.match(css, /\.kb-participant-main strong,\.kb-participant-main \.kb-participant-corporation\s*\{[^}]*white-space:normal/)
 })
 
 test('refresh reloads health and hides a newly persisted cooldown badge', async () => {

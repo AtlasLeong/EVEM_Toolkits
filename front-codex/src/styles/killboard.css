@@ -253,7 +253,7 @@
    gives the metadata a real reading column, and removes the heavy framed
    image treatment that clipped wide silhouettes. */
 .kb-hero { display:grid; grid-template-columns:minmax(190px, 260px) minmax(0, 1fr) minmax(190px, 235px); align-items:center; gap:20px; }
-.kb-hero .kb-asset--ship { width:100%; height:132px; overflow:visible; border:0; border-radius:0; background:transparent; }
+.kb-hero .kb-asset--ship { width:100%; height:168px; grid-template-rows:minmax(0,1fr); overflow:visible; border:0; border-radius:0; background:transparent; }
 .kb-hero .kb-asset--ship img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; filter:drop-shadow(0 10px 16px rgb(0 0 0 / 28%)); }
 .kb-hero-value { display:grid; justify-items:end; gap:5px; min-width:0; }
 .kb-hero-value strong { margin:0; white-space:nowrap; }
@@ -266,7 +266,7 @@
   .kb-main { padding:14px; }
   .kb-hero { min-height:124px; padding:15px 17px; }
   .kb-hero { grid-template-columns:minmax(160px, 190px) minmax(0, 1fr) minmax(165px, 205px); gap:14px; }
-  .kb-hero .kb-asset--ship { width:100%; height:100px; }
+  .kb-hero .kb-asset--ship { width:100%; height:132px; }
   .kb-hero h2 { font-size:27px; }
   .kb-content-grid .kb-panel { padding:14px; }
   .kb-participant--with-ship { grid-template-columns:72px minmax(0,1fr) auto; column-gap:9px; }
@@ -275,7 +275,7 @@
 }
 @media (max-width:760px) {
   .kb-hero { display:flex; align-items:flex-start; flex-direction:column; gap:10px; }
-  .kb-hero .kb-asset--ship { width:100%; max-width:250px; height:110px; align-self:center; }
+  .kb-hero .kb-asset--ship { width:100%; max-width:250px; height:144px; align-self:center; }
   .kb-hero h2 { font-size:28px; }
   .kb-content-grid .kb-panel { padding:15px; }
   .kb-participant--with-ship { grid-template-columns:72px minmax(0,1fr) auto; }
@@ -283,4 +283,42 @@
   .kb-participant-main strong { font-size:14px; }
   .kb-participant-stats { min-width:90px; }
   .kb-hero-value { width:100%; justify-items:start; text-align:left; }
+}
+
+/* Scan-friendly hierarchy: real names and tags, not collection diagnostics. */
+.kb-hero h2 { margin-bottom:5px; font-weight:800; line-height:1.2; }
+.kb-hull-class { display:inline-flex; align-items:center; margin-bottom:12px; padding:3px 8px; border:1px solid #416b77; border-radius:4px; color:#c5e8ee; background:#102b37; font-size:11px; font-weight:600; line-height:1.4; }
+.kb-hero-victim { gap:6px; }
+.kb-hero-victim .kb-victim-name { font-size:16px; }
+.kb-hero-corporation { display:flex; align-items:baseline; gap:7px; min-width:0; }
+.kb-hero-corporation > span { flex:0 0 auto; color:#9bb7be; font-size:10px; letter-spacing:.06em; }
+.kb-hero-corporation > strong { min-width:0; color:#9aeddf; font-size:14px; font-weight:700; }
+.kb-hero-victim .kb-hero-alliance { color:#a7bec4; font-size:11px; }
+.kb-participant-main .kb-participant-corporation { color:#9aeddf; font-weight:600; }
+.kb-participant-main .kb-participant-hull { color:#bdceda; font-size:12px; font-weight:600; }
+.kb-participant-main strong,.kb-participant-main .kb-participant-corporation { white-space:normal; overflow-wrap:anywhere; }
+.kb-participant-main .kb-participant-hull { white-space:normal; overflow-wrap:anywhere; }
+.kb-hero-corporation > strong { white-space:normal; overflow-wrap:anywhere; }
+.kb-participants-panel { container-type:inline-size; container-name:kb-participants; }
+@container kb-participants (max-width:450px) {
+  .kb-participant--with-ship { grid-template-columns:88px minmax(0,1fr); row-gap:7px; }
+  .kb-participant-stats { grid-column:2; grid-row:2; min-width:0; justify-items:start; text-align:left; }
+}
+
+/* Each category spans the scroll pane; rows remain compact inside the section. */
+.kb-equipment-panel { container-type:inline-size; container-name:kb-equipment; }
+.kb-equipment-group { grid-column:1 / -1; min-width:0; }
+.kb-equipment-group-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin:12px 0 3px; padding:7px 10px; border-left:2px solid #77e6e0; border-radius:4px; background:#102832; }
+.kb-equipment-group:first-child .kb-equipment-group-head { margin-top:0; }
+.kb-equipment-group-head h4 { margin:0; color:#c9f2ee; font-size:12px; font-weight:700; letter-spacing:.04em; }
+.kb-equipment-group-head > span { color:#a7c3c8; font-size:10px; white-space:nowrap; }
+.kb-equipment-group-items { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 14px; min-width:0; }
+.kb-item--dropped,.kb-item--mixed { margin-inline:0; padding-inline:6px !important; border:1px solid rgb(103 181 228 / 35%); border-radius:7px; background:linear-gradient(90deg,rgb(43 117 173 / 25%),rgb(26 70 110 / 14%)); }
+.kb-item--mixed { border-style:dashed; }
+@container kb-equipment (max-width:560px) {
+  .kb-equipment-group-items { grid-template-columns:1fr; }
+}
+@media (max-width:760px) {
+  .kb-equipment-group-items { grid-template-columns:1fr; }
+  .kb-hero-victim .kb-victim-name { font-size:15px; }
 }

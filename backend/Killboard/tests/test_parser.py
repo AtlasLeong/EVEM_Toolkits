@@ -279,10 +279,47 @@ class KillBlobParserTests(unittest.TestCase):
         participant = result["participants"][0]
         self.assertEqual(participant["character_name"], "刀功料理")
         self.assertEqual(participant["corporation_name"], "罗德骑士团")
+        self.assertEqual(participant.get("corporation_ticker"), "KOFR")
         self.assertEqual(participant["alliance_name"], "联盟一")
         self.assertEqual(result["victim_name"], "三天没挨打")
         self.assertEqual(result["victim_corporation_name"], "双子王的暗卫喵")
+        self.assertEqual(result.get("victim_corporation_ticker"), "GCG1")
         self.assertEqual(result["victim_alliance_name"], "联盟二")
+
+    def test_missing_verified_tickers_are_blank_not_derived_from_corporation_names(self):
+        for identity in (None, {}, {"corporations": {201: "Some English Corp", 202: {"name": "双子王"}}}):
+            with self.subTest(identity=identity):
+                result = parse_kill_blob(
+                    '<attackers><a c=101 r=201 d=100/></attackers>',
+                    summary={"kill_id": 19748417, "victim_character_id": 42,
+                             "victim_corporation_id": 202},
+                    identity_map=identity,
+                )
+                self.assertEqual(result.get("victim_corporation_ticker"), "")
+                self.assertEqual(result["participants"][0].get("corporation_ticker"), "")
+
+    def test_final_summary_participant_gets_verified_corporation_ticker(self):
+        result = parse_kill_blob(
+            '<other data="opaque"/>',
+            summary={"kill_id": 19748418, "final_character_id": 101,
+                     "final_corporation_id": 201},
+            identity_map={"corporations": {201: {"name": "罗德骑士团", "ticker": "KOFR"}}},
+        )
+        self.assertEqual(result["participants"][0].get("corporation_ticker"), "KOFR")
+
+    def test_malformed_or_oversized_corporation_tickers_are_absent_not_truncated(self):
+        for ticker in (None, 123, {}, ['TAG'], 'X' * 256):
+            with self.subTest(ticker_type=type(ticker).__name__):
+                result = parse_kill_blob(
+                    '<attackers><a c=101 r=201 d=100/></attackers>',
+                    summary={"kill_id": 19748417, "victim_corporation_id": 202},
+                    identity_map={"corporations": {
+                        201: {"name": "罗德骑士团", "ticker": ticker},
+                        202: {"name": "双子王的暗卫喵", "ticker": ticker},
+                    }},
+                )
+                self.assertEqual(result["victim_corporation_ticker"], "")
+                self.assertEqual(result["participants"][0]["corporation_ticker"], "")
 
     def test_captured_blob_without_attackers_keeps_summary_identity_and_unknown_count(self):
         result = parse_kill_blob(

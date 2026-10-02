@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, AlertTriangle, Copy, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getKillReport, getKillboardStatus, listKillReports } from '../services/apiKillboard'
-import { copyKillboardTag, equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
+import { copyKillboardTag, corporationLabel, equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
 import KillParticipantRow from '../components/killboard/KillParticipantRow'
 import GameItemImage from '../components/GameItemImage'
 import '../styles/killboard.css'
@@ -53,10 +53,6 @@ function classLabel(row) {
   return row?.ship_class_label || row?.ship_class_key || '舰船'
 }
 
-function statusLabel(value, fallback) {
-  return value === 'provided' ? fallback : value === 'summary' ? '仅最后一击' : value === 'missing' ? '来源未提供' : value === 'unknown' ? '来源未提供' : fallback
-}
-
 function itemStatusLabel(value) {
   return { dropped: '已掉落', destroyed: '已毁', mixed: '部分掉落', unknown: '状态未知' }[value] || '状态未知'
 }
@@ -91,7 +87,7 @@ function Participants({ report, hidden = false, compact = false }) {
   const visibilityNote = participantVisibilityNote(rows)
   return <section className="kb-panel kb-participants-panel" id="kb-panel-people" role={compact ? 'tabpanel' : 'region'} aria-labelledby={compact ? 'kb-tab-people' : 'kb-heading-people'} hidden={hidden}>
     <div className="kb-panel-head"><div><span className="kb-eyebrow">COMBATANTS</span><h3 id="kb-heading-people">参战记录</h3></div><span className="kb-panel-count">{report?.participant_count ?? '—'} 条记录</span></div>
-    {report?.participants_status !== 'provided' && !rows.length ? <EmptyState title="参与者明细暂不可用">{statusLabel(report?.participants_status, '当前报告未提供攻击列表')}</EmptyState> : visibleRows.length ? <><div className="kb-participant-list">{visibleRows.map((row, index) => <KillParticipantRow row={row} key={`${row.character_id || row.character_name || 'unknown'}-${index}`} />)}</div>{visibilityNote ? <p className="kb-participant-note">{visibilityNote}</p> : null}</> : <EmptyState title="未解析到玩家身份">报告包含伤害记录，但暂未返回可展示的玩家名称。</EmptyState>}
+    {visibleRows.length ? <><div className="kb-participant-list">{visibleRows.map((row, index) => <KillParticipantRow row={row} key={`${row.character_id || row.character_name || 'unknown'}-${index}`} />)}</div>{visibilityNote ? <p className="kb-participant-note">{visibilityNote}</p> : null}</> : <EmptyState title="暂无参战记录" />}
   </section>
 }
 
@@ -104,12 +100,33 @@ function Equipment({ report, hidden = false, compact = false }) {
   const [activeGroup, setActiveGroup] = useState('all')
   const [dropOnly, setDropOnly] = useState(false)
   useEffect(() => { setActiveGroup('all'); setDropOnly(false) }, [report?.kill_id])
-  const groupedRows = activeGroup === 'all' ? rows : groups.find(group => group.key === activeGroup)?.items || []
-  const visibleRows = dropOnly ? groupedRows.filter(itemHasDrop) : groupedRows
+  const visibleGroups = groups.filter(group => activeGroup === 'all' || group.key === activeGroup)
+    .map(group => ({ ...group, items: dropOnly ? group.dropItems : group.items }))
+    .filter(group => group.items.length)
   const droppedCount = rows.filter(itemHasDrop).length
   return <section className="kb-panel kb-equipment-panel" id="kb-panel-equipment" role={compact ? 'tabpanel' : 'region'} aria-labelledby={compact ? 'kb-tab-equipment' : 'kb-heading-equipment'} hidden={hidden}>
     <div className="kb-panel-head"><div><span className="kb-eyebrow">SALVAGE / FITTING</span><h3 id="kb-heading-equipment">装备与掉落</h3></div><span className="kb-panel-count">{rows.length ? `${rows.length} 项` : '—'}</span></div>
-    {report?.equipment_status !== 'provided' && !rows.length ? <EmptyState title="装备明细未提供">不会把空结果误判为“没有掉落”。</EmptyState> : rows.length ? <><div className="kb-equipment-controls"><div className="kb-slot-tabs" role="group" aria-label="装备槽位分类"><button type="button" aria-pressed={activeGroup === 'all'} className={activeGroup === 'all' ? 'is-active' : ''} onClick={() => setActiveGroup('all')}>全部 <b>{rows.length}</b></button>{groups.map(group => <button type="button" aria-pressed={activeGroup === group.key} key={group.key} disabled={!group.items.length} className={activeGroup === group.key ? 'is-active' : ''} onClick={() => setActiveGroup(group.key)}>{group.label} <b>{group.items.length}</b>{group.dropItems.length ? <em title={`${group.dropItems.length} 项已掉落`}>·{group.dropItems.length}</em> : null}</button>)}</div><button type="button" className={`kb-drop-filter${dropOnly ? ' is-active' : ''}`} aria-label="只看已掉落装备" aria-pressed={dropOnly} onClick={() => setDropOnly(value => !value)}><span>已掉落</span><b>{droppedCount}</b></button></div><p className="kb-slot-hint"><Layers3 size={14} />蓝色标记为掉落；点击“已掉落”可快速筛选。</p>{visibleRows.length ? <div className="kb-item-list">{visibleRows.map((row, index) => { const name = formatKillboardName(row.name) || '物品名称待补'; return <div className={`kb-item kb-item--${row.status}`} key={`${row.type_id || 'unknown'}-${index}`}><VisualAsset src={itemImage(row)} kind="item" /><div className="kb-item-main"><strong title={name}>{name}</strong><span>{equipmentSlotLabel(row.slot)}{row.quantity ? ` · ${row.quantity} 件` : ''}</span></div><span className={`kb-item-status kb-item-status--${row.status}`}>{itemStatusLabel(row.status)}{row.quantity_dropped ? ` · ${row.quantity_dropped}` : ''}</span></div> })}</div> : <EmptyState title="没有已掉落装备" />}</> : <EmptyState title="没有可展示的装备" />}
+    {rows.length ? <>
+      <div className="kb-equipment-controls">
+        <div className="kb-slot-tabs" role="group" aria-label="装备槽位分类">
+          <button type="button" aria-pressed={activeGroup === 'all'} className={activeGroup === 'all' ? 'is-active' : ''} onClick={() => setActiveGroup('all')}>全部 <b>{rows.length}</b></button>
+          {groups.map(group => <button type="button" aria-pressed={activeGroup === group.key} key={group.key} disabled={!group.items.length} className={activeGroup === group.key ? 'is-active' : ''} onClick={() => setActiveGroup(group.key)}>{group.label} <b>{group.items.length}</b>{group.dropItems.length ? <em title={`${group.dropItems.length} 项已掉落`}>·{group.dropItems.length}</em> : null}</button>)}
+        </div>
+        <button type="button" className={`kb-drop-filter${dropOnly ? ' is-active' : ''}`} aria-label="只看已掉落装备" aria-pressed={dropOnly} onClick={() => setDropOnly(value => !value)}><span>已掉落</span><b>{droppedCount}</b></button>
+      </div>
+      <p className="kb-slot-hint"><Layers3 size={14} />蓝色标记为掉落；点击“已掉落”可快速筛选。</p>
+      {visibleGroups.length ? <div className="kb-item-list">{visibleGroups.map(group => <section className="kb-equipment-group" data-slot={group.key} key={group.key} aria-label={`${group.label}装备`}>
+        <div className="kb-equipment-group-head"><h4>{group.label}</h4><span>{group.items.length} 项{` · 掉落 ${group.dropItems.length} 项`}</span></div>
+        <div className="kb-equipment-group-items">{group.items.map((row, index) => {
+          const name = formatKillboardName(row.name) || '物品'
+          return <div className={`kb-item kb-item--${row.status}`} key={`${row.type_id || 'unknown'}-${index}`}>
+            <VisualAsset src={itemImage(row)} kind="item" />
+            <div className="kb-item-main"><strong title={name}>{name}</strong><span>{equipmentSlotLabel(row.slot)}{row.quantity ? ` · ${row.quantity} 件` : ''}</span></div>
+            <span className={`kb-item-status kb-item-status--${row.status}`}>{itemStatusLabel(row.status)}{row.quantity_dropped ? ` · ${row.quantity_dropped}` : ''}</span>
+          </div>
+        })}</div>
+      </section>)}</div> : <EmptyState title="没有已掉落装备" />}
+    </> : <EmptyState title="暂无装备记录" />}
   </section>
 }
 
@@ -280,8 +297,13 @@ export default function KillboardPage() {
           <section className="kb-hero kb-panel">
             <VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} />
             <div className="kb-hero-copy">
-              <span className="kb-eyebrow">报告 {current.kill_id} · {classLabel(current)}</span><h2>{formatKillboardName(current.ship_name) || '未知舰船'}</h2>
-              <div className="kb-hero-victim"><strong>{current.victim_name || '目标身份未返回'}</strong><span>{current.victim_corporation_name || '军团资料未返回'}{current.victim_alliance_name ? ` · ${current.victim_alliance_name}` : ''}</span></div>
+              <span className="kb-eyebrow">报告 {current.kill_id}</span><h2>{formatKillboardName(current.ship_name) || '舰船'}</h2>
+              <span className="kb-hull-class">{classLabel(current)}</span>
+              <div className="kb-hero-victim">
+                {current.victim_name ? <strong className="kb-victim-name">{current.victim_name}</strong> : null}
+                {corporationLabel(current.victim_corporation_name, current.victim_corporation_ticker) ? <div className="kb-hero-corporation"><span>军团</span><strong>{corporationLabel(current.victim_corporation_name, current.victim_corporation_ticker)}</strong></div> : null}
+                {current.victim_alliance_name ? <span className="kb-hero-alliance">联盟 · {current.victim_alliance_name}</span> : null}
+              </div>
               <div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div>
             </div>
             <div className="kb-hero-value">

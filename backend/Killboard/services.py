@@ -170,7 +170,7 @@ def _save_children(report: KillReport, parsed: dict):
                     participant['character_name'] = old.character_name
                 same_corp = participant.get('corporation_id') in (None, old.corporation_id)
                 if same_corp:
-                    for field in ('corporation_id', 'corporation_name'):
+                    for field in ('corporation_id', 'corporation_name', 'corporation_ticker'):
                         if participant.get(field) in (None, ''):
                             participant[field] = getattr(old, field)
                     if participant.get('alliance_id') in (None, old.alliance_id):
@@ -180,7 +180,7 @@ def _save_children(report: KillReport, parsed: dict):
             KillParticipant.objects.create(report=report, **{
                 key: participant.get(key)
                 for key in (
-                    "character_id", "character_name", "corporation_id", "corporation_name",
+                    "character_id", "character_name", "corporation_id", "corporation_name", "corporation_ticker",
                     "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
                     "is_top_damage", "ship_type_id", "weapon_type_id", "source_index",
                     "camouflaged_faction_id", "feat_score", "is_source_summary",
@@ -239,9 +239,17 @@ def persist_report(
         report._collection_disposition = 'parsed'
         return report, False
 
+    incoming_corporation_id = parsed.get('victim_corporation_id')
+    if incoming_corporation_id is not None and incoming_corporation_id != report.victim_corporation_id:
+        # A verified corporation change invalidates the old name and short
+        # tag even when this bounded refresh lacks the new corp profile.
+        report.victim_corporation_name = ''
+        report.victim_corporation_ticker = ''
+
     fields = (
         "ship_type_id", "ship_name", "ship_class_key", "system_id", "system_name",
         "victim_character_id", "victim_name", "victim_corporation_id", "victim_corporation_name",
+        "victim_corporation_ticker",
         "victim_alliance_id", "victim_alliance_name", "kill_time_raw", "time_quality", "isk_lost",
         "participant_count",
         "victim_damage_taken", "damage_total_verified", "final_summary",
