@@ -4,7 +4,7 @@
 
 **Goal:** Add all tradeable component items and the 16 requested faction structure items to the market catalog, UI categories, and scheduled collection without increasing collector concurrency.
 
-**Architecture:** Extend the existing taxonomy with `components` and `structures` buckets. Components are classified by the official component subcategory while excluding blueprint category rows; structures use an explicit 16-ID allowlist. Seed/API/UI behavior stays data-driven, and production enablement is incremental.
+**Architecture:** Extend the existing taxonomy with `components` and `structures` buckets. Components are classified by six official component group names while excluding blueprint category rows; structures use an explicit 16-ID allowlist. Seed/API/UI behavior stays data-driven, and production enablement is incremental.
 
 **Tech Stack:** Django/Python, JSON catalog, React/Vite frontend, Playwright, GitHub Actions/systemd deployment.
 
@@ -41,7 +41,7 @@ Expected: failures because the new bucket constants/classification do not exist.
 
 **Step 1: Add minimal implementation**
 
-Add `BUCKET_COMPONENTS`, `BUCKET_STRUCTURES`, labels, the component subcategory constant, and the explicit 16 structure IDs. Classify components only when `subcategory_id=1200050` and `category_id != 1700`; classify structures only when the item ID is in the allowlist. Add both buckets to `PRIMARY_BUCKETS`, `BUCKET_CHOICES`, and the seed command help.
+Add `BUCKET_COMPONENTS`, `BUCKET_STRUCTURES`, labels, the six official component group names, and the explicit 16 structure IDs. Classify components only when the group name is one of the six names and `category_id != 1700`; classify structures only when the item ID is in the allowlist. Add both buckets to `PRIMARY_BUCKETS`, `BUCKET_CHOICES`, and the seed command help.
 
 **Step 2: Run the focused tests to verify green**
 

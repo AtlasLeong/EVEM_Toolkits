@@ -8,7 +8,7 @@ Expose all 58 tradeable component items from the official component subcategory 
 
 ## Scope
 
-- Add a `components` bucket labeled `组件` for catalog rows with `subcategory_id=1200050` and `category_id != 1700` (the 58 non-blueprint component items: advanced ship, personal citadel, Upwell, flagship, and drone components).
+- Add a `components` bucket labeled `组件` for the 58 non-blueprint rows in the six official component groups: `高级舰船组件-复数`, `个人堡垒组件-复数`, `铁壁升级组件-复数`, `建筑基础组件-复数`, `旗舰组件-复数`, and `无人机组件-复数`. The classifier must require `category_id != 1700` so blueprint rows are excluded.
 - Add a `structures` bucket labeled `受损结构` for exactly these 16 IDs, four per empire: level 4, dreadnought, carrier, and titan structures for Amarr, Caldari, Gallente, and Minmatar.
 - Do not enable blueprints or the other faction/industrial damaged-structure variants.
 - Keep the existing currency, planetary, minerals, and intermediate buckets and their enabled state unchanged during production rollout.
