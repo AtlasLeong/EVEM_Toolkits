@@ -24,7 +24,7 @@ Expose all 58 tradeable component items from the official component subcategory 
 
 - No parallel quote requests are introduced.
 - The existing 35–51 minute randomized schedule and run lease remain unchanged.
-- Adding 74 enabled items to the existing catalog increases a full rotation by roughly 74 seconds at the one-second query pace; the 40-item per-run cap keeps each individual session bounded.
+- Adding 74 enabled items adds roughly 74 seconds of active query time across at least two bounded runs at the one-second pace; the 40-item per-run cap keeps each individual session bounded, while the existing 35–51 minute schedule controls wall-clock load.
 - Blueprint rows are excluded by the `category_id != 1700` guard and structure rows are restricted to the explicit allowlist.
 
 ## Testing and rollout
