@@ -40,6 +40,8 @@ class MarketCategoryApiTests(TestCase):
             {'id': 'planetary', 'label': '行星资源', 'count': 1},
             {'id': 'minerals', 'label': '矿物', 'count': 1},
             {'id': 'intermediate', 'label': '中间产物', 'count': 1},
+            {'id': 'components', 'label': '组件', 'count': 0},
+            {'id': 'structures', 'label': '受损结构', 'count': 0},
             {'id': 'other', 'label': '其他', 'count': 1},
         ])
         for bucket, expected in [

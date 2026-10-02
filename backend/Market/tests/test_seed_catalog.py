@@ -154,3 +154,51 @@ class MarketCatalogSeedTests(TestCase):
             MarketItem.objects.get(pk=41006000004).market_bucket,
             'other',
         )
+
+    def test_seed_classifies_all_tradeable_components_and_requested_structures(self):
+        rows = [
+            {'item_id': 41300000000, 'item_name': '无人机突触线', 'category_id': 1200,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '无人机组件-复数'},
+            {'item_id': 27000000000, 'item_name': '建筑建造组件', 'category_id': 1100,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '建筑基础组件-复数'},
+            {'item_id': 27011000000, 'item_name': '旗舰船只维护舱', 'category_id': 1200,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '旗舰组件-复数'},
+            {'item_id': 77011000000, 'item_name': '旗舰船只维护舱蓝图', 'category_id': 1700,
+             'subcategory_id': 1700050, 'market_group_name_3rd': '旗舰组件蓝图-复数'},
+            {'item_id': 44000000004, 'item_name': '艾玛4级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+            {'item_id': 44030000015, 'item_name': '米玛塔尔泰坦受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '米玛塔尔受损结构-复数'},
+            {'item_id': 44000000005, 'item_name': '艾玛5级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+        ]
+        with TemporaryDirectory() as temporary:
+            catalog = self._catalog(temporary, rows)
+            call_command(
+                'market_seed_catalog', catalog=str(catalog),
+                enable_buckets='components,structures', stdout=StringIO(),
+            )
+
+        buckets = dict(MarketItem.objects.values_list('id', 'market_bucket'))
+        self.assertEqual(buckets, {
+            41300000000: 'components',
+            27000000000: 'components',
+            27011000000: 'components',
+            77011000000: 'other',
+            44000000004: 'structures',
+            44030000015: 'structures',
+            44000000005: 'other',
+        })
+        self.assertEqual(MarketItem.objects.filter(enabled=True).count(), 5)
+
+    def test_bundled_catalog_contains_all_requested_component_and_structure_rows(self):
+        call_command(
+            'market_seed_catalog', enable_buckets='components,structures', stdout=StringIO(),
+        )
+
+        self.assertEqual(MarketItem.objects.filter(market_bucket='components').count(), 58)
+        self.assertEqual(MarketItem.objects.filter(market_bucket='structures').count(), 16)
+        self.assertEqual(
+            MarketItem.objects.filter(category_id=1700, market_bucket__in=['components', 'structures']).count(),
+            0,
+        )
