@@ -95,6 +95,74 @@ class RestorePreflightTests(RestoreFixture, unittest.TestCase):
         self.write_backup(payload)
         restore.verify_backup(self.manifest, 'evem_market_qa_0123456789ab')
 
+    def test_quoted_command_and_ddl_table_and_column_names_are_allowed(self):
+        names = ('source', 'use', 'system', 'connect', 'tee', 'pager', 'prompt',
+                 'create', 'alter', 'drop', 'database', 'schema', 'user',
+                 'set', 'global', 'persist', 'persist_only', 'SOURCE', 'so``urce')
+        columns = ', '.join(f'`{name}` text' for name in names if name != 'SOURCE').encode('ascii')
+        for table in names:
+            with self.subTest(table=table):
+                quoted = f'`{table}`'.encode('ascii')
+                payload = (b'DROP TABLE IF EXISTS ' + quoted + b';\n'
+                           b'/*!50000 CREATE TABLE ' + quoted + b' (' + columns + b') */;\n'
+                           b'INSERT INTO ' + quoted + b' (`source`) VALUES '
+                           b'(\'USE eve_echoes; SOURCE synthetic.sql; SYSTEM echo; SET GLOBAL x=1\');\n'
+                           b'ALTER TABLE ' + quoted + b' ADD COLUMN `extra` int;\n'
+                           b'-- Dump completed on 2026-09-24\n')
+                self.write_backup(payload)
+                verified = restore.verify_backup(self.manifest, 'evem_market_qa_0123456789ab')
+                self.assertEqual(verified.dump_path, self.dump)
+
+    def test_quoted_and_unquoted_source_schema_qualifications_are_rejected(self):
+        footer = b'\n-- Dump completed on 2026-09-24\n'
+        for schema in (b'eve_echoes', b'`eve_echoes`', b'EVE_ECHOES', b'`EVE_ECHOES`'):
+            for table in (b'one', b'`one`'):
+                for separator in (b'.', b' /* ordinary comment */ .\n'):
+                    sql = b'INSERT INTO ' + schema + separator + table + b' VALUES (1);'
+                    for conditional in (False, True):
+                        with self.subTest(schema=schema, table=table,
+                                          separator=separator, conditional=conditional):
+                            statement = b'/*!50000 ' + sql + b' */;' if conditional else sql
+                            self.write_backup(statement + footer)
+                            with self.assertRaisesRegex(restore.RehearsalError, 'source schema'):
+                                restore.verify_backup(self.manifest, 'evem_market_qa_0123456789ab')
+
+    def test_unquoted_commands_ddl_and_escapes_remain_rejected_after_quoted_names(self):
+        preamble = b'CREATE TABLE `source` (`use` text, `system` text);\n'
+        footer = b'\n-- Dump completed on 2026-09-24\n'
+        forbidden = (
+            b'USE `other`;', b'SOURCE synthetic.sql', b'SYSTEM echo synthetic',
+            b'CONNECT other', b'TEE synthetic.out', b'PAGER cat', b'PROMPT synthetic',
+            b'CREATE DATABASE `other`;', b'ALTER DATABASE `other` CHARACTER SET utf8mb4;',
+            b'DROP DATABASE `other`;', b'CREATE SCHEMA `other`;',
+            b'ALTER SCHEMA `other` CHARACTER SET utf8mb4;', b'DROP SCHEMA `other`;',
+            b"CREATE USER 'synthetic'@'localhost' IDENTIFIED BY 'test';",
+            b"ALTER USER 'synthetic'@'localhost' IDENTIFIED BY 'test';",
+            b"DROP USER 'synthetic'@'localhost';",
+            b'SET GLOBAL max_connections=100;', b'SET PERSIST max_connections=100;',
+            b'SET PERSIST_ONLY max_connections=100;',
+            b'SET @@GLOBAL.max_connections=100;',
+            b'CREATE/**/DATABASE `other`;', b'SET/**/GLOBAL max_connections=100;',
+            b'/*!50000 CREATE*/ /*!50000 DATABASE `other` */;',
+            b'SET /*!50000 PERSIST */ max_connections=100;',
+            b'\\! echo synthetic', b'\\. synthetic.sql', b'\\u other', b'\\T synthetic.out',
+        )
+        for sql in forbidden:
+            for conditional in (False, True):
+                with self.subTest(sql=sql, conditional=conditional):
+                    statement = b'/*!50000 ' + sql + b' */;' if conditional else sql
+                    self.write_backup(preamble + statement + footer)
+                    with self.assertRaises(restore.RehearsalError):
+                        restore.verify_backup(self.manifest, 'evem_market_qa_0123456789ab')
+
+    def test_unclosed_quoted_identifiers_strings_and_comments_remain_rejected(self):
+        for sql in (b'CREATE TABLE `source', b'SELECT \'source',
+                    b'/*!50000 SET @x=1', b'/* unfinished'):
+            with self.subTest(sql=sql):
+                self.write_backup(sql + b'\n-- Dump completed on 2026-09-24\n')
+                with self.assertRaises(restore.RehearsalError):
+                    restore.verify_backup(self.manifest, 'evem_market_qa_0123456789ab')
+
     def test_database_switch_and_source_qualification_are_rejected(self):
         preamble = b'CREATE TABLE `one` (`id` int);\n'
         footer = b'\n-- Dump completed on 2026-09-24\n'

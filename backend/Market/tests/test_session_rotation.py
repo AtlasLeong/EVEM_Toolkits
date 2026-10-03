@@ -170,6 +170,8 @@ class RotationTests(TestCase):
             self.assertTrue(wire.closed)
 
     def test_larger_session_pool_does_not_expand_forty_item_batch_or_open_more_sessions(self):
+        self.config.max_items_per_run = 40
+        self.config.save(update_fields=['max_items_per_run'])
         for item_id in range(2, 46):
             MarketItem.objects.create(id=item_id, name=f'Synthetic {item_id}')
         session = FakeSession({item_id: Quote() for item_id in range(1, 46)})

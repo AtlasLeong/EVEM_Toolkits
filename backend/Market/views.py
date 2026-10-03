@@ -14,12 +14,12 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from Authentication.permissions import IsAllowlistedViewer
 
+from .batch_policy import batch_policy
 from .models import CollectionRun, MarketConfig, MarketConfigAudit, MarketItem, PriceSnapshot, epoch_ms
 from .serializers import (
     ConfigPatchSerializer, ItemCreateSerializer, ItemPatchSerializer, admin_item_payload,
     item_payload, price_levels, run_payload, utc_iso,
 )
-from .worker import MAX_ITEMS_PER_RUN
 from .scope import market_scope_payload
 from .taxonomy import (
     BUCKET_LABELS, BUCKET_OTHER, PRIMARY_BUCKETS, is_primary_bucket,
@@ -420,7 +420,7 @@ def config_payload(config):
         'session_status': config.session_status,
         'cooldown_until_ms': config.cooldown_until_ms,
         'enabled_item_count': MarketItem.objects.filter(enabled=True).count(),
-        'max_items_per_run': MAX_ITEMS_PER_RUN,
+        **batch_policy(config),
         'last_success_at': utc_iso(last_success.finished_at_ms) if last_success else None,
         'last_run_failure_count': last_run.failure_count if last_run else 0,
     }
@@ -441,17 +441,33 @@ class AdminConfigView(AdminView):
                 'min_interval_seconds': config.min_interval_seconds,
                 'max_interval_seconds': config.max_interval_seconds,
                 'enabled': config.enabled,
+                'max_items_per_run': config.max_items_per_run,
+                'batch_fallback_until_ms': config.batch_fallback_until_ms,
+                'batch_fallback_reason': config.batch_fallback_reason,
+                'capacity_failure_count': config.capacity_failure_count,
             }
             for field, value in serializer.validated_data.items():
                 setattr(config, field, value)
+            update_fields = list(serializer.validated_data)
+            if 'max_items_per_run' in serializer.validated_data:
+                config.batch_fallback_until_ms = None
+                config.batch_fallback_reason = ''
+                config.capacity_failure_count = 0
+                update_fields.extend([
+                    'batch_fallback_until_ms', 'batch_fallback_reason', 'capacity_failure_count',
+                ])
             after = {
                 'min_interval_seconds': config.min_interval_seconds,
                 'max_interval_seconds': config.max_interval_seconds,
                 'enabled': config.enabled,
+                'max_items_per_run': config.max_items_per_run,
+                'batch_fallback_until_ms': config.batch_fallback_until_ms,
+                'batch_fallback_reason': config.batch_fallback_reason,
+                'capacity_failure_count': config.capacity_failure_count,
             }
             if before != after:
                 config.updated_at_ms = epoch_ms()
-                config.save(update_fields=[*serializer.validated_data.keys(), 'updated_at_ms'])
+                config.save(update_fields=[*update_fields, 'updated_at_ms'])
                 MarketConfigAudit.objects.create(config=config, actor=request.user, before=before, after=after)
         return Response(config_payload(config))
 

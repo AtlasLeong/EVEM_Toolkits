@@ -11,8 +11,13 @@ The shared round-robin calculation is also used by Killboard; its existing
 private cursor file and bundle schema remain supported.
 
 Existing `MARKET_SESSION_FILE` / `MARKET_SESSION_FILES` configuration is unchanged.
-Market still runs 35–51 minutes after a finished collection, handles at most 40
-items per pass, and spaces item queries by one second. Killboard's ten-minute
+Market still runs 35–51 minutes after a finished collection. Its current capacity
+defaults to 80 items per pass, supports an explicit 40-item setting, and spaces
+serial item queries by a random 2–3 seconds. Persistent temporary fallback and
+the 480-second application budget are described in
+[Market batch capacity and release](market-prices.md#批次回退完成状态与管理-api).
+Explicit shared-account coordination retains Market's 40-item ceiling and the
+existing common RPC budget. Killboard's ten-minute
 timer with up-to-one-minute jitter, 24-look-up limit, 36-total-RPC limit and
 210-second deadline remain intact.
 Increasing pool size never adds passes, sessions per pass, or request capacity.
