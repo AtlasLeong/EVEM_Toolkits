@@ -1,660 +1,879 @@
 {
   "repository": "AtlasLeong/EVEM_Toolkits",
   "baseline_commit": "5cda8bef3b05dfb6361c51fb6abde2c07ad7492c",
-  "browser": "Actual Windows browser renders. Baselines and initial visual audits used headed user-PC Chrome; later Playwright stress captures and installed-Chrome lab measurements may be headless, as identified in their reports. Supported local fixtures and anonymous production evidence are distinguished per file.",
+  "browser": "Actual Windows user-PC Chrome and Linux CI Chromium renders. Baselines and visual audits used headed user-PC Chrome; later local stress captures and lab measurements may be headless, as identified in their reports. Three genuine Linux CI failure screenshots record the 320px text-pressure defect before its fix. Supported local fixtures, local production builds and anonymous production evidence are distinguished per file.",
   "scope_note": "Screenshots are visually inspected artifacts. They do not prove production authentication, backend authorization, accessibility conformance, or real-user performance.",
   "capture_note": "Extra baseline states taken after early shared-shell edits are marked initial_worktree. Rejected sticky-header capture artifacts are excluded.",
-  "consumer_note": "Use each exact library_file_id with Library read or prepare_materialize; the native image download route is https://chatgpt.com/api/library/files/<library_file_id>/download. Library read returned extracted text without pixels in this runtime; uploads succeeded and canonical IDs are retained independently of unsupported Windows xattrs.",
+  "consumer_note": "The public index uses evidence_id, filename, stage and available image hashes. The 117 native Library identifiers and consumer download verification are delivered privately; this public file grants no access to private attachments.",
   "files": [
     {
       "name": "01b-market-desktop-clean-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_4155227d002881918e8e2b708e4cd563"
+      "evidence_id": "E001"
     },
     {
       "name": "02b-market-mobile-clean-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_b300f95c7fd88191a2cc657451d27a3b"
+      "evidence_id": "E002"
     },
     {
       "name": "03-manufacturing-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_6f65f2cb16388191b3217b2efb4c6269"
+      "evidence_id": "E003"
     },
     {
       "name": "03-manufacturing-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_7b84166933288191b0ea9cec3f9ba1cd"
+      "evidence_id": "E004"
     },
     {
       "name": "04-planetary-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_c32ec463c76481918b6ab0e39abf0b37"
+      "evidence_id": "E005"
     },
     {
       "name": "04-planetary-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_36a1616ecfd881918851ddefd3033cb2"
+      "evidence_id": "E006"
     },
     {
       "name": "05-starmap-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_c37bc4f964e88191bd351e2afc2ad650"
+      "evidence_id": "E007"
     },
     {
       "name": "05-starmap-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_de041133efe48191973c4bc565baf553"
+      "evidence_id": "E008"
     },
     {
       "name": "06-fraudlist-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_9ed6703f85248191aec3f0da16120a85"
+      "evidence_id": "E009"
     },
     {
       "name": "06-fraudlist-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_b54fda4c14dc8191af9695406e87f5d1"
+      "evidence_id": "E010"
     },
     {
       "name": "07-feedback-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_c616e5b3e7f481919508facb059263c6"
+      "evidence_id": "E011"
     },
     {
       "name": "07-feedback-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_42bd88aa86ac819195f4a79571c57b49"
+      "evidence_id": "E012"
     },
     {
       "name": "08-infocenter-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_3fb4eb315cb48191972cff69e37c7a35"
+      "evidence_id": "E013"
     },
     {
       "name": "08-infocenter-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_058d4efaa1308191a5465a66320d7cb2"
+      "evidence_id": "E014"
     },
     {
       "name": "09-settings-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_6060351c79748191b1f7d3144fcb2dc4"
+      "evidence_id": "E015"
     },
     {
       "name": "09-settings-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_2fe6177f401c819184d2d92482ea83a8"
+      "evidence_id": "E016"
     },
     {
       "name": "10-corporations-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_3d46365a48a481918e500508bb43e0bd"
+      "evidence_id": "E017"
     },
     {
       "name": "10-corporations-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_80227beddc888191b33085f6b2220871"
+      "evidence_id": "E018"
     },
     {
       "name": "11-starsea-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_a73dec593dfc819185d486aca9335a8b"
+      "evidence_id": "E019"
     },
     {
       "name": "11-starsea-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_2f5a81590ab881919c011fe889fa9f3e"
+      "evidence_id": "E020"
     },
     {
       "name": "12-killboard-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_8bce28461bac819183a5ac252d827941"
+      "evidence_id": "E021"
     },
     {
       "name": "12-killboard-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_067e3c5db940819196b821dafaaf2052"
+      "evidence_id": "E022"
     },
     {
       "name": "13-tactical-desktop-1440.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_b35815faf38c8191a60ba6327610813a"
+      "evidence_id": "E023"
     },
     {
       "name": "13-tactical-mobile-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_505209e94a1881918362ac535ed92dbd"
+      "evidence_id": "E024"
     },
     {
       "name": "12b-killboard-mobile-scrolled-390.png",
       "stage": "baseline",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_2a7ddf498b4c8191996c2e41a0ec4fec"
+      "evidence_id": "E025"
     },
     {
       "name": "11b-starsea-fixture-desktop-1440.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_63903de8934081919bee69f51e1da2f7"
+      "evidence_id": "E026"
     },
     {
       "name": "11b-starsea-fixture-mobile-390.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_20717655314081919ceacd8ca24e1b1c"
+      "evidence_id": "E027"
     },
     {
       "name": "11c-starsea-detail-desktop-1440.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_944bc0e20dc08191a6e1e28370f4d165"
+      "evidence_id": "E028"
     },
     {
       "name": "11c-starsea-detail-mobile-390.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_10dfd5b262188191ad5a5e70c427a9e0"
+      "evidence_id": "E029"
     },
     {
       "name": "14-fraudadmin-desktop-1440.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_c8165b2937e08191a56e7f7ec2d85da3"
+      "evidence_id": "E030"
     },
     {
       "name": "14-fraudadmin-mobile-390.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_eed30c905ae08191a700fd162ec7467d"
+      "evidence_id": "E031"
     },
     {
       "name": "15-licenseadmin-desktop-1440.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_defb642dca588191b3a3c280f6ec64e3"
+      "evidence_id": "E032"
     },
     {
       "name": "15-licenseadmin-mobile-390.png",
       "stage": "initial_worktree",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_b3b528e6f7dc8191876ae6b4d7f1b6cd"
+      "evidence_id": "E033"
     },
     {
       "name": "manufacturing-1440.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_d86d405544b88191ac702f1999486035"
+      "evidence_id": "E034"
     },
     {
       "name": "manufacturing-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_152e1ee7d7a48191a267c457be19363e"
+      "evidence_id": "E035"
     },
     {
       "name": "manufacturing-1280.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_7fc3623e7478819180561214e64a9f8b"
+      "evidence_id": "E036"
     },
     {
       "name": "killboard-1440.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_3cbdd479b3ac8191ad71d2944200f982"
+      "evidence_id": "E037"
     },
     {
       "name": "killboard-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_5b2455ff3f7881918d211c63d1ccefd4"
+      "evidence_id": "E038"
     },
     {
       "name": "killboard-1280.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_ba19e65591a881919ff996a4f3ac97ae"
+      "evidence_id": "E039"
     },
     {
       "name": "killboard-equipment-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_179fc80791348191a9be0fd226308e98"
+      "evidence_id": "E040"
     },
     {
       "name": "killboard-long-content-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_823efa2495d48191928a726187d9530e"
+      "evidence_id": "E041"
     },
     {
       "name": "killboard-long-content-copy-visible-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_35d9aa24b808819192c9aaf43d7bf7fb"
+      "evidence_id": "E042"
     },
     {
       "name": "tactical-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_97449b993c508191b5625f225a3fe5bb"
+      "evidence_id": "E043"
     },
     {
       "name": "tactical-after-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_1536c277513881918fc465e7f47d9077"
+      "evidence_id": "E044"
     },
     {
       "name": "licenseadmin-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_72e51efc0690819193255c0376e79a92"
+      "evidence_id": "E045"
     },
     {
       "name": "licenseadmin-after-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_42e563bc31d48191beda56155e5d4921"
+      "evidence_id": "E046"
     },
     {
       "name": "settings-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_2e9d852da55c8191b2a458a5d531d6c7"
+      "evidence_id": "E047"
     },
     {
       "name": "planetary-after-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_5c32e9d01fb081919a5b6d235f164dde"
+      "evidence_id": "E048"
     },
     {
       "name": "corporations-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_fb4f6f8543e8819186c6eafe86b4e3f1"
+      "evidence_id": "E049"
     },
     {
       "name": "infocenter-after-1440.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_5d320a172f60819199aef224a4b2ac5e"
+      "evidence_id": "E050"
     },
     {
       "name": "fraudadmin-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_e2b78bfe95848191aae7d6a72e381a92"
+      "evidence_id": "E051"
     },
     {
       "name": "cached-refresh-failure-1440.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_6310c8b836f08191a2068166120e9c8e"
+      "evidence_id": "E052"
     },
     {
       "name": "cached-refresh-failure-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_302c03eab2388191ba5303aba8f7c62f"
+      "evidence_id": "E053"
     },
     {
       "name": "market-stat-hint-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_6b2d64ee6d888191b301f93e3bcf8160"
+      "evidence_id": "E054"
     },
     {
       "name": "market-stat-hint-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_361bb56043048191a38996459dcaa2d5"
+      "evidence_id": "E055"
     },
     {
       "name": "short-desktop-1280.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_625ef6ab05d8819190f8a2d13eb4ec81"
+      "evidence_id": "E056"
     },
     {
       "name": "settings-error-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_8c562c4ae7fc819199df6d9648ae8ec6"
+      "evidence_id": "E057"
     },
     {
       "name": "settings-error-after-320.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_0a069f25fdf88191863ae02726fb99bf"
+      "evidence_id": "E058"
     },
     {
       "name": "settings-recovery-after-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_41ae108a81508191be3cfa1da91c9764"
+      "evidence_id": "E059"
     },
     {
       "name": "licenseadmin-actions-viewport-390.png",
       "stage": "after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_6514ac3508f48191bc9f04f74f812655"
+      "evidence_id": "E060"
     },
     {
       "name": "01-production-login-desktop.png",
       "stage": "baseline",
       "mode": "anonymous_production",
-      "library_file_id": "libfile_07af831a9a648191bed26266f6194ea4"
+      "evidence_id": "E061"
     },
     {
       "name": "03-production-login-mobile.png",
       "stage": "baseline",
       "mode": "anonymous_production",
-      "library_file_id": "libfile_275cd43ae40c8191969e18dfae81d300"
+      "evidence_id": "E062"
     },
     {
       "name": "phase1-local-production-login-desktop.png",
       "stage": "after",
       "mode": "local_production_build",
-      "library_file_id": "libfile_5acfcab877588191a520e652c6be7a57"
+      "evidence_id": "E063"
     },
     {
       "name": "phase1-local-production-login-mobile.png",
       "stage": "after",
       "mode": "local_production_build",
-      "library_file_id": "libfile_4abc9c5e11ec8191ac75e37ef17f0564"
+      "evidence_id": "E064"
     },
     {
       "name": "new-eden-workbench.png",
       "stage": "approved_direction",
       "mode": "generated_concept_only",
-      "library_file_id": "libfile_faf9b202e1f481918263b007ae5bb80a"
+      "evidence_id": "E065"
     },
     {
       "name": "market-loading-catalog-390.png",
       "stage": "loading_diagnostic_before",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_721516ea0e188191afae3fb0e5da7a99"
+      "evidence_id": "E066"
     },
     {
       "name": "market-loading-series-390.png",
       "stage": "loading_diagnostic_before",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_0056314135e081918f19ae70a31c5d71"
+      "evidence_id": "E067"
     },
     {
       "name": "market-loading-loaded-390.png",
       "stage": "loading_diagnostic_before",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_1ee0251a2dcc819181ecc6778e3e40d3"
+      "evidence_id": "E068"
     },
     {
       "name": "killboard-loading-index-390.png",
       "stage": "loading_diagnostic_before",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_0aced67de83c81919481a6897e5f56fb"
+      "evidence_id": "E069"
     },
     {
       "name": "killboard-loading-detail-390.png",
       "stage": "loading_diagnostic_before",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_19c3367ad3f48191af1f1d63b1928e68"
+      "evidence_id": "E070"
     },
     {
       "name": "killboard-loading-loaded-390.png",
       "stage": "loading_diagnostic_before",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_655f4e6ce45881918b6b2d51967d4e4a"
+      "evidence_id": "E071"
     },
     {
       "name": "phase2-kmcollector-390.png",
       "stage": "route_state_diagnostic_before",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_fcb97539d0648191a1be96e6486e5b83"
+      "evidence_id": "E072"
     },
     {
       "name": "phase2-fraudadminlogin-guest-390.png",
       "stage": "route_state_diagnostic_before",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_33b26a35a7108191a477375e43e91a7a"
+      "evidence_id": "E073"
     },
     {
       "name": "phase2-kmcollector-after-1440.png",
       "stage": "route_state_review",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_5784cbcd369081918fb9ac9beff49949"
+      "evidence_id": "E074"
     },
     {
       "name": "phase2-kmcollector-after-390.png",
       "stage": "route_state_review",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_452d1d3faf108191b88f04ac72a3e7b6"
+      "evidence_id": "E075"
     },
     {
       "name": "phase2-kmcollector-after-320.png",
       "stage": "route_state_review",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_b52fc09641848191a9c9b1c7cbde763e"
+      "evidence_id": "E076"
     },
     {
       "name": "phase2-fraudadminlogin-after-1440.png",
       "stage": "route_state_review",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_2b541f5359908191b527484936093361"
+      "evidence_id": "E077"
     },
     {
       "name": "phase2-fraudadminlogin-after-390.png",
       "stage": "route_state_review",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_2dc7dfe7dc888191bcc5b420d11f3c4f"
+      "evidence_id": "E078"
     },
     {
       "name": "phase2-fraudadminlogin-after-320.png",
       "stage": "route_state_review",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_0a89cb9c516c8191b57aa419d9309d21"
+      "evidence_id": "E079"
     },
     {
       "name": "login-text-200-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_b6a45ef3ec4c81919a6c62497865d27e",
-      "caption": "Existing login tabs at200% text simulation; password-reset tab's second line is enclosed by its full hit area/background. Reset-form controls inserted after tab switch appear at normal size, so this image is not an all-reset-fields text200 conformance claim."
+      "caption": "Existing login tabs at200% text simulation; password-reset tab's second line is enclosed by its full hit area/background. Reset-form controls inserted after tab switch appear at normal size, so this image is not an all-reset-fields text200 conformance claim.",
+      "evidence_id": "E080"
     },
     {
       "name": "navigation-text-200-1440.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_e114a681053c8191b08216b3d65e09fd",
-      "caption": "Sidebar links at200% text simulation; collector label wraps inside full focus/hit area. Planetary labels/select values in page background are visibly vertically crowded/cropped; parent assigned a separate content fix, so do not caption this as whole-page text200 passed."
+      "caption": "Sidebar links at200% text simulation; collector label wraps inside full focus/hit area. Planetary labels/select values in page background are visibly vertically crowded/cropped; parent assigned a separate content fix, so do not caption this as whole-page text200 passed.",
+      "evidence_id": "E081"
     },
     {
       "name": "market-loading-catalog-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_cf1d6961985481918e25dda3414aaa5d"
+      "evidence_id": "E082"
     },
     {
       "name": "market-loading-series-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_24d98dd5f25081919db629c5235ae7c0"
+      "evidence_id": "E083"
     },
     {
       "name": "market-loading-loaded-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_c31b6818d5808191bdc57124915cc369"
+      "evidence_id": "E084"
     },
     {
       "name": "market-text-200-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_0905e354796c819188ff809f7227c3e8"
+      "evidence_id": "E085"
     },
     {
       "name": "killboard-loading-index-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_7a60c000a1c88191be3cf28f82f4a676"
+      "evidence_id": "E086"
     },
     {
       "name": "killboard-loading-detail-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_7f32e8738d088191976576f07170e4ca"
+      "evidence_id": "E087"
     },
     {
       "name": "killboard-loading-loaded-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_163d625647f48191af7379e7563a1dce"
+      "evidence_id": "E088"
     },
     {
       "name": "killboard-text-200-390.png",
       "stage": "refined_after",
       "mode": "local_production_build_fixture",
-      "library_file_id": "libfile_0481a69854388191968f457625534926"
+      "evidence_id": "E089"
     },
     {
       "name": "auth-reset-text-200-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_89190d62a95c81919e45a46717d37ce0"
+      "evidence_id": "E090"
     },
     {
       "name": "auth-register-text-200-320.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_1fe6d1c3a974819190f49b81334d95e8"
+      "evidence_id": "E091"
     },
     {
       "name": "auth-login-text-200-320.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_92ef4b7031b08191b184a949afd42bea"
+      "evidence_id": "E092"
     },
     {
       "name": "planetary-calculator-320.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_12e5d69cbcc081919c80269c36f0f767"
+      "evidence_id": "E093"
     },
     {
       "name": "planetary-calculator-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_c4dae990c2648191973ffcde8368113e"
+      "evidence_id": "E094"
     },
     {
       "name": "planetary-calculator-1440.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_62ad5324ab908191bc09da9f28f78775"
+      "evidence_id": "E095"
     },
     {
       "name": "planetary-calculator-table-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_15ae04a0dd108191ba1c56b0605158f1"
+      "evidence_id": "E096"
     },
     {
       "name": "planetary-calculator-text-200-320.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_651256720d74819195d4ed7c83f8d1ae"
+      "evidence_id": "E097"
     },
     {
       "name": "killboard-loaded-320.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_80c8e9e9b480819182f0c11a09551924"
+      "evidence_id": "E098"
     },
     {
       "name": "planetary-200-after-1440.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_462ffdc07e108191adf8e1a2d3ab1667"
+      "evidence_id": "E099"
     },
     {
       "name": "planetary-200-after-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_bc6a23b1ceb481918d3ce81ddc751f85"
+      "evidence_id": "E100"
     },
     {
       "name": "settings-prices-200-after-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_7de78c42ecf48191a1f4abeebb2457ce"
+      "evidence_id": "E101"
     },
     {
       "name": "license-200-after-1024.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_836a12dfc3508191ab6eed396a3211aa"
+      "evidence_id": "E102"
     },
     {
       "name": "license-200-after-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_f75074feaa888191be212149b97df259"
+      "evidence_id": "E103"
     },
     {
       "name": "settings-price-edited-200-after-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_ac5d159ca9f481918160975a28d153b2"
+      "evidence_id": "E104"
     },
     {
       "name": "planetary-selected-normal-after-1440.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_45eb3f89d6508191a275409d73e2365a"
+      "evidence_id": "E105"
     },
     {
       "name": "planetary-selected-normal-after-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_7197cae967f48191a853ef36781b47b8"
+      "evidence_id": "E106"
     },
     {
       "name": "planetary-selected-200-after-1440.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_dc231d014ba48191ae5571d68dca640b"
+      "evidence_id": "E107"
     },
     {
       "name": "planetary-selected-200-after-390.png",
       "stage": "refined_after",
       "mode": "supported_local_fixture",
-      "library_file_id": "libfile_c8a4b7a3ec4c8191a0ed23b0772bdcb9"
+      "evidence_id": "E108"
+    },
+    {
+      "name": "auth-fallback/ci-before-reset-320.png",
+      "stage": "phase3_auth_font_fallback_before",
+      "mode": "supported_linux_ci_fixture",
+      "caption": "Confirmed failed CI state: reset mode, Linux Chromium320x844 computed text200, run37152592131/source67efa221; edition brand clips at the right viewport edge. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "60020fd116804ed0d82a116aa8be3e046df890d1afdc0fa5a2e1d522405d9288",
+      "image_size": {
+        "width": 320,
+        "height": 844
+      },
+      "source": {
+        "run_id": 37152592131,
+        "head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "head_tree": "48ca04e446a693a67787a7f951b6fa255ce0255f",
+        "platform": "Linux Chromium / Playwright1.58.2",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "artifact_id": 11284991846
+      },
+      "evidence_id": "E109"
+    },
+    {
+      "name": "auth-fallback/ci-before-login-320.png",
+      "stage": "phase3_auth_font_fallback_before",
+      "mode": "supported_linux_ci_fixture",
+      "caption": "Confirmed failed CI state: login mode, Linux Chromium320x844 computed text200, run37152592131/source67efa221; edition brand clips at the right viewport edge. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "1b7f99a2ef19e99b3064e9fdd150614fb406cec0b8b6ebdb831709a2ec2ddfb0",
+      "image_size": {
+        "width": 320,
+        "height": 844
+      },
+      "source": {
+        "run_id": 37152592131,
+        "head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "head_tree": "48ca04e446a693a67787a7f951b6fa255ce0255f",
+        "platform": "Linux Chromium / Playwright1.58.2",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "artifact_id": 11284991846
+      },
+      "evidence_id": "E110"
+    },
+    {
+      "name": "auth-fallback/ci-before-register-320.png",
+      "stage": "phase3_auth_font_fallback_before",
+      "mode": "supported_linux_ci_fixture",
+      "caption": "Confirmed failed CI state: register mode, Linux Chromium320x844 computed text200, run37152592131/source67efa221; edition brand clips at the right viewport edge. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "8d04360be66735a31bfbabb4e449704871491b08b7a33157906d4a24cf37898a",
+      "image_size": {
+        "width": 320,
+        "height": 844
+      },
+      "source": {
+        "run_id": 37152592131,
+        "head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "head_tree": "48ca04e446a693a67787a7f951b6fa255ce0255f",
+        "platform": "Linux Chromium / Playwright1.58.2",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "artifact_id": 11284991846
+      },
+      "evidence_id": "E111"
+    },
+    {
+      "name": "auth-fallback/auth-login-normal-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, anonymous login form320 normal system font.",
+      "sha256": "7241df395cdedf609d49f2d7999312b314b56cbb2747b28bdf425cd613114fbc",
+      "image_size": {
+        "width": 320,
+        "height": 938
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": false,
+        "mode": "login"
+      },
+      "evidence_id": "E112"
+    },
+    {
+      "name": "auth-fallback/auth-login-normal-390.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, anonymous login form390 normal system font.",
+      "sha256": "f703c0d019e0491ce1ddc8435cffb0cf159f5f55df44bdedceee2496480e96de",
+      "image_size": {
+        "width": 390,
+        "height": 938
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "pressure": false,
+        "mode": "login"
+      },
+      "evidence_id": "E113"
+    },
+    {
+      "name": "auth-fallback/auth-login-normal-1440.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, anonymous login form1440 normal system font.",
+      "sha256": "b3ef16fad7e75e8747a0da960865abc72766eba1d34b5a53b90007604e238c32",
+      "image_size": {
+        "width": 1440,
+        "height": 960
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 1440,
+          "height": 960
+        },
+        "pressure": false,
+        "mode": "login"
+      },
+      "evidence_id": "E114"
+    },
+    {
+      "name": "auth-fallback/auth-login-arial-text-200-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, login320 Arial fallback plus computed text200; full brand glyphs wrap inside viewport. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "760e42168a0bbc69c5c8663ed44e98c003206b04724b2a10904983d42eda2c0d",
+      "image_size": {
+        "width": 320,
+        "height": 1721
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": true,
+        "mode": "login"
+      },
+      "evidence_id": "E115"
+    },
+    {
+      "name": "auth-fallback/auth-register-arial-text-200-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, register320 Arial fallback plus computed text200; settled selected tab and complete controls. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "1402cbd879a62d5221290941d4fe4ad80448126109b4748e37c2ed280fb3e7dd",
+      "image_size": {
+        "width": 320,
+        "height": 2169
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": true,
+        "mode": "register"
+      },
+      "evidence_id": "E116"
+    },
+    {
+      "name": "auth-fallback/auth-reset-arial-text-200-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, reset320 Arial fallback plus computed text200; settled selected tab and complete controls. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "694dbeb06c7d84334d48f724caa80165e90de337e41d3d1760768b20d1eacf93",
+      "image_size": {
+        "width": 320,
+        "height": 2065
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": true,
+        "mode": "reset"
+      },
+      "evidence_id": "E117"
     }
   ]
 }

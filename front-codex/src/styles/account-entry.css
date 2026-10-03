@@ -18,12 +18,14 @@
 .login-intro-edition {
   border-left: 1px solid var(--console-line);
   padding-left: 12px;
+  min-width: 0;
   max-width: 14ch;
   color: var(--console-muted);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: .11em;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .login-intro > .eyebrow { margin: 0 0 12px; color: var(--console-accent); }
 .login-intro-title {
