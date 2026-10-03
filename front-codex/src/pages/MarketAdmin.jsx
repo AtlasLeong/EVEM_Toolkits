@@ -34,6 +34,19 @@ function runLabel(value) {
   return { pending: '等待执行', queued: '等待执行', running: '执行中', success: '成功', succeeded: '成功', partial: '部分成功', failed: '失败', needs_auth: '需要授权', rate_limited: '限流，已停止本轮' }[value] || value || '未知'
 }
 
+function fallbackLabel(value) {
+  return {
+    runtime_budget: '采集用时达到上限',
+    incomplete_run: '连续采集未完成',
+    timeout: '查询超时',
+    ORDER_TIMEOUT: '查询超时',
+    network_error: '网络连接异常',
+    budget_exhausted: '本轮查询额度不足',
+    lease_expired: '采集任务中断',
+    shared_budget: '共享账号查询额度不足',
+  }[value] || '采集异常'
+}
+
 function CapacityNotice({ config }) {
   const count = Number(config.enabled_item_count)
   const perRun = Number(config.max_items_per_run)
@@ -44,20 +57,23 @@ function CapacityNotice({ config }) {
   const rounds = Math.ceil(count / perRun)
   const minMinutes = Math.ceil(rounds * minSeconds / 60)
   const maxMinutes = Math.ceil(rounds * maxSeconds / 60)
-  const severity = count > perRun * 3 ? 'critical' : count > perRun * 2 ? 'warning' : 'normal'
+  const severity = minMinutes > 120 ? 'critical' : maxMinutes > 120 ? 'warning' : 'normal'
 
   return <p className={`market-capacity ${severity}`} role={severity === 'critical' ? 'alert' : 'status'}>
     当前启用 {count} 件；单次最多 {perRun} 件。{count === 0 ? '启用目录物品后开始轮转采集。' : `轮转重访同一物品约需 ${rounds} 次采集，预计 ${minMinutes}–${maxMinutes} 分钟。`}
+    {count > 0 ? '仅按轮间隔估算，不含本轮采集时长与调度误差。' : null}
     {severity === 'warning' ? '最长可能超过 2 小时新鲜阈值；可继续启用，但较早报价可能显示为已过期。' : null}
     {severity === 'critical' ? '即使按最短间隔也超过 2 小时新鲜阈值；可继续启用，但较早报价可能持续显示为已过期。' : null}
   </p>
 }
 
 function SchedulePanel({ config, onSave, pending }) {
-  const [form, setForm] = useState({ enabled: true, min: '35', max: '51' })
+  const configuredItemLimit = Number(config.configured_max_items_per_run ?? config.max_items_per_run ?? 80)
+  const activeFallback = Number(config.batch_fallback_until_ms) > Date.now()
+  const [form, setForm] = useState({ enabled: true, min: '35', max: '51', maxItems: '80' })
   const [validation, setValidation] = useState('')
   useEffect(() => {
-    if (config) setForm({ enabled: Boolean(config.enabled), min: String(config.min_interval_seconds / 60), max: String(config.max_interval_seconds / 60) })
+    if (config) setForm({ enabled: Boolean(config.enabled), min: String(config.min_interval_seconds / 60), max: String(config.max_interval_seconds / 60), maxItems: String(config.configured_max_items_per_run ?? config.max_items_per_run ?? 80) })
   }, [config])
 
   function submit(event) {
@@ -69,7 +85,9 @@ function SchedulePanel({ config, onSave, pending }) {
       return
     }
     setValidation('')
-    onSave({ enabled: form.enabled, min_interval_seconds: min * 60, max_interval_seconds: max * 60 })
+    const payload = { enabled: form.enabled, min_interval_seconds: min * 60, max_interval_seconds: max * 60 }
+    if (Number(form.maxItems) !== configuredItemLimit) payload.max_items_per_run = Number(form.maxItems)
+    onSave(payload)
   }
 
   return <Panel title="采集设置" subtitle="每次采集结束后，在指定范围内随机安排下一次采集。">
@@ -78,10 +96,17 @@ function SchedulePanel({ config, onSave, pending }) {
       <div><span>下次采集</span><strong>{formatEpoch(config.next_due_at_ms ?? config.next_run_at)}</strong></div>
       <div><span>最近成功</span><strong>{config.last_success_at ? formatEpoch(config.last_success_at) : '暂无成功记录'}</strong></div>
       <div><span>最近任务失败数</span><strong>{config.last_run_failure_count ?? '—'}</strong></div>
+      {config.max_items_per_run != null ? <div><span>当前每轮上限</span><strong>{config.max_items_per_run} 件</strong></div> : null}
+      {config.query_delay_min_seconds != null && config.query_delay_max_seconds != null ? <div><span>物品查询间隔</span><strong>{config.query_delay_min_seconds}–{config.query_delay_max_seconds} 秒，逐件查询</strong></div> : null}
     </div>
     <CapacityNotice config={config} />
+    {activeFallback ? <div className="market-capacity warning market-batch-fallback" role="status" aria-label="采集数量回退">
+      当前暂用 {config.max_items_per_run} 件/轮（设定 {configuredItemLimit} 件）：{fallbackLabel(config.batch_fallback_reason)}。预计恢复时间：{formatEpoch(config.batch_fallback_until_ms)}。{' '}
+      <button type="button" className="ghost-btn compact" disabled={pending} onClick={() => onSave({ max_items_per_run: configuredItemLimit })}>恢复至 {configuredItemLimit} 件</button>
+    </div> : null}
     <form className="market-config-form" onSubmit={submit}>
-      <label className="market-check"><input type="checkbox" checked={form.enabled} onChange={event => setForm(value => ({ ...value, enabled: event.target.checked }))} />启用定时采集</label>
+      <label className="market-check" style={{ gridColumn: '1 / -1' }}><input type="checkbox" checked={form.enabled} onChange={event => setForm(value => ({ ...value, enabled: event.target.checked }))} />启用定时采集</label>
+      <label>单次数量<select className="text-input" value={form.maxItems} onChange={event => setForm(value => ({ ...value, maxItems: event.target.value }))}><option value="40">40 件</option><option value="80">80 件</option></select></label>
       <label>最短间隔（分钟）<input className="text-input" type="number" min="35" max="51" step="1" value={form.min} onChange={event => setForm(value => ({ ...value, min: event.target.value }))} /></label>
       <label>最长间隔（分钟）<input className="text-input" type="number" min="35" max="51" step="1" value={form.max} onChange={event => setForm(value => ({ ...value, max: event.target.value }))} /></label>
       <button type="submit" className="primary-btn" disabled={pending}>保存采集设置</button>
@@ -138,11 +163,15 @@ function RunsPanel({ runs, lastSuccessAt, onRefresh, onRun, pending }) {
     <button type="button" className="primary-btn" disabled={pending} onClick={onRun}>立即采集</button>
   </div>}>
     {runs.length === 0 ? <EmptyState title="暂无任务记录" desc="采集器执行后会在这里显示结果。" /> : <div className="market-table-shell"><table className="market-table market-admin-table">
-      <thead><tr><th>开始时间</th><th>来源</th><th>状态</th><th>成功 / 失败</th><th>错误代码</th></tr></thead>
+      <thead><tr><th>开始时间</th><th>来源</th><th>状态</th><th>计划数量</th><th>成功 / 失败</th><th>错误代码</th></tr></thead>
       <tbody>{runs.map((run, index) => <tr key={run.id ?? index}>
         <td data-label="开始时间">{formatEpoch(run.started_at_ms ?? run.started_at)}</td>
         <td data-label="来源">{run.trigger === 'manual' ? '手动' : ['schedule', 'scheduled'].includes(run.trigger) ? '定时' : run.trigger || '—'}</td>
         <td data-label="状态"><Pill tone={['success', 'succeeded'].includes(run.status) ? 'success' : run.status === 'failed' ? 'danger' : run.status === 'partial' ? 'warning' : 'neutral'}>{runLabel(run.status)}</Pill></td>
+        <td data-label="计划数量">{run.expected_count == null ? '未知' : `${run.expected_count} 件`}
+          {run.item_limit != null ? <span className="market-item-detail">上限 {run.item_limit} 件</span> : null}
+          {run.batch_fallback_reason ? <span className="market-item-detail">临时回退：{fallbackLabel(run.batch_fallback_reason)}</span> : null}
+        </td>
         <td data-label="成功 / 失败">{run.success_count ?? 0} / {run.failure_count ?? 0}</td>
         <td data-label="错误代码">{run.error_code || '—'}</td>
       </tr>)}</tbody>

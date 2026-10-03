@@ -7,15 +7,26 @@ from contextlib import nullcontext
 
 from django.db import transaction
 from django.db.models import Q
-from GameSessions.coordination import CoordinationError, account_lease
+from GameSessions.coordination import CoordinationError, MAX_ACCOUNT_RPCS, account_lease
 from GameSessions.rotation import round_robin
 
 from .models import CollectionRun, LatestPrice, MarketConfig, MarketItem, PriceSnapshot, epoch_ms
+from .batch_policy import (
+    MAX_ITEMS_PER_RUN, FALLBACK_ITEMS_PER_RUN, QUERY_DELAY_MIN_MS, QUERY_DELAY_MAX_MS,
+    RUN_TIME_BUDGET_SECONDS, RPC_RESERVE_SECONDS, SESSION_RESERVE_SECONDS,
+    FINISH_RESERVE_SECONDS,
+    FALLBACK_DURATION_MS, CAPACITY_FAILURE_THRESHOLD, CAPACITY_ERROR_CODES, batch_policy,
+)
 
 
 LEASE_MS = 12 * 60 * 1000
-QUERY_PACE_SECONDS = 1.0
-MAX_ITEMS_PER_RUN = 40
+AUTH_RPC_COUNT = 4
+
+
+class RuntimeBudgetExceeded(Exception):
+    """Stop before another network operation can consume the finish reserve."""
+
+    code = 'runtime_budget'
 
 
 class LeaseLost(Exception):
@@ -46,9 +57,20 @@ def _claim_run(now_ms):
         if active:
             return None
 
-        CollectionRun.objects.filter(status='running').filter(
+        expired = CollectionRun.objects.filter(status='running').filter(
             Q(lease_expires_at_ms__lte=now_ms) | Q(lease_expires_at_ms__isnull=True)
-        ).update(
+        )
+        if expired.exists():
+            config.batch_fallback_until_ms = now_ms + FALLBACK_DURATION_MS
+            config.batch_fallback_reason = 'lease_expired'
+            config.capacity_failure_count = 0
+            config.save(update_fields=['batch_fallback_until_ms', 'batch_fallback_reason', 'capacity_failure_count'])
+        elif config.batch_fallback_until_ms and config.batch_fallback_until_ms <= now_ms:
+            config.batch_fallback_until_ms = None
+            config.batch_fallback_reason = ''
+            config.capacity_failure_count = 0
+            config.save(update_fields=['batch_fallback_until_ms', 'batch_fallback_reason', 'capacity_failure_count'])
+        expired.update(
             status='failed', finished_at_ms=now_ms, error_code='lease_expired',
             lease_owner='', lease_expires_at_ms=None,
         )
@@ -134,11 +156,29 @@ def _finish_run(run, *, config_status, next_due_ms, finished_at_ms, retry_at_ms=
         elif run.status == 'succeeded':
             config.rate_failure_count = 0
             config.cooldown_until_ms = None
+        if run.error_code in CAPACITY_ERROR_CODES:
+            config.capacity_failure_count += 1
+        else:
+            config.capacity_failure_count = 0
+        fallback_reason = None
+        if run.error_code == 'runtime_budget':
+            fallback_reason = 'runtime_budget'
+        elif config.capacity_failure_count >= CAPACITY_FAILURE_THRESHOLD:
+            fallback_reason = run.error_code
+        elif getattr(run, '_shared_budget_limited', False):
+            fallback_reason = 'shared_budget'
+        if fallback_reason:
+            config.batch_fallback_until_ms = finished_at_ms + FALLBACK_DURATION_MS
+            config.batch_fallback_reason = fallback_reason
+        elif config.batch_fallback_until_ms and config.batch_fallback_until_ms <= finished_at_ms:
+            config.batch_fallback_until_ms = None
+            config.batch_fallback_reason = ''
         config.session_status = config_status
         config.next_due_at_ms = next_due_ms
         config.updated_at_ms = finished_at_ms
         config.save(update_fields=['session_status', 'next_due_at_ms', 'updated_at_ms',
-                                   'cooldown_until_ms', 'rate_failure_count'])
+                                   'cooldown_until_ms', 'rate_failure_count',
+                                   'capacity_failure_count', 'batch_fallback_until_ms', 'batch_fallback_reason'])
         run.finished_at_ms = finished_at_ms
         run.lease_owner = ''
         run.lease_expires_at_ms = None
@@ -147,12 +187,34 @@ def _finish_run(run, *, config_status, next_due_ms, finished_at_ms, retry_at_ms=
         locked_run.success_count = run.success_count
         locked_run.failure_count = run.failure_count
         locked_run.error_code = run.error_code
+        locked_run.item_limit = run.item_limit
+        locked_run.expected_count = run.expected_count
+        locked_run.batch_fallback_reason = run.batch_fallback_reason
         locked_run.lease_owner = ''
         locked_run.lease_expires_at_ms = None
         locked_run.save(update_fields=[
             'status', 'finished_at_ms', 'success_count', 'failure_count',
             'error_code', 'lease_owner', 'lease_expires_at_ms',
+            'item_limit', 'expected_count', 'batch_fallback_reason',
         ])
+
+
+def _save_plan(run, items, now_ms):
+    """Persist the fixed list size before connecting; never infer it afterwards."""
+    with transaction.atomic():
+        MarketConfig.objects.select_for_update().get(pk=1)
+        locked_run = CollectionRun.objects.select_for_update().get(pk=run.pk)
+        _check_lease(locked_run, run, now_ms)
+        run.expected_count = len(items)
+        locked_run.expected_count = run.expected_count
+        locked_run.item_limit = run.item_limit
+        locked_run.batch_fallback_reason = run.batch_fallback_reason
+        locked_run.save(update_fields=['expected_count', 'item_limit', 'batch_fallback_reason'])
+
+
+def _complete(run):
+    return (run.expected_count is not None and run.success_count == run.expected_count
+            and run.failure_count == 0 and not run.error_code)
 
 
 def _select_bundle(run, bundles, now_ms):
@@ -176,7 +238,8 @@ def _heartbeat_run(run, now_ms):
 
 
 def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
-                randint=random.randint, sleep=time.sleep, lease_factory=account_lease):
+                randint=random.randint, sleep=time.sleep, lease_factory=account_lease,
+                monotonic=time.monotonic):
     """Collect due prices once; injected I/O lets tests exercise the DB path."""
     from .session_bundle import NeedsAuthError
     from .collector_protocol import NetworkError, RateLimitedError, ServiceRejectedError
@@ -187,15 +250,25 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         from .collector_protocol import MarketSession
         session_factory = MarketSession
 
+    deadline = monotonic() + RUN_TIME_BUDGET_SECONDS
+
+    def check_budget(reserve=RPC_RESERVE_SECONDS):
+        if monotonic() + reserve >= deadline:
+            raise RuntimeBudgetExceeded()
+
     now_ms = clock_ms()
     run = _claim_run(now_ms)
     if run is None:
         return None
 
+    policy = batch_policy(MarketConfig.objects.get(pk=1), now_ms)
+    run.item_limit = min(MAX_ITEMS_PER_RUN, policy['max_items_per_run'])
+    run.batch_fallback_reason = policy['batch_fallback_reason']
     items = list(
         MarketItem.objects.filter(enabled=True)
-        .order_by('last_attempt_at_ms', 'id')[:MAX_ITEMS_PER_RUN]
+        .order_by('last_attempt_at_ms', 'id')[:run.item_limit]
     )
+    _save_plan(run, items, now_ms)
     if not items:
         run.status = 'failed'
         run.error_code = 'no_enabled_items'
@@ -212,24 +285,31 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         nonlocal config_status
         session = session_factory(bundle)
         def before_rpc():
+            check_budget()
             _heartbeat_run(run, clock_ms())
             if shared_lease is not None:
                 shared_lease.before_rpc()
+            check_budget()
         if hasattr(session, 'set_before_rpc'):
             session.set_before_rpc(before_rpc)
         elif shared_lease is not None:
             raise CoordinationError()
+        check_budget(SESSION_RESERVE_SECONDS)
         with session:
             for index, item in enumerate(items):
                 try:
+                    check_budget()
                     # `global` is the current API key for market region 8, not
                     # evidence that the game's region 8 is galaxy-wide.
                     if item.scope != 'global':
                         raise ValueError('unsupported_market_scope')
                     quote = session.quote(item.id, 8)
+                    check_budget(FINISH_RESERVE_SECONDS)
                     _save_quote(run, item, quote, clock_ms())
                     run.success_count += 1
                 except LeaseLost:
+                    raise
+                except RuntimeBudgetExceeded:
                     raise
                 except NeedsAuthError:
                     raise
@@ -250,7 +330,9 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                     if getattr(session, 'sock', True) is None:
                         break
                 if index < len(items) - 1:
-                    sleep(QUERY_PACE_SECONDS)
+                    delay = randint(QUERY_DELAY_MIN_MS, QUERY_DELAY_MAX_MS) / 1000
+                    check_budget(RPC_RESERVE_SECONDS + delay)
+                    sleep(delay)
 
     try:
         loaded = bundle_loader()
@@ -265,10 +347,22 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
 
         bundle, index = _select_bundle(run, bundles, now_ms)
         shared_lease = lease_factory('MARKET', index, len(bundles))
+        if shared_lease is not None:
+            # Four authentication RPCs count in the same account window as
+            # item queries. Keep the shared policy unchanged for KM.
+            permitted_items = min(FALLBACK_ITEMS_PER_RUN, MAX_ACCOUNT_RPCS - AUTH_RPC_COUNT)
+            if permitted_items < 1:
+                raise CoordinationError()
+            if policy['configured_max_items_per_run'] > permitted_items:
+                run._shared_budget_limited = True
+                run.item_limit = min(run.item_limit, permitted_items)
+                run.batch_fallback_reason = 'shared_budget'
+                items = items[:run.item_limit]
+                _save_plan(run, items, now_ms)
         with shared_lease if shared_lease is not None else nullcontext():
             try:
                 collect_bundle(bundle, shared_lease)
-                if shared_lease is not None and run.failure_count == 0:
+                if shared_lease is not None and _complete(run):
                     shared_lease.complete()
             except NeedsAuthError as exc:
                 if shared_lease is not None and exc.code != 'invalid_session':
@@ -284,6 +378,10 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                 raise
     except LeaseLost:
         return None
+    except RuntimeBudgetExceeded:
+        config_status = 'error'
+        run.status = 'partial' if run.success_count else 'failed'
+        run.error_code = 'runtime_budget'
     except NeedsAuthError as exc:
         config_status = 'needs_auth'
         run.status = 'needs_auth'
@@ -305,7 +403,7 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
             config_status, run.status = 'blocked', 'failed'
         else:
             config_status = 'blocked' if exc.code == 'configuration_error' else 'error'
-            run.status = 'failed'
+            run.status = 'partial' if run.success_count else 'failed'
     except NetworkError as exc:
         config_status = 'error'
         run.status = 'failed' if run.success_count == 0 else 'partial'
@@ -314,8 +412,10 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         run.status = 'failed' if run.success_count == 0 else 'partial'
         run.error_code = 'collection_error'
     else:
-        if run.failure_count:
+        if not _complete(run):
             run.status = 'partial' if run.success_count else 'failed'
+            if not run.error_code:
+                run.error_code = 'incomplete_run'
         else:
             run.status = 'succeeded'
 
