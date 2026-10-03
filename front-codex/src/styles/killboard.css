@@ -79,7 +79,6 @@
 .kb-item-status--mixed { color:var(--kb-amber) !important; }
 .kb-item--dropped { margin-inline:-6px; padding-inline:6px !important; border:1px solid rgb(101 209 183 / 32%); border-radius:7px; background:linear-gradient(90deg,rgb(55 139 126 / 23%),rgb(29 78 78 / 12%)); }
 .kb-item--dropped .kb-item-main strong { color:#e1fff5; }
-.kb-participant--npc { border-left:2px solid #76989d; padding-left:7px; }
 .kb-empty { display:grid; place-items:center; min-height:120px; padding:20px; color:#83a0a4; text-align:center; }
 .kb-empty strong { margin-top:9px; color:#bdd0d1; font-size:13px; }
 .kb-empty p { max-width:260px; margin:6px 0 0; font-size:11px; line-height:1.6; }
@@ -256,7 +255,7 @@
    image treatment that clipped wide silhouettes. */
 .kb-hero { display:grid; grid-template-columns:minmax(190px, 260px) minmax(0, 1fr) minmax(190px, 235px); align-items:center; gap:20px; }
 .kb-hero .kb-asset--ship { width:100%; height:168px; grid-template-rows:minmax(0,1fr); overflow:visible; border:0; border-radius:0; background:transparent; }
-.kb-hero .kb-asset--ship img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; filter:drop-shadow(0 10px 16px rgb(0 0 0 / 28%)); }
+.kb-hero .kb-asset--ship img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; transform:scale(.9); transform-origin:center; filter:drop-shadow(0 10px 16px rgb(0 0 0 / 28%)); }
 .kb-hero-value { display:grid; justify-items:end; gap:5px; min-width:0; }
 .kb-hero-value strong { margin:0; white-space:nowrap; }
 .kb-hero-value .kb-hero-exact { color:#aac0c2; font-size:10px; font-variant-numeric:tabular-nums; white-space:nowrap; }
