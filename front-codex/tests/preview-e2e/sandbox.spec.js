@@ -240,9 +240,13 @@ test("preview toolbar does not overlap the expanded or collapsed desktop navigat
 }) => {
   await page.goto("/login");
   const toolbar = roles(page);
+  await expect(page.locator("html")).toHaveCSS("scrollbar-gutter", "stable");
   const loginRect = await toolbar.boundingBox();
+  const loginBody = await page.locator("body").boundingBox();
   expect(loginRect.x).toBe(0);
-  expect(loginRect.width).toBe(1440);
+  // A stable root scrollbar gutter is outside the available page width.
+  // The toolbar must fill that width, not cover the reserved scrollbar area.
+  expect(loginRect.width).toBeCloseTo(loginBody.width, 1);
   await page.goto("/corporations");
   const sidebar = page.getByRole("complementary", {
     name: "工具导航",
