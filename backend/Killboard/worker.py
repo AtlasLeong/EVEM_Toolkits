@@ -14,7 +14,7 @@ class LeaseLostError(Exception):
 
 
 def paused_reason(cursor):
-    if cursor.pause_reason in ('unauthorized', 'configuration_error'):
+    if cursor.pause_reason in ('unauthorized', 'configuration_error', 'service_rejected'):
         return cursor.pause_reason
     if cursor.cooldown_until_ms and cursor.cooldown_until_ms > int(time.time()*1000):
         return 'cooldown'

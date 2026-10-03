@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from GameSessions.coordination import (AccountAuthPaused, AccountBudgetExhausted, AccountBusy,
                                       AccountLeaseLost, AccountRateLimited, CoordinationError,
+                                      AccountServicePaused,
                                       Coordinator, LEASE_MS, MAX_ACCOUNT_RPCS, WINDOW_MS,
                                       account_lease, provision)
 
@@ -94,6 +95,46 @@ class CoordinationTests(unittest.TestCase):
             with self.assertRaises(AccountBusy):
                 self.coordinator.resume('shared-a')
 
+    def test_service_refusal_survives_restart_and_auth_resume_does_not_clear_it(self):
+        with self.coordinator.lease('shared-a') as lease:
+            lease.pause_service()
+            with self.assertRaises(AccountServicePaused):
+                lease.before_rpc()
+        self.now += 24 * 60 * 60000
+        self.coordinator.resume('shared-a')  # authentication replacement acknowledgement only
+        with self.assertRaises(AccountServicePaused):
+            Coordinator(self.path, clock_ms=lambda: self.now).lease('shared-a').__enter__()
+        self.coordinator.resume('shared-a', auth=False, service=True)
+        with self.coordinator.lease('shared-a'):
+            pass
+
+    def test_older_coordination_schema_is_refused_without_adoption(self):
+        with closing(sqlite3.connect(self.path)) as db:
+            db.execute('PRAGMA user_version=1')
+        before = self.path.read_bytes()
+        with self.assertRaises(CoordinationError):
+            self.coordinator.lease('shared-a').__enter__()
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_offline_cli_requires_separate_service_and_auth_acknowledgements(self):
+        with self.coordinator.lease('shared-a') as lease:
+            lease.pause_auth()
+            lease.pause_service()
+        command = [sys.executable, '-m', 'GameSessions', 'resume', '--state-file', str(self.path),
+                   '--account-id', 'shared-a']
+        refused = subprocess.run(command, capture_output=True, timeout=15)
+        self.assertEqual(refused.returncode, 1)
+        service = subprocess.run(command + ['--confirm-resolved-service-restriction'],
+                                 capture_output=True, timeout=15)
+        self.assertEqual(service.returncode, 0)
+        with self.assertRaises(AccountAuthPaused):
+            self.coordinator.lease('shared-a').__enter__()
+        auth = subprocess.run(command + ['--confirm-authorized-session-replacement'],
+                              capture_output=True, timeout=15)
+        self.assertEqual(auth.returncode, 0)
+        with self.coordinator.lease('shared-a'):
+            pass
+
     def test_partial_ambiguous_duplicate_or_secret_like_mapping_fails_closed(self):
         for env in (
             {'GAME_SESSION_COORDINATOR_FILE': str(self.path)},
@@ -126,4 +167,4 @@ class CoordinationTests(unittest.TestCase):
         with closing(sqlite3.connect(self.path)) as db:
             columns = [row[1] for row in db.execute('PRAGMA table_info(accounts)')]
         self.assertEqual(set(columns), {'account_ref', 'owner', 'expires_ms', 'next_rpc_ms',
-                                        'window_ms', 'rpc_count', 'auth_paused'})
+                                        'window_ms', 'rpc_count', 'auth_paused', 'service_paused'})

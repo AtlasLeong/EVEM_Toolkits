@@ -33,7 +33,7 @@ from .session_bundle import MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS, loa
 MAX_IDENTITY_CACHE = 4096
 AUDIT_STAGES = ('connection', 'authentication', 'kill_report', 'identity')
 AUDIT_ERROR_CODES = ('unauthorized', 'rate_limited', 'network_error', 'malformed',
-                     'budget_exhausted', 'lease_lost', 'configuration_error')
+                     'budget_exhausted', 'lease_lost', 'configuration_error', 'service_rejected')
 
 
 @dataclass(frozen=True)
@@ -127,6 +127,8 @@ class KillboardSession(market.MarketSession):
                     self.account_lease.pause_auth()
                 elif failure is not None and failure.code == 'rate_limited':
                     self.account_lease.pause_rate()
+                elif failure is not None and failure.code == 'service_rejected':
+                    self.account_lease.pause_service()
                 elif failure is None:
                     self.account_lease.complete()
         finally:
@@ -238,6 +240,8 @@ def _transport_error(exc: Exception) -> CollectorError:
         return CollectorError(exc.code)
     if isinstance(exc, MarketNeedsAuthError):
         return CollectorError('unauthorized')
+    if isinstance(exc, market.ServiceRejectedError):
+        return CollectorError('service_rejected')
     if isinstance(exc, market.ProtocolTimeout):
         return CollectorError('network_error', 'timeout')
     # Market deliberately replaces OS errors with fixed safe messages. Match
@@ -467,7 +471,7 @@ class KillboardClient:
                     return self._enrich_report(decoded)
                 except Exception as exc:
                     code = getattr(exc, 'code', '')
-                    if (code not in ('rate_limited', 'unauthorized', 'network_error', 'budget_exhausted', 'malformed')
+                    if (code not in ('rate_limited', 'unauthorized', 'network_error', 'budget_exhausted', 'malformed', 'service_rejected')
                             or (code == 'malformed' and not isinstance(exc, CollectorError))):
                         raise
                     # Retain only identity rows already decoded through the

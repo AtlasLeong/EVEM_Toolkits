@@ -37,6 +37,7 @@ class ProbeStatus(str, Enum):
     BUDGET_EXHAUSTED = "budget_exhausted"
     LEASE_LOST = "lease_lost"
     CONFIGURATION_ERROR = "configuration_error"
+    SERVICE_REJECTED = "service_rejected"
 
 
 @dataclass(frozen=True)
@@ -210,7 +211,7 @@ class DiscoveryRunner:
 
     @staticmethod
     def pause(cursor, reason):
-        if reason in ('rate_limited', 'unauthorized', 'configuration_error'):
+        if reason in ('rate_limited', 'unauthorized', 'configuration_error', 'service_rejected'):
             cursor.failure_count += 1
             cursor.pause_reason = reason
             cursor.cooldown_until_ms = (
@@ -236,7 +237,7 @@ class DiscoveryRunner:
             return value
         deferred_stop = ''
         if isinstance(value, BaseReportResult):
-            if value.stop_code not in ('rate_limited', 'unauthorized', 'network_error', 'budget_exhausted', 'malformed'):
+            if value.stop_code not in ('rate_limited', 'unauthorized', 'network_error', 'budget_exhausted', 'malformed', 'service_rejected'):
                 return ProbeOutcome(ProbeStatus.MALFORMED, error_code='invalid_deferred_stop')
             deferred_stop, value = value.stop_code, value.decoded
         try:

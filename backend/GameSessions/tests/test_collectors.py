@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from GameSessions.coordination import AccountAuthPaused, AccountRateLimited, Coordinator, provision
+from GameSessions.coordination import AccountAuthPaused, AccountRateLimited, AccountServicePaused, Coordinator, provision
 from Killboard.collector_transport import CollectorError, KillboardClient
 from Killboard.tests.test_collector_transport import WireSocket, frame, response, successful_login, throttle
 from Killboard.tests.test_session_bundle import synthetic_bundle
@@ -71,3 +71,21 @@ class SharedKillboardTransportTests(unittest.TestCase):
         self.assertTrue(wire.closed)
         with self.coordinator.transaction() as db:
             self.assertEqual(db.execute('SELECT rate_failures FROM policy').fetchone()[0], 2)
+
+    def test_km_character_entry_refusal_pauses_shared_account_before_release(self):
+        wire = WireSocket(frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
+                          + response(1, [0, {'client_id': 77, 'proxy_node_id': 88}])
+                          + response(2, ['synthetic-refusal']))
+        client = KillboardClient(synthetic_bundle())
+        client.session.account_lease = self.coordinator.lease('shared-a')
+        with patch('socket.create_connection', return_value=wire) as connect:
+            with self.assertRaises(CollectorError) as caught:
+                client.get_kill_info(100)
+            self.assertEqual(caught.exception.code, 'service_rejected')
+            self.assertEqual(client.audit_snapshot()['error_code'], 'service_rejected')
+            with self.assertRaises(AccountServicePaused):
+                self.coordinator.lease('shared-a').__enter__()
+            with self.assertRaises(CollectorError):
+                client.get_kill_info(101)
+            self.assertEqual(connect.call_count, 1)
+        self.assertTrue(wire.closed)

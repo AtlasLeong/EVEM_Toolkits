@@ -31,6 +31,9 @@ Do not splice authentication and RPC templates from different captures/accounts.
   automatic collection. Do not retry another slot.
 - An unclassified service refusal: `blocked`, `service_rejected`; stop automatic
   collection without claiming that refreshing authentication will fix the refusal.
+  Killboard persists this same `service_rejected` pause even when the refusal
+  occurs inside its inherited character-entry RPCs; later scheduled passes send
+  no requests until the operator resolves the restriction and explicitly resumes.
 - A captured structured rate rejection: `cooldown`, `rate_limited`; stop all
   remaining queries. Persist 15/30/60-minute increasing cooldowns. Scheduled and
   queued manual jobs cannot bypass the cooldown. The next automatic pass is also
@@ -84,6 +87,10 @@ mapped account until explicit recovery, and the rejecting collector itself
 also remains paused. No captured material or material hashes are persisted in
 coordination state.
 
+An unclassified service refusal also suspends the mapped account for BOTH
+collectors. This has a separate latch from authentication refusal: replacement
+authentication material does not clear an unresolved service restriction.
+
 The SQLite file is for trusted collectors on ONE host's local filesystem.
 Neither separate copies, NFS/SMB, nor per-host files provide a distributed
 account lease. Multi-host use requires a separately designed shared database
@@ -125,6 +132,14 @@ no game connection, and does not clear rate cooldowns or the module's pause.
 Follow it with the module's existing deliberate verification/resume flow.
 Never use it to ignore an unresolved refusal or revoked access.
 
+Only after the service restriction itself is resolved, acknowledge that separate
+latch with `python -m GameSessions resume --account-id collector-a
+--confirm-resolved-service-restriction`. This does not clear authentication
+pauses, rate cooldowns or the module's own pause. The first-release coordinator
+uses state format 2; older prototype files are refused without adoption or
+automatic modification. No coordinator has been provisioned in production by
+this rollout; real mappings and the separate permission grants remain required.
+
 Before rollback, stop both timers. Retain additive schema and non-secret state;
 old workers do not honor the new cooldown/rotation fields, so do not resume them
 while relying on the new rejection protections. No migration reversal or
@@ -141,14 +156,19 @@ and rate stops, manual cooldown protection, network recovery and unchanged
 batch/frequency limits. They do not prove game credential lifetime or live
 MySQL/systemd behavior.
 
-Local verification on Windows / Python 3.11: 167 Market/shared/settings tests,
-278 explicitly selected Killboard/shared-catalog tests, 607 frontend unit/preview
+Local verification on Windows / Python 3.11: 172 Market/shared/settings tests,
+280 explicitly selected Killboard/shared-catalog tests, 607 frontend unit/preview
 tests and 45 related deployment/packaging contract tests passed. The frontend
 build, Django system check, migration drift checks and Python compilation passed.
 Use the explicit Killboard module list in `.github/workflows/ci.yml`: the bare
 `Killboard` test label does not discover its namespace test directory.
 
-The full deployment suite exceeded a 60-second local bound in the existing
-Windows backup escrow test; it was stopped. Linux-only release tests and real
-disposable MySQL integration remain CI checks. No production database, game
-credential or real game endpoint was used for this verification.
+The Windows backup escrow checks require the signed-in user's identity and an
+authorized temporary path. With that execution context, all 199 deployment
+tests passed (14 Linux-only skips); no safety check was changed. The first-head
+Linux CI and real disposable MySQL 8.0.37 integration passed. After the Codex
+service-refusal finding, synthetic transport tests also verify that KM persists
+its pause, shared accounts remain stopped across restart, and authentication
+replacement cannot clear a service restriction. CI and review must be repeated
+on the final head. No production database, game credential or real game endpoint
+was used for these offline tests.

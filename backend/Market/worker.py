@@ -278,6 +278,10 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                 if shared_lease is not None:
                     retry_at_ms = shared_lease.pause_rate()
                 raise
+            except ServiceRejectedError:
+                if shared_lease is not None:
+                    shared_lease.pause_service()
+                raise
     except LeaseLost:
         return None
     except NeedsAuthError as exc:
@@ -297,6 +301,8 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         elif exc.code == 'rate_limited':
             config_status, run.status = 'cooldown', 'rate_limited'
             retry_at_ms = getattr(exc, 'retry_at_ms', None)
+        elif exc.code == 'service_rejected':
+            config_status, run.status = 'blocked', 'failed'
         else:
             config_status = 'blocked' if exc.code == 'configuration_error' else 'error'
             run.status = 'failed'

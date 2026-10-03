@@ -16,6 +16,7 @@ import uuid
 
 
 APPLICATION_ID = 0x45564D53
+STATE_VERSION = 2
 LEASE_MS = 12 * 60 * 1000
 WINDOW_MS = 5 * 60 * 1000
 # Local conservative bounds, NOT an official game quota. Four auth RPCs plus
@@ -41,6 +42,10 @@ class AccountLeaseLost(CoordinationError):
 
 class AccountAuthPaused(CoordinationError):
     code = 'unauthorized'
+
+
+class AccountServicePaused(CoordinationError):
+    code = 'service_rejected'
 
 
 class AccountRateLimited(CoordinationError):
@@ -88,13 +93,14 @@ def provision(path):
     try:
         connection.executescript(f'''
             PRAGMA application_id={APPLICATION_ID};
-            PRAGMA user_version=1;
+            PRAGMA user_version={STATE_VERSION};
             CREATE TABLE accounts (
                 account_ref TEXT PRIMARY KEY,
                 owner TEXT NOT NULL DEFAULT '', expires_ms INTEGER NOT NULL DEFAULT 0,
                 next_rpc_ms INTEGER NOT NULL DEFAULT 0,
                 window_ms INTEGER NOT NULL DEFAULT 0, rpc_count INTEGER NOT NULL DEFAULT 0,
-                auth_paused INTEGER NOT NULL DEFAULT 0
+                auth_paused INTEGER NOT NULL DEFAULT 0,
+                service_paused INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE policy (
                 id INTEGER PRIMARY KEY CHECK(id=1), cooldown_ms INTEGER NOT NULL DEFAULT 0,
@@ -127,7 +133,7 @@ class Coordinator:
                 raise CoordinationError()
             connection.row_factory = sqlite3.Row
             if (connection.execute('PRAGMA application_id').fetchone()[0] != APPLICATION_ID
-                    or connection.execute('PRAGMA user_version').fetchone()[0] != 1):
+                    or connection.execute('PRAGMA user_version').fetchone()[0] != STATE_VERSION):
                 raise CoordinationError()
             connection.execute('BEGIN IMMEDIATE')
             yield connection
@@ -146,14 +152,17 @@ class Coordinator:
     def lease(self, account_ref):
         return AccountLease(self, _account_ref(account_ref))
 
-    def resume(self, account_ref):
+    def resume(self, account_ref, *, auth=True, service=False):
         """Operator acknowledgement only; performs no game login or token refresh."""
         account_ref = _account_ref(account_ref)
         with self.transaction() as db:
             row = db.execute('SELECT * FROM accounts WHERE account_ref=?', (account_ref,)).fetchone()
             if row and row['owner'] and row['expires_ms'] > self.clock_ms():
                 raise AccountBusy()
-            db.execute('UPDATE accounts SET auth_paused=0 WHERE account_ref=?', (account_ref,))
+            if auth:
+                db.execute('UPDATE accounts SET auth_paused=0 WHERE account_ref=?', (account_ref,))
+            if service:
+                db.execute('UPDATE accounts SET service_paused=0 WHERE account_ref=?', (account_ref,))
 
 
 class AccountLease:
@@ -180,6 +189,8 @@ class AccountLease:
             row = db.execute('SELECT * FROM accounts WHERE account_ref=?', (self.account_ref,)).fetchone()
             if row['auth_paused']:
                 raise AccountAuthPaused()
+            if row['service_paused']:
+                raise AccountServicePaused()
             if row['owner'] and row['expires_ms'] > now:
                 raise AccountBusy()
             db.execute('UPDATE accounts SET owner=?, expires_ms=? WHERE account_ref=?',
@@ -211,6 +222,8 @@ class AccountLease:
                     raise AccountRateLimited(policy['cooldown_ms'])
                 if row['auth_paused']:
                     raise AccountAuthPaused()
+                if row['service_paused']:
+                    raise AccountServicePaused()
                 delay = max(0, row['next_rpc_ms'] - now)
                 if not delay:
                     window, count = row['window_ms'], row['rpc_count']
@@ -229,6 +242,11 @@ class AccountLease:
         with self.coordinator.transaction() as db:
             self._owned(db, self.coordinator.clock_ms())
             db.execute('UPDATE accounts SET auth_paused=1 WHERE account_ref=?', (self.account_ref,))
+
+    def pause_service(self):
+        with self.coordinator.transaction() as db:
+            self._owned(db, self.coordinator.clock_ms())
+            db.execute('UPDATE accounts SET service_paused=1 WHERE account_ref=?', (self.account_ref,))
 
     def pause_rate(self):
         now = self.coordinator.clock_ms()

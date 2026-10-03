@@ -6,7 +6,7 @@ from unittest.mock import patch
 import msgpack
 from django.test import TestCase
 
-from GameSessions.coordination import Coordinator, provision
+from GameSessions.coordination import AccountServicePaused, Coordinator, provision
 from Market.collector_protocol import MarketSession, NetworkError, ProtocolTimeout, RateLimitedError, ServiceRejectedError
 from Market.models import CollectionRun, MarketConfig, MarketItem, PriceSnapshot
 from Market.session_bundle import AuthenticationRejected, SessionBundleError, load_session_pool, save_session
@@ -149,6 +149,25 @@ class RotationTests(TestCase):
                     session.quote(1)
         self.assertTrue(wire.closed)
         self.assertEqual(len(wire.sent), 6)  # handshake + auth4 + exactly one quote
+
+    def test_market_service_refusal_blocks_same_mapped_account_for_km(self):
+        from Market.worker import collect_due
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'state.sqlite3'
+            provision(path)
+            now = [1000]
+            coordinator = Coordinator(path, clock_ms=lambda: now[0],
+                                      sleep=lambda seconds: now.__setitem__(0, now[0] + int(seconds * 1000)))
+            wire = WireSocket(successful_login() + response(5, ['synthetic-refusal', []]))
+            with patch('socket.create_connection', return_value=wire):
+                run = collect_due(clock_ms=lambda: self.now, bundle_loader=lambda: [bundle()],
+                                  session_factory=MarketSession, randint=lambda low, high: low,
+                                  lease_factory=lambda *args: coordinator.lease('shared-a'))
+            self.config.refresh_from_db()
+            self.assertEqual((run.error_code, self.config.session_status), ('service_rejected', 'blocked'))
+            with self.assertRaises(AccountServicePaused):
+                coordinator.lease('shared-a').__enter__()
+            self.assertTrue(wire.closed)
 
     def test_larger_session_pool_does_not_expand_forty_item_batch_or_open_more_sessions(self):
         for item_id in range(2, 46):
