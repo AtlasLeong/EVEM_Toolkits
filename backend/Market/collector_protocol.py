@@ -19,7 +19,9 @@ import uuid
 
 import msgpack
 
-from .session_bundle import NeedsAuthError, validate_session
+from GameSessions.coordination import CoordinationError
+from GameSessions.rejections import structured_rejection
+from .session_bundle import AuthenticationRejected, NeedsAuthError, validate_session
 
 
 MAX_FRAME_SIZE = 10_000_000
@@ -33,8 +35,20 @@ class ProtocolError(Exception):
     code = 'protocol_error'
 
 
-class ProtocolTimeout(ProtocolError):
+class NetworkError(ProtocolError):
+    code = 'network_error'
+
+
+class ProtocolTimeout(NetworkError):
     code = 'timeout'
+
+
+class RateLimitedError(ProtocolError):
+    code = 'rate_limited'
+
+
+class ServiceRejectedError(ProtocolError):
+    code = 'service_rejected'
 
 
 @dataclass(frozen=True)
@@ -101,7 +115,7 @@ def extract_prices(value: Any) -> list[Decimal]:
             raise ProtocolError('Market response nesting limit exceeded.')
         if isinstance(part, dict):
             if any(str(key).lower() in error_keys for key in part):
-                raise ProtocolError('Market response contains an error.')
+                raise ServiceRejectedError('Market response contains an error.')
             if 'price' in part:
                 if any(isinstance(value, (dict, list)) for key, value in part.items() if key != 'price'):
                     raise ProtocolError('Unrecognized market order data.')
@@ -152,7 +166,7 @@ def summarize_orders(result: Any) -> Quote:
         raise ProtocolError('Market response lacks sell and buy sides.')
     if isinstance(result[0], str):
         # Remote error strings can contain identifiers/session data.
-        raise ProtocolError('Market RPC was rejected.')
+        raise ServiceRejectedError('Market RPC was rejected.')
     sells, buys = extract_prices(result[0]), extract_prices(result[1])
     sell_prices = tuple(sorted(sells)[:5])
     buy_prices = tuple(sorted(buys, reverse=True)[:5])
@@ -184,7 +198,7 @@ def _read_exact(sock, size, deadline):
         _remaining(sock, deadline)
         chunk = sock.recv(size - len(chunks))
         if not chunk:
-            raise ProtocolError('Market connection closed while reading a frame.')
+            raise NetworkError('Market connection closed while reading a frame.')
         chunks.extend(chunk)
     return bytes(chunks)
 
@@ -219,6 +233,12 @@ class MarketSession:
         self.proxy_id = None
         self.next_seq = 0
         self.next_server_seq = 0
+        self.before_rpc = None
+
+    def set_before_rpc(self, callback):
+        if callback is not None and not callable(callback):
+            raise ValueError('Invalid market RPC callback.')
+        self.before_rpc = callback
 
     def __enter__(self):
         if self.sock is not None:
@@ -233,8 +253,10 @@ class MarketSession:
             hello['token'] = str(uuid.uuid4())
             self.sock.sendall(_pack(1, hello))
             kind, response = _read_frame(self.sock, deadline)
-            if kind != 2 or not isinstance(response, dict) or response.get('accepted') is not True:
-                raise NeedsAuthError('Market handshake rejected; refresh the private session.')
+            if kind != 2 or not isinstance(response, dict) or type(response.get('accepted')) is not bool:
+                raise ProtocolError('Invalid market handshake response.')
+            if response['accepted'] is False:
+                raise AuthenticationRejected('Market handshake rejected; operator authorization is required.')
             try:
                 self.client_id = _identifier(response['info']['node_info']['node_id'])
             except (KeyError, TypeError):
@@ -242,11 +264,11 @@ class MarketSession:
             self.authenticate()
             return self
         except BaseException as exc:
-            self.__exit__(None, None, None)
+            self.__exit__(type(exc), exc, exc.__traceback__)
             if isinstance(exc, (socket.timeout, TimeoutError)):
                 raise ProtocolTimeout('Market connection timed out.') from None
             if isinstance(exc, OSError):
-                raise ProtocolError('Market connection is unavailable.') from None
+                raise NetworkError('Market connection is unavailable.') from None
             raise
 
     def __exit__(self, *_exc):
@@ -280,8 +302,10 @@ class MarketSession:
             body[3][0] = msgpack.ExtType(extension.code, msgpack.packb(call, use_bin_type=True))
         meta.update(content=msgpack.packb(body, use_bin_type=True), seq=self.next_seq,
                     ack=self.next_server_seq, trace=None)
-        deadline = time.monotonic() + self.timeout
         try:
+            if self.before_rpc is not None:
+                self.before_rpc()
+            deadline = time.monotonic() + self.timeout
             _remaining(self.sock, deadline)
             self.sock.sendall(_pack(3, meta))
             self.next_seq += 1
@@ -294,39 +318,60 @@ class MarketSession:
                 server_seq = response.get('seq')
                 if type(server_seq) is int and server_seq >= 0:
                     self.next_server_seq = max(self.next_server_seq, server_seq + 1)
-                packet = unpack_nested(response.get('content'))
+                packet = response.get('content')
+                if isinstance(packet, bytes):
+                    packet = _unpack(packet)
+                for _ in range(MAX_NESTING):
+                    if not isinstance(packet, msgpack.ExtType) or packet.code not in (10, 55):
+                        break
+                    packet = _unpack(packet.data)
                 if (isinstance(packet, list) and len(packet) > 3 and packet[0] == 2
                         and isinstance(packet[2], list) and len(packet[2]) > 2
                         and type(packet[2][2]) is int and packet[2][2] == call_id):
                     if not isinstance(packet[3], list) or not packet[3]:
                         raise ProtocolError('Invalid market RPC result.')
-                    return packet[3][0]
+                    rejection = structured_rejection(packet[3][0])
+                    if rejection == 'unauthorized':
+                        raise AuthenticationRejected('Market authorization rejected; operator recovery is required.')
+                    if rejection == 'rate_limited':
+                        raise RateLimitedError('Market requests are rate limited.')
+                    return unpack_nested(packet[3][0])
             raise ProtocolError('No matching market RPC response.')
-        except (OSError, ProtocolError) as exc:
+        except (OSError, ProtocolError, NeedsAuthError, CoordinationError) as exc:
             # A timeout can leave half a frame unread. Reusing that byte stream
             # could misattribute the next item; fail closed until a new cycle.
             self.__exit__(None, None, None)
             if isinstance(exc, (socket.timeout, TimeoutError)):
                 raise ProtocolTimeout('Market request timed out.') from None
             if isinstance(exc, OSError):
-                raise ProtocolError('Market connection is unavailable.') from None
+                raise NetworkError('Market connection is unavailable.') from None
             raise
 
     def authenticate(self):
         result = self._rpc('login_sigma')
-        if (not isinstance(result, list) or len(result) < 2 or type(result[0]) is not int
-                or result[0] != 0 or not isinstance(result[1], dict)):
-            raise NeedsAuthError('Market login rejected; refresh the private session.')
+        if not isinstance(result, list) or len(result) < 2 or type(result[0]) is not int:
+            raise ProtocolError('Invalid market login response.')
+        if result[0] != 0:
+            raise AuthenticationRejected('Market login rejected; operator authorization is required.')
+        if not isinstance(result[1], dict):
+            raise ProtocolError('Invalid market login response.')
         try:
             self.client_id = _identifier(result[1]['client_id'])
             self.proxy_id = _identifier(result[1]['proxy_node_id'])
         except (KeyError, TypeError, ProtocolError):
-            raise NeedsAuthError('Market login rejected; refresh the private session.') from None
+            raise ProtocolError('Invalid market login identifiers.') from None
         for method in ('request_start_wait', 'get_newbie_info', 'select_character_id'):
             result = self._rpc(method)
-            if ((isinstance(result, list) and result and isinstance(result[0], str))
-                    or (method == 'select_character_id' and (type(result) is not int or result != 1))):
-                raise NeedsAuthError('Market character entry rejected; refresh the private session.')
+            if isinstance(result, list) and result and isinstance(result[0], str):
+                raise ServiceRejectedError('Market character entry was rejected.')
+            if method == 'select_character_id' and type(result) is not int:
+                raise ProtocolError('Invalid market character entry response.')
+            if method == 'select_character_id' and result != 1:
+                raise AuthenticationRejected('Market character entry rejected; operator authorization is required.')
 
     def quote(self, item_id: int, region_id: int = 8) -> Quote:
-        return summarize_orders(self._rpc('get_super_orders', _identifier(item_id), _identifier(region_id)))
+        try:
+            return summarize_orders(self._rpc('get_super_orders', _identifier(item_id), _identifier(region_id)))
+        except ServiceRejectedError:
+            self.__exit__(None, None, None)
+            raise

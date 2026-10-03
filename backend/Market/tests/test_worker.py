@@ -245,7 +245,7 @@ class MarketWorkerTests(TestCase):
         ))
         self.assertEqual(CollectionRun.objects.count(), 1)
 
-    def test_auth_failure_in_one_session_falls_back_to_another_session(self):
+    def test_auth_failure_stops_without_falling_back_to_another_session(self):
         from Market.worker import collect_due
 
         opened = []
@@ -270,11 +270,11 @@ class MarketWorkerTests(TestCase):
             sleep=lambda seconds: None,
         )
 
-        self.assertEqual(run.status, 'succeeded')
-        self.assertEqual(opened, [{'name': 'bad'}, {'name': 'good'}])
-        self.assertEqual(run.success_count, 2)
+        self.assertEqual(run.status, 'needs_auth')
+        self.assertEqual(opened, [{'name': 'bad'}])
+        self.assertEqual(run.success_count, 0)
         self.config.refresh_from_db()
-        self.assertEqual(self.config.session_status, 'ready')
+        self.assertEqual(self.config.session_status, 'needs_auth')
 
     def test_expired_lease_is_marked_failed_before_new_run(self):
         from Market.worker import collect_due

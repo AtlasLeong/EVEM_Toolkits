@@ -40,10 +40,15 @@ class MarketConfig(models.Model):
             ('ready', 'Ready'),
             ('needs_auth', 'Needs authentication'),
             ('error', 'Error'),
+            ('cooldown', 'Rate-limit cooldown'),
+            ('blocked', 'Service rejected'),
         ],
         default='unconfigured',
     )
     updated_at_ms = models.BigIntegerField(default=epoch_ms)
+    session_cursor = models.PositiveIntegerField(default=0)
+    cooldown_until_ms = models.BigIntegerField(null=True, blank=True)
+    rate_failure_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [
@@ -88,6 +93,7 @@ class CollectionRun(models.Model):
         ('partial', 'Partial'),
         ('failed', 'Failed'),
         ('needs_auth', 'Needs authentication'),
+        ('rate_limited', 'Rate limited'),
     ]
     TRIGGER_CHOICES = [('scheduled', 'Scheduled'), ('manual', 'Manual')]
 

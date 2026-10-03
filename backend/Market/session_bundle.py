@@ -13,6 +13,7 @@ import base64
 import binascii
 import copy
 import ipaddress
+import hashlib
 import json
 import math
 import os
@@ -40,6 +41,14 @@ class NeedsAuthError(Exception):
 
 class SessionBundleError(NeedsAuthError):
     """The private session file is missing, unsafe or structurally invalid."""
+
+    code = 'invalid_session'
+
+
+class AuthenticationRejected(NeedsAuthError):
+    """An explicit server authentication denial, not a malformed file/response."""
+
+    code = 'auth_rejected'
 
 
 def _invalid():
@@ -223,17 +232,12 @@ def _session_paths(paths=None) -> list[Path]:
 
 
 def load_session_pool(paths=None) -> list[dict[str, Any]]:
-    """Load all configured private sessions for one collection decision."""
-    sessions = []
-    for path in _session_paths(paths):
-        try:
-            sessions.append(load_session(path))
-        except NeedsAuthError:
-            # A single expired or malformed bundle must not prevent a healthy
-            # bundle from being used.  Keep the error deliberately opaque so
-            # private paths and session contents never reach logs/API output.
-            continue
-    if not sessions:
+    """Validate the whole explicit pool; malformed/duplicate material fails closed."""
+    sessions = [load_session(path) for path in _session_paths(paths)]
+    fingerprints = {hashlib.sha256(json.dumps(json.loads(encode_session(bundle)), sort_keys=True,
+                                             separators=(',', ':')).encode('utf-8')).digest()
+                    for bundle in sessions}
+    if len(fingerprints) != len(sessions):
         raise _invalid()
     return sessions
 
@@ -245,7 +249,7 @@ def load_random_session(paths=None) -> dict[str, Any]:
 
 
 def load_random_session_pool(paths=None) -> list[dict[str, Any]]:
-    """Return a shuffled usable pool for one collection with auth fallback."""
+    """Legacy helper; production selection uses the persistent ORM cursor."""
     sessions = load_session_pool(paths)
     random.shuffle(sessions)
     return sessions

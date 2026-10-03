@@ -18,6 +18,8 @@ import math
 from typing import Any
 
 import msgpack
+from GameSessions.coordination import CoordinationError, account_lease
+from GameSessions.rejections import request_too_often
 
 from Market import collector_protocol as market
 from Market.session_bundle import NeedsAuthError as MarketNeedsAuthError
@@ -31,7 +33,7 @@ from .session_bundle import MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS, loa
 MAX_IDENTITY_CACHE = 4096
 AUDIT_STAGES = ('connection', 'authentication', 'kill_report', 'identity')
 AUDIT_ERROR_CODES = ('unauthorized', 'rate_limited', 'network_error', 'malformed',
-                     'budget_exhausted', 'lease_lost')
+                     'budget_exhausted', 'lease_lost', 'configuration_error')
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,7 @@ class KillboardSession(market.MarketSession):
         self._failure = None
         self._audit = {'rpc_count': 0, 'stage': 'connection'}
         self.set_before_rpc(before_rpc)
+        self.account_lease = None
 
     def _check_session_ready(self):
         if self._failure is not None:
@@ -89,7 +92,7 @@ class KillboardSession(market.MarketSession):
     def _latch_failure(self, failure):
         if isinstance(failure, CollectorError):
             self._failure = failure
-        elif isinstance(failure, (MarketNeedsAuthError, market.ProtocolError)):
+        elif isinstance(failure, (MarketNeedsAuthError, market.ProtocolError, CoordinationError)):
             self._failure = _transport_error(failure)
         else:
             self._failure = CollectorError('network_error', 'session_closed')
@@ -105,6 +108,8 @@ class KillboardSession(market.MarketSession):
     def __enter__(self):
         self._check_session_ready()
         try:
+            if self.account_lease is not None:
+                self.account_lease.__enter__()
             return super().__enter__()
         except BaseException as exc:
             self._latch_failure(exc)
@@ -112,7 +117,25 @@ class KillboardSession(market.MarketSession):
 
     def __exit__(self, *_exc):
         self._ended = True
-        super().__exit__(*_exc)
+        try:
+            super().__exit__(*_exc)
+            if self.account_lease is not None and self.account_lease.acquired:
+                failure = self._failure
+                if failure is None and len(_exc) > 1 and _exc[1] is not None:
+                    failure = _transport_error(_exc[1])
+                if failure is not None and failure.code == 'unauthorized':
+                    self.account_lease.pause_auth()
+                elif failure is not None and failure.code == 'rate_limited':
+                    self.account_lease.pause_rate()
+                elif failure is None:
+                    self.account_lease.complete()
+        finally:
+            if self.account_lease is not None:
+                failure = self._failure
+                if failure is not None:
+                    self.account_lease.__exit__(type(failure), failure, failure.__traceback__)
+                else:
+                    self.account_lease.__exit__(*_exc)
 
     def set_before_rpc(self, callback) -> None:
         if callback is not None and not callable(callback):
@@ -144,6 +167,8 @@ class KillboardSession(market.MarketSession):
                                 'kill_report' if method == 'get_kill_info' else 'authentication')
         if self.before_rpc is not None:
             self.before_rpc()
+        if self.account_lease is not None:
+            self.account_lease.before_rpc()
         self._audit['rpc_count'] += 1
         result = self._raw_rpc(method, item_id)
         stop = _structured_stop(result)
@@ -198,7 +223,7 @@ class KillboardSession(market.MarketSession):
                     return packet[3][0]
             raise market.ProtocolError('No matching market RPC response.')
         except (OSError, market.ProtocolError) as exc:
-            self.__exit__(None, None, None)
+            self.__exit__(type(exc), exc, exc.__traceback__)
             if isinstance(exc, (market.socket.timeout, TimeoutError)):
                 raise market.ProtocolTimeout('Market request timed out.') from None
             if isinstance(exc, OSError):
@@ -207,6 +232,10 @@ class KillboardSession(market.MarketSession):
 
 
 def _transport_error(exc: Exception) -> CollectorError:
+    if isinstance(exc, CoordinationError):
+        if exc.code == 'account_busy':
+            return CollectorError('network_error', 'account_busy')
+        return CollectorError(exc.code)
     if isinstance(exc, MarketNeedsAuthError):
         return CollectorError('unauthorized')
     if isinstance(exc, market.ProtocolTimeout):
@@ -246,7 +275,7 @@ def _structured_stop(value, *, transport_wrapped=False) -> str | None:
                                        max_map_len=4, max_ext_len=64)
             except (ValueError, TypeError, msgpack.UnpackException):
                 return 'malformed'
-            return 'rate_limited' if error == ['UserError', 'RequestTooOften', None] else 'malformed'
+            return 'rate_limited' if request_too_often(error) else 'malformed'
         if value.code not in (19, 58):
             return 'malformed'
     if isinstance(value, list) and value and value[0] == 'UserError':
@@ -460,5 +489,7 @@ class KillboardClient:
 
 def build_client(*, before_rpc=None, enrich=True, cursor_path=None) -> KillboardClient:
     """Management-command factory using explicit ``KILLBOARD_SESSION_FILES``."""
-    bundle, slot = load_round_robin_session(cursor_path=cursor_path, with_slot=True)
-    return KillboardClient(bundle, before_rpc=before_rpc, enrich=enrich, session_slot=slot)
+    bundle, slot, index, pool_size = load_round_robin_session(cursor_path=cursor_path, with_selection=True)
+    client = KillboardClient(bundle, before_rpc=before_rpc, enrich=enrich, session_slot=slot)
+    client.session.account_lease = account_lease('KILLBOARD', index, pool_size)
+    return client

@@ -128,6 +128,9 @@ def safe_error_code(value):
     safe_codes = {
         'AUTH_EXPIRED', 'ORDER_TIMEOUT', 'COLLECTION_ERROR',
         'needs_auth', 'lease_expired', 'no_enabled_items', 'item_error', 'collection_error',
+        'invalid_session', 'auth_rejected', 'rate_limited', 'service_rejected',
+        'configuration_error', 'account_busy', 'budget_exhausted', 'lease_lost',
+        'network_error', 'timeout',
     }
     return value if not value or value in safe_codes else 'COLLECTION_ERROR'
 

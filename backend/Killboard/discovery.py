@@ -36,6 +36,7 @@ class ProbeStatus(str, Enum):
     MALFORMED = "malformed"
     BUDGET_EXHAUSTED = "budget_exhausted"
     LEASE_LOST = "lease_lost"
+    CONFIGURATION_ERROR = "configuration_error"
 
 
 @dataclass(frozen=True)
@@ -209,7 +210,7 @@ class DiscoveryRunner:
 
     @staticmethod
     def pause(cursor, reason):
-        if reason in ('rate_limited', 'unauthorized'):
+        if reason in ('rate_limited', 'unauthorized', 'configuration_error'):
             cursor.failure_count += 1
             cursor.pause_reason = reason
             cursor.cooldown_until_ms = (
