@@ -117,7 +117,8 @@ class CollectionRun(models.Model):
     error_code = models.CharField(max_length=64, blank=True, default='')
     # Nullable additions keep older releases able to insert CollectionRun rows
     # during the pre-deploy migration window and a code rollback.
-    item_limit = models.PositiveSmallIntegerField(default=40, null=True, blank=True)
+    # A queued or just-claimed run has no capacity plan until _save_plan.
+    item_limit = models.PositiveSmallIntegerField(null=True, blank=True)
     expected_count = models.PositiveSmallIntegerField(null=True, blank=True)
     batch_fallback_reason = models.CharField(max_length=64, null=True, blank=True, default='')
     lease_owner = models.CharField(max_length=128, blank=True, default='')

@@ -137,6 +137,11 @@ def safe_error_code(value):
 
 
 def run_payload(run):
+    # Older code can enqueue a default limit between migration and deploy.
+    # A queued/claimed run only has a disclosed limit after its plan is saved.
+    item_limit = run.item_limit
+    if run.status in ('queued', 'running') and run.expected_count is None:
+        item_limit = None
     return {
         'id': run.pk,
         'status': run.status,
@@ -150,7 +155,7 @@ def run_payload(run):
         'success_count': run.success_count,
         'failure_count': run.failure_count,
         'error_code': safe_error_code(run.error_code),
-        'item_limit': run.item_limit,
+        'item_limit': item_limit,
         'expected_count': run.expected_count,
         'batch_fallback_reason': safe_error_code(run.batch_fallback_reason),
     }
