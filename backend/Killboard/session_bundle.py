@@ -26,6 +26,7 @@ import tempfile
 from typing import Any
 
 import msgpack
+from GameSessions.rotation import round_robin
 
 
 MAX_BUNDLE_SIZE = 2 * 1024 * 1024
@@ -308,7 +309,7 @@ def _write_cursor(path: Path, value: int) -> None:
         raise _invalid() from None
 
 
-def load_round_robin_session(paths=None, cursor_path=None, *, with_slot=False):
+def load_round_robin_session(paths=None, cursor_path=None, *, with_slot=False, with_selection=False):
     """Select one session for this run and atomically advance the next index.
 
     Cursor corruption is treated as a fresh pool (index zero), while an
@@ -317,13 +318,15 @@ def load_round_robin_session(paths=None, cursor_path=None, *, with_slot=False):
     """
     bundles = load_session_pool(paths)
     path = _cursor_path(cursor_path)
-    index = _read_cursor(path, len(bundles))
-    _write_cursor(path, (index + 1) % len(bundles))
-    if with_slot:
+    index, next_index = round_robin(len(bundles), _read_cursor(path, len(bundles)))
+    _write_cursor(path, next_index)
+    if with_slot or with_selection:
         ordinal, slot = index + 1, ''
         while ordinal:
             ordinal, remainder = divmod(ordinal - 1, 26)
             slot = chr(65 + remainder) + slot
+        if with_selection:
+            return bundles[index], slot, index, len(bundles)
         return bundles[index], slot
     return bundles[index]
 

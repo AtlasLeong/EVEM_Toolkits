@@ -418,6 +418,7 @@ def config_payload(config):
         'next_run_at': utc_iso(config.next_due_at_ms),
         'next_due_at_ms': config.next_due_at_ms,
         'session_status': config.session_status,
+        'cooldown_until_ms': config.cooldown_until_ms,
         'enabled_item_count': MarketItem.objects.filter(enabled=True).count(),
         'max_items_per_run': MAX_ITEMS_PER_RUN,
         'last_success_at': utc_iso(last_success.finished_at_ms) if last_success else None,

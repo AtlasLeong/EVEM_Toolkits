@@ -167,7 +167,7 @@ class CollectorTransportTests(unittest.TestCase):
     def test_handshake_or_login_denial_closes_and_stops_without_reconnect(self):
         for data in (frame(2, {'accepted': False, 'error': 'private-sensitive-detail'}),
                      frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
-                     + response(1, ['private-sensitive-detail'])):
+                     + response(1, [1, {'message': 'private-sensitive-detail'}])):
             wire = WireSocket(data)
             with patch('Market.collector_protocol.socket.create_connection', return_value=wire) as connect:
                 client = self.transport.KillboardClient(synthetic_bundle())
@@ -685,9 +685,9 @@ class CollectorTransportTests(unittest.TestCase):
                 self.bundle_module.save_session(synthetic_bundle(bytes([index])), path)
             with patch.dict(os.environ, {'KILLBOARD_SESSION_FILES': os.pathsep.join(map(str, paths))}):
                 with patch('Market.collector_protocol.socket.create_connection') as connect:
-                    with patch.object(self.transport, 'load_round_robin_session', return_value=(synthetic_bundle(b'one'), 'B')) as choose:
+                    with patch.object(self.transport, 'load_round_robin_session', return_value=(synthetic_bundle(b'one'), 'B', 1, 3)) as choose:
                         client = self.transport.build_client()
-                    choose.assert_called_once_with(cursor_path=None, with_slot=True)
+                    choose.assert_called_once_with(cursor_path=None, with_selection=True)
                     self.assertEqual(client.session.bundle['hello']['synthetic'], b'one')
                     self.assertEqual(client.audit_snapshot()['session_slot'], 'B')
                     connect.assert_not_called()

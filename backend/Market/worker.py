@@ -3,9 +3,12 @@
 import random
 import time
 import uuid
+from contextlib import nullcontext
 
 from django.db import transaction
 from django.db.models import Q
+from GameSessions.coordination import CoordinationError, account_lease
+from GameSessions.rotation import round_robin
 
 from .models import CollectionRun, LatestPrice, MarketConfig, MarketItem, PriceSnapshot, epoch_ms
 
@@ -51,9 +54,12 @@ def _claim_run(now_ms):
         )
 
         queued = CollectionRun.objects.select_for_update().filter(status='queued').order_by('created_at_ms', 'id').first()
+        # Manual jobs cannot bypass a server rate rejection.
+        if config.cooldown_until_ms and config.cooldown_until_ms > now_ms:
+            return None
         due = (
             config.enabled
-            and config.session_status != 'needs_auth'
+            and config.session_status not in ('needs_auth', 'blocked')
             and (config.next_due_at_ms is None or config.next_due_at_ms <= now_ms)
         )
         if not queued and not due:
@@ -101,29 +107,38 @@ def _save_quote(run, item, quote, observed_at_ms):
         run.lease_expires_at_ms = locked_run.lease_expires_at_ms
 
 
-def _record_failure(run, item, attempted_at_ms):
+def _record_failure(run, item, attempted_at_ms, error_code='COLLECTION_ERROR'):
     with transaction.atomic():
         MarketConfig.objects.select_for_update().get(pk=1)
         locked_run = CollectionRun.objects.select_for_update().get(pk=run.pk)
         _check_lease(locked_run, run, attempted_at_ms)
         item.last_attempt_at_ms = attempted_at_ms
         item.last_failure_at_ms = attempted_at_ms
-        item.last_error_code = 'COLLECTION_ERROR'
+        item.last_error_code = error_code
         item.save(update_fields=['last_attempt_at_ms', 'last_failure_at_ms', 'last_error_code'])
         locked_run.lease_expires_at_ms = attempted_at_ms + LEASE_MS
         locked_run.save(update_fields=['lease_expires_at_ms'])
         run.lease_expires_at_ms = locked_run.lease_expires_at_ms
 
 
-def _finish_run(run, *, config_status, next_due_ms, finished_at_ms):
+def _finish_run(run, *, config_status, next_due_ms, finished_at_ms, retry_at_ms=None):
     with transaction.atomic():
         config = MarketConfig.objects.select_for_update().get(pk=1)
         locked_run = CollectionRun.objects.select_for_update().get(pk=run.pk)
         _check_lease(locked_run, run, finished_at_ms)
+        if run.status == 'rate_limited':
+            config.rate_failure_count += 1
+            cooldown_ms = finished_at_ms + min(60, 15 * 2 ** min(config.rate_failure_count - 1, 2)) * 60000
+            config.cooldown_until_ms = max(cooldown_ms, retry_at_ms or 0)
+            next_due_ms = max(next_due_ms or 0, config.cooldown_until_ms)
+        elif run.status == 'succeeded':
+            config.rate_failure_count = 0
+            config.cooldown_until_ms = None
         config.session_status = config_status
         config.next_due_at_ms = next_due_ms
         config.updated_at_ms = finished_at_ms
-        config.save(update_fields=['session_status', 'next_due_at_ms', 'updated_at_ms'])
+        config.save(update_fields=['session_status', 'next_due_at_ms', 'updated_at_ms',
+                                   'cooldown_until_ms', 'rate_failure_count'])
         run.finished_at_ms = finished_at_ms
         run.lease_owner = ''
         run.lease_expires_at_ms = None
@@ -140,13 +155,34 @@ def _finish_run(run, *, config_status, next_due_ms, finished_at_ms):
         ])
 
 
+def _select_bundle(run, bundles, now_ms):
+    """Advance the durable cursor only while owning the same claimed run."""
+    with transaction.atomic():
+        config = MarketConfig.objects.select_for_update().get(pk=1)
+        locked_run = CollectionRun.objects.select_for_update().get(pk=run.pk)
+        _check_lease(locked_run, run, now_ms)
+        index, config.session_cursor = round_robin(len(bundles), config.session_cursor)
+        config.save(update_fields=['session_cursor'])
+    return bundles[index], index
+
+
+def _heartbeat_run(run, now_ms):
+    with transaction.atomic():
+        MarketConfig.objects.select_for_update().get(pk=1)
+        locked_run = CollectionRun.objects.select_for_update().get(pk=run.pk)
+        _check_lease(locked_run, run, now_ms)
+        locked_run.lease_expires_at_ms = now_ms + LEASE_MS
+        locked_run.save(update_fields=['lease_expires_at_ms'])
+
+
 def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
-                randint=random.randint, sleep=time.sleep):
+                randint=random.randint, sleep=time.sleep, lease_factory=account_lease):
     """Collect due prices once; injected I/O lets tests exercise the DB path."""
     from .session_bundle import NeedsAuthError
+    from .collector_protocol import NetworkError, RateLimitedError, ServiceRejectedError
     if bundle_loader is None:
-        from .session_bundle import load_random_session_pool
-        bundle_loader = load_random_session_pool
+        from .session_bundle import load_session_pool
+        bundle_loader = load_session_pool
     if session_factory is None:
         from .collector_protocol import MarketSession
         session_factory = MarketSession
@@ -169,10 +205,21 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         _finish_run(run, config_status=config.session_status, next_due_ms=next_due_ms, finished_at_ms=finished_at_ms)
         return run
 
-    needs_auth = False
+    config_status = 'ready'
+    retry_at_ms = None
 
-    def collect_bundle(bundle):
-        with session_factory(bundle) as session:
+    def collect_bundle(bundle, shared_lease):
+        nonlocal config_status
+        session = session_factory(bundle)
+        def before_rpc():
+            _heartbeat_run(run, clock_ms())
+            if shared_lease is not None:
+                shared_lease.before_rpc()
+        if hasattr(session, 'set_before_rpc'):
+            session.set_before_rpc(before_rpc)
+        elif shared_lease is not None:
+            raise CoordinationError()
+        with session:
             for index, item in enumerate(items):
                 try:
                     # `global` is the current API key for market region 8, not
@@ -186,6 +233,16 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                     raise
                 except NeedsAuthError:
                     raise
+                except CoordinationError:
+                    raise
+                except (RateLimitedError, ServiceRejectedError):
+                    raise
+                except NetworkError as exc:
+                    config_status = 'error'
+                    _record_failure(run, item, clock_ms(), exc.code)
+                    run.failure_count += 1
+                    run.error_code = exc.code
+                    break
                 except Exception:
                     _record_failure(run, item, clock_ms())
                     run.failure_count += 1
@@ -206,25 +263,53 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
         if not bundles:
             raise NeedsAuthError('No usable market session')
 
-        for bundle in bundles:
+        bundle, index = _select_bundle(run, bundles, now_ms)
+        shared_lease = lease_factory('MARKET', index, len(bundles))
+        with shared_lease if shared_lease is not None else nullcontext():
             try:
-                collect_bundle(bundle)
-            except NeedsAuthError:
-                # Retry only when the session failed before any item was
-                # persisted.  Retrying after a partial collection could create
-                # duplicate snapshots or double-count run results.
-                if run.success_count or run.failure_count:
-                    raise
-                continue
-            break
-        else:
-            raise NeedsAuthError('No usable market session')
+                collect_bundle(bundle, shared_lease)
+                if shared_lease is not None and run.failure_count == 0:
+                    shared_lease.complete()
+            except NeedsAuthError as exc:
+                if shared_lease is not None and exc.code != 'invalid_session':
+                    shared_lease.pause_auth()
+                raise
+            except RateLimitedError:
+                if shared_lease is not None:
+                    retry_at_ms = shared_lease.pause_rate()
+                raise
+            except ServiceRejectedError:
+                if shared_lease is not None:
+                    shared_lease.pause_service()
+                raise
     except LeaseLost:
         return None
-    except NeedsAuthError:
-        needs_auth = True
+    except NeedsAuthError as exc:
+        config_status = 'needs_auth'
         run.status = 'needs_auth'
-        run.error_code = 'needs_auth'
+        run.error_code = exc.code
+    except RateLimitedError:
+        config_status = 'cooldown'
+        run.status, run.error_code = 'rate_limited', 'rate_limited'
+    except ServiceRejectedError:
+        config_status = 'blocked'
+        run.status, run.error_code = 'failed', 'service_rejected'
+    except CoordinationError as exc:
+        run.error_code = exc.code
+        if exc.code == 'unauthorized':
+            config_status, run.status = 'needs_auth', 'needs_auth'
+        elif exc.code == 'rate_limited':
+            config_status, run.status = 'cooldown', 'rate_limited'
+            retry_at_ms = getattr(exc, 'retry_at_ms', None)
+        elif exc.code == 'service_rejected':
+            config_status, run.status = 'blocked', 'failed'
+        else:
+            config_status = 'blocked' if exc.code == 'configuration_error' else 'error'
+            run.status = 'failed'
+    except NetworkError as exc:
+        config_status = 'error'
+        run.status = 'failed' if run.success_count == 0 else 'partial'
+        run.error_code = exc.code
     except Exception:
         run.status = 'failed' if run.success_count == 0 else 'partial'
         run.error_code = 'collection_error'
@@ -236,9 +321,11 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
 
     finished_at_ms = clock_ms()
     config = MarketConfig.objects.get(pk=1)
-    next_due_ms = None if needs_auth else (
+    next_due_ms = None if config_status in ('needs_auth', 'blocked') else (
         finished_at_ms + randint(config.min_interval_seconds, config.max_interval_seconds) * 1000
     )
-    session_status = 'needs_auth' if needs_auth else ('error' if run.status == 'failed' else 'ready')
-    _finish_run(run, config_status=session_status, next_due_ms=next_due_ms, finished_at_ms=finished_at_ms)
+    if config_status == 'ready' and run.status == 'failed':
+        config_status = 'error'
+    _finish_run(run, config_status=config_status, next_due_ms=next_due_ms,
+                finished_at_ms=finished_at_ms, retry_at_ms=retry_at_ms)
     return run

@@ -296,7 +296,7 @@ class SessionExportTests(unittest.TestCase):
         for forbidden in ('private-source-marker', 'private-output-marker'):
             self.assertNotIn(forbidden, stdout.getvalue() + stderr.getvalue())
 
-    def test_session_pool_skips_one_malformed_file_and_keeps_valid_session(self):
+    def test_session_pool_rejects_whole_pool_when_one_file_is_malformed(self):
         from Market.session_bundle import load_session_pool
 
         valid = synthetic_bundle()
@@ -307,9 +307,9 @@ class SessionExportTests(unittest.TestCase):
             from Market.session_bundle import save_session
             save_session(valid, good_path)
 
-            sessions = load_session_pool([bad_path, good_path])
-
-        self.assertEqual(sessions, [valid])
+            from Market.session_bundle import SessionBundleError
+            with self.assertRaises(SessionBundleError):
+                load_session_pool([bad_path, good_path])
 
     def test_random_session_pool_shuffles_each_collection_candidates(self):
         from Market.session_bundle import load_random_session_pool
@@ -320,7 +320,9 @@ class SessionExportTests(unittest.TestCase):
             second = Path(temporary) / 'second.json'
             from Market.session_bundle import save_session
             save_session(valid, first)
-            save_session(valid, second)
+            second_bundle = synthetic_bundle()
+            second_bundle['hello']['synthetic'] = b'second-synthetic-account'
+            save_session(second_bundle, second)
             with patch('Market.session_bundle.random.shuffle') as shuffle:
                 result = load_random_session_pool([first, second])
 

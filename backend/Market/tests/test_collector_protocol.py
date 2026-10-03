@@ -111,7 +111,7 @@ class SessionBundleTests(Modules):
         with patch.dict(os.environ, {}, clear=True), patch('socket.create_connection') as connect:
             with self.assertRaises(self.session.NeedsAuthError) as caught:
                 self.session.load_session()
-            self.assertEqual(caught.exception.code, 'needs_auth')
+            self.assertEqual(caught.exception.code, 'invalid_session')
             connect.assert_not_called()
 
     def test_relative_path_and_invalid_bundle_fail_closed(self):
@@ -245,7 +245,9 @@ class SessionPoolTests(Modules):
             first = Path(temporary) / 'session-a.json'
             second = Path(temporary) / 'session-b.json'
             self.session.save_session(bundle(), first)
-            self.session.save_session(bundle(), second)
+            second_bundle = bundle()
+            second_bundle['hello']['synthetic'] = b'second-synthetic-account'
+            self.session.save_session(second_bundle, second)
             with patch.dict(os.environ, {'MARKET_SESSION_FILES': os.pathsep.join((str(first), str(second)))}, clear=False):
                 loaded = self.session.load_session_pool()
                 with patch.object(self.session.random, 'choice', return_value=loaded[1]) as choose:
@@ -287,7 +289,7 @@ class TransportTests(Modules):
 
     def test_login_rejection_is_needs_auth_and_closes_socket_without_remote_text(self):
         wire = WireSocket(frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
-                          + response(1, ['private-account-detail']))
+                          + response(1, [1, {'message': 'private-account-detail'}]))
         with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
             with self.assertRaises(self.session.NeedsAuthError) as caught:
                 with self.protocol.MarketSession(bundle()):
@@ -304,6 +306,34 @@ class TransportTests(Modules):
         self.assertTrue(wire.closed)
         self.assertEqual(caught.exception.code, 'timeout')
         self.assertNotIn('sensitive', str(caught.exception))
+
+    def test_malformed_login_is_protocol_error_without_expiry_claim(self):
+        wire = WireSocket(frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
+                          + response(1, ['synthetic-unknown-reply', {}]))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with self.assertRaises(self.protocol.ProtocolError) as caught:
+                with self.protocol.MarketSession(bundle()):
+                    pass
+        self.assertEqual(caught.exception.code, 'protocol_error')
+        self.assertTrue(wire.closed)
+
+    def test_wrapped_structured_auth_denial_stops_without_remote_text(self):
+        rejected = msgpack.ExtType(10, pack({'error': {'code': 'unauthorized', 'detail': 'synthetic-secret'}}))
+        wire = WireSocket(successful_login() + response(5, rejected))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with self.assertRaises(self.session.AuthenticationRejected) as caught:
+                with self.protocol.MarketSession(bundle()) as client:
+                    client.quote(1)
+        self.assertNotIn('synthetic-secret', str(caught.exception))
+        self.assertTrue(wire.closed)
+
+    def test_unknown_error_dictionary_closes_transport_as_service_refusal(self):
+        wire = WireSocket(successful_login() + response(5, [{'error': 'synthetic-refusal'}, []]))
+        with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
+            with self.assertRaises(self.protocol.ServiceRejectedError):
+                with self.protocol.MarketSession(bundle()) as client:
+                    client.quote(1)
+        self.assertTrue(wire.closed)
 
     def test_unrelated_rpc_is_ignored_and_server_sequence_acknowledged(self):
         wire = WireSocket(successful_login() + response(999, ['ignored'], seq=50) + response(5, [[], []], seq=51))
@@ -354,12 +384,12 @@ class TransportTests(Modules):
                 self.assertEqual(caught.exception.code, 'timeout')
                 self.assertTrue(wire.closed)
 
-    def test_character_entry_failure_is_needs_auth(self):
+    def test_unclassified_character_entry_denial_is_service_rejection(self):
         wire = WireSocket(frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
                           + response(1, [0, {'client_id': 77, 'proxy_node_id': 88}])
                           + response(2, ['private-character-info']))
         with patch('Market.collector_protocol.socket.create_connection', return_value=wire):
-            with self.assertRaises(self.session.NeedsAuthError) as caught:
+            with self.assertRaises(self.protocol.ServiceRejectedError) as caught:
                 with self.protocol.MarketSession(bundle()):
                     pass
         self.assertTrue(wire.closed)

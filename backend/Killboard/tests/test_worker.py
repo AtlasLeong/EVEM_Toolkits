@@ -54,6 +54,41 @@ class WorkerTests(TestCase):
         self.assertEqual(run.stop_reason, 'unauthorized')
         self.assertEqual(another.calls, [])
 
+    def test_inherited_character_entry_service_refusal_pauses_next_scheduled_pass(self):
+        from Killboard.collector_transport import KillboardClient
+        from Killboard.tests.test_collector_transport import WireSocket, frame, response as rpc_response
+        from Killboard.tests.test_session_bundle import synthetic_bundle
+        cursor = ProbeCursor.objects.create(name='service-refused', next_probe_id=100)
+        wire = WireSocket(frame(2, {'accepted': True, 'info': {'node_info': {'node_id': 42}}})
+                          + rpc_response(1, [0, {'client_id': 77, 'proxy_node_id': 88}])
+                          + rpc_response(2, ['synthetic-service-refusal']))
+        with patch('socket.create_connection', return_value=wire) as connect:
+            first = DiscoveryRunner(KillboardClient(synthetic_bundle()), cursor=cursor,
+                                    config=DiscoveryConfig(max_requests=2)).run()
+            cursor.refresh_from_db()
+            self.assertEqual((first.stop_reason, cursor.pause_reason), ('service_rejected', 'service_rejected'))
+            self.assertIsNone(cursor.cooldown_until_ms)
+            later = FakeClient({100: response(100)})
+            second = DiscoveryRunner(later, cursor=cursor, config=DiscoveryConfig(max_requests=2)).run()
+            self.assertEqual((second.stop_reason, second.request_count), ('service_rejected', 0))
+            self.assertEqual(later.calls, [])
+            self.assertEqual(connect.call_count, 1)
+        self.assertTrue(wire.closed)
+
+    def test_deferred_service_refusal_retains_verified_base_report_and_pauses(self):
+        from Killboard.collector_transport import BaseReportResult
+        from Killboard.models import KillReport
+        from Killboard.protocol import decode_kill_info_response
+        from Killboard.tests.test_discovery import captured_response
+        cursor = ProbeCursor.objects.create(name='deferred-service', next_probe_id=100)
+        base = decode_kill_info_response(captured_response(100))
+        client = FakeClient({100: BaseReportResult(base, 'service_rejected'), 101: response(101)})
+        run = DiscoveryRunner(client, cursor=cursor, config=DiscoveryConfig(max_requests=2)).run()
+        cursor.refresh_from_db()
+        self.assertTrue(KillReport.objects.filter(kill_id=100).exists())
+        self.assertEqual((run.stop_reason, cursor.pause_reason, cursor.next_probe_id), ('service_rejected', 'service_rejected', 101))
+        self.assertEqual(client.calls, [100])
+
     def test_repeated_rate_rejections_increase_local_backoff(self):
         cursor = ProbeCursor.objects.create(name='rate', next_probe_id=100)
         DiscoveryRunner(FakeClient({100: RateLimited()}), cursor=cursor,

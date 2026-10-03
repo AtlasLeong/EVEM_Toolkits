@@ -25,11 +25,13 @@ function sessionLabel(value) {
     unconfigured: '会话未配置',
     offline: '采集器离线',
     error: '会话异常',
+    cooldown: '限流冷却中',
+    blocked: '服务拒绝，采集已暂停',
   }[value] || value || '状态未知'
 }
 
 function runLabel(value) {
-  return { pending: '等待执行', queued: '等待执行', running: '执行中', success: '成功', succeeded: '成功', partial: '部分成功', failed: '失败', needs_auth: '需要授权' }[value] || value || '未知'
+  return { pending: '等待执行', queued: '等待执行', running: '执行中', success: '成功', succeeded: '成功', partial: '部分成功', failed: '失败', needs_auth: '需要授权', rate_limited: '限流，已停止本轮' }[value] || value || '未知'
 }
 
 function CapacityNotice({ config }) {
