@@ -21,23 +21,37 @@ PR #30 将现有 EVE 工具站统一为“新伊甸工作台”。升级覆盖�
 
 ## 回归与已修复问题
 
-首阶段 [CI 37150092777](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37150092777) 已通过，包括主浏览器 436 项、独立 preview 4 项、tactical 170 项、617 单元测试以及既有后端、认证、迁移、发布安全和 MySQL 检查。
+首阶段 [CI 37150092777](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37150092777) 已通过，包括主浏览器 436 项、独立 preview 4 项、tactical 170 项、617 项 Node 检查（587 单元测试与 30 preview contract）以及既有后端、认证、迁移、发布安全和 MySQL 检查。
 
-第二阶段本地完整主浏览器回归为 **466/466 passed，6.1m，正常退出**，617 单元测试及 production build/原包大小预算通过。独立代码审查与实际桌面、手机、加载、错误及文字压力截图审核完成。
+第二阶段本地完整主浏览器回归为 **466/466 passed，6.1m，正常退出**，617 项 Node 检查（587 单元测试与 30 preview contract）及 production build/原包大小预算通过。独立代码审查与实际桌面、手机、加载、错误及文字压力截图审核完成。
 
-[CI 37152592131](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37152592131) 在 tree `48ca04e446a693a67787a7f951b6fa255ce0255f` 上得到 **463 passed / 3 failed**。三项都是 320px 登录、注册和找回密码双倍文字的页面宽度 332px；617 单元、构建、包预算、后端检查和 MySQL 通过，preview、tactical 和发行打包被跳过。
+[CI 37152592131](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37152592131) 在 tree `48ca04e446a693a67787a7f951b6fa255ce0255f` 上得到 **463 passed / 3 failed**。三项都是 320px 登录、注册和找回密码双倍文字的页面宽度 332px；617 项 Node 检查、构建、包预算、后端检查和 MySQL 通过，preview、tactical 和发行打包被跳过。
 
 失败 artifact `11284991846` 的摘要已核验，全部九次失败 trace 保留。实际 Linux Chromium 截图显示顶部英文品牌副标识越过右边缘。使用同一文字压力 helper，仅改本地回退字体为 Arial，可精确复现 332px。修复只在 `.login-intro-edition` 增加 `min-width: 0` 和 `overflow-wrap: anywhere`，使 flex 子项与较宽英文单词完整换行；不改字号、helper、断言、timeout 或页面 overflow。
 
-该修复的原 43 项认证/导航回归与 8 项文字压力回归 **51/51 passed，正常退出**。独立浏览器核验三种模式 × 原字体/Arial 六种状态均为 320px，文字和按钮完整可见。Windows 截图是补证，新 Linux CI 通过仍是最终验收要求。
+该修复的原 43 项认证/导航回归与 8 项文字压力回归 **51/51 passed，正常退出**。独立浏览器核验三种模式 × 原字体/Arial 六种状态均为 320px，文字和按钮完整可见。Windows 截图是补证；后续 Linux CI 的 8 项认证文字压力用例已全部通过。最终候选仍需完整 CI 验收。
 
 原生产 artifact 的军团编辑导航失败也已依据 trace 定位：React transition 更新 URL 后尚未提交目标页面，立即 Back 会取消中间转换。测试保留全部断言与 timeout，仅等待目标 heading 和旧编辑区域消失后操作历史导航；相关 trace 9/9 通过，没有产品逻辑或后端改动。
 
+[CI 37155309249](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37155309249) 在 tree `d32acc013d4c6d842b408419d1bf1b0bfb3e0bf3` 上记录 **462 passed / 2 persistent failures / 2 flaky（重试通过）**。认证字号 8 项全部通过；617 项 Node 检查、构建、预算、后端与 MySQL 通过。主浏览器门槛失败后，独立 preview 浏览器、tactical 和打包被跳过，没有发行 artifact。
+
+军团审核的两条持久失败共六次尝试均实际出现成功通知和被动空摘要同时匹配 `status`。共享空态恢复普通摘要语义，保留加载与操作通知的播报；原失败用例按 CI workers/retries 配置重复 **10/10**，没有使用重试。多个独立操作的状态通知仍然保留。全站检查覆盖 25 个共享空态调用和 106 个 status/alert 测试定位，未发现其他新增同型冲突。
+
+移动导航的 trace 与受控真实浏览器复现证明：CSS 隐藏控件可能先清除焦点，媒体通知随后才触发。修复记录该隐藏控件的焦点来源，使断点关闭时移到可见主内容；主动移除焦点或移到其他控件保持原行为。新增四条针对两种事件次序和外部/主动焦点的回归，原断言及 timeout 保留。重复焦点场景 **15/15**、认证/导航/字号目标 **55/55** 通过，没有使用重试。
+
+设置价格反馈使用与当前消息绑定的明确结果类别。保存失败后“恢复默认”现在以成功状态播报，后续保存错误仍以警报播报；没有重置 mutation、改变请求或放开保存中按钮。新增回归先在旧源真实失败，修后两项设置用例各重复五次 **10/10** 通过，没有使用重试。
+
+许可证表格键盘横滚首次 `scrollLeft=0`、重试通过，根因尚未闭合。原测试按 CI workers/retries 配置重复 **5/5**；用户电脑浏览器的立即切宽与等待滚动对照均通过，不能据此认定增加等待是修复。本轮保留其源码、动作、断言和 timeout。
+
+旧本地与 Linux CI 的 85 个测试文件、466 个首轮定位多重集完全一致，测试与配置 Git 对象相同。本地使用 2 workers 且实际无重试；CI 使用 1 worker、允许两次重试。两者默认 Playwright 1.58.2 / Chromium 145.0.7632.6 revision 1208；Chrome 153 只用于用户电脑的视觉核验。CI 实际 Node 22.23.3，本机当前 Node 24.13.1，旧完整日志未记录 Node 版本。环境差异不能单独证明失败原因。
+
 ## 构建与性能边界
 
-最终代码构建的 `index.html` SHA256 为 `20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541`。主 CSS 为 120,124 bytes，原阈值 122,880 bytes；包大小门槛未放宽。
+本轮语义与焦点修复冻结后，617 项 Node 检查全部通过，production build 与原包预算通过。新构建 `index.html` SHA256 为 `ae8b7e21108de301105cc9fd2a593b93c14473f4b9732df026d801d19d7be983`；完整 471 项主浏览器及新 Linux CI 的结果以 PR 最新记录为准。
 
-同一冻结构建执行 12 次市场/KM 导航及匿名 `/market → /login` 检查，页面错误和 document 横向溢出均为 0。
+认证换行修复版本（9bb5e566…）构建的 `index.html` SHA256 为 `20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541`。主 CSS 为 120,124 bytes，原阈值 122,880 bytes；包大小门槛未放宽。
+
+该版本同一冻结构建执行 12 次市场/KM 导航及匿名 `/market → /login` 检查，页面错误和 document 横向溢出均为 0。
 
 | 页面 | viewport | LCP 中位数 | CLS 中位数 |
 | --- | --- | --- | --- |

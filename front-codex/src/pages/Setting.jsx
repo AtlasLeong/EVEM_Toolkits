@@ -128,7 +128,7 @@ function PriceSettingCard() {
   const queryClient = useQueryClient()
   const [typeFilter, setTypeFilter] = useState('')
   const [rows, setRows] = useState([])
-  const [msg, setMsg] = useState('')
+  const [msg, setMsg] = useState(null)
 
   const userPriceQuery = useQuery({
     queryKey: ['price-user'],
@@ -147,9 +147,9 @@ function PriceSettingCard() {
     mutationFn: saveUserPrePrice,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['price-user'] })
-      setMsg('预设价格已保存')
+      setMsg({ text: '预设价格已保存', severity: 'success' })
     },
-    onError: (e) => setMsg(e.message || '保存失败'),
+    onError: (e) => setMsg({ text: e.message || '保存失败', severity: 'error' }),
   })
 
   const resourceTypeList = useMemo(() => {
@@ -186,11 +186,11 @@ function PriceSettingCard() {
 
   const onReset = () => {
     setRows((defaultPriceQuery.data || []).map((item) => ({ ...item })))
-    setMsg('已恢复默认价格')
+    setMsg({ text: '已恢复默认价格', severity: 'success' })
   }
 
   const onSave = () => {
-    setMsg('')
+    setMsg(null)
     saveMutation.mutate({
       prePriceElement: rows,
     })
@@ -281,7 +281,7 @@ function PriceSettingCard() {
             </button>
           </div>
 
-          {msg ? <p role={saveMutation.isError ? 'alert' : 'status'} className={msg.includes('已') ? 'form-success' : 'form-error'}>{msg}</p> : null}
+          {msg ? <p role={msg.severity === 'error' ? 'alert' : 'status'} className={msg.severity === 'error' ? 'form-error' : 'form-success'}>{msg.text}</p> : null}
         </Panel>
       </div>
     </div>

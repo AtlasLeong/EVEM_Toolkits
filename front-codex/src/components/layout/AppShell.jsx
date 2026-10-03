@@ -114,14 +114,33 @@ export default function AppShell() {
 
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 1180px)')
+    const isMobileControl = element => mobileNavRef.current?.contains(element) || element === mobileToggleRef.current
+    let lastFocusedMobile = isMobileControl(document.activeElement) ? document.activeElement : null
+    const rememberMobileFocus = event => {
+      lastFocusedMobile = isMobileControl(event.target) ? event.target : null
+    }
+    const forgetVisibleBlur = event => {
+      if (!isMobileControl(event.target)) return
+      // A hidden control may blur before the breakpoint notification arrives.
+      // An intentional blur or a move to another control clears its origin.
+      if (event.relatedTarget || event.target.getClientRects().length) lastFocusedMobile = null
+    }
     const closeOnDesktop = event => {
       if (!event.matches) return
-      const focusedMobileNavigation = mobileNavRef.current?.contains(document.activeElement) || document.activeElement === mobileToggleRef.current
+      const active = document.activeElement
+      const focused = active === document.body ? lastFocusedMobile : active
+      const focusedMobileNavigation = focused?.isConnected && isMobileControl(focused)
       setMobileNavOpen(false)
       if (focusedMobileNavigation) mainRef.current?.focus({ preventScroll: true })
     }
+    document.addEventListener('focusin', rememberMobileFocus)
+    document.addEventListener('focusout', forgetVisibleBlur)
     desktop.addEventListener('change', closeOnDesktop)
-    return () => desktop.removeEventListener('change', closeOnDesktop)
+    return () => {
+      document.removeEventListener('focusin', rememberMobileFocus)
+      document.removeEventListener('focusout', forgetVisibleBlur)
+      desktop.removeEventListener('change', closeOnDesktop)
+    }
   }, [])
 
   const prevPathRef = useRef(location.pathname)

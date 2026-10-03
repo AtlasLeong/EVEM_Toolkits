@@ -29,7 +29,7 @@ export function Panel({ title, subtitle, children, action, className = '' }) {
 
 export function EmptyState({ title, desc }) {
   return (
-    <div className="empty-state" role="status">
+    <div className="empty-state">
       <p className="empty-title">{title}</p>
       {desc ? <p className="empty-desc">{desc}</p> : null}
     </div>
