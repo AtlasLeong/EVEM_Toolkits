@@ -15,16 +15,15 @@ the backend contract or collector behavior.
 3. Prefer the resolved solar-system name. If it is absent but `system_id` is
    present, show `星系 #<id>`; use `未知星系` only when neither value exists.
    Constellation and region names remain optional secondary context.
-4. During a report switch, retain the last complete detail as a visual shell
-   while the new detail request is pending. A response may replace the shell
-   only when its `kill_id` matches the selected route. This removes the blank
-   intermediate render and prevents stale detail from being shown under a new
-   selection.
+4. Keep one page transition key and one route element for the entry and numeric
+   KM paths, so report selection never remounts the whole page. While details
+   are pending, render only the matching new summary, never the previous KM's
+   details. A late entry-list response must not overwrite a newer selection.
 
 ## Scope and verification
 
-The change is limited to `Killboard.jsx`, `KillParticipantRow.jsx`,
-`killboard.css`, and focused unit tests. Tests cover the system-ID fallback,
-dedicated report-ID class, equal placeholder box styling, stale-response
-fencing and no blank detail during a switch. The normal Killboard unit suite,
+The change covers `Killboard.jsx`, its presentation helpers, `App.jsx`,
+`AppShell.jsx`, `killboard.css`, and focused unit tests. Tests cover the system-ID
+fallback, dedicated report-ID class, equal placeholder box styling, stable
+transition keys and stale-response fencing. The normal Killboard unit suite,
 production build, and an isolated browser smoke check must pass before release.

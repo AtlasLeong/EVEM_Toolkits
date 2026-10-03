@@ -29,10 +29,10 @@ function nodes(tree) {
   return [tree, ...(tree.children || []).flatMap(nodes)]
 }
 
-function harness() {
+function harness(initialKillId = '1') {
   const values = [], refs = [], previousDeps = [], cleanups = [], effects = []
   const calls = { list: [], detail: [], status: [] }
-  let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = '1', tree
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = initialKillId, tree
   const request = (kind, options) => {
     const call = { ...deferred(), signal: options.signal }
     calls[kind].push(call)
@@ -227,11 +227,48 @@ test('equipment panel exposes a dropped-only quick filter and per-slot drop coun
   page.unmount()
 })
 
+test('hero report identifier has a dedicated readable class and system ID fallback', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const hero = nodes(page.tree).find(node => node.props.className === 'kb-hero kb-panel')
+  assert.ok(hero)
+  assert.match(JSON.stringify(hero), /kb-report-id/)
+  assert.match(JSON.stringify(hero), /PRIVATE SYSTEM/)
+  page.unmount()
+})
+
+test('route changes clear the previous detail before the new KM arrives', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.route('2')
+  assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-hero kb-panel'))
+  page.unmount()
+})
+
+test('a late entry list cannot replace a newer route selection', async () => {
+  const page = harness(null)
+  page.render()
+  page.route('2')
+  const detailRequest = page.calls.detail.at(-1)
+  page.calls.list[0].resolve({ results: [privateReport('1'), privateReport('2')], count: 2 })
+  await page.flush()
+  assert.equal(detailRequest.signal.aborted, false)
+  assert.equal(page.calls.detail.length, 1)
+  page.unmount()
+})
+
 test('equipment list uses a compact multi-column layout with independent scrolling', () => {
   const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
   assert.match(css, /\.kb-item-list\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)/)
   assert.match(css, /\.kb-item-list\s*\{[^}]*overflow:auto/)
   assert.match(css, /\.kb-item--dropped\s*\{[^}]*background:/)
+})
+
+test('participant placeholder fills the same framed box as ship art', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*display:grid/)
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*width:100%/)
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*height:100%/)
 })
 
 test('raw participant counts are labelled records, not a proven number of players', async () => {
