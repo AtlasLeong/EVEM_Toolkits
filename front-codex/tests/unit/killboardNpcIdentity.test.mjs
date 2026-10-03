@@ -7,7 +7,7 @@ test('verified NPC display labels keep their name and NPC treatment', () => {
   const identity = participantIdentity(row)
 
   assert.equal(identity.name, '科尔')
-  assert.equal(identity.corporation, '非玩家角色')
+  assert.equal(identity.corporation, '')
   assert.equal(identity.isNpc, true)
   assert.deepEqual(visibleParticipantRows([row]), [row])
 })

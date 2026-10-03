@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any, Protocol
 import uuid
 import re
+import inspect
 
 from django.conf import settings
 from django.db import transaction
@@ -17,7 +18,9 @@ from django.utils import timezone
 from .parser import KillParseError, parse_kill_blob
 from .protocol import KillProtocolError, decode_kill_info_response
 from .models import CollectionPolicy, ProbeCursor, ProbeEvent, ProbeRun
-from .services import persist_report
+from .services import persist_report, disposition_for
+from .collector_transport import BaseReportResult, AUDIT_STAGES, AUDIT_ERROR_CODES
+from .session_bundle import REQUIRED_METHODS, OPTIONAL_METHODS
 from .worker import LeaseLostError, paused_reason
 
 
@@ -40,6 +43,7 @@ class ProbeOutcome:
     status: ProbeStatus
     payload: Any = None
     error_code: str = ""
+    deferred_stop_code: str = ""
 
 
 ProbeResult = ProbeOutcome
@@ -108,6 +112,59 @@ def _safe_error_code(value: str | None) -> str:
     return value[:64] if re.fullmatch(r'[a-z0-9_.-]{1,64}', value) else ''
 
 
+def safe_audit_snapshot(client):
+    """Allowlist only ordinal session and local transport classifiers."""
+    method = getattr(client, 'audit_snapshot', None)
+    if not callable(method):
+        return {}
+    try:
+        raw = method()
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    result = {}
+    slot = raw.get('session_slot')
+    if isinstance(slot, str) and re.fullmatch(r'[A-Z]{1,2}', slot):
+        result['session_slot'] = slot
+    count = raw.get('rpc_count')
+    if type(count) is int and 0 <= count <= 10000:
+        result['rpc_count'] = count
+    for key in ('last_rpc_method', 'failure_rpc_method'):
+        if raw.get(key) in (*REQUIRED_METHODS, *OPTIONAL_METHODS):
+            result[key] = raw[key]
+    if raw.get('stage') in AUDIT_STAGES:
+        result['stage'] = raw['stage']
+    if raw.get('error_code') in AUDIT_ERROR_CODES:
+        result['error_code'] = raw['error_code']
+    return result
+
+
+def record_diagnostics(run, client, disposition='', enrichment_deferred=False):
+    """Merge safe transport state and actual persistence counters into a run.
+
+    The caller owns its transaction and persists the modified run. Return the
+    event snapshot independently so later RPCs cannot rewrite old attribution.
+    """
+    counters = ('created_count', 'updated_count', 'filtered_value_count',
+                'filtered_npc_count', 'filtered_policy_count', 'parsed_count',
+                'enrichment_deferred_count')
+    diagnostics = dict(run.diagnostics) if isinstance(run.diagnostics, dict) else {}
+    for key in counters:
+        if type(diagnostics.get(key)) is not int or diagnostics[key] < 0:
+            diagnostics[key] = 0
+    event = safe_audit_snapshot(client)
+    diagnostics.update(event)
+    if disposition in ('created', 'updated', 'filtered_value', 'filtered_npc', 'filtered_policy', 'parsed'):
+        diagnostics[disposition + '_count'] += 1
+        event['disposition'] = disposition
+    if enrichment_deferred:
+        diagnostics['enrichment_deferred_count'] += 1
+        event['enrichment_deferred'] = True
+    run.diagnostics = diagnostics
+    return event
+
+
 def _time_value(raw: str | None):
     if not raw:
         return None
@@ -164,10 +221,11 @@ class DiscoveryRunner:
     def paused_reason(cursor):
         return paused_reason(cursor)
 
-    def _fetch(self, kill_id: int) -> ProbeOutcome:
+    def _fetch(self, kill_id: int, *, enrich=None) -> ProbeOutcome:
         try:
             method = getattr(self.client, "get_kill_info", None) or getattr(self.client, "fetch")
-            value = method(kill_id)
+            accepts_override = enrich is not None and 'enrich' in inspect.signature(method).parameters
+            value = method(kill_id, enrich=enrich) if accepts_override else method(kill_id)
         except Exception as exc:  # do not swallow cancellation/keyboard interrupts
             status = _exception_status(exc)
             if status is ProbeStatus.MALFORMED:
@@ -175,6 +233,11 @@ class DiscoveryRunner:
             return ProbeOutcome(status, error_code=str(getattr(exc, "code", "")))
         if isinstance(value, ProbeOutcome):
             return value
+        deferred_stop = ''
+        if isinstance(value, BaseReportResult):
+            if value.stop_code not in ('rate_limited', 'unauthorized', 'network_error', 'budget_exhausted', 'malformed'):
+                return ProbeOutcome(ProbeStatus.MALFORMED, error_code='invalid_deferred_stop')
+            deferred_stop, value = value.stop_code, value.decoded
         try:
             # Fake/in-process clients may already return the decoded mapping;
             # network clients return the verified MessagePack envelope.
@@ -196,7 +259,7 @@ class DiscoveryRunner:
             parsed = parse_kill_blob(blob, summary=decoded, identity_map=identity_map)
             if parsed.get("kill_id") != kill_id:
                 return ProbeOutcome(ProbeStatus.MALFORMED, error_code="kill_id_mismatch")
-            return ProbeOutcome(ProbeStatus.REPORT, payload=parsed)
+            return ProbeOutcome(ProbeStatus.REPORT, payload=parsed, deferred_stop_code=deferred_stop)
         except (KillProtocolError, KillParseError, TypeError, ValueError) as exc:
             return ProbeOutcome(ProbeStatus.MALFORMED, error_code=type(exc).__name__)
 
@@ -243,8 +306,10 @@ class DiscoveryRunner:
                     finished_at_ms=int(timezone.now().timestamp()*1000),
                     lease_owner='', lease_expires_at_ms=None)
                 if failed:
+                    diagnostics = record_diagnostics(run, self.client)
+                    ProbeRun.objects.filter(pk=run.pk).update(diagnostics=run.diagnostics)
                     ProbeEvent.objects.create(run=run, kill_id=self.pending_id, status='failed',
-                                              error_code=error_code)
+                                              error_code=error_code, diagnostics=diagnostics)
             raise
         return run
 
@@ -304,15 +369,18 @@ class DiscoveryRunner:
     def _record(self, run, cursor, probe_id, outcome):
         self._owned(run, cursor)
         run.request_count += 1
+        disposition = ''
         if outcome.status is ProbeStatus.REPORT:
             parsed = outcome.payload
             report_time = _time_value(parsed.get('kill_time_raw'))
             if cursor.last_success_kill_time and report_time and report_time < cursor.last_success_kill_time:
                 run.stop_reason = 'time_reversed'
             else:
-                persist_report(parsed, policy=self.policy, source=self.source)
+                report, created = persist_report(parsed, policy=self.policy, source=self.source)
+                disposition = disposition_for(parsed, self.policy, report, created)
                 run.report_count += 1
-                cursor.pause_reason, cursor.cooldown_until_ms, cursor.failure_count = '', None, 0
+                if not outcome.deferred_stop_code:
+                    cursor.pause_reason, cursor.cooldown_until_ms, cursor.failure_count = '', None, 0
                 cursor.last_success_id = probe_id
                 if report_time is not None:
                     cursor.last_success_kill_time = report_time
@@ -320,6 +388,9 @@ class DiscoveryRunner:
                 self.first_empty = None
                 cursor.provisional_empty_id = None
                 cursor.next_probe_id = probe_id + 1
+            if outcome.deferred_stop_code:
+                run.stop_reason = run.error_code = outcome.deferred_stop_code
+                self.pause(cursor, run.stop_reason)
         elif outcome.status is ProbeStatus.EMPTY:
             if self.first_empty is None:
                 self.first_empty = probe_id
@@ -335,13 +406,17 @@ class DiscoveryRunner:
             self.pause(cursor, run.stop_reason)
         cursor.updated_at_ms = int(timezone.now().timestamp()*1000)
         cursor.save()
-        run.save(update_fields=['request_count', 'report_count', 'empty_count', 'error_code', 'stop_reason'])
+        diagnostics = record_diagnostics(run, self.client, disposition,
+                                         enrichment_deferred=bool(outcome.deferred_stop_code))
+        run.save(update_fields=['request_count', 'report_count', 'empty_count', 'error_code', 'stop_reason', 'diagnostics'])
         ProbeEvent.objects.create(
             run=run,
             kill_id=probe_id,
             status=outcome.status.value,
-            error_code=_safe_error_code(outcome.error_code) or (outcome.status.value if outcome.status is not ProbeStatus.REPORT else ''),
+            error_code=_safe_error_code(outcome.error_code) or outcome.deferred_stop_code or
+                       (outcome.status.value if outcome.status is not ProbeStatus.REPORT else ''),
             observed_at_ms=cursor.updated_at_ms,
+            diagnostics=diagnostics,
         )
 
     @transaction.atomic

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from GameData.registry import camouflaged_identity, item_name, location_record, npc_identity
 
@@ -9,6 +9,16 @@ from .models import KillItem, KillParticipant, KillReport
 
 def _iso(value):
     return value.isoformat() if value is not None else None
+
+
+def _report_time(report):
+    point = report.kill_time_display
+    # The verified game protocol returns UTC without an offset. Django's
+    # legacy naive storage must not make browsers interpret that as local time.
+    source = str(report.source or '')
+    if point is not None and point.tzinfo is None and (source == 'kill_api' or source.startswith('kill_api_')):
+        point = point.replace(tzinfo=timezone.utc)
+    return _iso(point)
 
 
 def _string(value):
@@ -37,10 +47,11 @@ def report_payload(report, security=None):
         'victim_name': report.victim_name or '',
         'victim_corporation_id': _string(report.victim_corporation_id),
         'victim_corporation_name': report.victim_corporation_name or '',
+        'victim_corporation_ticker': getattr(report, 'victim_corporation_ticker', '') or '',
         'victim_alliance_id': _string(report.victim_alliance_id),
         'victim_alliance_name': report.victim_alliance_name or '',
         'kill_time_raw': report.kill_time_raw or '',
-        'kill_time_display': _iso(report.kill_time_display),
+        'kill_time_display': _report_time(report),
         'time_quality': report.time_quality,
         'isk_lost': _string(report.isk_lost),
         'participant_count': report.participant_count,
@@ -71,6 +82,7 @@ def participant_payload(row):
         'npc_source_type_id': (npc or {}).get('source_type_id'),
         'corporation_id': _string(row.corporation_id),
         'corporation_name': row.corporation_name or '',
+        'corporation_ticker': getattr(row, 'corporation_ticker', '') or '',
         'alliance_id': _string(row.alliance_id),
         'alliance_name': row.alliance_name or '',
         'damage': row.damage,

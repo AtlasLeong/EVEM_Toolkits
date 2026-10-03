@@ -13,6 +13,13 @@ function idLabel(value) {
   return value === null || value === undefined || value === '' ? '' : String(value)
 }
 
+export function killboardSystemLabel(report = {}) {
+  const name = String(report.system_name || '').trim()
+  if (name) return name
+  const id = idLabel(report.system_id).trim()
+  return /^\d+$/.test(id) && Number(id) > 0 ? `星系 #${id}` : '未知星系'
+}
+
 // Legacy records may still carry client localization wrappers. Only remove
 // recognized wrappers, never arbitrary braces that may be meaningful source
 // text. These tokens are emitted by the client item/localization pipeline.
@@ -109,9 +116,46 @@ export function shouldShowKillboardLiveStatus(status) {
   return reason !== 'rate_limited' && reason !== 'cooldown'
 }
 
+const COLLECTOR_AUDIT_LABELS = Object.freeze({
+  connection: '连接游戏服务', authentication: '会话认证', kill_report: '基础 KM 查询', identity: '身份补全',
+  created: '新增收录', updated: '更新已有 KM', parsed: '已解析', filtered_value: '低于收录价值',
+  filtered_npc: '纯 NPC 击杀不收录', filtered_policy: '不符合收录规则',
+  rate_limited: '请求过于频繁', cooldown: '安全冷却', unauthorized: '会话认证失效',
+  network_error: '网络异常', malformed: '响应格式异常', configuration_error: '采集配置错误',
+  budget_exhausted: '本轮请求预算用尽', max_requests: '本轮探测预算用尽', max_seconds: '本轮时长上限',
+  empty_threshold: '到达空边界', time_reversed: '报告时间顺序异常', lease_expired: '执行租约过期',
+  lease_lost: '执行租约失效', failed: '执行失败', boundary_located: '已定位候选边界',
+  frontier_search: '继续定位最新边界', caught_up: '已处理当前窗口', not_configured: '未配置',
+  locate: '定位最新边界', scan: '收录最新窗口',
+  locate_budget: '边界定位预算用尽', missing_known_report: '已知报告暂不可见',
+  invalid_strategy_state: '采集策略状态异常', waiting_visibility: '等待报告可见后再查', id_limit: 'ID 已达上限',
+})
+
+export function collectorAuditLabel(value) {
+  return COLLECTOR_AUDIT_LABELS[value] || (value ? '未知' : '—')
+}
+
+export function collectorRunCounts(run = {}) {
+  const diagnostics = run.diagnostics || {}
+  const integer = (value, fallback = 0) => Number.isSafeInteger(value) && value >= 0 ? value : fallback
+  const hasCounters = Number.isSafeInteger(diagnostics.created_count)
+  return {
+    requests: integer(run.request_count), parsed: integer(run.report_count), empty: integer(run.empty_count),
+    rpc: integer(diagnostics.rpc_count, null), created: integer(diagnostics.created_count, null),
+    updated: integer(diagnostics.updated_count, hasCounters ? 0 : null),
+    filteredValue: integer(diagnostics.filtered_value_count, hasCounters ? 0 : null),
+    filteredNpc: integer(diagnostics.filtered_npc_count, hasCounters ? 0 : null),
+    deferred: integer(diagnostics.enrichment_deferred_count, hasCounters ? 0 : null),
+  }
+}
+
 export function participantShipLabel(row = {}) {
-  const name = formatKillboardName(row.ship_name)
-  return name || (idLabel(row.ship_type_id) ? '舰船名称待补' : '舰船资料未返回')
+  return formatKillboardName(row.ship_name)
+}
+
+export function corporationLabel(name, ticker) {
+  const tag = String(ticker || '').trim()
+  return [tag ? `[${tag}]` : '', String(name || '').trim()].filter(Boolean).join(' ')
 }
 
 function isNpcParticipant(row = {}) {
@@ -123,14 +167,13 @@ export function participantIdentity(row = {}) {
   const characterId = idLabel(row.character_id)
   const corporationId = idLabel(row.corporation_id)
   const characterName = String(row.character_name || '').trim()
-  const corporationName = String(row.corporation_name || '').trim()
-  const sourceName = formatKillboardName(row.display_name || ((row.identity_kind === 'source' || row.identity_kind === 'camouflaged' || row.is_source_summary) ? row.ship_name : ''))
+  const corporationName = corporationLabel(row.corporation_name, row.corporation_ticker)
+  const sourceName = formatKillboardName(row.display_name) || formatKillboardName(row.ship_name)
   const npc = !characterName && isNpcParticipant(row)
-  const sourceOnly = !npc && !characterName && !characterId && Boolean(sourceName)
   const identity = {
-    name: characterName || sourceName || (npc ? 'NPC' : characterId ? `角色 ID ${characterId}` : '身份资料未返回'),
+    name: characterName || sourceName || (npc ? 'NPC' : '参战舰船'),
     nameDetail: characterName && characterId ? `ID ${characterId}` : characterId,
-    corporation: corporationName || (npc ? '非玩家角色' : sourceOnly ? '来源记录 · 无角色身份' : corporationId ? `军团 ID ${corporationId}` : '军团资料未返回'),
+    corporation: corporationName,
     corporationDetail: corporationName && corporationId ? `ID ${corporationId}` : corporationId,
     named: Boolean(characterName),
   }
@@ -152,14 +195,9 @@ export function visibleParticipantRows(rows = []) {
 }
 
 export function participantVisibilityNote(rows = []) {
-  const namedCount = rows.filter(row => row && typeof row === 'object' && String(row.character_name || '').trim().length > 0).length
-  const visibleCount = Math.min(namedCount, 7)
-  const hiddenNamed = Math.max(0, namedCount - visibleCount)
-  const unnamed = Math.max(0, rows.length - namedCount)
-  if (!hiddenNamed && !unnamed) return ''
-  if (hiddenNamed && unnamed) return `展示前 ${visibleCount} 条可识别角色；另有 ${hiddenNamed} 名角色和 ${unnamed} 条未命名火力记录未展开。`
-  if (hiddenNamed) return `展示前 ${visibleCount} 条可识别角色；另有 ${hiddenNamed} 名角色记录未展开。`
-  return `展示前 ${visibleCount} 条可识别角色；另有 ${unnamed} 条未命名火力或聚合伤害条目。`
+  const visibleRows = visibleParticipantRows(rows)
+  const hidden = Math.max(0, rows.length - visibleRows.length)
+  return hidden ? `展示 ${visibleRows.length} 条参战记录；另有 ${hidden} 条记录未展开。` : ''
 }
 
 export function slotFlag(slot) {
@@ -188,7 +226,7 @@ export function equipmentSlotLabel(slot) {
   const flag = slotFlag(slot)
   if (flag === 110) return '机库改装件'
   if (flag === 111) return '防御改装件'
-  return SLOT_GROUPS.find(group => group.key === slotGroup(slot) && group.key !== 'other')?.label || '槽位待确认'
+  return SLOT_GROUPS.find(group => group.key === slotGroup(slot) && group.key !== 'other')?.label || '其他'
 }
 
 export function groupEquipmentItems(rows = []) {

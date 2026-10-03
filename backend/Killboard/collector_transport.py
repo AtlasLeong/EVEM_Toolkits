@@ -12,6 +12,7 @@ rotation, PCAP/DPAPI reader, automatic scan or network work at import time.
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import math
 from typing import Any
@@ -28,6 +29,21 @@ from .session_bundle import MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS, loa
 
 
 MAX_IDENTITY_CACHE = 4096
+AUDIT_STAGES = ('connection', 'authentication', 'kill_report', 'identity')
+AUDIT_ERROR_CODES = ('unauthorized', 'rate_limited', 'network_error', 'malformed',
+                     'budget_exhausted', 'lease_lost')
+
+
+@dataclass(frozen=True)
+class BaseReportResult:
+    """Verified base data plus a trusted local stop after identity enrichment.
+
+    A remote mapping cannot opt into this outcome; the transport constructs it
+    only after successful KM decoding. The stopped session is never reusable.
+    """
+
+    decoded: dict[str, Any]
+    stop_code: str
 
 
 class CollectorError(Exception):
@@ -61,6 +77,7 @@ class KillboardSession(market.MarketSession):
         self.next_server_seq = 0
         self._ended = False
         self._failure = None
+        self._audit = {'rpc_count': 0, 'stage': 'connection'}
         self.set_before_rpc(before_rpc)
 
     def _check_session_ready(self):
@@ -76,7 +93,14 @@ class KillboardSession(market.MarketSession):
             self._failure = _transport_error(failure)
         else:
             self._failure = CollectorError('network_error', 'session_closed')
+        self.note_failure(self._failure.code)
         self.__exit__(None, None, None)
+
+    def note_failure(self, code):
+        if 'failure_rpc_method' not in self._audit and self._audit.get('last_rpc_method'):
+            self._audit['failure_rpc_method'] = self._audit['last_rpc_method']
+        if code in AUDIT_ERROR_CODES:
+            self._audit['error_code'] = code
 
     def __enter__(self):
         self._check_session_ready()
@@ -115,8 +139,12 @@ class KillboardSession(market.MarketSession):
         if (method not in (*REQUIRED_METHODS, *OPTIONAL_METHODS)
                 or method not in self.bundle['templates'] or region_id is not None):
             raise CollectorError('malformed', 'unsupported_rpc')
+        self._audit['last_rpc_method'] = method
+        self._audit['stage'] = ('identity' if method in OPTIONAL_METHODS else
+                                'kill_report' if method == 'get_kill_info' else 'authentication')
         if self.before_rpc is not None:
             self.before_rpc()
+        self._audit['rpc_count'] += 1
         result = self._raw_rpc(method, item_id)
         stop = _structured_stop(result)
         if stop:
@@ -235,7 +263,8 @@ def _structured_stop(value, *, transport_wrapped=False) -> str | None:
 class KillboardClient:
     """Lazy single-run ProbeClient, usable as a context manager or with close()."""
 
-    def __init__(self, bundle: dict[str, Any], timeout: float = 10.0, *, before_rpc=None, enrich=True):
+    def __init__(self, bundle: dict[str, Any], timeout: float = 10.0, *, before_rpc=None,
+                 enrich=True, session_slot=''):
         if type(enrich) is not bool:
             raise ValueError('Invalid Killboard enrichment setting.')
         self.session = KillboardSession(bundle, timeout, before_rpc=before_rpc)
@@ -245,6 +274,17 @@ class KillboardClient:
         self._failure: CollectorError | None = None
         self._identities = {'characters': {}, 'corporations': {}}
         self._queried = {'characters': set(), 'corporations': set()}
+        if not isinstance(session_slot, str) or (session_slot and (
+                not session_slot.isascii() or not session_slot.isalpha()
+                or not session_slot.isupper() or len(session_slot) > 2)):
+            raise ValueError('Invalid Killboard session ordinal.')
+        self._session_slot = session_slot
+
+    def audit_snapshot(self):
+        result = dict(self.session._audit)
+        if self._session_slot:
+            result['session_slot'] = self._session_slot
+        return result
 
     def set_before_rpc(self, callback) -> None:
         """Install one run-wide pacer without connecting or invoking it."""
@@ -283,6 +323,7 @@ class KillboardClient:
 
     def _stop(self, failure: CollectorError):
         self._failure = failure
+        self.session.note_failure(failure.code)
         self.close()
         raise failure from None
 
@@ -313,8 +354,9 @@ class KillboardClient:
             if optional and isinstance(exc, IdentityProtocolError):
                 raise CollectorError('malformed', 'optional_identity') from None
             self._stop(CollectorError('malformed', type(exc).__name__))
-        except BaseException:
+        except BaseException as exc:
             # Pacer budget/cancellation propagate unchanged but stop reuse.
+            self.session.note_failure(getattr(exc, 'code', ''))
             self.close()
             raise
 
@@ -374,9 +416,11 @@ class KillboardClient:
         return {**decoded, 'identity_map': {'characters': characters, 'corporations': corporations,
                                            'alliances': alliances}}
 
-    def get_kill_info(self, kill_id: int) -> Any:
+    def get_kill_info(self, kill_id: int, *, enrich=None) -> Any:
         if type(kill_id) is not int or not 1 <= kill_id <= MAX_KILL_ID:
             raise ValueError('Kill ID is outside the signed 64-bit positive range.')
+        if enrich is not None and type(enrich) is not bool:
+            raise ValueError('Invalid Killboard enrichment setting.')
         def decode(result):
             # Validate the business extension before returning it to discovery;
             # no-report remains distinct from malformed/auth/network failure.
@@ -388,13 +432,33 @@ class KillboardClient:
                 observed_id = parse_kill_blob(decoded['kill_blob'])['kill_id']
                 if observed_id is not None and observed_id != kill_id:
                     raise KillProtocolError('Kill response identifier does not match the request.')
-            if (self.enrich and decoded and 'kill_blob' in decoded
+            if ((self.enrich if enrich is None else enrich) and decoded and 'kill_blob' in decoded
                     and any(method in self.session.bundle['templates'] for method in OPTIONAL_METHODS)):
-                return self._enrich_report(decoded)
+                try:
+                    return self._enrich_report(decoded)
+                except Exception as exc:
+                    code = getattr(exc, 'code', '')
+                    if (code not in ('rate_limited', 'unauthorized', 'network_error', 'budget_exhausted', 'malformed')
+                            or (code == 'malformed' and not isinstance(exc, CollectorError))):
+                        raise
+                    # Retain only identity rows already decoded through the
+                    # verified endpoints. The failing request has latched and
+                    # closed this client's transport before returning here.
+                    # An identity wire failure cannot invalidate the already
+                    # decoded base KM; malformed base parsing itself is not
+                    # a CollectorError and remains fatal above.
+                    identities = copy.deepcopy(self._identities)
+                    identities['alliances'] = {
+                        row['alliance_id']: {'name': row['alliance_name']}
+                        for row in identities['corporations'].values()
+                        if row.get('alliance_id') is not None and row.get('alliance_name')
+                    }
+                    return BaseReportResult({**decoded, 'identity_map': identities}, code)
             return result
         return self._request('get_kill_info', kill_id, decode)
 
 
 def build_client(*, before_rpc=None, enrich=True, cursor_path=None) -> KillboardClient:
     """Management-command factory using explicit ``KILLBOARD_SESSION_FILES``."""
-    return KillboardClient(load_round_robin_session(cursor_path=cursor_path), before_rpc=before_rpc, enrich=enrich)
+    bundle, slot = load_round_robin_session(cursor_path=cursor_path, with_slot=True)
+    return KillboardClient(bundle, before_rpc=before_rpc, enrich=enrich, session_slot=slot)

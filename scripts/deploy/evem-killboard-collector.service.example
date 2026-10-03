@@ -2,7 +2,7 @@
 Description=EVEM Killboard collection pass (requires an operator-supplied client)
 Wants=network-online.target
 After=network-online.target
-ConditionPathExists=/EVEMTK/deploy/current/backend/Killboard/management/commands/killboard_probe.py
+ConditionPathExists=/EVEMTK/deploy/current/backend/Killboard/management/commands/killboard_collect.py
 ConditionPathExists=/EVEMTK/deploy/shared/killboard/collector.env
 
 [Service]

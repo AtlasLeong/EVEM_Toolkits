@@ -305,6 +305,18 @@ class SessionBundleTests(unittest.TestCase):
                 self.assertEqual(selected['hello']['synthetic'], b'\x00')
                 self.assertEqual(json.loads(cursor.read_text()), 1)
 
+    def test_round_robin_returns_ordinal_without_private_file_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            paths = [Path(temporary) / f'private-{index}.json' for index in range(3)]
+            cursor = Path(temporary) / 'cursor.json'
+            for index, path in enumerate(paths):
+                self.session.save_session(synthetic_bundle(bytes([index])), path)
+            for expected in ('A', 'B', 'C', 'A'):
+                bundle, ordinal = self.session.load_round_robin_session(paths, cursor, with_slot=True)
+                self.assertEqual(ordinal, expected)
+                self.assertNotIn('private', ordinal)
+                self.assertIn('templates', bundle)
+
     def test_pool_rejects_duplicate_session_material_in_different_files(self):
         with tempfile.TemporaryDirectory() as temporary:
             paths = [Path(temporary) / name for name in ('one.json', 'two.json')]

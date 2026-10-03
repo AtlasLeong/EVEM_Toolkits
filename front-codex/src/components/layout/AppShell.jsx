@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { AuthContext } from '../../context/AuthContext'
 import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 import useKillboardAccess from '../../hooks/useKillboardAccess'
+import { pageTransitionKey } from '../../utils/routeTransition.js'
 
 const navItems = [
   { to: '/planetary', label: '行星资源', icon: Globe },
@@ -64,6 +65,7 @@ export default function AppShell() {
   const prevIndexRef = useRef(routeIndex(location.pathname))
   const directionRef = useRef(1)
   const hasPathChanged = prevPathRef.current !== location.pathname
+  const transitionKey = pageTransitionKey(location.pathname)
 
   if (hasPathChanged) {
     const current = routeIndex(location.pathname)
@@ -179,7 +181,7 @@ export default function AppShell() {
         <main className="shell-main">
           <div className="page-stage">
             <motion.div
-              key={location.pathname}
+              key={transitionKey}
               initial={
                 reduceMotion || !hasPathChanged
                   ? false

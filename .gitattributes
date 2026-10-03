@@ -1,0 +1,3 @@
+# Exact-byte, checksummed catalogs must not be converted by Windows checkouts.
+backend/GameData/data/versions/*.json -text
+backend/Killboard/run-collector.sh text eol=lf

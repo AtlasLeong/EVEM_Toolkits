@@ -154,3 +154,144 @@ class MarketCatalogSeedTests(TestCase):
             MarketItem.objects.get(pk=41006000004).market_bucket,
             'other',
         )
+
+    def test_seed_classifies_all_tradeable_components_and_requested_structures(self):
+        rows = [
+            {'item_id': 41300000000, 'item_name': '无人机突触线', 'category_id': 1200,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '无人机组件-复数'},
+            {'item_id': 27000000000, 'item_name': '建筑建造组件', 'category_id': 1100,
+             'subcategory_id': 1100000, 'market_group_name_3rd': '建筑基础组件-复数'},
+            {'item_id': 27011000000, 'item_name': '旗舰船只维护舱', 'category_id': 1200,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '旗舰组件-复数'},
+            {'item_id': 27012000000, 'item_name': '高级舰船组件', 'category_id': 1200,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '高级舰船组件-复数'},
+            {'item_id': 27013000000, 'item_name': '个人堡垒组件', 'category_id': 1100,
+             'subcategory_id': 1100000, 'market_group_name_3rd': '个人堡垒组件-复数'},
+            {'item_id': 27014000000, 'item_name': '铁壁升级组件', 'category_id': 1100,
+             'subcategory_id': 1100010, 'market_group_name_3rd': '铁壁升级组件-复数'},
+            {'item_id': 77011000000, 'item_name': '旗舰船只维护舱蓝图', 'category_id': 1700,
+             'subcategory_id': 1700050, 'market_group_name_3rd': '旗舰组件蓝图-复数'},
+            {'item_id': 77012000000, 'item_name': '蓝图伪装组件', 'category_id': 1700,
+             'subcategory_id': 1200050, 'market_group_name_3rd': '旗舰组件-复数'},
+            {'item_id': 44000000004, 'item_name': '艾玛4级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+            {'item_id': 44000000011, 'item_name': '艾玛无畏舰受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+            {'item_id': 44000000012, 'item_name': '艾玛航母受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+            {'item_id': 44000000015, 'item_name': '艾玛泰坦受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+            {'item_id': 44010000004, 'item_name': '加达里4级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '加达里受损结构-复数'},
+            {'item_id': 44010000011, 'item_name': '加达里无畏舰受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '加达里受损结构-复数'},
+            {'item_id': 44010000012, 'item_name': '加达里航母受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '加达里受损结构-复数'},
+            {'item_id': 44010000015, 'item_name': '加达里泰坦受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '加达里受损结构-复数'},
+            {'item_id': 44020000004, 'item_name': '盖伦特4级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '盖伦特受损结构-复数'},
+            {'item_id': 44020000011, 'item_name': '盖伦特无畏舰受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '盖伦特受损结构-复数'},
+            {'item_id': 44020000012, 'item_name': '盖伦特航母受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '盖伦特受损结构-复数'},
+            {'item_id': 44020000015, 'item_name': '盖伦特泰坦受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '盖伦特受损结构-复数'},
+            {'item_id': 44030000004, 'item_name': '米玛塔尔4级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '米玛塔尔受损结构-复数'},
+            {'item_id': 44030000011, 'item_name': '米玛塔尔无畏舰受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '米玛塔尔受损结构-复数'},
+            {'item_id': 44030000012, 'item_name': '米玛塔尔航母受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '米玛塔尔受损结构-复数'},
+            {'item_id': 44030000015, 'item_name': '米玛塔尔泰坦受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '米玛塔尔受损结构-复数'},
+            {'item_id': 44000000005, 'item_name': '艾玛5级受损结构', 'category_id': 1200,
+             'subcategory_id': 1200040, 'market_group_name_3rd': '艾玛受损结构-复数'},
+        ]
+        with TemporaryDirectory() as temporary:
+            catalog = self._catalog(temporary, rows)
+            call_command(
+                'market_seed_catalog', catalog=str(catalog),
+                enable_buckets='components,structures', stdout=StringIO(),
+            )
+
+        buckets = dict(MarketItem.objects.values_list('id', 'market_bucket'))
+        self.assertEqual(buckets, {
+            41300000000: 'components',
+            27000000000: 'components',
+            27011000000: 'components',
+            27012000000: 'components',
+            27013000000: 'components',
+            27014000000: 'components',
+            77011000000: 'other',
+            77012000000: 'other',
+            44000000004: 'structures',
+            44000000011: 'structures',
+            44000000012: 'structures',
+            44000000015: 'structures',
+            44010000004: 'structures',
+            44010000011: 'structures',
+            44010000012: 'structures',
+            44010000015: 'structures',
+            44020000004: 'structures',
+            44020000011: 'structures',
+            44020000012: 'structures',
+            44020000015: 'structures',
+            44030000004: 'structures',
+            44030000011: 'structures',
+            44030000012: 'structures',
+            44030000015: 'structures',
+            44000000005: 'other',
+        })
+        self.assertEqual(MarketItem.objects.filter(enabled=True).count(), 22)
+
+    def test_bundled_catalog_contains_all_requested_component_and_structure_rows(self):
+        call_command(
+            'market_seed_catalog', enable_buckets='components,structures', stdout=StringIO(),
+        )
+
+        self.assertEqual(MarketItem.objects.filter(market_bucket='components').count(), 58)
+        self.assertEqual(MarketItem.objects.filter(market_bucket='structures').count(), 16)
+        self.assertEqual(
+            MarketItem.objects.filter(category_id=1700, market_bucket__in=['components', 'structures']).count(),
+            0,
+        )
+        catalog_path = Path(__file__).resolve().parents[1] / 'data' / 'market_catalog.json'
+        with catalog_path.open(encoding='utf-8') as source:
+            rows = json.load(source)
+        expected_components = {
+            row['item_id'] for row in rows
+            if '组件' in row['market_group_name_3rd'] and row['category_id'] != 1700
+        }
+        expected_structures = {
+            44000000004, 44000000011, 44000000012, 44000000015,
+            44010000004, 44010000011, 44010000012, 44010000015,
+            44020000004, 44020000011, 44020000012, 44020000015,
+            44030000004, 44030000011, 44030000012, 44030000015,
+        }
+        self.assertEqual(
+            set(MarketItem.objects.filter(market_bucket='components').values_list('id', flat=True)),
+            expected_components,
+        )
+        self.assertEqual(
+            set(MarketItem.objects.filter(market_bucket='structures').values_list('id', flat=True)),
+            expected_structures,
+        )
+        self.assertEqual(
+            set(MarketItem.objects.filter(enabled=True).values_list('id', flat=True)),
+            expected_components | expected_structures,
+        )
+
+    def test_incremental_enable_preserves_old_toggles_and_manual_buckets(self):
+        MarketItem.objects.create(id=28007000000, name='伊甸币', market_bucket='currency', enabled=False)
+        MarketItem.objects.create(id=41000000000, name='三钛合金', market_bucket='minerals', enabled=True)
+        MarketItem.objects.create(id=27011000000, name='人工分类组件', market_bucket='minerals', enabled=False)
+
+        call_command('market_seed_catalog', enable_buckets='components,structures', stdout=StringIO())
+
+        self.assertFalse(MarketItem.objects.get(pk=28007000000).enabled)
+        self.assertTrue(MarketItem.objects.get(pk=41000000000).enabled)
+        manual = MarketItem.objects.get(pk=27011000000)
+        self.assertEqual(manual.market_bucket, 'minerals')
+        self.assertEqual(manual.name, '人工分类组件')
+        self.assertFalse(manual.enabled)

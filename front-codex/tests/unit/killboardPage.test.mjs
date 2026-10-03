@@ -29,10 +29,24 @@ function nodes(tree) {
   return [tree, ...(tree.children || []).flatMap(nodes)]
 }
 
-function harness() {
+function harness(initialKillId = '1') {
   const values = [], refs = [], previousDeps = [], cleanups = [], effects = []
   const calls = { list: [], detail: [], status: [] }
-  let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = '1', tree
+  const copies = []
+  const timers = new Map(), windowEvents = new Map(), documentEvents = new Map()
+  let timerId = 0
+  const document = {
+    visibilityState: 'visible',
+    addEventListener: (name, listener) => documentEvents.set(name, listener),
+    removeEventListener: name => documentEvents.delete(name),
+  }
+  const window = {
+    setInterval: (callback, milliseconds) => { timers.set(++timerId, { callback, milliseconds }); return timerId },
+    clearInterval: id => timers.delete(id),
+    addEventListener: (name, listener) => windowEvents.set(name, listener),
+    removeEventListener: name => windowEvents.delete(name),
+  }
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = initialKillId, tree
   const request = (kind, options) => {
     const call = { ...deferred(), signal: options.signal }
     calls[kind].push(call)
@@ -54,11 +68,12 @@ function harness() {
         previousDeps[index] = dependencies
       }
     },
-    useParams: () => ({ killId }), useNavigate: () => () => {}, AbortController,
+    useParams: () => ({ killId }), useNavigate: () => () => {}, AbortController, window, document,
     listKillReports: options => request('list', options),
     getKillReport: (_id, options) => request('detail', options),
     getKillboardStatus: options => request('status', options),
     ...presentation,
+    copyKillboardTag: () => { const copy = deferred(); copies.push(copy); return copy.promise },
   }
   for (const name of ['Activity', 'AlertTriangle', 'Copy', 'Database', 'Layers3', 'LoaderCircle', 'RefreshCw', 'Search', 'Swords', 'X', 'KillParticipantRow', 'GameItemImage']) dependencies[name] = name
   const module = { exports: {} }
@@ -73,12 +88,30 @@ function harness() {
     return tree
   }
   return {
-    calls, format: module.exports.formatKillIsk, formatTime: module.exports.formatKillboardTime, render,
+    calls, copies, format: module.exports.formatKillIsk, formatTime: module.exports.formatKillboardTime, render,
     get tree() { return tree },
     get serializedState() { return JSON.stringify(values) },
     async flush() { await settle(); render() },
     refresh() { nodes(tree).find(node => node.props.className === 'kb-action').props.onClick(); render() },
     route(id) { killId = id; render(); render() },
+    component(node) {
+      const stateOffset = stateIndex, refOffset = refIndex, effectOffset = effectIndex
+      return {
+        render(props = node.props) {
+          stateIndex = stateOffset; refIndex = refOffset; effectIndex = effectOffset
+          const subtree = node.type(props)
+          for (const { index, callback } of effects.splice(0)) {
+            cleanups[index]?.()
+            cleanups[index] = callback()
+          }
+          return subtree
+        },
+      }
+    },
+    tick() { for (const timer of timers.values()) timer.callback(); render() },
+    focus() { windowEvents.get('focus')?.(); render() },
+    visibility(value) { document.visibilityState = value; documentEvents.get('visibilitychange')?.(); render() },
+    get intervals() { return [...timers.values()].map(timer => timer.milliseconds) },
     unmount() { cleanups.forEach(cleanup => cleanup?.()) },
   }
 }
@@ -181,6 +214,71 @@ test('killboard timestamps are rendered in explicit Asia/Shanghai 24-hour format
   assert.doesNotMatch(formatTime('2026-09-30T03:35:37Z'), /AM|PM|上午|下午/)
 })
 
+test('known game-source raw timestamp fallback also treats naive protocol time as UTC', () => {
+  const formatTime = harness().formatTime
+  assert.equal(formatTime(null, '2026-09-30T12:58:02', 'kill_api_latest'), '2026/9/30 20:58:02')
+})
+
+test('hero forwards game source when only the raw kill time is available', async () => {
+  const page = harness()
+  page.render()
+  const report = { ...privateReport(), source: 'kill_api_latest', kill_time_raw: '2026-09-30T12:58:02' }
+  page.calls.list[0].resolve({ results: [report], count: 1 })
+  page.calls.detail[0].resolve(report)
+  page.calls.status[0].resolve({})
+  await page.flush()
+  assert.match(JSON.stringify(page.tree), /2026\/9\/30 20:58:02/)
+  page.unmount()
+})
+
+test('manual refresh reloads the same selected KM detail and fences superseded responses', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.refresh()
+  assert.equal(page.calls.detail.length, 2)
+  const superseded = page.calls.detail[1]
+  page.refresh()
+  assert.equal(page.calls.detail.length, 3)
+  assert.equal(superseded.signal.aborted, true)
+  page.calls.detail[2].resolve({ ...privateReport(), victim_name: 'NEW VICTIM' })
+  await page.flush()
+  superseded.resolve({ ...privateReport(), victim_name: 'STALE VICTIM' })
+  await page.flush()
+  assert.match(JSON.stringify(page.tree), /NEW VICTIM/)
+  assert.doesNotMatch(JSON.stringify(page.tree), /STALE VICTIM/)
+  page.unmount()
+})
+
+test('backend polling and focus refresh are visibility bounded and skip overlapping requests', async () => {
+  const page = harness()
+  page.render()
+  assert.deepEqual(page.intervals, [180000])
+  page.tick()
+  page.focus()
+  assert.equal(page.calls.list.length, 1)
+  page.calls.list[0].resolve({ results: [privateReport()], count: 1 })
+  page.calls.detail[0].resolve(privateReport())
+  page.calls.status[0].resolve({})
+  await page.flush()
+  page.visibility('hidden')
+  page.tick()
+  page.focus()
+  assert.equal(page.calls.list.length, 1)
+  page.visibility('visible')
+  assert.equal(page.calls.list.length, 2)
+  assert.equal(page.calls.detail.length, 2)
+  page.tick()
+  assert.equal(page.calls.list.length, 2)
+  page.calls.list[1].resolve({ results: [privateReport()], count: 1 })
+  page.calls.detail[1].resolve(privateReport())
+  page.calls.status[1].resolve({})
+  await page.flush()
+  page.tick()
+  assert.equal(page.calls.list.length, 3)
+  page.unmount()
+  assert.deepEqual(page.intervals, [])
+})
+
 test('rate-limit status does not render the live badge while forbidden status does', async () => {
   const page = harness()
   await loadPrivate(page, { status: false })
@@ -227,11 +325,99 @@ test('equipment panel exposes a dropped-only quick filter and per-slot drop coun
   page.unmount()
 })
 
+test('all equipment is separated in high mid low rig other order and filters omit empty sections', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const node = nodes(page.tree).find(node => typeof node.type === 'function' && node.type.name === 'Equipment')
+  const component = page.component(node)
+  const report = { ...privateReport(), items: [
+    { name: 'RIG LOST', slot: 'rig', status: 'destroyed' },
+    { name: 'LOW DROP', slot: 'low', status: 'mixed', quantity_dropped: 1 },
+    { name: 'HIGH DROP', slot: 'high', status: 'dropped' },
+    { name: 'OTHER LOST', slot: 'unknown', status: 'destroyed' },
+    { name: 'MID LOST', slot: 'mid', status: 'destroyed' },
+    { name: 'HIGH LOST', slot: 'high', status: 'destroyed' },
+  ] }
+  const props = { ...node.props, report }
+  let panel = component.render(props)
+  const sections = tree => nodes(tree).filter(item => item.props.className === 'kb-equipment-group')
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['high', 'mid', 'low', 'rig', 'other'])
+  for (const section of sections(panel)) assert.ok(nodes(section).some(item => item.type === 'h4'))
+  assert.match(JSON.stringify(sections(panel)[1]), /掉落 0 项/)
+  assert.match(JSON.stringify(sections(panel)[0]), /高槽|HIGH DROP|HIGH LOST/)
+  nodes(panel).find(item => item.props['aria-label'] === '只看已掉落装备').props.onClick()
+  panel = component.render(props)
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['high', 'low'])
+  assert.doesNotMatch(JSON.stringify(panel), /OTHER LOST|MID LOST|RIG LOST|HIGH LOST/)
+  const lowTab = nodes(panel).find(item => item.type === 'button' && JSON.stringify(item.children).includes('低槽'))
+  lowTab.props.onClick()
+  panel = component.render(props)
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['low'])
+  const next = { ...props, report: { ...report, kill_id: '2' } }
+  component.render(next)
+  panel = component.render(next)
+  assert.deepEqual(sections(panel).map(item => item.props['data-slot']), ['high', 'mid', 'low', 'rig', 'other'])
+  page.unmount()
+})
+
+test('the hero identifies corporation tag and hull class without diagnostic identity copy', async () => {
+  const page = harness()
+  page.render()
+  const report = { ...privateReport(), victim_corporation_name: '罗德骑士团', victim_corporation_ticker: 'KOFR', ship_class_label: '突击航空母舰' }
+  page.calls.list[0].resolve({ results: [report], count: 1 })
+  page.calls.detail[0].resolve(report)
+  page.calls.status[0].resolve({})
+  await page.flush()
+  const hero = nodes(page.tree).find(node => node.props.className === 'kb-hero kb-panel')
+  assert.match(JSON.stringify(hero), /\[KOFR\] 罗德骑士团/)
+  assert.ok(nodes(hero).some(node => node.props.className === 'kb-hull-class' && JSON.stringify(node.children).includes('突击航空母舰')))
+  assert.ok(nodes(hero).some(node => node.props.className === 'kb-hero-corporation'))
+  assert.doesNotMatch(JSON.stringify(hero), /军团资料未返回|目标身份未返回/)
+  page.unmount()
+})
+
+test('hero report identifier has a dedicated readable class and system ID fallback', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const hero = nodes(page.tree).find(node => node.props.className === 'kb-hero kb-panel')
+  assert.ok(hero)
+  assert.match(JSON.stringify(hero), /kb-report-id/)
+  assert.match(JSON.stringify(hero), /PRIVATE SYSTEM/)
+  page.unmount()
+})
+
+test('route changes clear the previous detail before the new KM arrives', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.route('2')
+  assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-hero kb-panel'))
+  page.unmount()
+})
+
+test('a late entry list cannot replace a newer route selection', async () => {
+  const page = harness(null)
+  page.render()
+  page.route('2')
+  const detailRequest = page.calls.detail.at(-1)
+  page.calls.list[0].resolve({ results: [privateReport('1'), privateReport('2')], count: 2 })
+  await page.flush()
+  assert.equal(detailRequest.signal.aborted, false)
+  assert.equal(page.calls.detail.length, 1)
+  page.unmount()
+})
+
 test('equipment list uses a compact multi-column layout with independent scrolling', () => {
   const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
   assert.match(css, /\.kb-item-list\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)/)
   assert.match(css, /\.kb-item-list\s*\{[^}]*overflow:auto/)
   assert.match(css, /\.kb-item--dropped\s*\{[^}]*background:/)
+})
+
+test('participant placeholder fills the same framed box as ship art', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*display:grid/)
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*width:100%/)
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*height:100%/)
 })
 
 test('raw participant counts are labelled records, not a proven number of players', async () => {
@@ -291,11 +477,55 @@ test('the hero exposes a copyable in-game KM tag and visible exact ISK value', a
   page.unmount()
 })
 
-test('hero artwork has an uncropped, wider containment stage', () => {
+test('switching KM clears copy feedback and cannot accept a late copy result from the old KM', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const copyButton = () => nodes(page.tree).find(node => node.props['aria-label'] === '复制 KM')
+  const firstCopy = copyButton().props.onClick()
+  page.copies[0].resolve(true)
+  await firstCopy
+  page.render()
+  assert.match(JSON.stringify(copyButton()), /已复制/)
+  const pendingCopy = copyButton().props.onClick()
+  page.route('2')
+  page.calls.detail.at(-1).resolve(privateReport('2'))
+  await page.flush()
+  assert.doesNotMatch(JSON.stringify(copyButton()), /已复制/)
+  page.copies[1].resolve(true)
+  await pendingCopy
+  page.render()
+  assert.doesNotMatch(JSON.stringify(copyButton()), /已复制/)
+  page.unmount()
+})
+
+test('a new detail request clears the previous KM network error', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.route('2')
+  page.calls.detail.at(-1).reject(new Error('OLD KM DETAIL ERROR'))
+  await page.flush()
+  assert.match(JSON.stringify(page.tree), /OLD KM DETAIL ERROR/)
+  page.route('3')
+  page.calls.detail.at(-1).resolve(privateReport('3'))
+  await page.flush()
+  assert.doesNotMatch(JSON.stringify(page.tree), /OLD KM DETAIL ERROR/)
+  page.unmount()
+})
+
+test('hero artwork constrains its grid track instead of trusting object fit alone', () => {
   const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
   assert.match(css, /\.kb-hero\s*\{[^}]*grid-template-columns:minmax\(190px, 260px\)/)
-  assert.match(css, /\.kb-hero \.kb-asset--ship\s*\{[^}]*height:132px;[^}]*overflow:visible/)
+  assert.match(css, /\.kb-hero \.kb-asset--ship\s*\{[^}]*grid-template-rows:minmax\(0,1fr\)/)
   assert.match(css, /\.kb-hero \.kb-asset--ship img\s*\{[^}]*object-fit:contain;[^}]*object-position:center/)
+})
+
+test('equipment category dividers span the scroll area and category items keep the column layout', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-equipment-group\s*\{[^}]*grid-column:1\s*\/\s*-1/)
+  assert.match(css, /\.kb-equipment-group-items\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/)
+  assert.match(css, /@container kb-equipment \(max-width:560px\)/)
+  assert.match(css, /@container kb-participants \(max-width:450px\)/)
+  assert.match(css, /\.kb-participant-main strong,\.kb-participant-main \.kb-participant-corporation\s*\{[^}]*white-space:normal/)
 })
 
 test('refresh reloads health and hides a newly persisted cooldown badge', async () => {

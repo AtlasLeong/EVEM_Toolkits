@@ -112,9 +112,8 @@ export default function App() {
             <Route path="/market" element={appRoute(<MarketPricesPage />)} />
             <Route path="/manufacturing" element={appRoute(<ManufacturingEstimatorPage />)} />
             <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
-            <Route path="/killboard" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
-            <Route path="/killboard/:killId" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
             <Route path="/killboard/admin" element={<RequireKillboardAccess>{appRoute(<KillboardCollectorAdminPage />)}</RequireKillboardAccess>} />
+            <Route path="/killboard/:killId?" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
             <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
             <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
             <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />

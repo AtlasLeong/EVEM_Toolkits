@@ -38,6 +38,8 @@ class PublicMarketRoutingTests(TestCase):
             {'id': 'planetary', 'label': '行星资源', 'count': 0},
             {'id': 'minerals', 'label': '矿物', 'count': 0},
             {'id': 'intermediate', 'label': '中间产物', 'count': 1},
+            {'id': 'components', 'label': '组件', 'count': 0},
+            {'id': 'structures', 'label': '受损结构', 'count': 0},
         ])
 
 

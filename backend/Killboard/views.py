@@ -88,6 +88,101 @@ def _minimum_isk_lost():
         return Decimal('20000000000.00')
 
 
+_AUDIT_METHODS = frozenset(('login_sigma', 'request_start_wait', 'get_newbie_info',
+                          'select_character_id', 'get_kill_info', 'get_public_info', 'get_corp_brief'))
+_AUDIT_STAGES = frozenset(('connection', 'authentication', 'kill_report', 'identity'))
+_AUDIT_ERRORS = frozenset((
+    'rate_limited', 'cooldown', 'unauthorized', 'network_error', 'malformed', 'budget_exhausted',
+    'configuration_error', 'empty_threshold', 'max_requests', 'max_seconds', 'time_reversed',
+    'lease_expired', 'lease_lost', 'failed', 'empty', 'report', 'boundary_located',
+    'frontier_search', 'caught_up', 'not_configured', 'CollectorError', 'NeedsAuthError',
+    'locate_budget', 'missing_known_report', 'invalid_strategy_state', 'waiting_visibility', 'id_limit',
+))
+_AUDIT_COUNTS = frozenset(('rpc_count', 'created_count', 'updated_count', 'filtered_value_count',
+                          'filtered_npc_count', 'filtered_policy_count', 'enrichment_deferred_count',
+                          'parsed_count', 'locate_count', 'scan_count', 'history_count'))
+_AUDIT_DISPOSITIONS = frozenset(('created', 'updated', 'filtered_value', 'filtered_npc',
+                               'filtered_policy', 'parsed'))
+
+
+def _audit_error(value):
+    return value if _audit_choice(value, _AUDIT_ERRORS) else ('unknown_error' if value else '')
+
+
+def _audit_choice(value, choices):
+    return isinstance(value, str) and value in choices
+
+
+def _bounded_integer(value, maximum=2**63 - 1):
+    return value if type(value) is int and 0 <= value <= maximum else None
+
+
+def _safe_diagnostics(value):
+    """Revalidate the stored JSON; never return arbitrary fields or remote text."""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    slot = value.get('session_slot')
+    if isinstance(slot, str) and 1 <= len(slot) <= 2 and all('A' <= char <= 'Z' for char in slot):
+        ordinal = 0
+        for char in slot:
+            ordinal = ordinal * 26 + ord(char) - ord('A') + 1
+        if ordinal <= 201:
+            result['session_slot'] = slot
+    for key in _AUDIT_COUNTS:
+        number = _bounded_integer(value.get(key), 10000000)
+        if number is not None:
+            result[key] = number
+    for key in ('last_rpc_method', 'failure_rpc_method'):
+        if _audit_choice(value.get(key), _AUDIT_METHODS):
+            result[key] = value[key]
+    if _audit_choice(value.get('stage'), _AUDIT_STAGES):
+        result['stage'] = value['stage']
+    if _audit_choice(value.get('disposition'), _AUDIT_DISPOSITIONS):
+        result['disposition'] = value['disposition']
+    if _audit_choice(value.get('error_code'), _AUDIT_ERRORS):
+        result['error_code'] = value['error_code']
+    if value.get('strategy') == 'latest_first':
+        result['strategy'] = 'latest_first'
+    if value.get('phase') in ('locate', 'scan'):
+        result['phase'] = value['phase']
+    return result
+
+
+def _strategy_summary(value):
+    state = value if isinstance(value, dict) else {}
+    raw_ranges = state.get('pending_ranges')
+    ranges = []
+    if isinstance(raw_ranges, list):
+        for pair in raw_ranges[:256]:
+            if not isinstance(pair, list) or len(pair) != 2:
+                continue
+            lower, upper = (_bounded_integer(point) for point in pair)
+            if lower is not None and upper is not None and 0 < lower <= upper:
+                ranges.append((lower, upper))
+    frontier = _bounded_integer(state.get('frontier'))
+    deferred = state.get('deferred_ids')
+    deferred_count = 0
+    if isinstance(deferred, dict):
+        deferred_count = sum(
+            1 for identifier, retry_at in list(deferred.items())[:256]
+            if isinstance(identifier, str) and 1 <= len(identifier) <= 19
+            and identifier.isascii() and identifier.isdecimal()
+            and 0 < int(identifier) <= 2**63 - 1 and _bounded_integer(retry_at) is not None
+        )
+    return {
+        'phase': state.get('phase') if state.get('phase') in ('locate', 'scan') else 'unknown',
+        'newest_candidate_id': str(frontier) if frontier and _bounded_integer(state.get('last_boundary_at_ms')) else None,
+        'historical_next_id': str(min(pair[0] for pair in ranges)) if ranges else None,
+        'pending_range_count': len(ranges),
+        'pending_id_count': sum(upper - lower + 1 for lower, upper in ranges),
+        'deferred_id_count': deferred_count,
+        'last_boundary_at_ms': _bounded_integer(state.get('last_boundary_at_ms')),
+        # A bounded frontier search never proves complete collection coverage.
+        'coverage_verified': False,
+    }
+
+
 class ReportsView(PrivateKillboardView):
     def get(self, request):
         page, size = _page(request)
@@ -206,8 +301,9 @@ class CollectorLogsView(PrivateKillboardView):
                     'request_count': row.request_count,
                     'report_count': row.report_count,
                     'empty_count': row.empty_count,
-                    'stop_reason': row.stop_reason,
-                    'error_code': row.error_code,
+                    'stop_reason': _audit_error(row.stop_reason),
+                    'error_code': _audit_error(row.error_code),
+                    'diagnostics': _safe_diagnostics(row.diagnostics),
                 }
                 for row in run_rows
             ]
@@ -220,9 +316,10 @@ class CollectorLogsView(PrivateKillboardView):
                     'run_id': row.run_id,
                     'kill_id': str(row.kill_id) if row.kill_id is not None else None,
                     'status': row.status,
-                    'error_code': row.error_code,
+                    'error_code': _audit_error(row.error_code),
                     'observed_at_ms': row.observed_at_ms,
                     'duration_ms': row.duration_ms,
+                    'diagnostics': _safe_diagnostics(row.diagnostics),
                 }
                 for row in event_rows
             ]
@@ -235,10 +332,11 @@ class CollectorLogsView(PrivateKillboardView):
                 'name': cursor.name if cursor else 'latest',
                 'last_success_id': str(cursor.last_success_id) if cursor and cursor.last_success_id else None,
                 'next_probe_id': str(cursor.next_probe_id) if cursor and cursor.next_probe_id else None,
-                'pause_reason': cursor.pause_reason if cursor else '',
+                'pause_reason': _audit_error(cursor.pause_reason) if cursor else '',
                 'cooldown_until_ms': cursor.cooldown_until_ms if cursor else None,
                 'failure_count': cursor.failure_count if cursor else 0,
                 'updated_at_ms': cursor.updated_at_ms if cursor else None,
+                'strategy': _strategy_summary(cursor.strategy_state if cursor else {}),
             },
             'runs': runs,
             'events': events,

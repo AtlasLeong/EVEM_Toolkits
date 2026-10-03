@@ -120,6 +120,23 @@ def _is_proven_npc_only(participants) -> bool:
     return True
 
 
+def disposition_for(parsed, policy, report, created):
+    """Stable audit classification, with the same conservative filtering rules."""
+    if report is not None:
+        return getattr(report, '_collection_disposition', 'created' if created else 'updated')
+    if _is_proven_npc_only(parsed.get('participants')):
+        return 'filtered_npc'
+    if policy is not None and policy.min_isk_lost is not None:
+        value = parsed.get('isk_lost')
+        try:
+            observed = Decimal(str(value)) if value is not None and not isinstance(value, bool) else None
+        except (InvalidOperation, TypeError, ValueError):
+            observed = None
+        if observed is None or not observed.is_finite() or observed <= policy.min_isk_lost:
+            return 'filtered_value'
+    return 'filtered_policy'
+
+
 def _set_if_present(report: KillReport, parsed: dict, field: str, *, preserve_blank=True):
     if field not in parsed:
         return
@@ -138,12 +155,32 @@ def _save_children(report: KillReport, parsed: dict):
         or (participants == [] and parsed.get("participant_count") == 0)
     )
     if "participants" in parsed and participants is not None and participants_provided:
+        previous = {
+            (row.character_id, row.source_index, row.is_source_summary): row
+            for row in report.participants.all()
+            if row.character_id is not None and row.character_id > 0
+        }
         report.participants.all().delete()
         for participant in participants or []:
+            participant = dict(participant)
+            old = previous.get((participant.get('character_id'), participant.get('source_index'),
+                                participant.get('is_source_summary', False)))
+            if old is not None:
+                if not participant.get('character_name'):
+                    participant['character_name'] = old.character_name
+                same_corp = participant.get('corporation_id') in (None, old.corporation_id)
+                if same_corp:
+                    for field in ('corporation_id', 'corporation_name', 'corporation_ticker'):
+                        if participant.get(field) in (None, ''):
+                            participant[field] = getattr(old, field)
+                    if participant.get('alliance_id') in (None, old.alliance_id):
+                        for field in ('alliance_id', 'alliance_name'):
+                            if participant.get(field) in (None, ''):
+                                participant[field] = getattr(old, field)
             KillParticipant.objects.create(report=report, **{
                 key: participant.get(key)
                 for key in (
-                    "character_id", "character_name", "corporation_id", "corporation_name",
+                    "character_id", "character_name", "corporation_id", "corporation_name", "corporation_ticker",
                     "alliance_id", "alliance_name", "damage", "damage_pct", "is_final_blow",
                     "is_top_damage", "ship_type_id", "weapon_type_id", "source_index",
                     "camouflaged_faction_id", "feat_score", "is_source_summary",
@@ -199,11 +236,20 @@ def persist_report(
 
     existing_rank = _COMPLETENESS_RANK.get(report.completeness, 0)
     if not created and incoming_rank < existing_rank:
+        report._collection_disposition = 'parsed'
         return report, False
+
+    incoming_corporation_id = parsed.get('victim_corporation_id')
+    if incoming_corporation_id is not None and incoming_corporation_id != report.victim_corporation_id:
+        # A verified corporation change invalidates the old name and short
+        # tag even when this bounded refresh lacks the new corp profile.
+        report.victim_corporation_name = ''
+        report.victim_corporation_ticker = ''
 
     fields = (
         "ship_type_id", "ship_name", "ship_class_key", "system_id", "system_name",
         "victim_character_id", "victim_name", "victim_corporation_id", "victim_corporation_name",
+        "victim_corporation_ticker",
         "victim_alliance_id", "victim_alliance_name", "kill_time_raw", "time_quality", "isk_lost",
         "participant_count",
         "victim_damage_taken", "damage_total_verified", "final_summary",
@@ -216,6 +262,7 @@ def persist_report(
     report.source = source
     report.parser_version = parser_version
     report.completeness = incoming_completeness
+    report._collection_disposition = 'created' if created else 'updated'
     if "participants_status" in parsed:
         incoming_status = parsed["participants_status"]
         if created or incoming_status not in {"missing", "unavailable", "unknown"} or report.participants_status not in {"provided", "summary"}:

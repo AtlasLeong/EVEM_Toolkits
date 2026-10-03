@@ -79,6 +79,98 @@ class CodedFailure(Exception):
 
 
 class DiscoveryTests(TestCase):
+    def test_verified_base_report_persists_and_stops_on_malformed_identity_wire(self):
+        from Killboard.collector_transport import BaseReportResult
+        from Killboard.protocol import decode_kill_info_response
+        base = decode_kill_info_response(captured_response(100))
+        client = FakeClient({100: BaseReportResult(base, 'malformed'), 101: response(101)})
+        cursor = ProbeCursor.objects.create(name='deferred-malformed', next_probe_id=100)
+        run = DiscoveryRunner(client, cursor=cursor, config=DiscoveryConfig(max_requests=5)).run()
+        cursor.refresh_from_db()
+        self.assertTrue(KillReport.objects.filter(kill_id=100).exists())
+        self.assertEqual(client.calls, [100])
+        self.assertEqual(cursor.next_probe_id, 101)
+        self.assertEqual(run.stop_reason, 'malformed')
+        self.assertEqual(run.diagnostics['created_count'], 1)
+        self.assertEqual(run.diagnostics['enrichment_deferred_count'], 1)
+
+    def test_verified_base_report_persists_and_stops_on_deferred_identity_limit(self):
+        from Killboard import collector_transport
+        from Killboard.protocol import decode_kill_info_response
+        base = decode_kill_info_response(captured_response(100))
+        client = FakeClient({100: collector_transport.BaseReportResult(base, 'rate_limited'),
+                             101: response(101)})
+        cursor = ProbeCursor.objects.create(name='deferred-base', next_probe_id=100)
+        run = DiscoveryRunner(client, cursor=cursor, config=DiscoveryConfig(max_requests=5)).run()
+        cursor.refresh_from_db()
+        self.assertTrue(KillReport.objects.filter(kill_id=100).exists())
+        self.assertEqual(client.calls, [100])
+        self.assertEqual(cursor.next_probe_id, 101)
+        self.assertEqual(cursor.pause_reason, 'rate_limited')
+        self.assertEqual(run.stop_reason, 'rate_limited')
+        self.assertEqual(run.report_count, 1)
+        self.assertEqual(run.diagnostics['created_count'], 1)
+        self.assertEqual(run.diagnostics['enrichment_deferred_count'], 1)
+        self.assertEqual(run.events.get().diagnostics['disposition'], 'created')
+
+    def test_audit_snapshot_rejects_unapproved_keys_and_values(self):
+        from Killboard.discovery import safe_audit_snapshot
+        class AuditClient:
+            def audit_snapshot(self):
+                return {'session_slot': 'B', 'rpc_count': 5,
+                        'last_rpc_method': 'get_kill_info', 'stage': 'kill_report',
+                        'failure_rpc_method': '/private/session.json', 'error_code': 'secret token',
+                        'password': 'secret', 'endpoint': 'private'}
+        self.assertEqual(safe_audit_snapshot(AuditClient()), {
+            'session_slot': 'B', 'rpc_count': 5,
+            'last_rpc_method': 'get_kill_info', 'stage': 'kill_report',
+        })
+
+    def test_deferred_identity_limit_preserves_prior_failure_backoff(self):
+        from Killboard.collector_transport import BaseReportResult
+        from Killboard.protocol import decode_kill_info_response
+        base = decode_kill_info_response(captured_response(100))
+        cursor = ProbeCursor.objects.create(name='deferred-backoff', next_probe_id=100,
+                                             failure_count=2, pause_reason='rate_limited',
+                                             cooldown_until_ms=epoch_ms()-1)
+        run = DiscoveryRunner(FakeClient({100: BaseReportResult(base, 'rate_limited')}),
+                              cursor=cursor, config=DiscoveryConfig(max_requests=1)).run()
+        cursor.refresh_from_db()
+        self.assertEqual(run.stop_reason, 'rate_limited')
+        self.assertEqual(cursor.failure_count, 3)
+        self.assertGreater(cursor.cooldown_until_ms, epoch_ms()+59*60*1000)
+
+    def test_time_reversed_base_still_applies_trusted_deferred_cooldown(self):
+        from Killboard.collector_transport import BaseReportResult
+        from Killboard.protocol import decode_kill_info_response
+        base = decode_kill_info_response(captured_response(100))
+        cursor = ProbeCursor.objects.create(name='deferred-reversed', next_probe_id=100,
+                                             last_success_id=99,
+                                             last_success_kill_time=datetime(2026, 9, 29, tzinfo=timezone.utc))
+        run = DiscoveryRunner(FakeClient({100: BaseReportResult(base, 'rate_limited')}),
+                              cursor=cursor, config=DiscoveryConfig(max_requests=1)).run()
+        cursor.refresh_from_db()
+        self.assertEqual(cursor.pause_reason, 'rate_limited')
+        self.assertEqual(cursor.next_probe_id, 100)
+        self.assertEqual(run.stop_reason, 'rate_limited')
+
+    def test_parsed_report_count_is_separate_from_value_filtered_and_created(self):
+        self.policy.min_isk_lost = 20_000_000_000
+        self.policy.allowed_class_keys = []
+        self.policy.min_ship_rank = 0
+        self.policy.save()
+        low = response(100)
+        high = response(101)
+        high['kill_blob'] = high['kill_blob'].replace('<kill ', '<kill iskLost="20000000001" ')
+        cursor = ProbeCursor.objects.create(name='audit-counts', next_probe_id=100)
+        run = DiscoveryRunner(FakeClient({100: low, 101: high}), cursor=cursor,
+                              policy=self.policy, config=DiscoveryConfig(max_requests=2)).run()
+        self.assertEqual(run.report_count, 2)
+        self.assertEqual(run.diagnostics['filtered_value_count'], 1)
+        self.assertEqual(run.diagnostics['created_count'], 1)
+        self.assertEqual([row.diagnostics['disposition'] for row in run.events.order_by('id')],
+                         ['filtered_value', 'created'])
+
     def setUp(self):
         ShipClass.objects.create(key="battleship", label="Battleship", rank=4)
         self.policy = CollectionPolicy.objects.create(

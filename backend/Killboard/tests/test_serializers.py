@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -7,6 +8,46 @@ from Killboard.serializers import item_payload, participant_payload, report_payl
 
 
 class KillboardSerializerDisplayTests(SimpleTestCase):
+    def test_missing_corporation_ticker_is_an_additive_blank_payload_field(self):
+        report = self.time_report('kill_api', None)
+        self.assertEqual(report_payload(report).get('victim_corporation_ticker'), '')
+        row = SimpleNamespace(
+            character_id=None, character_name='', corporation_id=None, corporation_name='',
+            alliance_id=None, alliance_name='', damage=None, damage_pct=None,
+            is_final_blow=False, is_top_damage=False, ship_type_id=None,
+            weapon_type_id=None, camouflaged_faction_id=None,
+            feat_score=None, is_source_summary=False,
+        )
+        self.assertEqual(participant_payload(row).get('corporation_ticker'), '')
+
+    def time_report(self, source, point):
+        return SimpleNamespace(
+            kill_id=19748417, ship_type_id=None, ship_name='', ship_class_key='',
+            ship_class_label='', system_id=None, system_name='', victim_character_id=None,
+            victim_name='', victim_corporation_id=None, victim_corporation_name='',
+            victim_alliance_id=None, victim_alliance_name='', kill_time_raw='2026-09-30T12:58:02',
+            kill_time_display=point, time_quality='provided', isk_lost=None,
+            participant_count=None, participant_count_source='unknown', participants_status='missing',
+            equipment_status='missing', completeness='partial', source=source,
+            victim_damage_taken=None, damage_total_verified=False, final_summary={},
+        )
+
+    def test_verified_game_source_naive_time_is_explicit_utc(self):
+        for source in ('kill_api', 'kill_api_bootstrap', 'kill_api_latest'):
+            with self.subTest(source=source):
+                report = self.time_report(source, datetime(2026, 9, 30, 12, 58, 2))
+                payload = report_payload(report)
+                self.assertEqual(payload['kill_time_display'], '2026-09-30T12:58:02+00:00')
+                self.assertEqual(payload['kill_time_raw'], '2026-09-30T12:58:02')
+
+    def test_unknown_source_naive_time_is_not_reinterpreted(self):
+        report = self.time_report('collector', datetime(2026, 9, 30, 12, 58, 2))
+        self.assertEqual(report_payload(report)['kill_time_display'], '2026-09-30T12:58:02')
+
+    def test_existing_timezone_is_preserved_for_known_game_source(self):
+        report = self.time_report('kill_api', datetime(2026, 9, 30, 12, 58, 2, tzinfo=timezone.utc))
+        self.assertEqual(report_payload(report)['kill_time_display'], '2026-09-30T12:58:02+00:00')
+
     def test_anonymous_npc_weapon_identity_is_resolved_from_client_catalog(self):
         row = SimpleNamespace(
             character_id=None, character_name='', corporation_id=None, corporation_name='',

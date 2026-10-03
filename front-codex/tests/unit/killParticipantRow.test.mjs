@@ -34,15 +34,37 @@ test('participant row shows player, corporation, exact ship and damage without r
   assert.doesNotMatch(html, /10500000601/)
 })
 
-test('an unmapped hull keeps readable missing-data text without a guessed image URL', async () => {
+test('an unmapped hull omits internal missing-data text without a guessed image URL', async () => {
   const Row = await loadComponent()
   const html = renderToStaticMarkup(React.createElement(Row, { row: {
     character_name: '测试角色', ship_type_id: '99999999999', damage: 0,
   } }))
-  assert.match(html, /舰船名称待补/)
-  assert.match(html, /军团资料未返回/)
+  assert.doesNotMatch(html, /名称待补|资料未返回|非玩家角色/)
   assert.match(html, /0 伤害/)
   assert.doesNotMatch(html, /<img/)
+})
+
+test('a hull-backed unnamed row uses the source name once and keeps both damage marks', async () => {
+  const Row = await loadComponent()
+  const html = renderToStaticMarkup(React.createElement(Row, { row: {
+    character_id: '100000111', corporation_id: '22222', ship_name: '混乱风暴发射器',
+    damage: 512042, damage_pct: '33', is_final_blow: true, is_top_damage: true,
+  } }))
+  assert.match(html, />混乱风暴发射器<\/strong>/)
+  assert.doesNotMatch(html, /身份资料未返回|军团资料未返回|非玩家角色|100000111|22222/)
+  assert.doesNotMatch(html, /<small/)
+  assert.match(html, /最后一击/)
+  assert.match(html, /伤害最多/)
+})
+
+test('participant corporation English tag is visible without a missing-data caption', async () => {
+  const Row = await loadComponent()
+  const html = renderToStaticMarkup(React.createElement(Row, { row: {
+    character_name: '刀功料理', corporation_name: '罗德骑士团', corporation_ticker: 'KOFR',
+    ship_name: '元帅级', damage: 1,
+  } }))
+  assert.match(html, /\[KOFR\] 罗德骑士团/)
+  assert.doesNotMatch(html, /非玩家角色|资料未返回/)
 })
 
 test('a verified participant hull renders its exact API image URL', async () => {

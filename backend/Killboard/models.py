@@ -71,6 +71,7 @@ class KillReport(models.Model):
     victim_name = models.CharField(max_length=255, blank=True, default='')
     victim_corporation_id = models.BigIntegerField(null=True, blank=True)
     victim_corporation_name = models.CharField(max_length=255, blank=True, default='')
+    victim_corporation_ticker = models.CharField(max_length=255, blank=True, default='')
     victim_alliance_id = models.BigIntegerField(null=True, blank=True)
     victim_alliance_name = models.CharField(max_length=255, blank=True, default='')
     kill_time_raw = models.CharField(max_length=64, blank=True, default='')
@@ -110,6 +111,7 @@ class KillParticipant(models.Model):
     character_name = models.CharField(max_length=255, blank=True, default='')
     corporation_id = models.BigIntegerField(null=True, blank=True)
     corporation_name = models.CharField(max_length=255, blank=True, default='')
+    corporation_ticker = models.CharField(max_length=255, blank=True, default='')
     alliance_id = models.BigIntegerField(null=True, blank=True)
     alliance_name = models.CharField(max_length=255, blank=True, default='')
     damage = models.PositiveBigIntegerField(null=True, blank=True)
@@ -180,6 +182,7 @@ class ProbeCursor(models.Model):
     candidate_id = models.BigIntegerField(null=True, blank=True)
     candidate_at_ms = models.BigIntegerField(null=True, blank=True)
     provisional_empty_id = models.BigIntegerField(null=True, blank=True)
+    strategy_state = models.JSONField(default=dict, blank=True)
     updated_at_ms = models.BigIntegerField(default=epoch_ms)
 
     class Meta:
@@ -207,6 +210,7 @@ class ProbeRun(models.Model):
     empty_count = models.PositiveIntegerField(default=0)
     stop_reason = models.CharField(max_length=64, blank=True, default='')
     error_code = models.CharField(max_length=64, blank=True, default='')
+    diagnostics = models.JSONField(default=dict, blank=True)
     lease_owner = models.CharField(max_length=64, blank=True, default='')
     lease_expires_at_ms = models.BigIntegerField(null=True, blank=True, db_index=True)
     created_at_ms = models.BigIntegerField(default=epoch_ms, db_index=True)
@@ -233,6 +237,7 @@ class ProbeEvent(models.Model):
     error_code = models.CharField(max_length=64, blank=True, default='')
     observed_at_ms = models.BigIntegerField(default=epoch_ms, db_index=True)
     duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    diagnostics = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ['-observed_at_ms', '-id']

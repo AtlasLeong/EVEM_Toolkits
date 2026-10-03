@@ -244,6 +244,7 @@ def _participant(node: _Node, index: int) -> dict:
         "character_name": _text(_attr(node, "charactername", "character_name", "name")),
         "corporation_id": _int(_attr(node, "corporationid", "corporation_id", "r"), "corporation id"),
         "corporation_name": _text(_attr(node, "corporationname", "corporation_name")),
+        "corporation_ticker": "",
         "alliance_id": _int(_attr(node, "allianceid", "alliance_id", "a"), "alliance id"),
         "alliance_name": _text(_attr(node, "alliancename", "alliance_name")),
         "damage": _int(_attr(node, "damagedone", "damage", "damage_done", "d"), "damage"),
@@ -300,6 +301,7 @@ def _summary_participant(summary: Mapping) -> dict | None:
         "character_name": "",
         "corporation_id": _int(_summary_attr(summary, "final_corporation_id"), "final corporation id"),
         "corporation_name": "",
+        "corporation_ticker": "",
         "alliance_id": _int(_summary_attr(summary, "final_alliance_id"), "final alliance id"),
         "alliance_name": "",
         "damage": _int(_summary_attr(summary, "final_damage_done"), "final damage"),
@@ -378,6 +380,14 @@ def _identity_id(record: Mapping | str | None, *keys: str) -> int | None:
     return None
 
 
+def _identity_ticker(record: Mapping | str | None) -> str:
+    # Name-only legacy identity records are not evidence of a short tag.
+    value = record.get("ticker") if isinstance(record, Mapping) else None
+    if not isinstance(value, str) or len(value) > MAX_TEXT_LENGTH:
+        return ""
+    return value.strip()
+
+
 def _enrich_identity(
     participants: list[dict],
     *,
@@ -388,7 +398,7 @@ def _enrich_identity(
     victim_alliance_id: int | None,
     victim_alliance_name: str,
     identity_map: Mapping,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str, int | None]:
     """Fill names from explicit identity responses, preserving source names."""
     def enrich_row(row: dict) -> None:
         character = _identity_value(identity_map, "characters", row.get("character_id"))
@@ -401,6 +411,7 @@ def _enrich_identity(
         corporation = _identity_value(identity_map, "corporations", row.get("corporation_id"))
         if not row.get("corporation_name"):
             row["corporation_name"] = _identity_name(corporation, "name", "corporation_name")
+        row["corporation_ticker"] = _identity_ticker(corporation)
         alliance = _identity_value(identity_map, "alliances", row.get("alliance_id"))
         if not row.get("alliance_name"):
             row["alliance_name"] = _identity_name(alliance, "name", "alliance_name")
@@ -421,7 +432,8 @@ def _enrich_identity(
     alliance = _identity_value(identity_map, "alliances", victim_alliance_id)
     if not victim_alliance_name:
         victim_alliance_name = _identity_name(alliance, "name", "alliance_name")
-    return victim_name, victim_corporation_name, victim_alliance_name
+    return (victim_name, victim_corporation_name, victim_alliance_name,
+            _identity_ticker(corporation), victim_corporation_id)
 
 
 def parse_kill_blob(
@@ -530,8 +542,10 @@ def parse_kill_blob(
                 participants.append(summary_participant)
                 final_summary = {**_json_row(summary_participant), 'match_status': 'added'}
 
+    victim_corporation_ticker = ""
     if identity_map is not None:
-        victim_name, victim_corporation_name, victim_alliance_name = _enrich_identity(
+        (victim_name, victim_corporation_name, victim_alliance_name,
+         victim_corporation_ticker, victim_corporation_id) = _enrich_identity(
             participants,
             victim_character_id=victim_character_id,
             victim_name=victim_name,
@@ -567,6 +581,7 @@ def parse_kill_blob(
         "victim_name": victim_name,
         "victim_corporation_id": victim_corporation_id,
         "victim_corporation_name": victim_corporation_name,
+        "victim_corporation_ticker": victim_corporation_ticker,
         "victim_alliance_id": victim_alliance_id,
         "victim_alliance_name": victim_alliance_name,
         "kill_time_raw": kill_time_raw,
