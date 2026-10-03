@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -6,6 +7,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from Market.models import CollectionRun, MarketConfig, MarketConfigAudit, MarketItem
+from Market.tests.test_worker import FakeSession, Quote
 
 
 def iso(epoch_millis):
@@ -325,6 +327,96 @@ class MarketAdminAPITests(TestCase):
         self.assertEqual(run.requested_by, self.user)
         self.assertIsNone(run.started_at_ms)
         self.assertEqual(self.client.post(url, {}, format='json').status_code, 409)
+
+    def test_manual_runs_expose_unknown_capacity_until_planned_even_during_cooldown(self):
+        from Market.worker import collect_due
+
+        self.allow('collectionrun')
+        now_ms = 1_700_000_000_000
+        config = MarketConfig.objects.create()
+        for capacity in (40, 80):
+            for cooldown_until_ms in (None, now_ms + 60_000):
+                with self.subTest(capacity=capacity, cooldown_until_ms=cooldown_until_ms):
+                    config.max_items_per_run = capacity
+                    config.cooldown_until_ms = cooldown_until_ms
+                    config.save(update_fields=['max_items_per_run', 'cooldown_until_ms'])
+
+                    response = self.client.post('/api/market/admin/run/', {}, format='json')
+
+                    self.assertEqual(response.status_code, 202)
+                    self.assertEqual(response.json()['status'], 'queued')
+                    self.assertIsNone(response.json()['item_limit'])
+                    self.assertIsNone(response.json()['expected_count'])
+                    if cooldown_until_ms:
+                        with patch('Market.session_bundle.load_session_pool') as load_session_pool:
+                            self.assertIsNone(collect_due(clock_ms=lambda: now_ms))
+                        load_session_pool.assert_not_called()
+
+                    runs = self.client.get('/api/market/admin/runs/')
+                    self.assertEqual(runs.status_code, 200)
+                    row = next(row for row in runs.json()['results'] if row['id'] == response.json()['id'])
+                    self.assertEqual(row['status'], 'queued')
+                    self.assertIsNone(row['item_limit'])
+                    self.assertIsNone(row['expected_count'])
+                    CollectionRun.objects.filter(pk=row['id']).delete()
+
+    def test_manual_run_api_discloses_capacity_only_after_the_actual_plan_is_saved(self):
+        from Market.worker import _save_plan, collect_due
+
+        self.allow('collectionrun')
+        now_ms = 1_700_000_000_000
+        config = MarketConfig.objects.create()
+        MarketItem.objects.bulk_create([
+            MarketItem(id=item_id, name=f'Synthetic item {item_id}')
+            for item_id in range(1, 86)
+        ])
+        for capacity, fallback_reason, expected_limit in ((80, '', 80), (80, 'runtime_budget', 40), (40, '', 40)):
+            with self.subTest(capacity=capacity, fallback_reason=fallback_reason):
+                config.max_items_per_run = capacity
+                config.batch_fallback_reason = fallback_reason
+                config.batch_fallback_until_ms = now_ms + 60_000 if fallback_reason else None
+                config.save(update_fields=['max_items_per_run', 'batch_fallback_reason', 'batch_fallback_until_ms'])
+                response = self.client.post('/api/market/admin/run/', {}, format='json')
+                self.assertEqual(response.status_code, 202)
+                run_id = response.json()['id']
+                session = FakeSession({item_id: Quote() for item_id in range(1, 86)})
+
+                def api_row():
+                    response = self.client.get('/api/market/admin/runs/')
+                    self.assertEqual(response.status_code, 200)
+                    return next(row for row in response.json()['results'] if row['id'] == run_id)
+
+                def save_plan(run, items, plan_at_ms):
+                    row = api_row()
+                    self.assertEqual(row['status'], 'running')
+                    self.assertIsNone(row['item_limit'])
+                    self.assertIsNone(row['expected_count'])
+                    _save_plan(run, items, plan_at_ms)
+
+                def load_bundle():
+                    row = api_row()
+                    self.assertEqual(row['status'], 'running')
+                    self.assertEqual(row['item_limit'], expected_limit)
+                    self.assertEqual(row['expected_count'], expected_limit)
+                    self.assertEqual(row['batch_fallback_reason'], fallback_reason)
+                    return {'fixture': True}
+
+                with patch('Market.worker._save_plan', side_effect=save_plan), patch(
+                    'socket.create_connection', side_effect=AssertionError('No network in API capacity tests')
+                ):
+                    run = collect_due(
+                        clock_ms=lambda: now_ms, monotonic=lambda: 0,
+                        bundle_loader=load_bundle, session_factory=lambda _bundle: session,
+                        randint=lambda low, _high: low, sleep=lambda _seconds: None,
+                        lease_factory=lambda *_args: None,
+                    )
+
+                self.assertEqual(run.pk, run_id)
+                row = api_row()
+                self.assertEqual(row['status'], 'succeeded')
+                self.assertEqual((row['item_limit'], row['expected_count']), (expected_limit, expected_limit))
+                self.assertEqual(row['success_count'], expected_limit)
+                self.assertEqual(len(session.queries), expected_limit)
 
     def test_manual_run_rejects_unexpected_request_fields(self):
         self.allow('collectionrun')

@@ -34,3 +34,18 @@ class PacedBatchMigrationCompatibilityTests(TestCase):
         self.assertIsNone(run.expected_count)
         self.assertIsNone(run.item_limit)
         self.assertIsNone(run.batch_fallback_reason)
+
+    def test_previous_paced_release_keeps_historical_forty_item_plan(self):
+        previous_apps = MigrationLoader(connection).project_state([
+            ('Market', '0009_paced_batches'),
+        ]).apps
+        PreviousRun = previous_apps.get_model('Market', 'CollectionRun')
+        old_run = PreviousRun.objects.create(
+            trigger='scheduled', status='succeeded', success_count=40, expected_count=40,
+        )
+
+        run = CollectionRun.objects.get(pk=old_run.pk)
+        self.assertEqual((run.item_limit, run.expected_count, run.success_count), (40, 40, 40))
+        new_run = CollectionRun.objects.create(trigger='manual')
+        self.assertIsNone(new_run.item_limit)
+        self.assertIsNone(new_run.expected_count)
