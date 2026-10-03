@@ -85,7 +85,7 @@ def _tokens(path):
                             identifier.append(96)
                             i += 2
                             continue
-                        yield ('identifier', bytes(identifier).decode('latin1').casefold())
+                        yield ('quoted_identifier', bytes(identifier).decode('latin1').casefold())
                         identifier.clear()
                         state = return_state
                     else:
@@ -141,6 +141,7 @@ def inspect_dump(path, source_database):
     source_name = str(source_database).casefold()
     forbidden_commands = {'use', 'source', 'system', 'connect', 'tee', 'pager', 'prompt'}
     for token in _tokens(path):
+        # Backtick names cannot act as SQL keywords or MySQL client commands.
         if token[0] == 'identifier':
             word = token[1]
             if word in forbidden_commands:
@@ -151,7 +152,9 @@ def inspect_dump(path, source_database):
             if previous and previous[0] == 'identifier' and previous[1] == 'set' \
                     and word in {'global', 'persist', 'persist_only'}:
                 raise RehearsalError('Dump contains server-global SQL.')
-        elif token[0] == 'dot' and previous == ('identifier', source_name):
+        elif (token[0] == 'dot' and previous
+              and previous[0] in {'identifier', 'quoted_identifier'}
+              and previous[1] == source_name):
             raise RehearsalError('Dump references the source schema by qualified name.')
         previous = token
 
