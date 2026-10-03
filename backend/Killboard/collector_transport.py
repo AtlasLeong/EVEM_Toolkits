@@ -27,7 +27,8 @@ from Market.session_bundle import NeedsAuthError as MarketNeedsAuthError
 from .protocol import KillProtocolError, decode_kill_info_response
 from .identity_protocol import IdentityProtocolError, decode_public_info, decode_corp_brief, profile_ids
 from .parser import KillParseError, parse_kill_blob
-from .session_bundle import MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS, load_round_robin_session, validate_session
+from .session_bundle import (MAX_KILL_ID, REQUIRED_METHODS, OPTIONAL_METHODS,
+                             load_round_robin_session, safe_material_metadata, validate_session)
 
 
 MAX_IDENTITY_CACHE = 4096
@@ -297,7 +298,7 @@ class KillboardClient:
     """Lazy single-run ProbeClient, usable as a context manager or with close()."""
 
     def __init__(self, bundle: dict[str, Any], timeout: float = 10.0, *, before_rpc=None,
-                 enrich=True, session_slot=''):
+                 enrich=True, session_slot='', material_metadata=None):
         if type(enrich) is not bool:
             raise ValueError('Invalid Killboard enrichment setting.')
         self.session = KillboardSession(bundle, timeout, before_rpc=before_rpc)
@@ -312,11 +313,15 @@ class KillboardClient:
                 or not session_slot.isupper() or len(session_slot) > 2)):
             raise ValueError('Invalid Killboard session ordinal.')
         self._session_slot = session_slot
+        self._material_metadata = safe_material_metadata(material_metadata)
+        if material_metadata is not None and material_metadata != self._material_metadata:
+            raise ValueError('Invalid Killboard material attribution.')
 
     def audit_snapshot(self):
         result = dict(self.session._audit)
         if self._session_slot:
             result['session_slot'] = self._session_slot
+        result.update(self._material_metadata)
         return result
 
     def set_before_rpc(self, callback) -> None:
@@ -493,7 +498,8 @@ class KillboardClient:
 
 def build_client(*, before_rpc=None, enrich=True, cursor_path=None) -> KillboardClient:
     """Management-command factory using explicit ``KILLBOARD_SESSION_FILES``."""
-    bundle, slot, index, pool_size = load_round_robin_session(cursor_path=cursor_path, with_selection=True)
-    client = KillboardClient(bundle, before_rpc=before_rpc, enrich=enrich, session_slot=slot)
+    bundle, slot, index, pool_size, metadata = load_round_robin_session(cursor_path=cursor_path, with_audit=True)
+    client = KillboardClient(bundle, before_rpc=before_rpc, enrich=enrich, session_slot=slot,
+                            material_metadata=metadata)
     client.session.account_lease = account_lease('KILLBOARD', index, pool_size)
     return client

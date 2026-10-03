@@ -21,6 +21,7 @@ import math
 import os
 from pathlib import Path
 import random
+import re
 import stat
 import tempfile
 from typing import Any
@@ -39,6 +40,29 @@ OPTIONAL_METHODS = ('get_public_info', 'get_corp_brief')
 PROFILE_ROUTES = {'get_public_info': 'char_proxy', 'get_corp_brief': 'corp_rec_proxy'}
 MAX_PROFILE_IDS = 512
 DEFAULT_CURSOR_FILE = '/var/lib/evem-killboard/session-cursor.json' if os.name == 'posix' else None
+MATERIAL_AUDIT_PREFIXES = {'material_alias': 'm_', 'material_version': 'v_', 'pool_version': 'p_'}
+
+
+def safe_material_metadata(value) -> dict[str, str]:
+    """Accept a complete non-secret attribution tuple; never partial identity."""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for key, prefix in MATERIAL_AUDIT_PREFIXES.items():
+        item = value.get(key)
+        if not isinstance(item, str) or not re.fullmatch(prefix + r'[a-f0-9]{24}', item):
+            return {}
+        result[key] = item
+    return result
+
+
+def _metadata_digest(prefix, value) -> str:
+    encoded = json.dumps(value, ensure_ascii=True, separators=(',', ':')).encode('utf-8')
+    return prefix + hashlib.sha256(encoded).hexdigest()[:24]
+
+
+def _file_generation(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
 
 
 class NeedsAuthError(Exception):
@@ -202,7 +226,7 @@ def _reject_link_components(path: Path) -> None:
             raise _invalid()
 
 
-def load_session(path: str | Path) -> dict[str, Any]:
+def load_session(path: str | Path, *, with_metadata=False):
     """Read one explicit regular private file with bounded size and race checks."""
     try:
         source = _session_path(path)
@@ -219,7 +243,22 @@ def load_session(path: str | Path) -> dict[str, Any]:
             _check_file_stat(after)
             if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
                 raise _invalid()
-            return decode_session(stream.read(MAX_BUNDLE_SIZE + 1))
+            encoded = stream.read(MAX_BUNDLE_SIZE + 1)
+            final = os.fstat(stream.fileno())
+            _check_file_stat(final)
+            if _file_generation(after) != _file_generation(final):
+                raise _invalid()
+            bundle = decode_session(encoded)
+            if with_metadata:
+                # The alias identifies a configured material path, never an
+                # account. Versions use only this verified file's metadata;
+                # credentials and their hashes are not persisted or exposed.
+                metadata = {
+                    'material_alias': _metadata_digest('m_', os.path.normcase(os.path.normpath(str(source)))),
+                    'material_version': _metadata_digest('v_', _file_generation(final)),
+                }
+                return bundle, metadata
+            return bundle
     except (OSError, ValueError, TypeError):
         raise _invalid() from None
 
@@ -238,12 +277,19 @@ def _session_paths(paths=None) -> list[Path]:
     return result
 
 
-def load_session_pool(paths=None) -> list[dict[str, Any]]:
+def load_session_pool(paths=None, *, with_metadata=False):
     """Validate the explicit pool; invalid configuration fails closed as a whole."""
-    bundles = [load_session(path) for path in _session_paths(paths)]
+    sources = _session_paths(paths)
+    loaded = [load_session(path, with_metadata=True) for path in sources] if with_metadata else [
+        load_session(path) for path in sources]
+    bundles = [item[0] for item in loaded] if with_metadata else loaded
     fingerprints = {hashlib.sha256(encode_session(bundle).encode('utf-8')).digest() for bundle in bundles}
     if len(fingerprints) != len(bundles):
         raise _invalid()
+    if with_metadata:
+        version = _metadata_digest('p_', [[item[1]['material_alias'], item[1]['material_version']]
+                                         for item in loaded])
+        return [(bundle, {**metadata, 'pool_version': version}) for bundle, metadata in loaded]
     return bundles
 
 
@@ -309,22 +355,26 @@ def _write_cursor(path: Path, value: int) -> None:
         raise _invalid() from None
 
 
-def load_round_robin_session(paths=None, cursor_path=None, *, with_slot=False, with_selection=False):
+def load_round_robin_session(paths=None, cursor_path=None, *, with_slot=False, with_selection=False,
+                            with_audit=False):
     """Select one session for this run and atomically advance the next index.
 
     Cursor corruption is treated as a fresh pool (index zero), while an
     unreadable cursor directory fails closed instead of silently reusing one
     account forever. The selected bundle remains fixed for the caller's run.
     """
-    bundles = load_session_pool(paths)
+    loaded = load_session_pool(paths, with_metadata=True) if with_audit else load_session_pool(paths)
+    bundles = [item[0] for item in loaded] if with_audit else loaded
     path = _cursor_path(cursor_path)
     index, next_index = round_robin(len(bundles), _read_cursor(path, len(bundles)))
     _write_cursor(path, next_index)
-    if with_slot or with_selection:
+    if with_slot or with_selection or with_audit:
         ordinal, slot = index + 1, ''
         while ordinal:
             ordinal, remainder = divmod(ordinal - 1, 26)
             slot = chr(65 + remainder) + slot
+        if with_audit:
+            return bundles[index], slot, index, len(bundles), loaded[index][1]
         if with_selection:
             return bundles[index], slot, index, len(bundles)
         return bundles[index], slot

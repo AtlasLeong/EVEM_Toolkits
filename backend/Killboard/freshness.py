@@ -5,6 +5,7 @@ assumption. Inclusive pending ranges, not a jumped cursor, preserve older work.
 All state/report/event changes occur under DiscoveryRunner's existing lease.
 """
 from copy import deepcopy
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
@@ -49,6 +50,19 @@ def _remove(ranges, kill_id):
         else:
             result.append([lower, upper])
     return result
+
+
+def _known_value_filtered(parsed, policy):
+    if policy is None or policy.min_isk_lost is None:
+        return False
+    value = parsed.get('isk_lost')
+    if isinstance(value, bool) or not isinstance(value, (Decimal, int, float, str)):
+        return False
+    try:
+        value = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+    return value.is_finite() and 0 <= value <= policy.min_isk_lost
 
 
 def _validated_state(cursor, start_id):
@@ -133,6 +147,9 @@ class FreshnessRunner(DiscoveryRunner):
                                              source='kill_api_latest' if phase == 'locate' else self.source)
             disposition = disposition_for(parsed, self.policy, report, created)
             run.report_count += 1
+            if (phase == 'locate' and not outcome.deferred_stop_code
+                    and disposition == 'filtered_value' and _known_value_filtered(parsed, self.policy)):
+                self._located_value_filtered_ids.add(probe_id)
             if cursor.last_success_id is None or probe_id > cursor.last_success_id:
                 cursor.last_success_id = probe_id
                 observed_time = _time_value(parsed.get('kill_time_raw'))
@@ -160,6 +177,15 @@ class FreshnessRunner(DiscoveryRunner):
         if outcome.deferred_stop_code:
             run.stop_reason = run.error_code = outcome.deferred_stop_code
             self.pause(cursor, outcome.deferred_stop_code)
+        if (phase == 'locate' and state['phase'] == 'scan'
+                and outcome.status in (ProbeStatus.REPORT, ProbeStatus.EMPTY)
+                and not outcome.deferred_stop_code):
+            # These reports were already parsed and excluded by a known value
+            # in this run. Scanning them would neither collect nor enrich them.
+            # Keep unknown values and all work from earlier runs unresolved.
+            for kill_id in self._located_value_filtered_ids:
+                state['pending_ranges'] = _remove(state['pending_ranges'], kill_id)
+                state.get('deferred_ids', {}).pop(str(kill_id), None)
         diagnostic = record_diagnostics(run, self.client, disposition,
                                         enrichment_deferred=bool(outcome.deferred_stop_code))
         diagnostic.update({'phase': phase, 'history': history})
@@ -200,6 +226,7 @@ class FreshnessRunner(DiscoveryRunner):
 
     def _run_locked(self, run, cursor):
         self.active_run = run
+        self._located_value_filtered_ids = set()
         run.diagnostics = {'strategy': 'latest_first'}
         paused = self.paused_reason(cursor)
         if paused:
