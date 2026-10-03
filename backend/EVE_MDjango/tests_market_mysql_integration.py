@@ -21,6 +21,7 @@ import django
 django.setup()
 
 from django.db import IntegrityError, connection, connections, transaction  # noqa: E402
+from django.db.migrations.loader import MigrationLoader  # noqa: E402
 
 from EVE_MDjango.market_mysql_ci_cleanup import clear_price_snapshots, require_ci_schema  # noqa: E402
 from Market.models import CollectionRun, LatestPrice, MarketConfig, MarketItem, PriceSnapshot  # noqa: E402
@@ -127,6 +128,26 @@ class MarketMysqlIntegrationTests(unittest.TestCase):
         config = MarketConfig.objects.get(pk=1)
         self.assertEqual(config.session_status, 'ready')
         self.assertEqual(config.next_due_at_ms, NOW_MS + 2_100_000)
+
+    def test_previous_release_can_write_after_additive_batch_migration(self):
+        config = MarketConfig.objects.create(max_items_per_run=80)
+        previous_apps = MigrationLoader(connection).project_state([
+            ('Market', '0008_marketconfig_cooldown_until_ms_and_more'),
+        ]).apps
+        previous_apps.get_model('Market', 'MarketConfig').objects.filter(pk=config.pk).update(session_status='ready')
+        old_run = previous_apps.get_model('Market', 'CollectionRun').objects.create(
+            trigger='scheduled', status='succeeded', success_count=40,
+        )
+        config.refresh_from_db()
+        run = CollectionRun.objects.get(pk=old_run.pk)
+        self.assertEqual((config.session_status, config.max_items_per_run), ('ready', 80))
+        self.assertIsNone(run.expected_count)
+        self.assertIsNone(run.item_limit)
+        self.assertIsNone(run.batch_fallback_reason)
+
+    def test_mysql_rejects_unsupported_batch_capacity(self):
+        with self.assertRaises(IntegrityError):
+            MarketConfig.objects.create(max_items_per_run=60)
 
     def test_second_mysql_connection_cannot_claim_a_new_active_lease(self):
         MarketConfig.objects.create(next_due_at_ms=0)

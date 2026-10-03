@@ -83,6 +83,7 @@ class ConfigPatchSerializer(StrictSerializer):
     min_interval_seconds = serializers.IntegerField(min_value=2100, max_value=3060, required=False)
     max_interval_seconds = serializers.IntegerField(min_value=2100, max_value=3060, required=False)
     enabled = serializers.BooleanField(required=False)
+    max_items_per_run = serializers.ChoiceField(choices=[40, 80], required=False)
 
     def validate(self, attrs):
         current = self.context['config']
@@ -130,7 +131,7 @@ def safe_error_code(value):
         'needs_auth', 'lease_expired', 'no_enabled_items', 'item_error', 'collection_error',
         'invalid_session', 'auth_rejected', 'rate_limited', 'service_rejected',
         'configuration_error', 'account_busy', 'budget_exhausted', 'lease_lost',
-        'network_error', 'timeout',
+        'network_error', 'timeout', 'runtime_budget', 'incomplete_run', 'shared_budget',
     }
     return value if not value or value in safe_codes else 'COLLECTION_ERROR'
 
@@ -149,4 +150,7 @@ def run_payload(run):
         'success_count': run.success_count,
         'failure_count': run.failure_count,
         'error_code': safe_error_code(run.error_code),
+        'item_limit': run.item_limit,
+        'expected_count': run.expected_count,
+        'batch_fallback_reason': safe_error_code(run.batch_fallback_reason),
     }

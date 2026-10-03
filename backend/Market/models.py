@@ -49,10 +49,15 @@ class MarketConfig(models.Model):
     session_cursor = models.PositiveIntegerField(default=0)
     cooldown_until_ms = models.BigIntegerField(null=True, blank=True)
     rate_failure_count = models.PositiveIntegerField(default=0)
+    max_items_per_run = models.PositiveSmallIntegerField(default=80, choices=[(40, '40'), (80, '80')])
+    batch_fallback_until_ms = models.BigIntegerField(null=True, blank=True)
+    batch_fallback_reason = models.CharField(max_length=64, blank=True, default='')
+    capacity_failure_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [
             models.CheckConstraint(check=Q(id=1), name='market_config_singleton_id'),
+            models.CheckConstraint(check=Q(max_items_per_run__in=[40, 80]), name='market_config_batch_bounds'),
             models.CheckConstraint(
                 check=Q(min_interval_seconds__gte=2100) & Q(max_interval_seconds__lte=3060)
                 & Q(min_interval_seconds__lte=F('max_interval_seconds')),
@@ -64,6 +69,8 @@ class MarketConfig(models.Model):
         super().clean()
         if self.pk != 1:
             raise ValidationError({'id': 'Market configuration must be the singleton row.'})
+        if self.max_items_per_run not in (40, 80):
+            raise ValidationError({'max_items_per_run': 'Choose 40 or 80 items per run.'})
         if not 2100 <= self.min_interval_seconds <= self.max_interval_seconds <= 3060:
             raise ValidationError({
                 'min_interval_seconds': 'Intervals must satisfy 2100 <= min <= max <= 3060.'
@@ -108,6 +115,11 @@ class CollectionRun(models.Model):
     success_count = models.PositiveIntegerField(default=0)
     failure_count = models.PositiveIntegerField(default=0)
     error_code = models.CharField(max_length=64, blank=True, default='')
+    # Nullable additions keep older releases able to insert CollectionRun rows
+    # during the pre-deploy migration window and a code rollback.
+    item_limit = models.PositiveSmallIntegerField(default=40, null=True, blank=True)
+    expected_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    batch_fallback_reason = models.CharField(max_length=64, null=True, blank=True, default='')
     lease_owner = models.CharField(max_length=128, blank=True, default='')
     lease_expires_at_ms = models.BigIntegerField(null=True, blank=True)
 
