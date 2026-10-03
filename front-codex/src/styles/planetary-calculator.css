@@ -1,0 +1,39 @@
+.modal-card.calculator-card :is(.calculator-programme-current-inline, .calculator-dropdown, .field-row, .calculator-table-shell) { min-width:0; }
+.modal-card.calculator-card .calculator-stat-card strong { font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.modal-card.calculator-card .calculator-table-shell { width:100%; max-width:100%; overflow:auto; }
+.calculator-table-hint { display:none; }
+
+@media (max-width:640px) {
+  .modal-backdrop.planetary-calculator-backdrop { padding:12px; }
+  .modal-card.calculator-card { width:100%; max-height:calc(100dvh - 24px); padding:16px; }
+  .modal-card.calculator-card .modal-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:8px; margin-bottom:18px; }
+  .modal-card.calculator-card .modal-head > div { min-width:0; }
+  .modal-card.calculator-card .modal-head h3 { font-size:22px; line-height:1.35; }
+  .modal-card.calculator-card .modal-kicker { font-size:10px; letter-spacing:.08em; overflow-wrap:anywhere; }
+  .modal-card.calculator-card .modal-close-btn { flex-shrink:0; height:auto; min-height:44px; padding:8px 10px; line-height:1.5; white-space:nowrap; }
+  .modal-card.calculator-card .modal-close-btn svg { flex-shrink:0; }
+  .modal-card.calculator-card .calculator-toolbar { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+  .modal-card.calculator-card .calculator-segments { min-width:0; }
+  .modal-card.calculator-card .calculator-segment-group { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); min-width:0; max-width:100%; gap:4px; }
+  .modal-card.calculator-card .calculator-segment { min-width:0; height:auto; min-height:44px; padding:4px 8px; font-size:13px; line-height:1.5; white-space:normal; }
+  .modal-card.calculator-card .calculator-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .modal-card.calculator-card .calculator-actions .ghost-btn { min-width:0; height:auto; min-height:44px; padding:8px; font-size:12px; line-height:1.5; white-space:normal; }
+  .modal-card.calculator-card .calculator-stats { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .modal-card.calculator-card .calculator-stat-card { min-width:0; padding:12px; gap:8px; }
+  .modal-card.calculator-card .calculator-stat-head { align-items:flex-start; gap:6px; }
+  .modal-card.calculator-card .calculator-stat-head > span:last-child { min-width:0; font-size:12px; line-height:1.5; }
+  .modal-card.calculator-card .calculator-stat-icon { width:26px; height:26px; }
+  .modal-card.calculator-card .calculator-stat-card strong { font-size:21px; line-height:1.3; }
+  .modal-card.calculator-card .calculator-stat-card p { font-size:11px; }
+  .modal-card.calculator-card .calculator-programme-picker { grid-template-columns:minmax(0,1fr) auto; gap:10px; }
+  .modal-card.calculator-card .calculator-programme-current-inline { grid-column:1 / -1; padding:10px 12px; }
+  .modal-card.calculator-card .calculator-programme-current-inline span { flex-shrink:0; }
+  .modal-card.calculator-card .calculator-programme-current-inline strong { min-width:0; overflow-wrap:anywhere; }
+  .modal-card.calculator-card :is(.calculator-programme-form, .calculator-batch-grid) { grid-template-columns:minmax(0,1fr); }
+  .modal-card.calculator-card .calculator-programme-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .modal-card.calculator-card .calculator-programme-actions button { min-width:0; height:auto; min-height:44px; padding:8px; font-size:12px; line-height:1.5; white-space:normal; }
+  .modal-card.calculator-card .calculator-batch-grid .inline-field { grid-template-columns:minmax(0,1fr); }
+  .modal-card.calculator-card .calculator-copy-btn { height:auto; min-height:44px; padding:8px 10px; font-size:12px; line-height:1.5; white-space:normal; }
+  .modal-card.calculator-card .calculator-table-hint { display:block; margin:0 0 8px; color:var(--text-soft); font-size:12px; line-height:1.5; }
+  .modal-card.calculator-card .calculator-table-shell:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+}

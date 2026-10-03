@@ -83,13 +83,13 @@ function ItemNav({ rows, selectedId, onSelect, now }) {
   </div>
 }
 
-function QueryReadStatus({ query, label }) {
-  if (query.data === undefined) return null
+function QueryReadStatus({ query, label, enabled = true }) {
   const readAt = query.dataUpdatedAt > 0 ? new Date(query.dataUpdatedAt) : null
-  const message = query.isError ? '刷新失败，显示本页缓存' : query.isFetching ? '更新中，保留本页缓存' : '已读取'
+  const hasData = query.data !== undefined
+  const message = !enabled ? '等待物品目录' : !hasData ? query.isError ? '读取失败' : '读取中' : query.isError ? '刷新失败，显示本页缓存' : query.isFetching ? '更新中，保留本页缓存' : '已读取'
   return <p className={`market-data-status${query.isError ? ' market-data-status--warning' : ''}`} role="status" aria-label={`${label}读取状态`}>
     <span>{label}{message}</span>
-    {readAt ? <span>读取于 <time dateTime={readAt.toISOString()}>{formatMarketTime(readAt)}</time></span> : null}
+    {readAt ? <span>读取于 <time dateTime={readAt.toISOString()}>{formatMarketTime(readAt)}</time></span> : <span>尚未读取</span>}
   </p>
 }
 
@@ -157,6 +157,8 @@ export default function MarketPricesPage() {
   const points = seriesQuery.data?.points || []
   const showBuy = viewMode !== 'sell'
   const showSell = viewMode !== 'buy'
+  const catalogLoading = itemsQuery.isPending && !itemsQuery.data
+  const seriesState = catalogLoading || seriesQuery.isPending ? 'loading' : seriesQuery.isError && !seriesQuery.data ? 'error' : 'ready'
 
   function selectCategory(value) {
     setCategoryId(value)
@@ -211,17 +213,15 @@ export default function MarketPricesPage() {
       </aside>
 
       <main className="market-terminal-main">
-        {selected ? <>
-          <div className="market-instrument-head"><div><div className="market-instrument-title"><h2>{selected.name}</h2><span className="market-instrument-category">{selected.category || '未分类'}</span></div><p>报价观测 <span aria-hidden="true">·</span> 价格范围：{marketScopeLabel(marketScope)} <span aria-hidden="true">·</span> ISK</p></div></div>
+        {selected || catalogLoading ? <>
+          <div className="market-instrument-head"><div><div className="market-instrument-title"><h2>{selected?.name || '物品读取中'}</h2><span className="market-instrument-category">{selected ? selected.category || '未分类' : '读取中'}</span></div><p>报价观测 <span aria-hidden="true">·</span> 价格范围：{marketScopeLabel(marketScope)} <span aria-hidden="true">·</span> ISK</p></div></div>
           <div className="market-focus-toolbar">
-            <div className="market-view-modes" role="group" aria-label="走势显示方式">{[['both', '双边走势'], ['sell', '只看卖价'], ['buy', '只看买价']].map(([mode, label]) => <button type="button" key={mode} className={viewMode === mode ? 'active' : ''} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>{label}</button>)}</div>
-            <div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div>
+            <div className="market-view-modes" role="group" aria-label="走势显示方式">{[['both', '双边走势'], ['sell', '只看卖价'], ['buy', '只看买价']].map(([mode, label]) => <button type="button" key={mode} disabled={!selected} className={viewMode === mode ? 'active' : ''} aria-pressed={viewMode === mode} onClick={() => setViewMode(mode)}>{label}</button>)}</div>
+            <div className="market-periods" role="group" aria-label="历史时间范围">{WINDOWS.map(window => <button type="button" key={window.days} disabled={!selected} className={days === window.days ? 'active' : ''} aria-pressed={days === window.days} onClick={() => setDays(window.days)}>{window.label}</button>)}</div>
           </div>
-          <div className="market-legend"><h3>价格走势 <small>ISK</small></h3><QueryReadStatus query={seriesQuery} label="走势" /><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}</span></div>
-          <div className="market-chart-frame" aria-busy={seriesQuery.isFetching}>
-            {seriesQuery.isPending && !seriesQuery.data ? <div className="market-chart-message"><LoadingBar /><span>正在读取真实历史报价…</span></div> : null}
-            {seriesQuery.isError && !seriesQuery.data ? <div className="market-chart-message" role="alert">走势图暂时无法加载；当前报价与历史走势可能不一致，请稍后刷新。</div> : null}
-            {seriesQuery.data ? <MarketTrendChart key={`${selected.item_id}-${days}`} points={points} stats={seriesQuery.data.stats} showBuy={showBuy} showSell={showSell} formatPrice={formatMarketPrice} formatTime={formatMarketTime} /> : null}
+          <div className="market-legend"><h3>价格走势 <small>ISK</small></h3><QueryReadStatus query={seriesQuery} label="走势" enabled={Boolean(selected)} /><span>{seriesQuery.data ? `${seriesQuery.data.count} 次观测` : '等待数据'}</span></div>
+          <div className="market-chart-frame" aria-busy={catalogLoading || seriesQuery.isFetching}>
+            <MarketTrendChart key={`${selected?.item_id || 'catalog-pending'}-${days}`} state={seriesState} loadingMessage={catalogLoading ? '正在读取物品目录，随后获取真实历史报价…' : '正在读取真实历史报价…'} points={points} stats={seriesQuery.data?.stats} showBuy={showBuy} showSell={showSell} formatPrice={formatMarketPrice} formatTime={formatMarketTime} />
           </div>
         </> : <div className="market-terminal-blank"><Activity size={42} aria-hidden="true" /><h2>{itemsQuery.isPending ? '正在读取物品目录' : itemsQuery.isError ? '目录暂时无法读取' : '选择物品，查看价格轨迹'}</h2><p>{itemsQuery.isError ? '请刷新行情后重试。' : '左侧列表只展示已启用的市场物品。'}</p></div>}
       </main>

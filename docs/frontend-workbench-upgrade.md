@@ -6,7 +6,7 @@
 
 首阶段补查已修复：KM 采集后台两张手机表格的 15 个单元格补上与原表头一致的字段名；访客进入管理员登录时不再把未启用的查询显示为持续验证。新增与原管理员回归 5/5 通过，采集后台单元测试 3/3 通过；数据、权限和接口保持原样。
 
-记录时间：2026-10-03 19:16 UTC。仓库：AtlasLeong/EVEM_Toolkits；候选分支：codex/frontend-command-deck-20261003。本记录供 PR 审阅和父代理串行部署使用，不代表已发布。
+记录时间：2026-10-03 20:35 UTC。仓库：AtlasLeong/EVEM_Toolkits；候选分支：codex/frontend-command-deck-20261003。本记录供 PR 审阅和父代理串行部署使用，不代表已发布。
 
 本阶段解决登录入口误导、商品切换与缓存状态混淆、小屏击毁报告裁切及主要工具在手机上难以快速读取的问题，并把现有深色工具站统一为“新伊甸工作台”。保持真实数据、表格密度、计算与权限流程，不宣称获奖、完美或全面可访问性合规。
 
@@ -14,13 +14,13 @@
 
 | 项目 | 本记录时状态 |
 | --- | --- |
-| 线上已发布版本 | 5cda8bef3b05dfb6361c51fb6abde2c07ad7492c（市场 PR #28） |
+| 线上已发布版本 | dbd40c326ec9c4908f25ff5980a796f8b3926ad8（PR #29；父代理确认 Production [37146476313](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37146476313) 成功） |
 | 本地基线提交 | 5cda8bef3b05dfb6361c51fb6abde2c07ad7492c |
-| 最新 master | 父代理通报已到 dbd40c32；提交/PR 前须吸收最新 master 并保留 PR #29 的后端修正 |
-| [PR #29](https://github.com/AtlasLeong/EVEM_Toolkits/pull/29) | 后端修正已 merge；其 Production 全量前端回归失败，尚未 publish |
-| 本阶段前端 PR | 待父代理创建 draft PR；本记录没有新增 PR 号码或提交 SHA |
-| 本阶段远端 CI | Pending，尚未开始；不得把本地通过写成 GitHub CI 通过 |
-| 本阶段 merge / deploy | Pending；PR #29 发布暂停未解除前不并发发布 |
+| 最新 master | dbd40c326ec9c4908f25ff5980a796f8b3926ad8；本候选已吸收该提交，保留 PR #29 后端修正 |
+| [PR #29](https://github.com/AtlasLeong/EVEM_Toolkits/pull/29) | 已上线；CI [37146475969](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37146475969) 和 Production 成功，发布暂停已解除 |
+| 本阶段前端 PR | [Draft PR #30](https://github.com/AtlasLeong/EVEM_Toolkits/pull/30)，首阶段 head 9ed97f9af630df3cf53a1f1e002464ca842159a9；后续修复以 PR 当前 head 为准 |
+| 本阶段远端 CI | 首轮 [37150092777](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37150092777) 完整通过（主 E2E 436、独立预览 4、战术 170）；最终 head 全量 CI 尚待执行并在 [当前 checks](https://github.com/AtlasLeong/EVEM_Toolkits/pull/30/checks) 留证 |
+| 本阶段 merge / deploy | Pending；常规发布授权有效，无已知并发发布；须最终 head 审查、截图复核及完整 CI 通过后串行 merge/deploy |
 | 用户常规自主权窗口 | 2026-10-03 18:32:24 UTC 至 2026-10-04 02:32:24 UTC；截止后不新开部署，进行中的事务安全收尾 |
 
 最新 master 与线上组件版本分别记录。master 前进不意味着前端或后端已经切换上线；发布后须以真实版本接口和资源检查确认。
@@ -257,3 +257,28 @@ Windows 初次使用自动 webServer 启动 npm 的专项运行在完成案例�
 7. 任一健康/版本检查失败使用现有事务回滚；确认旧版本恢复及所有权。回滚代码不回滚数据库，不执行未经审查的 migrate/fake。若回滚未恢复，保留 journal 并阻止后续切换。
 
 授权截止前留足 deploy smoke 与回滚时间；2026-10-04 02:32:24 UTC 后不自行开启新部署。发布成功后由父代理将本记录的 Pending 状态替换为真实 PR/run/version/test 证据。
+
+## 9. 第二阶段冻结检查点（2026-10-03）
+
+本节更新初始 draft 中的待办；首阶段远端 CI [37150092777](https://github.com/AtlasLeong/EVEM_Toolkits/actions/runs/37150092777) 已完整通过。最终整合版本需要自己的完整 CI，不能沿用首阶段的结果作为放行。
+
+- 市场目录与走势图加载使用最终布局的真实状态槽，保留中性破折号，不生成报价或曲线。SVG 按实际字形宽度留出金额轴空间，窄屏日期分行，按钮随文本自然增高；保留旧轴语义和空盘/未采集区别。市场专项 128/128、相关单元 16/16 通过，既有断言和阈值未删减。
+- KM 固定手机顶部状态结构，首屏按真实 viewport 初始化索引开合。详情失败仍保留列表摘要，明确“详情未读取”，参战/装备不会被误报为空或读取成功。计算器使用手机两列指标、单列表单和 11 列内部横滚；补齐 inert、Tab/Escape、关闭后焦点恢复和 reduced-motion。相关 39/39 E2E、35/35 KM 单元及最终 Windows headed Chrome 12/12 专项通过。
+- 登录与导航两倍字号模拟不再裁剪标签；重新采样切换模式后新渲染的字段，320/390px 三种表单及导航共 8/8 通过。Planetary 筛选行随文字增高，设置价格输入保留可读数字宽度并在表格内横滚，License 筛选与延期控件随文字扩展；相关 12/12 通过。模拟不是浏览器原生缩放，单行输入保留原生水平编辑滚动。
+- 既有 Production 失败 artifact `11282251460` 的三份 trace 证实：URL 已改变时 React transition 尚未提交，中间页面未卸载，立即 Back 取消了跳转。军团稳定性测试保留全部旧断言与 timeout，只等待大厅 heading 和旧 tagline 消失后再 Back；重复 trace 9/9 通过。没有产品逻辑改动或盲目重跑来掩盖该原因。
+- 独立审查复验修复了三类 P2。实际截图拒绝 fixed-overlay fullPage 和未结束动画的捕获伪影，最终 settled 帧才作为视觉证据。17 个代码/测试文件已最终冻结；Planetary 正常密度兼容规则在全套回归后修正并复验，与文档/Library 索引一并复核。
+
+整合本地单元/预览契约 617/617 通过；production build 和既有 bundle budget 通过。入口 JS 29,277 bytes、入口 CSS 120,124 bytes（原预算 122,880 bytes）。466 项完整 frontend E2E 首次整合为 464 passed / 2 failed：Planetary 大字号修复使正常摘要变为 42.5px、顶部对齐差 2px，已修源码并保留旧 42px 和对齐断言，原 5 项及两倍文字 3 项共 8/8 通过并正常退出，1440/390 实际截图再次独立接受。466 项完整复验正在执行；最终复验结果与远端 head/CI 在 PR #30 中更新，未写成已完成。
+
+此次整合测量构建的 index SHA256 为 `6f2fa177b767f3c3f1667691e20fb5b90324a9f0c72feb89d4bd590d098f27f2`，不包含其后的正常密度修正。安装于用户 Windows 电脑的 Chrome 153 无节流、即时既有合成接口，市场/KM 两宽度各三次导航：
+
+| 页面 | viewport | LCP 中位数 | CLS 中位数 |
+| --- | --- | --- | --- |
+| 市场 | 1440×960 | 312ms | 0.009054 |
+| 市场 | 390×844 | 244ms | 0.007458 |
+| KM | 1440×960 | 452ms | 0.008390 |
+| KM | 390×844 | 312ms | 0.000005 |
+
+12 次导航页面错误与 document 横向溢出均为 0；未注入本地 fixture 会话的 `/market` 仍返回 `/login`。前一实现快照 `079594…` 的完整 24 次导航、字体/等效页面重排/reduced-motion/交互测量与实际加载分阶段截图分别保存，没有把后续构建冒称同一 artifact。初始手机市场/KM CLS 约 0.627/0.278 的主要加载位移已消除；并发测试与 OS 缓存未控制，LCP 差异不能归因于源码。以上均为本地实验结果，不能代替生产 field p75、INP、真实账号授权查询或全面可访问性认证。
+
+最终代码、审查与当前 head 的完整 CI 通过后，把 PR/run/SHA/Library 原生 ID 和串行发布计划交父代理跟踪，再走原有 Production 流程。发布前后保持采集预算、认证边界、publisher 锁/校验/回滚与部署用户所有权不变。

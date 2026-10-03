@@ -48,7 +48,7 @@
 .auth-access-notice p { margin: 6px 0 0; color: var(--console-muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .auth-return-hint { margin: 0; padding-left: 12px; border-left: 2px solid var(--info); color: var(--info); font-size: 13px; line-height: 1.65; }
 .site-frame .login-layout .auth-tabs { padding: 4px; }
-.site-frame .login-layout .auth-tab { font-size: 13px; min-height: 44px; }
+.site-frame .login-layout .auth-tab { height: auto; min-height: 44px; padding: 10px 6px; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
 .site-frame .login-layout .auth-section { gap: 16px; }
 .site-frame .login-layout .field-row > label { color: var(--console-muted-strong); font-size: 13px; font-weight: 600; }
 .site-frame .login-layout .auth-footer { padding-top: 16px; border-top: 1px solid var(--console-line); }

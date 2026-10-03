@@ -1,10 +1,10 @@
 {
   "repository": "AtlasLeong/EVEM_Toolkits",
   "baseline_commit": "5cda8bef3b05dfb6361c51fb6abde2c07ad7492c",
-  "browser": "Actual user-PC headed Chrome; supported local fixture and anonymous production evidence are distinguished per file.",
+  "browser": "Actual Windows browser renders. Baselines and initial visual audits used headed user-PC Chrome; later Playwright stress captures and installed-Chrome lab measurements may be headless, as identified in their reports. Supported local fixtures and anonymous production evidence are distinguished per file.",
   "scope_note": "Screenshots are visually inspected artifacts. They do not prove production authentication, backend authorization, accessibility conformance, or real-user performance.",
   "capture_note": "Extra baseline states taken after early shared-shell edits are marked initial_worktree. Rejected sticky-header capture artifacts are excluded.",
-  "consumer_note": "Use each exact library_file_id with Library read or prepare_materialize. This Windows runtime returned extracted text rather than image pixels from read; materialization metadata steps could not persist xattrs, so exact IDs are retained here.",
+  "consumer_note": "Use each exact library_file_id with Library read or prepare_materialize; the native image download route is https://chatgpt.com/api/library/files/<library_file_id>/download. Library read returned extracted text without pixels in this runtime; uploads succeeded and canonical IDs are retained independently of unsupported Windows xattrs.",
   "files": [
     {
       "name": "01b-market-desktop-clean-1440.png",
@@ -395,6 +395,266 @@
       "stage": "approved_direction",
       "mode": "generated_concept_only",
       "library_file_id": "libfile_faf9b202e1f481918263b007ae5bb80a"
+    },
+    {
+      "name": "market-loading-catalog-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_721516ea0e188191afae3fb0e5da7a99"
+    },
+    {
+      "name": "market-loading-series-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_0056314135e081918f19ae70a31c5d71"
+    },
+    {
+      "name": "market-loading-loaded-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_1ee0251a2dcc819181ecc6778e3e40d3"
+    },
+    {
+      "name": "killboard-loading-index-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_0aced67de83c81919481a6897e5f56fb"
+    },
+    {
+      "name": "killboard-loading-detail-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_19c3367ad3f48191af1f1d63b1928e68"
+    },
+    {
+      "name": "killboard-loading-loaded-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_655f4e6ce45881918b6b2d51967d4e4a"
+    },
+    {
+      "name": "phase2-kmcollector-390.png",
+      "stage": "route_state_diagnostic_before",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_fcb97539d0648191a1be96e6486e5b83"
+    },
+    {
+      "name": "phase2-fraudadminlogin-guest-390.png",
+      "stage": "route_state_diagnostic_before",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_33b26a35a7108191a477375e43e91a7a"
+    },
+    {
+      "name": "phase2-kmcollector-after-1440.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_5784cbcd369081918fb9ac9beff49949"
+    },
+    {
+      "name": "phase2-kmcollector-after-390.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_452d1d3faf108191b88f04ac72a3e7b6"
+    },
+    {
+      "name": "phase2-kmcollector-after-320.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_b52fc09641848191a9c9b1c7cbde763e"
+    },
+    {
+      "name": "phase2-fraudadminlogin-after-1440.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_2b541f5359908191b527484936093361"
+    },
+    {
+      "name": "phase2-fraudadminlogin-after-390.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_2dc7dfe7dc888191bcc5b420d11f3c4f"
+    },
+    {
+      "name": "phase2-fraudadminlogin-after-320.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_0a89cb9c516c8191b57aa419d9309d21"
+    },
+    {
+      "name": "login-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_b6a45ef3ec4c81919a6c62497865d27e",
+      "caption": "Existing login tabs at200% text simulation; password-reset tab's second line is enclosed by its full hit area/background. Reset-form controls inserted after tab switch appear at normal size, so this image is not an all-reset-fields text200 conformance claim."
+    },
+    {
+      "name": "navigation-text-200-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_e114a681053c8191b08216b3d65e09fd",
+      "caption": "Sidebar links at200% text simulation; collector label wraps inside full focus/hit area. Planetary labels/select values in page background are visibly vertically crowded/cropped; parent assigned a separate content fix, so do not caption this as whole-page text200 passed."
+    },
+    {
+      "name": "market-loading-catalog-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_cf1d6961985481918e25dda3414aaa5d"
+    },
+    {
+      "name": "market-loading-series-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_24d98dd5f25081919db629c5235ae7c0"
+    },
+    {
+      "name": "market-loading-loaded-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_c31b6818d5808191bdc57124915cc369"
+    },
+    {
+      "name": "market-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_0905e354796c819188ff809f7227c3e8"
+    },
+    {
+      "name": "killboard-loading-index-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_7a60c000a1c88191be3cf28f82f4a676"
+    },
+    {
+      "name": "killboard-loading-detail-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_7f32e8738d088191976576f07170e4ca"
+    },
+    {
+      "name": "killboard-loading-loaded-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_163d625647f48191af7379e7563a1dce"
+    },
+    {
+      "name": "killboard-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "library_file_id": "libfile_0481a69854388191968f457625534926"
+    },
+    {
+      "name": "auth-reset-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_89190d62a95c81919e45a46717d37ce0"
+    },
+    {
+      "name": "auth-register-text-200-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_1fe6d1c3a974819190f49b81334d95e8"
+    },
+    {
+      "name": "auth-login-text-200-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_92ef4b7031b08191b184a949afd42bea"
+    },
+    {
+      "name": "planetary-calculator-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_12e5d69cbcc081919c80269c36f0f767"
+    },
+    {
+      "name": "planetary-calculator-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_c4dae990c2648191973ffcde8368113e"
+    },
+    {
+      "name": "planetary-calculator-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_62ad5324ab908191bc09da9f28f78775"
+    },
+    {
+      "name": "planetary-calculator-table-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_15ae04a0dd108191ba1c56b0605158f1"
+    },
+    {
+      "name": "planetary-calculator-text-200-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_651256720d74819195d4ed7c83f8d1ae"
+    },
+    {
+      "name": "killboard-loaded-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_80c8e9e9b480819182f0c11a09551924"
+    },
+    {
+      "name": "planetary-200-after-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_462ffdc07e108191adf8e1a2d3ab1667"
+    },
+    {
+      "name": "planetary-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_bc6a23b1ceb481918d3ce81ddc751f85"
+    },
+    {
+      "name": "settings-prices-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_7de78c42ecf48191a1f4abeebb2457ce"
+    },
+    {
+      "name": "license-200-after-1024.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_836a12dfc3508191ab6eed396a3211aa"
+    },
+    {
+      "name": "license-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_f75074feaa888191be212149b97df259"
+    },
+    {
+      "name": "settings-price-edited-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_ac5d159ca9f481918160975a28d153b2"
+    },
+    {
+      "name": "planetary-selected-normal-after-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_45eb3f89d6508191a275409d73e2365a"
+    },
+    {
+      "name": "planetary-selected-normal-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_7197cae967f48191a853ef36781b47b8"
+    },
+    {
+      "name": "planetary-selected-200-after-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_dc231d014ba48191ae5571d68dca640b"
+    },
+    {
+      "name": "planetary-selected-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_c8a4b7a3ec4c8191a0ed23b0772bdcb9"
     }
   ]
 }

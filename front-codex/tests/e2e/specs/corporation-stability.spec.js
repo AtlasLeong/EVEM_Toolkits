@@ -293,10 +293,15 @@ test("同军团重复跳转后退取消仍保留编辑，确认离开后前进�
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("link", { name: "发现军团", exact: true }).click();
   await expect(page).toHaveURL(/\/corporations$/);
+  // Concurrent routing updates the URL before the previous editor unmounts.
+  // Back should test a completed departure, rather than cancel that transition.
+  await expect(page.getByRole("heading", { name: "军团大厅", exact: true })).toBeVisible();
+  await expect(tagline(page)).toHaveCount(0);
   await page.goBack();
   await expect(tagline(page)).toHaveValue(corpContent.tagline);
   await page.goForward();
   await expect(page).toHaveURL(/\/corporations$/);
+  await expect(page.getByRole("heading", { name: "军团大厅", exact: true })).toBeVisible();
 });
 
 test("确认同页跳转后新修改仍会触发离开提醒", async ({ page }) => {

@@ -38,7 +38,9 @@ async function capture(page, name) {
     document.activeElement?.blur()
     window.scrollTo(0, 0)
     await document.fonts.ready
-    await Promise.all([...document.images].map(image => image.decode().catch(() => {})))
+    // Hidden compact panels contain intentionally lazy images. They never load
+    // until their tab is opened, so only await artwork in the captured layout.
+    await Promise.all([...document.images].filter(image => image.getClientRects().length).map(image => image.decode().catch(() => {})))
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
   })
   await page.screenshot({ path: `../output/playwright/tool-refinement/${name}.png`, fullPage: true })

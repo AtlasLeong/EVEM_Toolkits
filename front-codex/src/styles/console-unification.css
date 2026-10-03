@@ -873,7 +873,7 @@ body {
   letter-spacing: .08em;
   line-height: 1.5;
 }
-.site-frame .nav-item { height: 40px; min-height: 40px; }
+.site-frame .nav-item { height: auto; min-height: 40px; padding-block: 9px; line-height: 1.5; }
 .site-frame .nav-item.active { border-left-color: var(--console-accent); }
 .site-frame .is-sidebar-collapsed .nav-group-label { display: none; }
 .site-frame .is-sidebar-collapsed .nav-row { gap: 12px; }
@@ -928,7 +928,7 @@ body {
 .shell-density-options button[aria-pressed='true'] { background: var(--console-raised); color: var(--console-text); }
 .shell-density-options button:hover { color: var(--console-text); }
 .site-frame:has(.app-shell[data-density='comfortable']) .data-table td { padding-block: 18px; }
-.site-frame:has(.app-shell[data-density='comfortable']) .nav-item { height: 44px; }
+.site-frame:has(.app-shell[data-density='comfortable']) .nav-item { min-height: 44px; padding-block: 11px; }
 .site-frame:has(.app-shell[data-density='comfortable']) .market-item-choice { padding-block: 14px; }
 .is-sidebar-collapsed .shell-density-control { display: none; }
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; background: var(--console-text); }

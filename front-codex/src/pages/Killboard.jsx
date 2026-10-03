@@ -83,17 +83,17 @@ function VisualAsset({ src, kind = 'item', alt = '' }) {
   </div>
 }
 
-function Participants({ report, hidden = false, compact = false }) {
+function Participants({ report, hidden = false, compact = false, pending = false, unavailable = false }) {
   const rows = report?.participants || []
   const visibleRows = visibleParticipantRows(rows)
   const visibilityNote = participantVisibilityNote(rows)
   return <section className="kb-panel kb-participants-panel" id="kb-panel-people" role={compact ? 'tabpanel' : 'region'} aria-labelledby={compact ? 'kb-tab-people' : 'kb-heading-people'} hidden={hidden}>
     <div className="kb-panel-head"><div><span className="kb-eyebrow">COMBATANTS</span><h3 id="kb-heading-people">参战记录</h3></div><span className="kb-panel-count">{report?.participant_count ?? '—'} 条记录</span></div>
-    {visibleRows.length ? <><div className="kb-participant-list">{visibleRows.map((row, index) => <KillParticipantRow row={row} key={`${row.character_id || row.character_name || 'unknown'}-${index}`} />)}</div>{visibilityNote ? <p className="kb-participant-note">{visibilityNote}</p> : null}</> : <EmptyState title="暂无参战记录" />}
+    {pending ? <EmptyState title="正在读取参战记录…" /> : unavailable ? <EmptyState title="参战详情未读取">当前仅有报告摘要，请刷新重试。</EmptyState> : visibleRows.length ? <><div className="kb-participant-list">{visibleRows.map((row, index) => <KillParticipantRow row={row} key={`${row.character_id || row.character_name || 'unknown'}-${index}`} />)}</div>{visibilityNote ? <p className="kb-participant-note">{visibilityNote}</p> : null}</> : <EmptyState title="暂无参战记录" />}
   </section>
 }
 
-function Equipment({ report, hidden = false, compact = false }) {
+function Equipment({ report, hidden = false, compact = false, pending = false, unavailable = false }) {
   const rows = report?.items || []
   const groups = useMemo(() => groupEquipmentItems(rows).map(group => ({
     ...group,
@@ -108,7 +108,7 @@ function Equipment({ report, hidden = false, compact = false }) {
   const droppedCount = rows.filter(itemHasDrop).length
   return <section className="kb-panel kb-equipment-panel" id="kb-panel-equipment" role={compact ? 'tabpanel' : 'region'} aria-labelledby={compact ? 'kb-tab-equipment' : 'kb-heading-equipment'} hidden={hidden}>
     <div className="kb-panel-head"><div><span className="kb-eyebrow">SALVAGE / FITTING</span><h3 id="kb-heading-equipment">装备与掉落</h3></div><span className="kb-panel-count">{rows.length ? `${rows.length} 项` : '—'}</span></div>
-    {rows.length ? <>
+    {pending ? <EmptyState title="正在读取装备记录…" /> : unavailable ? <EmptyState title="装备详情未读取">当前仅有报告摘要，请刷新重试。</EmptyState> : rows.length ? <>
       <div className="kb-equipment-controls">
         <div className="kb-slot-tabs" role="group" aria-label="装备槽位分类">
           <button type="button" aria-pressed={activeGroup === 'all'} className={activeGroup === 'all' ? 'is-active' : ''} onClick={() => setActiveGroup('all')}>全部 <b>{rows.length}</b></button>
@@ -132,6 +132,14 @@ function Equipment({ report, hidden = false, compact = false }) {
   </section>
 }
 
+function LoadingReportHero() {
+  return <section className="kb-hero kb-panel kb-hero-loading" aria-label="正在读取报告">
+    <div className="kb-asset kb-asset--ship kb-skeleton" aria-hidden="true" />
+    <div className="kb-hero-copy" aria-hidden="true"><span className="kb-skeleton kb-skeleton-line" /><span className="kb-skeleton kb-skeleton-title" /><span className="kb-skeleton kb-skeleton-line" /><span className="kb-skeleton kb-skeleton-block" /></div>
+    <div className="kb-hero-value" aria-hidden="true"><span>估算损失</span><span className="kb-skeleton kb-skeleton-value" /><span className="kb-skeleton kb-skeleton-line" /><span className="kb-skeleton kb-skeleton-line" /></div>
+  </section>
+}
+
 export default function KillboardPage() {
   const { killId } = useParams()
   const navigate = useNavigate()
@@ -146,7 +154,7 @@ export default function KillboardPage() {
   const [error, setError] = useState('')
   const [forbidden, setForbidden] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [compactDetail, setCompactDetail] = useState(false)
+  const [compactDetail, setCompactDetail] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 1099px)')?.matches))
   const [activePanel, setActivePanel] = useState('people')
   const [copyState, setCopyState] = useState('')
   const [indexExpanded, setIndexExpanded] = useState(false)
@@ -297,14 +305,18 @@ export default function KillboardPage() {
   }
 
   const security = killboardSecurityMeta(current)
+  const detailReady = Boolean(current && String(selected?.kill_id) === String(current.kill_id))
+  const initialPending = !current && !forbidden && !error && (loading || detailLoading)
+  const pendingContent = initialPending || (detailLoading && !detailReady)
+  const summaryOnly = Boolean(current && !detailLoading && !detailReady)
   return <div className="page-stack kb-page">
     <header className="kb-header">
       <div><div className="kb-brandline"><Swords size={18} aria-hidden="true" /><span>EVE ECHOES / KILL INTELLIGENCE</span></div><h1>击毁情报</h1>{reportSourceNote(current) ? <p>{reportSourceNote(current)}</p> : null}</div>
-      <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />00地区</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div>{(forbidden || shouldShowKillboardLiveStatus(status)) ? <span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span> : null}<button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
+      <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />00地区</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div><span className="kb-status-slot">{(forbidden || shouldShowKillboardLiveStatus(status)) ? <span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span> : null}</span><button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
     </header>
     <div className="kb-workspace">
       <aside className={`kb-sidebar${indexExpanded ? ' is-index-open' : ''}`} aria-label="击毁报告筛选">
-        <div className="kb-sidebar-head"><div><span className="kb-eyebrow">REPORT INDEX</span><h2>报告索引</h2></div><span>{total || reports.length}</span></div>
+        <div className="kb-sidebar-head"><div><span className="kb-eyebrow">REPORT INDEX</span><h2>报告索引</h2></div><span>{loading && !reports.length ? '—' : total || reports.length}</span></div>
         <button ref={indexToggleRef} className="kb-mobile-index-toggle" type="button" aria-controls="kb-index-content" aria-expanded={indexExpanded} onClick={() => setIndexExpanded(value => !value)}><span>{indexExpanded ? '收起索引' : '筛选 / 切换报告'}</span><ChevronDown size={16} aria-hidden="true" /></button>
         <div ref={indexContentRef} className="kb-index-content" id="kb-index-content" tabIndex={-1}>
         <label className="kb-search"><Search size={16} /><input type="search" value={filters.q} disabled={forbidden} onChange={event => { if (!revoked.current) setFilters(value => ({ ...value, q: event.target.value })) }} placeholder="搜索舰船、星系或角色" aria-label="搜索击毁报告" /></label>
@@ -313,10 +325,11 @@ export default function KillboardPage() {
         <div className="kb-report-list" aria-busy={loading}>{loading && !reports.length ? <div className="kb-list-loading" role="status"><LoaderCircle className="spin" size={20} aria-hidden="true" />读取报告…</div> : reports.length ? reports.map(report => <ReportRow key={report.kill_id} report={report} active={String(report.kill_id) === String(selectedId)} onSelect={selectReport} />) : <EmptyState title={filters.q.trim() ? '没有匹配报告' : '暂无击毁报告'}>{filters.q.trim() ? '尝试其他舰船、星系或角色名称。' : '采集器尚未写入符合条件的报告。'}</EmptyState>}</div>
         </div>
       </aside>
-      <main className="kb-main" aria-busy={detailLoading}>
+      <main className="kb-main" aria-busy={initialPending || detailLoading}>
         {error ? <div className={`kb-error${forbidden ? ' is-forbidden' : ''}`} role="alert"><AlertTriangle size={17} /><div><strong>{forbidden ? '访问受限' : '加载失败'}</strong><span>{error}</span></div>{!forbidden ? <button type="button" onClick={() => setError('')} aria-label="关闭错误"><X size={15} /></button> : null}</div> : null}
-        {detailLoading ? <div className="kb-detail-loading" role="status"><LoaderCircle className="spin" size={16} aria-hidden="true" />正在读取报告详情…</div> : null}
-        {current ? <>
+        {(current || initialPending) ? <div className="kb-detail-loading" role="status">{initialPending || detailLoading ? <LoaderCircle className="spin" size={16} aria-hidden="true" /> : <Database size={16} aria-hidden="true" />}{initialPending && loading ? '正在读取报告索引…' : initialPending || detailLoading ? '正在读取报告详情…' : detailReady ? '报告详情已读取' : '仅展示报告摘要，详情未读取'}</div> : null}
+        {(current || initialPending) ? <>
+          {current ?
           <section className="kb-hero kb-panel">
             <VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} />
             <div className="kb-hero-copy">
@@ -334,9 +347,9 @@ export default function KillboardPage() {
               <time>{formatKillboardTime(current.kill_time_display, current.kill_time_raw, current.source)}</time>
               <button className="kb-copy-km" type="button" onClick={copyCurrentKillTag} aria-label="复制 KM" title="复制游戏内击毁报告标签"><Copy size={14} />{copyState || '复制 KM'}</button>{copyState ? <span className="kb-copy-feedback" role="status">{copyState === '已复制' ? '击毁报告标签已复制' : '复制失败，请重试'}</span> : null}
             </div>
-          </section>
+          </section> : <LoadingReportHero />}
           {compactDetail ? <div className="kb-detail-tabs" role="tablist" aria-label="报告详情"><button type="button" role="tab" id="kb-tab-people" aria-controls="kb-panel-people" aria-selected={activePanel === 'people'} tabIndex={activePanel === 'people' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('people')}>人员</button><button type="button" role="tab" id="kb-tab-equipment" aria-controls="kb-panel-equipment" aria-selected={activePanel === 'equipment'} tabIndex={activePanel === 'equipment' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('equipment')}>装备</button></div> : null}
-          <div className={`kb-content-grid${compactDetail ? ' is-compact' : ''}`} ref={contentRef}><Participants report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'people'} /><Equipment report={current} compact={compactDetail} hidden={compactDetail && activePanel !== 'equipment'} /></div>
+          <div className={`kb-content-grid${compactDetail ? ' is-compact' : ''}`} ref={contentRef}><Participants report={current} pending={pendingContent} unavailable={summaryOnly} compact={compactDetail} hidden={compactDetail && activePanel !== 'people'} /><Equipment report={current} pending={pendingContent} unavailable={summaryOnly} compact={compactDetail} hidden={compactDetail && activePanel !== 'equipment'} /></div>
         </> : <EmptyState title="选择一份报告查看详情">左侧索引展示价值大于 200 亿 ISK 的最新击毁报告。</EmptyState>}
       </main>
     </div>

@@ -210,7 +210,8 @@ function PriceSettingCard() {
           {!rows.length && !userPriceQuery.isPending && !userPriceQuery.isError ? (
             <EmptyState title="暂无价格数据" />
           ) : rows.length ? (
-            <div className="table-shell tall">
+            <>
+            <div className="table-shell tall settings-price-table-shell" role="region" aria-label="预设价格表，可横向滚动" aria-describedby="settings-price-scroll-hint" tabIndex={0}>
               <table className="data-table compact price-table">
                 <thead>
                   <tr>
@@ -235,7 +236,7 @@ function PriceSettingCard() {
                         <input
                           type="number"
                           aria-label={`${item.resource_name}预设价格`}
-                          className="text-input compact-input"
+                          className="text-input compact-input settings-price-input"
                           value={item.resource_price ?? 0}
                           onChange={(e) => updatePrice(item.resource_name, e.target.value)}
                         />
@@ -245,6 +246,8 @@ function PriceSettingCard() {
                 </tbody>
               </table>
             </div>
+            <p id="settings-price-scroll-hint" className="settings-price-scroll-hint">左右滚动查看完整价格；点击价格可编辑。</p>
+            </>
           ) : null}
         </Panel>
       </div>
