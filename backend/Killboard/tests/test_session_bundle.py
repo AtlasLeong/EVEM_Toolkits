@@ -325,6 +325,72 @@ class SessionBundleTests(unittest.TestCase):
             with self.assertRaises(self.session.NeedsAuthError):
                 self.session.load_session_pool(paths)
 
+    def test_material_alias_survives_reordering_and_versions_mark_pool_changes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            paths = [Path(temporary) / f'private-{index}.json' for index in range(2)]
+            for index, path in enumerate(paths):
+                self.session.save_session(synthetic_bundle(bytes([index])), path)
+            original = self.session.load_session_pool(paths, with_metadata=True)
+            repeated = self.session.load_session_pool(paths, with_metadata=True)
+            reordered = self.session.load_session_pool(list(reversed(paths)), with_metadata=True)
+            self.assertEqual(original, repeated)
+            for index, (_, metadata) in enumerate(original):
+                moved = reordered[1 - index][1]
+                self.assertEqual(metadata['material_alias'], moved['material_alias'])
+                self.assertEqual(metadata['material_version'], moved['material_version'])
+                self.assertNotEqual(metadata['pool_version'], moved['pool_version'])
+                self.assertEqual(self.session.safe_material_metadata(metadata), metadata)
+                self.assertNotIn(str(paths[index]), json.dumps(metadata))
+                self.assertNotIn('private', json.dumps(metadata))
+            self.assertNotEqual(original[0][1]['material_alias'], original[1][1]['material_alias'])
+            replacement = Path(temporary) / 'replacement.json'
+            self.session.save_session(synthetic_bundle(b'new-synthetic-material'), replacement)
+            os.replace(replacement, paths[0])
+            refreshed = self.session.load_session_pool(paths, with_metadata=True)
+            self.assertEqual(original[0][1]['material_alias'], refreshed[0][1]['material_alias'])
+            self.assertNotEqual(original[0][1]['material_version'], refreshed[0][1]['material_version'])
+            self.assertNotEqual(original[0][1]['pool_version'], refreshed[0][1]['pool_version'])
+            self.assertEqual(original[1][1]['material_version'], refreshed[1][1]['material_version'])
+
+    def test_audited_selection_reads_each_explicit_file_once_and_advances_cursor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            paths = [Path(temporary) / f'{index}.json' for index in range(2)]
+            cursor = Path(temporary) / 'cursor.json'
+            for index, path in enumerate(paths):
+                self.session.save_session(synthetic_bundle(bytes([index])), path)
+            with patch.object(self.session, 'load_session', wraps=self.session.load_session) as loader:
+                bundle, slot, index, size, metadata = self.session.load_round_robin_session(
+                    paths, cursor, with_audit=True)
+            self.assertEqual(loader.call_count, 2)
+            self.assertEqual((slot, index, size), ('A', 0, 2))
+            self.assertEqual(bundle['hello']['synthetic'], b'\x00')
+            self.assertEqual(json.loads(cursor.read_text()), 1)
+            self.assertEqual(set(metadata), {'material_alias', 'material_version', 'pool_version'})
+
+    def test_in_place_material_change_during_read_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'synthetic.json'
+            self.session.save_session(synthetic_bundle(), path)
+            actual = path.stat()
+            changed = SimpleNamespace(**{
+                name: getattr(actual, name) for name in (
+                    'st_mode', 'st_uid', 'st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')})
+            changed.st_mtime_ns += 1
+            with patch.object(self.session.os, 'fstat', side_effect=[actual, changed]):
+                with self.assertRaises(self.session.NeedsAuthError):
+                    self.session.load_session(path, with_metadata=True)
+
+    def test_metadata_allowlist_rejects_partial_attribution_and_remote_text(self):
+        valid = {'material_alias': 'm_' + 'a' * 24, 'material_version': 'v_' + 'b' * 24,
+                 'pool_version': 'p_' + 'c' * 24}
+        self.assertEqual(self.session.safe_material_metadata({**valid, 'token': 'secret'}), valid)
+        for candidate in (None, [], {'material_alias': valid['material_alias']},
+                          {**valid, 'material_version': '/private/session.json'},
+                          {**valid, 'pool_version': ['private-token']},
+                          {**valid, 'material_alias': 'm_' + 'A' * 24}):
+            with self.subTest(candidate=candidate):
+                self.assertEqual(self.session.safe_material_metadata(candidate), {})
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -685,11 +685,15 @@ class CollectorTransportTests(unittest.TestCase):
                 self.bundle_module.save_session(synthetic_bundle(bytes([index])), path)
             with patch.dict(os.environ, {'KILLBOARD_SESSION_FILES': os.pathsep.join(map(str, paths))}):
                 with patch('Market.collector_protocol.socket.create_connection') as connect:
-                    with patch.object(self.transport, 'load_round_robin_session', return_value=(synthetic_bundle(b'one'), 'B', 1, 3)) as choose:
+                    metadata = {'material_alias': 'm_' + 'a' * 24, 'material_version': 'v_' + 'b' * 24,
+                                'pool_version': 'p_' + 'c' * 24}
+                    with patch.object(self.transport, 'load_round_robin_session', return_value=(synthetic_bundle(b'one'), 'B', 1, 3, metadata)) as choose:
                         client = self.transport.build_client()
-                    choose.assert_called_once_with(cursor_path=None, with_selection=True)
+                    choose.assert_called_once_with(cursor_path=None, with_audit=True)
                     self.assertEqual(client.session.bundle['hello']['synthetic'], b'one')
                     self.assertEqual(client.audit_snapshot()['session_slot'], 'B')
+                    for key, value in metadata.items():
+                        self.assertEqual(client.audit_snapshot()[key], value)
                     connect.assert_not_called()
                     client.close()
 
@@ -722,6 +726,20 @@ class CollectorTransportTests(unittest.TestCase):
         for value in ('account@email.test', 'secret.json', 'a', 'ABC', 2, None):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 self.transport.KillboardClient(synthetic_bundle(), session_slot=value)
+
+    def test_material_metadata_is_detached_and_invalid_values_never_connect(self):
+        metadata = {'material_alias': 'm_' + 'a' * 24, 'material_version': 'v_' + 'b' * 24,
+                    'pool_version': 'p_' + 'c' * 24}
+        with patch('Market.collector_protocol.socket.create_connection') as connect:
+            client = self.transport.KillboardClient(synthetic_bundle(), material_metadata=metadata)
+            metadata['material_alias'] = 'm_' + 'd' * 24
+            self.assertEqual(client.audit_snapshot()['material_alias'], 'm_' + 'a' * 24)
+            for invalid in ({'material_alias': 'account@example.invalid'},
+                            {**metadata, 'token': 'private-token'},
+                            {**metadata, 'pool_version': ['private-token']}, ['private-token']):
+                with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                    self.transport.KillboardClient(synthetic_bundle(), material_metadata=invalid)
+            connect.assert_not_called()
 
 
 if __name__ == '__main__':

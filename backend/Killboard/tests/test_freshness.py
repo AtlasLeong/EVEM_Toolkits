@@ -1,6 +1,7 @@
 """Resumable freshness probing with real cursor, lease and persistence state."""
 from unittest.mock import patch
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from django.test import TestCase
 from django.core.management import call_command, CommandError
@@ -8,8 +9,10 @@ from django.core.management import call_command, CommandError
 from Killboard.discovery import DiscoveryConfig, ProbeOutcome, ProbeStatus, RUN_LEASE_MS
 from Killboard.collector_transport import CollectorError
 from Killboard.freshness import FreshnessRunner, _merge, _validated_state
-from Killboard.models import KillReport, ProbeCursor, ProbeEvent, ProbeRun
-from Killboard.tests.test_discovery import FakeClient, RateLimited, response
+from Killboard.models import CollectionPolicy, KillReport, ProbeCursor, ProbeEvent, ProbeRun
+from Killboard.parser import parse_kill_blob
+from Killboard.protocol import decode_kill_info_response
+from Killboard.tests.test_discovery import FakeClient, RateLimited, captured_response, response
 
 
 class PrefixClient(FakeClient):
@@ -24,14 +27,204 @@ class PrefixClient(FakeClient):
         return response(kill_id) if kill_id <= self.frontier else None
 
 
+class ValuePrefixClient(PrefixClient):
+    def __init__(self, frontier, *, value='1', values=None, captured=False):
+        super().__init__(frontier)
+        self.value, self.values = value, values or {}
+        self.captured = captured
+        self.enrichment_calls = []
+
+    def get_kill_info(self, kill_id, *, enrich=None):
+        self.enrichment_calls.append((kill_id, enrich))
+        result = super().get_kill_info(kill_id, enrich=enrich)
+        value = self.values.get(kill_id, self.value)
+        if result is not None and self.captured:
+            result = decode_kill_info_response(captured_response(kill_id))
+            if value is not None:
+                result['isk_lost'] = value
+        elif result is not None and value is not None:
+            result['kill_blob'] = result['kill_blob'].replace('<kill ', f'<kill iskLost="{value}" ')
+        return result
+
+
 class FreshnessTests(TestCase):
-    def cursor(self):
-        return ProbeCursor.objects.create(name='latest', last_success_id=100,
+    def cursor(self, name='latest'):
+        return ProbeCursor.objects.create(name=name, last_success_id=100,
                                           next_probe_id=101)
 
     def run_pass(self, cursor, client, maximum=24):
         return FreshnessRunner(client, cursor=cursor, policy=None,
                                config=DiscoveryConfig(max_requests=maximum)).run()
+
+    def value_policy(self):
+        return CollectionPolicy.objects.create(name='value_only', min_ship_rank=0,
+                                               min_isk_lost=Decimal('20000000000.00'))
+
+    def test_known_value_filtered_locator_reports_do_not_repeat_in_the_same_round(self):
+        cursor = self.cursor()
+        client = ValuePrefixClient(105, values={105: '20000000000.00'})
+        run = FreshnessRunner(client, cursor=cursor, policy=self.value_policy()).run()
+        cursor.refresh_from_db()
+        located_reports = list(run.events.filter(status='report', diagnostics__phase='locate')
+                               .order_by('id').values_list('kill_id', flat=True))
+        self.assertEqual(located_reports, [101, 105])
+        for kill_id in located_reports:
+            self.assertEqual(client.calls.count(kill_id), 1)
+            self.assertNotIn((kill_id, True), client.enrichment_calls)
+        self.assertEqual(set(run.events.filter(diagnostics__phase='scan')
+                             .values_list('kill_id', flat=True)), {102, 103, 104})
+        self.assertEqual(cursor.strategy_state['pending_ranges'], [])
+        self.assertEqual(cursor.next_probe_id, 106)
+        self.assertFalse(cursor.strategy_state['coverage_verified'])
+        self.assertEqual(run.stop_reason, 'caught_up')
+        self.assertEqual(run.request_count, len(client.calls))
+        self.assertEqual(run.request_count, run.events.count())
+        self.assertEqual(run.report_count, 5)
+        self.assertEqual(run.diagnostics['filtered_value_count'], 5)
+        self.assertEqual(run.diagnostics['scan_count'], 3)
+        self.assertFalse(KillReport.objects.exists())
+
+    def test_captured_base_without_identity_names_can_complete_value_filtered_work(self):
+        decoded = decode_kill_info_response(captured_response(102))
+        decoded['isk_lost'] = '1'
+        parsed = parse_kill_blob(decoded['kill_blob'], summary=decoded)
+        self.assertEqual(parsed['ship_name'], '')
+        self.assertEqual(parsed['victim_name'], '')
+        self.assertEqual(parsed['participants_status'], 'provided')
+        self.assertEqual(parsed['isk_lost'], Decimal('1'))
+        cursor = self.cursor()
+        cursor.strategy_state = {
+            'version': 1, 'phase': 'locate', 'frontier': 100, 'history_start': 101,
+            'pending_ranges': [], 'coverage_verified': False,
+            'search': {'lower': 100, 'upper': 104, 'step': 64},
+        }
+        cursor.save()
+        client = ValuePrefixClient(103, captured=True)
+        run = FreshnessRunner(client, cursor=cursor, policy=self.value_policy()).run()
+        cursor.refresh_from_db()
+        self.assertEqual(client.calls, [104, 102, 103, 101])
+        self.assertEqual(list(run.events.filter(diagnostics__phase='scan')
+                              .values_list('kill_id', flat=True)), [101])
+        self.assertEqual(cursor.strategy_state['pending_ranges'], [])
+        self.assertEqual(cursor.strategy_state['frontier'], 103)
+        self.assertEqual(run.request_count, len(client.calls))
+        self.assertEqual(run.request_count, run.events.count())
+        self.assertEqual(run.report_count, 3)
+        self.assertEqual(run.diagnostics['filtered_value_count'], 3)
+        self.assertEqual(run.stop_reason, 'caught_up')
+
+    def test_unknown_value_and_above_threshold_reports_still_scan_with_enrichment(self):
+        policy = self.value_policy()
+        for name, value in (('unknown', None), ('eligible', '20000000000.01')):
+            with self.subTest(value=value):
+                cursor = self.cursor(name)
+                client = ValuePrefixClient(101, value=value)
+                run = FreshnessRunner(client, cursor=cursor, policy=policy).run()
+                cursor.refresh_from_db()
+                self.assertEqual(client.calls.count(101), 2)
+                self.assertIn((101, False), client.enrichment_calls)
+                self.assertIn((101, True), client.enrichment_calls)
+                self.assertEqual(run.report_count, 2)
+                self.assertEqual(run.request_count, len(client.calls))
+                self.assertEqual(cursor.strategy_state['pending_ranges'], [])
+                self.assertEqual(KillReport.objects.filter(kill_id=101).exists(), value is not None)
+
+    def test_reports_without_a_value_threshold_still_scan(self):
+        policy = CollectionPolicy.objects.create(name='no_threshold', min_ship_rank=0)
+        for name, active_policy in (('no_policy', None), ('no_threshold', policy)):
+            with self.subTest(policy=name):
+                cursor = self.cursor(name)
+                client = ValuePrefixClient(101)
+                run = FreshnessRunner(client, cursor=cursor, policy=active_policy).run()
+                self.assertEqual(client.calls.count(101), 2)
+                self.assertIn((101, True), client.enrichment_calls)
+                self.assertEqual(run.report_count, 2)
+
+    def test_filtered_locator_markers_do_not_survive_an_unfinished_round_on_the_same_runner(self):
+        cursor = self.cursor()
+        client = ValuePrefixClient(101)
+        runner = FreshnessRunner(client, cursor=cursor, policy=self.value_policy(),
+                                 config=DiscoveryConfig(max_requests=1))
+        first = runner.run()
+        cursor.refresh_from_db()
+        self.assertEqual(client.calls, [101])
+        self.assertEqual(first.stop_reason, 'max_requests')
+        self.assertEqual(cursor.strategy_state['phase'], 'locate')
+        self.assertNotIn('_located_value_filtered_ids', cursor.strategy_state)
+        client.calls.clear()
+        client.enrichment_calls.clear()
+        client.value = '20000000000.01'
+        runner.config = DiscoveryConfig(max_requests=24)
+        second = runner.run()
+        cursor.refresh_from_db()
+        self.assertIn((101, True), client.enrichment_calls)
+        self.assertEqual(client.calls.count(101), 1)
+        self.assertEqual(second.request_count, len(client.calls))
+        self.assertEqual(cursor.strategy_state['pending_ranges'], [])
+        self.assertEqual(KillReport.objects.get(kill_id=101).isk_lost, Decimal('20000000000.01'))
+
+    def test_value_filtered_report_with_deferred_limit_retains_recovery_work(self):
+        cursor = self.cursor()
+        cursor.failure_count = 2
+        cursor.save()
+        client = ValuePrefixClient(101)
+        runner = FreshnessRunner(client, cursor=cursor, policy=self.value_policy())
+        original_fetch = runner._fetch
+
+        def deferred(kill_id, **kwargs):
+            outcome = original_fetch(kill_id, **kwargs)
+            return ProbeOutcome(ProbeStatus.REPORT, payload=outcome.payload,
+                                deferred_stop_code='rate_limited')
+
+        with patch.object(runner, '_fetch', side_effect=deferred):
+            limited = runner.run()
+        cursor.refresh_from_db()
+        self.assertEqual(limited.stop_reason, 'rate_limited')
+        self.assertEqual(cursor.failure_count, 3)
+        self.assertEqual(client.calls, [101])
+        self.assertEqual(cursor.strategy_state['phase'], 'locate')
+        client.calls.clear()
+        client.enrichment_calls.clear()
+        paused = runner.run()
+        self.assertEqual(paused.stop_reason, 'cooldown')
+        self.assertEqual(client.calls, [])
+        cursor.cooldown_until_ms = 1
+        cursor.save(update_fields=['cooldown_until_ms'])
+        recovered = runner.run()
+        cursor.refresh_from_db()
+        self.assertIn((101, True), client.enrichment_calls)
+        self.assertEqual(recovered.request_count, len(client.calls))
+        self.assertEqual(cursor.strategy_state['pending_ranges'], [])
+        self.assertEqual(cursor.failure_count, 0)
+
+    def test_deferred_stop_at_the_boundary_keeps_all_unscanned_locator_reports_pending(self):
+        cursor = self.cursor()
+        cursor.strategy_state = {
+            'version': 1, 'phase': 'locate', 'frontier': 100, 'history_start': 101,
+            'pending_ranges': [], 'coverage_verified': False,
+            'search': {'lower': 100, 'upper': 104, 'step': 64},
+        }
+        cursor.save()
+        client = ValuePrefixClient(103)
+        runner = FreshnessRunner(client, cursor=cursor, policy=self.value_policy())
+        original_fetch = runner._fetch
+
+        def deferred_boundary(kill_id, **kwargs):
+            outcome = original_fetch(kill_id, **kwargs)
+            if kill_id == 103:
+                return ProbeOutcome(ProbeStatus.REPORT, payload=outcome.payload,
+                                    deferred_stop_code='rate_limited')
+            return outcome
+
+        with patch.object(runner, '_fetch', side_effect=deferred_boundary):
+            run = runner.run()
+        cursor.refresh_from_db()
+        self.assertEqual(client.calls, [104, 102, 103])
+        self.assertEqual(run.stop_reason, 'rate_limited')
+        self.assertEqual(cursor.strategy_state['phase'], 'scan')
+        self.assertEqual(cursor.strategy_state['pending_ranges'], [[101, 103]])
+        self.assertEqual(cursor.next_probe_id, 101)
+        self.assertEqual(run.request_count, len(client.calls))
 
     def test_search_resumes_and_prioritizes_newest_without_losing_history(self):
         cursor = self.cursor()

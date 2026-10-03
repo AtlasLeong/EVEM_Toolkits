@@ -20,7 +20,7 @@ from .protocol import KillProtocolError, decode_kill_info_response
 from .models import CollectionPolicy, ProbeCursor, ProbeEvent, ProbeRun
 from .services import persist_report, disposition_for
 from .collector_transport import BaseReportResult, AUDIT_STAGES, AUDIT_ERROR_CODES
-from .session_bundle import REQUIRED_METHODS, OPTIONAL_METHODS
+from .session_bundle import REQUIRED_METHODS, OPTIONAL_METHODS, safe_material_metadata
 from .worker import LeaseLostError, paused_reason
 
 
@@ -115,7 +115,7 @@ def _safe_error_code(value: str | None) -> str:
 
 
 def safe_audit_snapshot(client):
-    """Allowlist only ordinal session and local transport classifiers."""
+    """Allowlist material attribution, ordinal slot and local classifiers."""
     method = getattr(client, 'audit_snapshot', None)
     if not callable(method):
         return {}
@@ -126,6 +126,7 @@ def safe_audit_snapshot(client):
     if not isinstance(raw, dict):
         return {}
     result = {}
+    result.update(safe_material_metadata(raw))
     slot = raw.get('session_slot')
     if isinstance(slot, str) and re.fullmatch(r'[A-Z]{1,2}', slot):
         result['session_slot'] = slot

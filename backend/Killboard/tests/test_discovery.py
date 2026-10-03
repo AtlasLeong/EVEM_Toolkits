@@ -79,6 +79,26 @@ class CodedFailure(Exception):
 
 
 class DiscoveryTests(TestCase):
+    def test_material_attribution_is_recorded_on_run_and_event_without_secrets(self):
+        metadata = {'material_alias': 'm_' + 'a' * 24, 'material_version': 'v_' + 'b' * 24,
+                    'pool_version': 'p_' + 'c' * 24}
+        class AuditClient(FakeClient):
+            def audit_snapshot(self):
+                return {**metadata, 'session_slot': 'B', 'rpc_count': len(self.calls),
+                        'password': 'secret-marker', 'path': '/private/session.json'}
+        cursor = ProbeCursor.objects.create(name='material-attribution', next_probe_id=100)
+        client = AuditClient({100: response(100)})
+        run = DiscoveryRunner(client, cursor=cursor, config=DiscoveryConfig(max_requests=1)).run()
+        event = run.events.get()
+        for key, value in metadata.items():
+            self.assertEqual(run.diagnostics[key], value)
+            self.assertEqual(event.diagnostics[key], value)
+        self.assertNotIn('password', run.diagnostics)
+        self.assertNotIn('path', event.diagnostics)
+        metadata['material_version'] = 'v_' + 'd' * 24
+        event.refresh_from_db()
+        self.assertEqual(event.diagnostics['material_version'], 'v_' + 'b' * 24)
+
     def test_verified_base_report_persists_and_stops_on_malformed_identity_wire(self):
         from Killboard.collector_transport import BaseReportResult
         from Killboard.protocol import decode_kill_info_response

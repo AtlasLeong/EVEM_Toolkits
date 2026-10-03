@@ -101,7 +101,7 @@ jobs:
       - name: Private Killboard and shared game catalog regression
         working-directory: backend
         run: |
-          python manage.py test Killboard.tests.test_api Killboard.tests.test_serializers Killboard.tests.test_models Killboard.tests.test_parser Killboard.tests.test_services Killboard.tests.test_discovery Killboard.tests.test_freshness Killboard.tests.test_bootstrap Killboard.tests.test_catalog Killboard.tests.test_asset_registry Killboard.tests.test_image_catalog Killboard.tests.test_security Killboard.tests.test_collector_transport Killboard.tests.test_session_bundle Killboard.tests.test_identity_protocol Killboard.tests.test_worker Killboard.tests.test_worker_settings GameData.tests --settings=EVE_MDjango.killboard_test_settings --noinput 2>&1 | tee ../ci-evidence/killboard-tests.log
+          python manage.py test Killboard.tests.test_api Killboard.tests.test_diagnostics Killboard.tests.test_serializers Killboard.tests.test_models Killboard.tests.test_parser Killboard.tests.test_services Killboard.tests.test_discovery Killboard.tests.test_freshness Killboard.tests.test_bootstrap Killboard.tests.test_catalog Killboard.tests.test_asset_registry Killboard.tests.test_image_catalog Killboard.tests.test_security Killboard.tests.test_collector_transport Killboard.tests.test_session_bundle Killboard.tests.test_identity_protocol Killboard.tests.test_worker Killboard.tests.test_worker_settings GameData.tests --settings=EVE_MDjango.killboard_test_settings --noinput 2>&1 | tee ../ci-evidence/killboard-tests.log
           python manage.py makemigrations Killboard --check --dry-run --settings=EVE_MDjango.killboard_test_settings
       - name: Private capture tooling and game data provenance tests
         run: |
