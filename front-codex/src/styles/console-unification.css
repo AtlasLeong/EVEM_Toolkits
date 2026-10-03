@@ -61,6 +61,10 @@ body,
   color: var(--console-text);
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   min-width: 320px;
   color: var(--console-text);
@@ -470,10 +474,50 @@ body {
   border-color: var(--console-line-strong);
   background: #203c47;
 }
+.site-frame .manufacturing-page--terminal .manufacturing-tree-node.is-selected > .manufacturing-tree-row {
+  box-shadow: inset 3px 0 var(--console-accent);
+}
 .site-frame .manufacturing-page--terminal .manufacturing-tree-copy strong { font-size: 14px; line-height: 1.4; }
 .site-frame .manufacturing-page--terminal .manufacturing-tree-copy small { font-size: 12px; color: var(--console-muted); }
 .site-frame .manufacturing-page--terminal .manufacturing-tree-children { margin-left: 16px; padding-left: 12px; }
-.site-frame .manufacturing-page--terminal .manufacturing-route-toggle { min-height: 32px; font-size: 12px; }
+.site-frame .manufacturing-page--terminal .manufacturing-route-segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 0 0 126px;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+}
+.site-frame .manufacturing-page--terminal .manufacturing-route-toggle {
+  min-height: 32px;
+  min-width: 0;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 7px;
+  border: 1px solid var(--console-line-strong);
+  border-radius: var(--radius-control);
+  background: var(--console-bg);
+  color: var(--console-muted);
+  box-shadow: none;
+  transform: none;
+  font-size: 12px;
+  line-height: 18px;
+  transition: background-color .14s ease, color .14s ease, border-color .14s ease;
+}
+.site-frame .manufacturing-page--terminal .manufacturing-route-toggle:hover:not(.is-active) {
+  border-color: var(--console-muted);
+  background: var(--console-surface);
+  color: var(--console-text);
+}
+.site-frame .manufacturing-page--terminal .manufacturing-route-toggle.is-active {
+  border-color: var(--console-accent);
+  background: var(--console-accent);
+  color: var(--console-on-accent);
+  box-shadow: none;
+}
 .site-frame .manufacturing-page--terminal .manufacturing-total-card {
   padding: 18px 14px;
   background: var(--console-bg);
@@ -689,6 +733,11 @@ body {
 .site-frame .kb-page .kb-filter-list b,
 .site-frame .kb-page .kb-search input::placeholder { color: var(--console-muted); }
 
+@media (min-width: 1100px) {
+  .site-frame .manufacturing-page--terminal :is(.manufacturing-controls, .manufacturing-tree-panel, .manufacturing-summary, .manufacturing-tree) {
+    scrollbar-gutter: stable;
+  }
+}
 @media (min-width: 1440px) {
   .site-frame .manufacturing-page--terminal .manufacturing-workspace { grid-template-columns: 240px minmax(0, 1fr) 280px; }
 }
@@ -745,14 +794,17 @@ body {
   .site-frame .manufacturing-page--terminal .manufacturing-tree-heading h2 { max-width: none; }
 }
 @media (max-width: 640px) {
+  /* Touch-sized pages keep the full viewport; desktop retains a stable rail. */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar { display: none; }
   .site-frame .app-shell .shell-main { padding: 20px 16px 28px; }
   .site-frame .manufacturing-page--terminal .manufacturing-page-header { gap: 12px; }
   .site-frame .manufacturing-page--terminal .manufacturing-tree-heading { flex-direction: column; align-items: flex-start; }
   .site-frame .manufacturing-page--terminal .manufacturing-tree-actions { width: 100%; justify-content: space-between; }
   .site-frame .manufacturing-page--terminal .manufacturing-tree-children { margin-left: 4px; padding-left: 8px; }
   .site-frame .manufacturing-page--terminal .manufacturing-tree-row { flex-wrap: wrap; gap: 8px; }
-  .site-frame .manufacturing-page--terminal .manufacturing-tree-select { min-width: 0; flex: 1 1 140px; }
-  .site-frame .manufacturing-page--terminal .manufacturing-route-segmented { flex-basis: 110px; }
+  .site-frame .manufacturing-page--terminal .manufacturing-tree-select { min-width: 0; flex: 1 1 100px; }
+  .site-frame .manufacturing-page--terminal .manufacturing-route-segmented { flex-basis: 126px; }
   .site-frame .manufacturing-page--terminal :is(.manufacturing-route-toggle, .manufacturing-tree-expand) { min-height: 44px; }
   .site-frame .market-focus .market-terminal-heading { flex-wrap: wrap; }
   .site-frame .market-focus .market-header-scope { margin-left: 0; }

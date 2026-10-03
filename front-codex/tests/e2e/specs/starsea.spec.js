@@ -246,7 +246,7 @@ test("星海公开目录提供筛选和登录返回路径", async ({ page }) => 
 test("星海目录支持从军团页进入关联见闻", async ({ page }) => {
   await fixture(page, false);
   await page.goto("/starsea?corporation_id=1");
-  await expect(page.getByRole("status")).toContainText("关联军团");
+  await expect(page.getByRole("status").filter({ hasText: "关联军团" })).toContainText("关联军团");
   await page.getByRole("button", { name: "清除军团筛选", exact: true }).click();
   await expect(page).toHaveURL(/\/starsea$/);
 });

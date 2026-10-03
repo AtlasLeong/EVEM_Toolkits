@@ -4,6 +4,7 @@ import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
 import { isViewerAllowed, VIEWER_ACCESS_ENABLED } from './utils/viewerAccess'
+import { resolveSiteTitle } from './utils/siteMetadata'
 import useKillboardAccess from './hooks/useKillboardAccess'
 const LoginPage = lazy(() => import('./pages/Login'))
 const InfoCenterPage = lazy(() => import('./pages/InfoCenter'))
@@ -37,6 +38,16 @@ const starseaRoute = page => <Suspense fallback={pageFallback('加载星海见�
 const corporationRoute = page => <Suspense fallback={pageFallback('加载军团页面')}>{page}</Suspense>
 const appRoute = page => <Suspense fallback={pageFallback('加载页面')}>{page}</Suspense>
 
+function SiteMetadata() {
+  const { pathname } = useLocation()
+
+  useEffect(() => {
+    document.title = resolveSiteTitle(pathname)
+  }, [pathname])
+
+  return null
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation()
 
@@ -69,7 +80,7 @@ function AccessDeniedPage() {
   const { logout } = useContext(AuthContext)
   return (
     <main className="access-denied-page" role="alert">
-      <p className="eyebrow">EVEM TOOLKITS</p>
+      <p className="eyebrow">EVEM 工具箱</p>
       <h1>暂未开放查看权限</h1>
       <p>当前账号不在查看白名单中，请切换到已获授权的账号。</p>
       <button type="button" onClick={logout}>切换账号</button>
@@ -89,6 +100,7 @@ function RequireKillboardAccess({ children }) {
 export default function App() {
   return (
     <div className="site-frame">
+      <SiteMetadata />
       <ScrollToTop />
       <div className="site-content">
         <Routes>
