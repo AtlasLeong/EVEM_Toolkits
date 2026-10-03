@@ -36,7 +36,7 @@ test('搜索失败时给出明确提示并保留筛选', async ({ page }) => {
   await expect(page.locator('.resource-disclosure summary')).toContainText('光泽合金')
 })
 
-test('批量操作显眼、选中计数正确、滚动后仍可加入且计算器统一浅色', async ({ page }) => {
+test('批量操作显眼、选中计数正确、滚动后仍可加入且计算器统一深色', async ({ page }) => {
   const add = page.getByRole('button', { name: /加入计算器/ })
   await expect(add).toBeDisabled()
   await expect(add).toHaveCSS('height', '48px')
@@ -47,7 +47,7 @@ test('批量操作显眼、选中计数正确、滚动后仍可加入且计算�
   await expect(page.locator('tbody tr').first()).toHaveCSS('height', '58px')
   await page.locator('tbody .table-check-trigger').first().click()
   await expect(add).toHaveText(/加入计算器 · 1 项/)
-  await expect(add).toHaveCSS('background-color', 'rgb(166, 83, 62)')
+  await expect(add).toHaveCSS('background-color', 'rgb(239, 181, 102)')
   await expect(page.locator('tbody tr').first()).toHaveClass(/is-selected/)
   for (const width of [1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 1080 })
@@ -57,8 +57,8 @@ test('批量操作显眼、选中计数正确、滚动后仍可加入且计算�
   await page.locator('tbody tr').last().scrollIntoViewIfNeeded()
   await expect(add).toBeInViewport()
   await add.click()
-  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
-  await expect(page.locator('.table-inline-input').first()).toHaveCSS('background-color', 'rgb(250, 249, 246)')
+  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(18, 37, 46)')
+  await expect(page.locator('.table-inline-input').first()).toHaveCSS('background-color', 'rgb(11, 23, 29)')
 })
 
 test('结果区计算器入口保持醒目且可直接打开已有内容', async ({ page }) => {
@@ -66,7 +66,7 @@ test('结果区计算器入口保持醒目且可直接打开已有内容', async
   await expect(page.getByRole('button', { name: /打开计算器/ })).toHaveCount(1)
   await expect(open).toBeEnabled()
   await expect(open).toHaveCSS('height', '48px')
-  await expect(open).toHaveCSS('border-top-color', 'rgb(36, 36, 34)')
+  await expect(open).toHaveCSS('border-top-color', 'rgb(239, 181, 102)')
   await open.click()
   await expect(page.locator('.calculator-card')).toBeVisible()
   await page.locator('.calculator-card').getByRole('button', { name: '关闭', exact: true }).click()

@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import { clientIconDevServerPlugin } from './scripts/client-icon-dev-server.mjs'
 
 export default defineConfig(({ command, mode, isPreview }) => ({
+  // Only the application is an entry. Generated Playwright HTML/trace files
+  // are not pages to scan or hot-reload while a local preview is open.
+  optimizeDeps: { entries: ['index.html'] },
+  ...(process.env.PW_TEST_PORT ? { cacheDir: `node_modules/.vite-pw-${process.env.PW_TEST_PORT}` } : {}),
   plugins: [
     react(),
     ...(command === 'serve' && !isPreview && mode !== 'production' ? [clientIconDevServerPlugin()] : []),
@@ -20,7 +24,7 @@ export default defineConfig(({ command, mode, isPreview }) => ({
     fs: {
       deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/output/client-icon-candidates/**'],
     },
-    watch: { ignored: ['**/test-results-tactical/**', '**/output/playwright/**', '**/output/client-icon-candidates/**'] },
+    watch: { ignored: ['**/test-results-tactical/**', '**/test-results*/**', '**/playwright-report/**', '**/output/playwright/**', '**/output/client-icon-candidates/**'] },
   },
   build: {
     rollupOptions: {

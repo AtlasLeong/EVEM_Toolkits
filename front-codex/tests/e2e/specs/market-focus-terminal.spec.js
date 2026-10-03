@@ -74,7 +74,7 @@ test('image failure uses a library fallback without shifting the item row', asyn
   expect(box.height).toBe(40)
 })
 
-test('adjacent quote levels stay visibly precise and toolbar focus contrasts on the warm header', async ({ page }) => {
+test('adjacent quote levels stay visibly precise and toolbar focus contrasts on the unified dark header', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 })
   await openMarket(page)
   const prices = page.locator('.market-price-ladder--buy li strong > [aria-hidden="true"]')
@@ -85,7 +85,15 @@ test('adjacent quote levels stay visibly precise and toolbar focus contrasts on 
   await page.getByRole('button', { name: '刷新市场价格' }).focus()
   await page.keyboard.press('Tab')
   await page.keyboard.press('Shift+Tab')
-  await expect(page.getByRole('button', { name: '刷新市场价格' })).toHaveCSS('outline-color', 'rgb(23, 51, 61)')
+  const focusRing = await page.evaluate(() => {
+    const sample = document.createElement('span')
+    sample.style.color = 'var(--focus-ring)'
+    document.body.append(sample)
+    const color = getComputedStyle(sample).color
+    sample.remove()
+    return color
+  })
+  await expect(page.getByRole('button', { name: '刷新市场价格' })).toHaveCSS('outline-color', focusRing)
 })
 
 test('very large quote levels fit the rail and retain the exact decimal in their accessible label', async ({ page }) => {

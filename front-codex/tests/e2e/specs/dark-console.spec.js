@@ -6,13 +6,13 @@ test.beforeEach(async ({ page }) => {
   await installApiMock(page, async () => json([]))
 })
 
-test('客户导航使用暖白底和可读的炭黑登录按钮', async ({ page }) => {
+test('客户导航使用统一深色底和可读的琥珀登录按钮', async ({ page }) => {
   await page.goto('/infocenter')
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 246)')
-  await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(240, 239, 235)')
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(11, 23, 29)')
+  await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(15, 32, 40)')
   const login = page.getByRole('button', { name: '登录 \\ 注册' })
-  await expect(login).toHaveCSS('background-color', 'rgb(36, 36, 34)')
-  await expect(login).toHaveCSS('color', 'rgb(255, 255, 255)')
+  await expect(login).toHaveCSS('background-color', 'rgb(239, 181, 102)')
+  await expect(login).toHaveCSS('color', 'rgb(21, 37, 43)')
 })
 
 for (const width of [1280, 1440, 1920]) {

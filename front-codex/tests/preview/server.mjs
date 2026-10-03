@@ -13,6 +13,7 @@ const assetRoot = fileURLToPath(
 const sandboxMiddleware = createSandboxMiddleware();
 const preview = await createServer({
   root,
+  cacheDir: "node_modules/.vite-ui-preview",
   define: { "import.meta.env.VITE_API_URL": JSON.stringify("/api") },
   server: { host: "127.0.0.1", port, strictPort: true },
   plugins: [

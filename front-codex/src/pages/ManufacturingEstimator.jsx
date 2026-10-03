@@ -4,7 +4,7 @@ import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshC
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
 import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
-import { formatCompactIsk } from '../utils/manufacturingDisplay'
+import { formatCompactIsk, formatMissingMaterialReason } from '../utils/manufacturingDisplay'
 import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
@@ -45,7 +45,7 @@ function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, exp
     <li className={`manufacturing-tree-node manufacturing-tree-node--${node.kind}${selected ? ' is-selected' : ''}`} role="treeitem" aria-selected={selected} aria-expanded={hasChildren ? expanded : undefined}>
       <div className="manufacturing-tree-row" data-testid="manufacturing-tree-row" data-selected={selected ? 'true' : 'false'}>
         <button type="button" className="manufacturing-tree-select" aria-label={`查看 ${node.name}`} onClick={() => onSelect(node.itemId)}>
-          <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" />
+          <MarketItemIcon itemId={node.itemId} size={34} className="manufacturing-tree-icon" priority={path === '0' || path.split('.').length === 2 ? 'high' : undefined} />
           <span className="manufacturing-tree-copy">
             <strong>{node.name}</strong>
             <small>{formatQuantity(node.quantity)} 件 · {node.kind === 'recipe' && !buying ? `自造 · ${CATEGORY_LABELS[node.category] || '制造'}` : '购买'}</small>
@@ -215,7 +215,7 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
           return <section key={group.category} className="manufacturing-target-group" data-testid={`manufacturing-target-group-${group.category}`} aria-label={group.label}>
           <div className="manufacturing-target-group-heading"><strong>{group.label}</strong><span>{group.count}</span></div>
           <div className="manufacturing-target-options" role="listbox" aria-label={`${group.label}目标`} onKeyDown={handleOptionKeyDown}>
-            {group.recipes.map(recipe => <button role="option" aria-selected={recipe.productId === selectedId} aria-label={recipe.name} key={recipe.productId} type="button" tabIndex={recipe.productId === tabStop.productId ? 0 : -1} onFocus={() => setActiveOptionId(recipe.productId)} onClick={() => chooseTarget(recipe.productId)}><MarketItemIcon itemId={recipe.productId} size={28} /><span className="manufacturing-target-copy"><strong>{recipe.name}</strong><small>产出 {recipe.outputNum} 件</small></span>{recipe.productId === selectedId ? <Check size={15} aria-hidden="true" /> : null}</button>)}
+            {group.recipes.map(recipe => <button role="option" aria-selected={recipe.productId === selectedId} aria-label={recipe.name} key={recipe.productId} type="button" tabIndex={recipe.productId === tabStop.productId ? 0 : -1} onFocus={() => setActiveOptionId(recipe.productId)} onClick={() => chooseTarget(recipe.productId)}><MarketItemIcon itemId={recipe.productId} size={28} priority={recipe.productId === selectedId ? 'high' : undefined} /><span className="manufacturing-target-copy"><strong>{recipe.name}</strong><small>产出 {recipe.outputNum} 件</small></span>{recipe.productId === selectedId ? <Check size={15} aria-hidden="true" /> : null}</button>)}
           </div>
         </section>
         }) : <p className="manufacturing-empty">没有匹配目标</p>}
@@ -226,7 +226,7 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
   return <>
     <div ref={pickerRef} className={`manufacturing-target-picker${open ? ' is-open' : ''}`} aria-label="制造目标">
       <div className="manufacturing-target-label"><h3>制造目标</h3><button type="button" className="manufacturing-change-target" aria-label="切换制造目标" aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}>切换目标</button></div>
-      {selected ? <button type="button" className="manufacturing-selected-target" aria-label={`当前制造目标：${selected.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}><MarketItemIcon itemId={selected.productId} size={40} /><span className="manufacturing-target-copy"><strong>{selected.name}</strong><small>{CATEGORY_LABELS[selected.category]}配方 · 产出 {selected.outputNum} 件</small></span><ChevronDown size={15} aria-hidden="true" /></button> : null}
+      {selected ? <button type="button" className="manufacturing-selected-target" aria-label={`当前制造目标：${selected.name}`} aria-haspopup="dialog" aria-expanded={open} onClick={openPicker}><MarketItemIcon itemId={selected.productId} size={40} priority="high" /><span className="manufacturing-target-copy"><strong>{selected.name}</strong><small>{CATEGORY_LABELS[selected.category]}配方 · 产出 {selected.outputNum} 件</small></span><ChevronDown size={15} aria-hidden="true" /></button> : null}
     </div>
     {targetDialog}
   </>
@@ -234,10 +234,6 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
 
 function SettingField({ label, children }) {
   return <label className="manufacturing-setting"><span>{label}</span>{children}</label>
-}
-
-function LevelControl({ label, value, onChange, disabled = false, options = ['3', '4', '5'] }) {
-  return <div className="manufacturing-level-field"><span>{label}</span><div className="manufacturing-level-control" role="group" aria-label={label}>{options.map(option => <button key={option} type="button" disabled={disabled} title={disabled ? '技能预设暂未接入，请填写游戏内最终材料效率' : undefined} className={String(value) === option ? 'is-active' : ''} aria-pressed={String(value) === option} onClick={() => onChange(option)}>{option}</button>)}</div></div>
 }
 
 function EfficiencyRateField({ value, onChange }) {
@@ -250,7 +246,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
   const selectedPurchase = selectedNode?.mode === 'buy'
   return (
     <aside className="manufacturing-summary" data-testid="manufacturing-cost-rail">
-       <div className="manufacturing-summary-heading"><div><span className="eyebrow">成本摘要</span><h2>成本概览</h2></div><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{complete ? '可计算' : '待补报价'}</span></div>
+       <div className="manufacturing-summary-heading"><h2>成本概览</h2><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{complete ? '可计算' : '待补报价'}</span></div>
       <div className="manufacturing-total-card">
         <span>{complete ? '总成本' : '已覆盖小计'}</span>
         <strong>{formatIsk(complete ? summary.total : summary.coveredSubtotal)}</strong>
@@ -264,7 +260,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
       </dl>
       <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>材料效率 {summary.materialEfficiencyPercent}% 已应用</span></div>
       <p className="manufacturing-price-help">材料按客户端逐批取整；制造费用与时间暂按基础配方估算。</p>
-      {summary.missing.length > 0 ? <div className="manufacturing-missing" role="status"><strong>尚未计入</strong><span>{summary.missing.slice(0, 3).map(entry => `${entry.name}（${entry.reason}）`).join('、')}{summary.missing.length > 3 ? ` 等 ${summary.missing.length} 项` : ''}</span></div> : null}
+      {summary.missing.length > 0 ? <div className="manufacturing-missing" role="status"><strong>尚未计入</strong><span>{summary.missing.slice(0, 3).map(entry => `${entry.name}（${formatMissingMaterialReason(entry.reason)}）`).join('、')}{summary.missing.length > 3 ? ` 等 ${summary.missing.length} 项` : ''}</span></div> : null}
       <section className="manufacturing-price-editor" aria-label="方案价格编辑">
         <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">节点报价</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedPurchase ? <span className="manufacturing-route-pill is-buy">购买</span> : selectedNode ? <span className="manufacturing-route-pill is-make">自造</span> : null}</div>
         {selectedPurchase ? <>
@@ -427,18 +423,13 @@ export default function ManufacturingEstimatorPage() {
       </header>
       <section className="manufacturing-workspace">
         <aside className="manufacturing-controls" data-testid="manufacturing-config-rail">
-          <div className="manufacturing-panel-heading"><div><span className="eyebrow">方案配置</span><h2>方案设置</h2></div><span className="manufacturing-save-state">本地方案</span></div>
+          <div className="manufacturing-panel-heading"><h2>方案设置</h2><span className="manufacturing-save-state">本地方案</span></div>
           <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} onSelect={handleTargetSelect} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input data-testid="manufacturing-quantity-value" aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
           <fieldset className="manufacturing-settings" aria-label="技能与效率">
             <legend>技能与效率</legend>
             <EfficiencyRateField value={settings.materialEfficiencyPercent} onChange={value => setSettings(current => ({ ...current, materialEfficiencyPercent: value }))} />
             <p className="manufacturing-price-help">填写游戏中含技能、设施加成的最终值；初始 150%，最低 75%。当前统一用于所有自造层级。</p>
-            <details className="manufacturing-pending-presets"><summary>技能 / 建筑预设 · 待接入</summary>
-              <div className="manufacturing-level-grid"><LevelControl disabled label="制造" value={settings.manufacturingSkill} /><LevelControl disabled label="研究" value={settings.researchSkill} /><LevelControl disabled label="效率技能" value={settings.efficiencySkill} /></div>
-              <label className="manufacturing-building-field"><span>生产建筑</span><select disabled aria-label="生产建筑" value={settings.building}><option>标准工厂</option><option>高级工厂</option><option>旗舰工业设施</option></select></label>
-              <p className="manufacturing-price-help">分类技能与建筑自动换算暂未核实，以上预设不参与计算。</p>
-            </details>
           </fieldset>
         </aside>
         <section className="manufacturing-tree-panel" data-testid="manufacturing-route-workspace" aria-label="制造链路">
@@ -448,7 +439,7 @@ export default function ManufacturingEstimatorPage() {
           <p className="manufacturing-tree-hint">点击节点查看价格；将中间产物切换为购买后，其下游制造会从本方案中移除。</p>
           <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} onModeChange={onModeChange} selectedId={selectedNodeId} onSelect={setSelectedNodeId} path="0" expandedNodes={expandedNodes} onToggleExpanded={toggleExpanded} /></ul>
           {quoteError ? <p className="manufacturing-inline-error" role="status">{quoteError}</p> : null}
-          <div className="manufacturing-route-footer"><span>制造时间</span><strong>{Math.ceil((summary.manufacturingTime || 0) / 3600)} 小时</strong><span>购买项</span><strong>{summary.purchases.length} 类</strong></div>
+          <div className="manufacturing-route-footer"><span>制造时间</span><strong>{Math.ceil((summary.manufacturingTime || 0) / 3600)} 小时</strong><span>购买项</span><strong>{purchaseIds.length} 类</strong></div>
         </section>
         <SummaryPanel summary={summary} selectedNode={selectedNode} quote={selectedQuote} manualPrice={selectedNodeId ? purchasePrices[selectedNodeId] || '' : ''} onManualPrice={updateManualPrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} />
       </section>

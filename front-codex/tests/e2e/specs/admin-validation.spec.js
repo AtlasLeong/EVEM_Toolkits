@@ -1,4 +1,4 @@
-﻿import { test, expect } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 import { installApiMock, json, TINY_ICON } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
@@ -72,13 +72,30 @@ test('管理员审核举报缺少必填项时显示字段提示', async ({ page 
   await page.goto('/fraudadmin')
   await page.locator('.admin-tab-row .tab-btn').nth(2).click()
   await page.locator('.data-table tbody .ghost-btn').first().click()
+  await expect(page.locator('.admin-review-submit')).toHaveClass(/primary-btn/)
   await page.locator('.admin-review-submit').hover()
-  await expect(page.locator('.admin-review-submit')).toHaveCSS('background-color', 'rgb(40, 77, 55)')
+  const actionHover = await page.evaluate(() => {
+    const sample = document.createElement('span')
+    sample.style.color = 'var(--action-hover)'
+    document.body.append(sample)
+    const color = getComputedStyle(sample).color
+    sample.remove()
+    return color
+  })
+  await expect(page.locator('.admin-review-submit')).toHaveCSS('background-color', actionHover)
   await page.locator('.admin-review-submit').click()
 
   await expect(page.getByText('审核备注为必填字段')).toBeVisible()
   await expect(page.getByText('请选择审核结果')).toBeVisible()
   await expect(page.locator('.admin-report-modal')).toBeVisible()
-  await expect(page.locator('.admin-report-modal .text-input.is-invalid').first()).toHaveCSS('border-top-color', 'rgb(161, 55, 55)')
+  const dangerColor = await page.evaluate(() => {
+    const sample = document.createElement('span')
+    sample.style.color = 'var(--danger)'
+    document.body.append(sample)
+    const color = getComputedStyle(sample).color
+    sample.remove()
+    return color
+  })
+  await expect(page.locator('.admin-report-modal .text-input.is-invalid').first()).toHaveCSS('border-top-color', dangerColor)
   expect(reviewSubmitted).toBeFalsy()
 })

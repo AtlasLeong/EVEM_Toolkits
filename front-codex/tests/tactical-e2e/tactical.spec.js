@@ -1695,7 +1695,20 @@ test('system counts respect side filter and cannot be adopted as a fleet',async(
   await expect(page.locator('.tac-intel-label.has-count')).toHaveCount(0);
   await page.getByRole('button',{name:'全部阵营',exact:true}).click();
   await expect(page.locator('.tac-intel-label.has-count')).toHaveCount(1);
+  // The HTTP fallback polls every five seconds. Synchronize with the restored
+  // reports rather than spending the default five-second assertion deadline
+  // waiting for the poll itself (plus network and rendering time).
+  const restoredSnapshot = page.waitForResponse(async response => {
+    if (new URL(response.url()).pathname !== '/api/tactical/organizations/1/snapshot/' ||
+        response.request().method() !== 'GET' || response.status() !== 200) return false;
+    const data = await response.json();
+    return Array.isArray(data.reports) && data.reports.length === state.snapshot.reports.length &&
+      state.snapshot.reports.every(expected => data.reports.some(report =>
+        report.id === expected.id && report.report_kind === expected.report_kind &&
+        report.people === expected.people && report.status === expected.status));
+  }, { timeout: 15000 });
   state.setSnapshot(state.snapshot);
+  await restoredSnapshot;
   await expect(page.locator('.tac-intel-label.has-count')).toHaveCount(0);
   await expect(page.locator('.tac-map-force')).toHaveCount(1);
 });

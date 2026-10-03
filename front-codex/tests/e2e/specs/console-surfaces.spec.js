@@ -3,7 +3,7 @@ import { installApiMock, json } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
 for (const route of ['/fraudlist', '/planetary', '/starmap', '/feedback', '/infocenter', '/usersetting', '/fraudadmin', '/licenseadmin', '/login', '/fraudlogin']) {
-  test(`${route} 使用统一暖白表面与可读文字`, async ({ page }) => {
+  test(`${route} 使用统一深色表面与可读文字`, async ({ page }) => {
     const runtimeErrors = []
     page.on('pageerror', error => runtimeErrors.push(error.message))
     page.on('console', message => { if (message.type() === 'error') runtimeErrors.push(message.text()) })
@@ -14,12 +14,12 @@ for (const route of ['/fraudlist', '/planetary', '/starmap', '/feedback', '/info
       return json([])
     })
     await page.goto(route)
-    await expect(page.locator('.panel, .login-card').first()).toHaveCSS('background-color', route === '/planetary' ? 'rgba(0, 0, 0, 0)' : 'rgb(255, 255, 255)')
-    await expect(page.locator('body')).toHaveCSS('color', 'rgb(36, 36, 34)')
+    await expect(page.locator('.panel, .login-card').first()).toHaveCSS('background-color', route === '/starmap' ? 'rgb(11, 23, 29)' : 'rgb(18, 37, 46)')
+    await expect(page.locator('body')).toHaveCSS('color', 'rgb(232, 240, 241)')
     const fields = page.locator('.text-input:visible, .search-box:visible, .auth-input-shell:visible')
     if (await fields.count()) {
       const color = await fields.first().evaluate(el => getComputedStyle(el).backgroundColor)
-      expect(['rgb(250, 249, 246)', 'rgba(0, 0, 0, 0)']).toContain(color)
+      expect(['rgb(11, 23, 29)', 'rgba(0, 0, 0, 0)']).toContain(color)
     }
     expect(runtimeErrors).toEqual([])
   })
@@ -29,8 +29,8 @@ test('主操作对比度与键盘焦点、减少动画偏好', async ({ page }) 
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('/login')
   const action = page.locator('form .primary-btn')
-  await expect(action).toHaveCSS('background-color', 'rgb(36, 36, 34)')
-  await expect(action).toHaveCSS('color', 'rgb(255, 255, 255)')
+  await expect(action).toHaveCSS('background-color', 'rgb(239, 181, 102)')
+  await expect(action).toHaveCSS('color', 'rgb(21, 37, 43)')
   await action.focus()
   await expect(action).toHaveCSS('outline-style', 'solid')
   await expect(action).toHaveCSS('transition-duration', '0s')

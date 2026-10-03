@@ -167,7 +167,7 @@ export default function MarketPricesPage() {
 
   return <div className="page-stack market-page market-page--immersive market-terminal market-focus">
     <header className="market-terminal-header">
-      <div className="market-terminal-heading"><Activity size={18} aria-hidden="true" /><h1>市场价格</h1><ChevronRight className="market-header-divider" size={15} aria-hidden="true" /><span className="market-header-category">{selected?.category || '行情工作台'}</span><span className="market-header-scope" data-testid="market-scope">价格范围：{marketScopeLabel(marketScope)}</span></div>
+      <div className="market-terminal-brand"><span className="eyebrow">EVE ECHOES / MARKET INTELLIGENCE</span><div className="market-terminal-heading"><h1>市场价格</h1><ChevronRight className="market-header-divider" size={15} aria-hidden="true" /><span className="market-header-category">{selected?.category || '行情工作台'}</span><span className="market-header-scope" data-testid="market-scope">价格范围：{marketScopeLabel(marketScope)}</span></div></div>
       <div className="market-header-actions">{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>
     </header>
 

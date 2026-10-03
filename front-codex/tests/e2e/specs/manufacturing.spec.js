@@ -54,9 +54,8 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await efficiencyRate.fill('112.11')
   await expect(efficiencyRate).toHaveValue('112.11')
   await expect(tritanium).toContainText('43,313 件')
-  await page.getByText('技能 / 建筑预设 · 待接入', { exact: true }).click()
-  await expect(page.getByRole('group', { name: '制造', exact: true }).getByRole('button').first()).toBeDisabled()
-  await page.getByText('技能 / 建筑预设 · 待接入', { exact: true }).click()
+  await expect(page.getByText('技能 / 建筑预设 · 待接入', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: '生产建筑' })).toHaveCount(0)
 
   await page.getByRole('button', { name: '切换制造目标' }).click()
   let targetDialog = page.getByRole('dialog', { name: '选择制造目标' })
@@ -206,5 +205,101 @@ for (const viewport of [{ width: 1280, height: 600 }, { width: 390, height: 700 
     await expect(dialog).toHaveCount(0)
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width)
+  })
+}
+
+test('manufacturing route choices are separated console buttons without nested borders', async ({ page }) => {
+  await installApiMock(page, () => undefined)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('/manufacturing')
+  const group = page.getByRole('group', { name: '生产方式 狮鹫级', exact: true })
+  const make = group.getByRole('button', { name: '自造', exact: true })
+  const buy = group.getByRole('button', { name: '购买', exact: true })
+  await expect(group).toBeVisible()
+  const geometry = async () => Promise.all([group, make, buy].map(control => control.boundingBox()))
+  const before = await geometry()
+  expect(before[2].x - before[1].x - before[1].width).toBeCloseTo(6, 1)
+  await expect(group).toHaveCSS('border-top-width', '0px')
+  await expect(group).toHaveCSS('overflow', 'visible')
+  for (const button of [make, buy]) {
+    await expect(button).toHaveCSS('border-radius', '8px')
+    await expect(button).toHaveCSS('border-left-color', button === make ? 'rgb(239, 181, 102)' : 'rgb(95, 126, 137)')
+    await expect(button).toHaveCSS('box-shadow', 'none')
+    await expect(button).toHaveCSS('transform', 'none')
+  }
+  await buy.click()
+  await expect(buy).toHaveAttribute('aria-pressed', 'true')
+  await expect(buy).toHaveCSS('background-color', 'rgb(239, 181, 102)')
+  const after = await geometry()
+  for (let index = 0; index < before.length; index += 1) {
+    expect(after[index].x).toBeCloseTo(before[index].x, 1)
+    expect(after[index].width).toBeCloseTo(before[index].width, 1)
+  }
+  await make.click()
+  await expect(make).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('manufacturing counts unpriced purchases and hides disconnected preset controls', async ({ page }) => {
+  await installApiMock(page, () => undefined)
+  await page.goto('/manufacturing')
+  await expect(page.locator('.manufacturing-total-card')).toContainText('缺少 8 项购买价格')
+  await expect(page.locator('.manufacturing-route-footer')).toContainText('购买项8 类')
+  await expect(page.locator('.manufacturing-pending-presets')).toHaveCount(0)
+  await expect(page.getByText('方案配置', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('成本摘要', { exact: true })).toHaveCount(0)
+  await expect(page.getByRole('spinbutton', { name: '制造效率百分比' })).toHaveValue('150')
+  await expect(page.locator('.manufacturing-price-help')).toContainText(['填写游戏中含技能、设施加成的最终值；初始 150%，最低 75%。当前统一用于所有自造层级。', '材料按客户端逐批取整；制造费用与时间暂按基础配方估算。', '点击制造链中的节点，可查看市场参考价并设置本方案的购买单价。'])
+})
+
+for (const width of [1440, 390]) {
+  test(`manufacturing picker and selected-node gutters keep horizontal geometry stable at ${width}px`, async ({ page }) => {
+    await installApiMock(page, () => undefined)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/manufacturing')
+    await expect(page.getByTestId('manufacturing-config-rail')).toBeVisible()
+    // A real scrolling document is required to catch overflow-lock expansion;
+    // tall mobile pages provide it naturally, and this reproduces it on desktop.
+    await page.addStyleTag({ content: 'body { min-height: calc(100vh + 40px); }' })
+    await expect(page.locator('html')).toHaveCSS('scrollbar-gutter', 'stable')
+    const layout = () => page.evaluate(() => ({
+      rootWidth: document.documentElement.clientWidth,
+      bodyWidth: document.body.getBoundingClientRect().width,
+      cards: ['.manufacturing-workspace', '.manufacturing-controls', '.manufacturing-tree-panel', '.manufacturing-summary'].map(selector => {
+        const node = document.querySelector(selector)
+        const rect = node.getBoundingClientRect()
+        return { x: rect.x, width: rect.width, clientWidth: node.clientWidth }
+      }),
+    }))
+    const stable = (before, after) => {
+      // clientWidth reflects whether a classic scrollbar is currently painted;
+      // the reserved layout area must stay constant even when it is hidden.
+      expect(after.bodyWidth).toBeCloseTo(before.bodyWidth, 1)
+      for (let index = 0; index < before.cards.length; index += 1) {
+        expect(after.cards[index].x).toBeCloseTo(before.cards[index].x, 1)
+        expect(after.cards[index].width).toBeCloseTo(before.cards[index].width, 1)
+        expect(after.cards[index].clientWidth).toBe(before.cards[index].clientWidth)
+      }
+    }
+    const before = await layout()
+    if (width < 640) {
+      expect(before.rootWidth).toBe(width)
+      await expect(page.locator('body')).toHaveJSProperty('scrollWidth', width)
+      const choices = await page.getByRole('group', { name: '生产方式 狮鹫级', exact: true }).boundingBox()
+      const expand = await page.getByRole('button', { name: '收起 狮鹫级层级', exact: true }).boundingBox()
+      expect(expand.y + expand.height / 2).toBeCloseTo(choices.y + choices.height / 2, 1)
+    }
+    await page.getByRole('button', { name: '切换制造目标' }).click()
+    await expect(page.getByRole('dialog', { name: '选择制造目标' })).toBeVisible()
+    stable(before, await layout())
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog', { name: '选择制造目标' })).toHaveCount(0)
+    stable(before, await layout())
+    await page.getByRole('button', { name: '查看 光泽合金', exact: true }).click()
+    await expect(page.getByRole('textbox', { name: '方案手填单价' })).toBeVisible()
+    stable(before, await layout())
+    const selected = page.locator('[data-testid="manufacturing-tree-row"][data-selected="true"]')
+    expect(await selected.evaluate(node => getComputedStyle(node).boxShadow.endsWith('inset'))).toBeTruthy()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
   })
 }
