@@ -1,6 +1,6 @@
 """Existing releases must keep writing during the additive migration window."""
 
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.db.migrations.loader import MigrationLoader
 from django.test import TestCase
 
@@ -8,6 +8,13 @@ from Market.models import CollectionRun, MarketConfig
 
 
 class PacedBatchMigrationCompatibilityTests(TestCase):
+    def test_database_rejects_capacity_outside_supported_choices(self):
+        config = MarketConfig.objects.create(max_items_per_run=80)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            MarketConfig.objects.filter(pk=config.pk).update(max_items_per_run=60)
+        config.refresh_from_db()
+        self.assertEqual(config.max_items_per_run, 80)
+
     def test_previous_release_can_insert_runs_and_update_existing_config(self):
         config = MarketConfig.objects.create(max_items_per_run=80)
         previous_apps = MigrationLoader(connection).project_state([

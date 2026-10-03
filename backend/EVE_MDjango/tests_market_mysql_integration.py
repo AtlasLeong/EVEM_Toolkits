@@ -146,8 +146,12 @@ class MarketMysqlIntegrationTests(unittest.TestCase):
         self.assertIsNone(run.batch_fallback_reason)
 
     def test_mysql_rejects_unsupported_batch_capacity(self):
-        with self.assertRaises(IntegrityError):
-            MarketConfig.objects.create(max_items_per_run=60)
+        config = MarketConfig.objects.create(max_items_per_run=80)
+        with self.assertRaises(IntegrityError) as failure:
+            MarketConfig.objects.filter(pk=config.pk).update(max_items_per_run=60)
+        self.assertIn('market_config_batch_bounds', str(failure.exception))
+        config.refresh_from_db()
+        self.assertEqual(config.max_items_per_run, 80)
 
     def test_second_mysql_connection_cannot_claim_a_new_active_lease(self):
         MarketConfig.objects.create(next_due_at_ms=0)
