@@ -3,6 +3,8 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.db import connection
+from django.db.migrations.loader import MigrationLoader
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -366,19 +368,30 @@ class MarketAdminAPITests(TestCase):
         self.allow('collectionrun')
         now_ms = 1_700_000_000_000
         config = MarketConfig.objects.create()
+        previous_apps = MigrationLoader(connection).project_state([('Market', '0009_paced_batches')]).apps
+        PreviousRun = previous_apps.get_model('Market', 'CollectionRun')
         MarketItem.objects.bulk_create([
             MarketItem(id=item_id, name=f'Synthetic item {item_id}')
             for item_id in range(1, 86)
         ])
-        for capacity, fallback_reason, expected_limit in ((80, '', 80), (80, 'runtime_budget', 40), (40, '', 40)):
-            with self.subTest(capacity=capacity, fallback_reason=fallback_reason):
+        cases = [
+            (False, 80, '', 80), (False, 80, 'runtime_budget', 40), (False, 40, '', 40),
+            (True, 80, '', 80), (True, 80, 'runtime_budget', 40), (True, 40, '', 40),
+        ]
+        for previous_release, capacity, fallback_reason, expected_limit in cases:
+            with self.subTest(previous_release=previous_release, capacity=capacity, fallback_reason=fallback_reason):
                 config.max_items_per_run = capacity
                 config.batch_fallback_reason = fallback_reason
                 config.batch_fallback_until_ms = now_ms + 60_000 if fallback_reason else None
                 config.save(update_fields=['max_items_per_run', 'batch_fallback_reason', 'batch_fallback_until_ms'])
-                response = self.client.post('/api/market/admin/run/', {}, format='json')
-                self.assertEqual(response.status_code, 202)
-                run_id = response.json()['id']
+                if previous_release:
+                    queued_run = PreviousRun.objects.create(trigger='manual', requested_by_id=self.user.pk)
+                    self.assertEqual(queued_run.item_limit, 40)
+                    run_id = queued_run.pk
+                else:
+                    response = self.client.post('/api/market/admin/run/', {}, format='json')
+                    self.assertEqual(response.status_code, 202)
+                    run_id = response.json()['id']
                 session = FakeSession({item_id: Quote() for item_id in range(1, 86)})
 
                 def api_row():
@@ -391,6 +404,8 @@ class MarketAdminAPITests(TestCase):
                     self.assertEqual(row['status'], 'running')
                     self.assertIsNone(row['item_limit'])
                     self.assertIsNone(row['expected_count'])
+                    self.assertEqual(CollectionRun.objects.get(pk=run_id).item_limit,
+                                     40 if previous_release else None)
                     _save_plan(run, items, plan_at_ms)
 
                 def load_bundle():
@@ -401,6 +416,10 @@ class MarketAdminAPITests(TestCase):
                     self.assertEqual(row['batch_fallback_reason'], fallback_reason)
                     return {'fixture': True}
 
+                queued = api_row()
+                self.assertEqual(queued['status'], 'queued')
+                self.assertIsNone(queued['item_limit'])
+                self.assertIsNone(queued['expected_count'])
                 with patch('Market.worker._save_plan', side_effect=save_plan), patch(
                     'socket.create_connection', side_effect=AssertionError('No network in API capacity tests')
                 ):
@@ -417,6 +436,34 @@ class MarketAdminAPITests(TestCase):
                 self.assertEqual((row['item_limit'], row['expected_count']), (expected_limit, expected_limit))
                 self.assertEqual(row['success_count'], expected_limit)
                 self.assertEqual(len(session.queries), expected_limit)
+
+    def test_run_api_hides_only_unplanned_active_limits_and_preserves_terminal_history(self):
+        cases = [
+            ('queued', 40, None, None), ('running', 80, None, None),
+            ('queued', 40, 40, 40), ('queued', 80, 80, 80),
+            ('running', 40, 40, 40), ('running', 80, 80, 80),
+            ('succeeded', 40, None, 40), ('succeeded', 80, None, 80),
+            ('failed', 40, None, 40), ('failed', 80, None, 80),
+            ('partial', 40, 40, 40), ('partial', 80, 80, 80),
+        ]
+        runs = []
+        for status, stored_limit, expected_count, disclosed_limit in cases:
+            run = CollectionRun.objects.create(
+                trigger='manual', status=status, item_limit=stored_limit, expected_count=expected_count,
+            )
+            runs.append((run, disclosed_limit))
+
+        response = self.client.get('/api/market/admin/runs/')
+
+        self.assertEqual(response.status_code, 200)
+        rows = {row['id']: row for row in response.json()['results']}
+        for run, disclosed_limit in runs:
+            with self.subTest(status=run.status, item_limit=run.item_limit, expected_count=run.expected_count):
+                self.assertEqual(rows[run.pk]['item_limit'], disclosed_limit)
+                self.assertEqual(rows[run.pk]['expected_count'], run.expected_count)
+                stored_limit = run.item_limit
+                run.refresh_from_db()
+                self.assertEqual(run.item_limit, stored_limit)
 
     def test_manual_run_rejects_unexpected_request_fields(self):
         self.allow('collectionrun')

@@ -3,6 +3,14 @@
 from django.db import migrations, models
 
 
+def clear_unplanned_queued_limits(apps, schema_editor):
+    CollectionRun = apps.get_model('Market', 'CollectionRun')
+    CollectionRun.objects.using(schema_editor.connection.alias).filter(
+        status='queued', started_at_ms__isnull=True, expected_count__isnull=True,
+        item_limit__isnull=False,
+    ).update(item_limit=None)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -15,4 +23,5 @@ class Migration(migrations.Migration):
             name='item_limit',
             field=models.PositiveSmallIntegerField(blank=True, null=True),
         ),
+        migrations.RunPython(clear_unplanned_queued_limits, migrations.RunPython.noop),
     ]

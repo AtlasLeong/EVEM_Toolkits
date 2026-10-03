@@ -1,8 +1,9 @@
 """Existing releases must keep writing during the additive migration window."""
 
 from django.db import IntegrityError, connection, transaction
+from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.loader import MigrationLoader
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 
 from Market.models import CollectionRun, MarketConfig
 
@@ -49,3 +50,67 @@ class PacedBatchMigrationCompatibilityTests(TestCase):
         new_run = CollectionRun.objects.create(trigger='manual')
         self.assertIsNone(new_run.item_limit)
         self.assertIsNone(new_run.expected_count)
+
+
+class UnplannedBatchMigrationTests(TransactionTestCase):
+    migrate_from = ('Market', '0009_paced_batches')
+    migrate_to = ('Market', '0010_unplanned_item_limit_null')
+
+    def setUp(self):
+        super().setUp()
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        self.previous_apps = executor.loader.project_state([self.migrate_from]).apps
+        self.addCleanup(self.restore_current_schema)
+
+    def restore_current_schema(self):
+        MigrationExecutor(connection).migrate([self.migrate_to])
+
+    def test_existing_unstarted_unplanned_queue_is_cleared_without_changing_other_runs(self):
+        PreviousRun = self.previous_apps.get_model('Market', 'CollectionRun')
+        cases = [
+            ({'status': 'queued'}, None),
+            ({'status': 'queued', 'item_limit': 80}, None),
+            ({'status': 'queued', 'item_limit': None}, None),
+            ({'status': 'queued', 'started_at_ms': 1000}, 40),
+            ({'status': 'queued', 'started_at_ms': 1000, 'item_limit': 80}, 80),
+            ({'status': 'queued', 'expected_count': 40}, 40),
+            ({'status': 'queued', 'expected_count': 80, 'item_limit': 80}, 80),
+            ({'status': 'running', 'started_at_ms': 1000}, 40),
+            ({'status': 'running', 'started_at_ms': 1000, 'item_limit': 80}, 80),
+            ({'status': 'running', 'expected_count': 40}, 40),
+            ({'status': 'running', 'expected_count': 80, 'item_limit': 80}, 80),
+            ({'status': 'succeeded', 'finished_at_ms': 2000, 'success_count': 40}, 40),
+            ({'status': 'succeeded', 'finished_at_ms': 2000, 'item_limit': 80,
+              'expected_count': 80, 'success_count': 80}, 80),
+            ({'status': 'failed', 'finished_at_ms': 2000, 'item_limit': 80,
+              'failure_count': 1, 'error_code': 'item_error'}, 80),
+            ({'status': 'partial', 'finished_at_ms': 2000, 'expected_count': 40,
+              'success_count': 3, 'failure_count': 1}, 40),
+        ]
+        expected_limits = {}
+        for fields, expected_limit in cases:
+            run = PreviousRun.objects.create(trigger='manual', created_at_ms=500, **fields)
+            expected_limits[run.pk] = expected_limit
+        self.assertEqual(PreviousRun.objects.order_by('id').first().item_limit, 40)
+        expected_rows = list(PreviousRun.objects.order_by('id').values())
+        for row in expected_rows:
+            row['item_limit'] = expected_limits[row['id']]
+
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        current_apps = executor.loader.project_state([self.migrate_to]).apps
+        CurrentRun = current_apps.get_model('Market', 'CollectionRun')
+
+        self.assertEqual(list(CurrentRun.objects.order_by('id').values()), expected_rows)
+        new_run = CurrentRun.objects.create(trigger='manual')
+        self.assertIsNone(new_run.item_limit)
+        self.assertIsNone(new_run.expected_count)
+        rows_before_reverse = list(CurrentRun.objects.order_by('id').values())
+
+        # Reversing the code default must not manufacture a capacity plan.
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_from])
+        reversed_apps = executor.loader.project_state([self.migrate_from]).apps
+        ReversedRun = reversed_apps.get_model('Market', 'CollectionRun')
+        self.assertEqual(list(ReversedRun.objects.order_by('id').values()), rows_before_reverse)
