@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, AlertTriangle, Copy, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getKillReport, getKillboardStatus, listKillReports } from '../services/apiKillboard'
-import { copyKillboardTag, corporationLabel, equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
+import { copyKillboardTag, corporationLabel, equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, killboardSystemLabel, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
 import KillParticipantRow from '../components/killboard/KillParticipantRow'
 import GameItemImage from '../components/GameItemImage'
 import '../styles/killboard.css'
@@ -64,9 +64,10 @@ function itemHasDrop(row = {}) {
 function ReportRow({ report, active, onSelect }) {
   const security = killboardSecurityMeta(report)
   const shipName = formatKillboardName(report.ship_name) || '未知舰船'
-  return <button type="button" className={`kb-report-row${active ? ' is-active' : ''}`} onClick={() => onSelect(report.kill_id)} aria-current={active ? 'true' : undefined} aria-label={`${shipName}，${report.system_name || '未知星系'}，${security.zoneLabel} ${security.valueLabel}`}>
+  const systemName = killboardSystemLabel(report)
+  return <button type="button" className={`kb-report-row${active ? ' is-active' : ''}`} onClick={() => onSelect(report.kill_id)} aria-current={active ? 'true' : undefined} aria-label={`${shipName}，${systemName}，${security.zoneLabel} ${security.valueLabel}`}>
     <span className="kb-report-row-top"><strong>{shipName}</strong><span className="kb-status-chip">{classLabel(report)}</span></span>
-    <span className="kb-report-row-meta"><span>{report.victim_name || '未知目标'} · {report.system_name || '未知星系'}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></span>
+    <span className="kb-report-row-meta"><span>{report.victim_name || '未知目标'} · {systemName}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></span>
     <span className="kb-report-row-bottom"><time>{formatKillboardTime(report.kill_time_display, report.kill_time_raw, report.source)}</time><b title={exactIsk(report.isk_lost)}>{formatKillIsk(report.isk_lost)} ISK</b></span>
   </button>
 }
@@ -151,6 +152,7 @@ export default function KillboardPage() {
   const revoked = useRef(false)
   const requests = useRef(new Set())
   const activeRequests = useRef(new Set())
+  const copyRequest = useRef(0)
 
   function revokeAccess() {
     // Latch synchronously: already queued successes must not restore private data.
@@ -181,7 +183,7 @@ export default function KillboardPage() {
       setReports(data.results || [])
       setTotal(data.count || 0)
       setError('')
-      if (!selectedId && data.results?.[0]) setSelectedId(data.results[0].kill_id)
+      if (data.results?.[0]) setSelectedId(currentId => currentId || String(data.results[0].kill_id))
     }).catch(err => {
       if (!alive || revoked.current || err.name === 'AbortError') return
       if (err.status === 403) revokeAccess()
@@ -214,6 +216,7 @@ export default function KillboardPage() {
     activeRequests.current.add(controller)
     let alive = true
     setDetailLoading(true)
+    setError('')
     getKillReport(selectedId, { signal: controller.signal }).then(data => {
       if (alive && !revoked.current) setSelected(data)
     }).catch(err => {
@@ -244,8 +247,14 @@ export default function KillboardPage() {
     if (!revoked.current && killId && killId !== selectedId) setSelectedId(killId)
   }, [killId])
 
-  const activeReport = useMemo(() => reports.find(row => String(row.kill_id) === String(selectedId)) || null, [reports, selectedId])
-  const current = forbidden ? null : selectedReport(selectedId, selected, activeReport)
+  const routeSelectedId = killId || selectedId
+  useEffect(() => {
+    copyRequest.current += 1
+    setCopyState('')
+    return () => { copyRequest.current += 1 }
+  }, [routeSelectedId])
+  const activeReport = useMemo(() => reports.find(row => String(row.kill_id) === String(routeSelectedId)) || null, [reports, routeSelectedId])
+  const current = forbidden ? null : selectedReport(routeSelectedId, selected, activeReport)
   useEffect(() => {
     const element = contentRef.current
     if (!element || typeof ResizeObserver === 'undefined') return undefined
@@ -273,7 +282,9 @@ export default function KillboardPage() {
 
   async function copyCurrentKillTag() {
     if (revoked.current || !current?.kill_id) return
+    const requestId = ++copyRequest.current
     const copied = await copyKillboardTag(current.kill_id)
+    if (revoked.current || requestId !== copyRequest.current) return
     setCopyState(copied ? '已复制' : '复制失败')
   }
 
@@ -297,14 +308,14 @@ export default function KillboardPage() {
           <section className="kb-hero kb-panel">
             <VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} />
             <div className="kb-hero-copy">
-              <span className="kb-eyebrow">报告 {current.kill_id}</span><h2>{formatKillboardName(current.ship_name) || '舰船'}</h2>
+              <span className="kb-eyebrow kb-report-id">报告 {current.kill_id}</span><h2>{formatKillboardName(current.ship_name) || '舰船'}</h2>
               <span className="kb-hull-class">{classLabel(current)}</span>
               <div className="kb-hero-victim">
                 {current.victim_name ? <strong className="kb-victim-name">{current.victim_name}</strong> : null}
                 {corporationLabel(current.victim_corporation_name, current.victim_corporation_ticker) ? <div className="kb-hero-corporation"><span>军团</span><strong>{corporationLabel(current.victim_corporation_name, current.victim_corporation_ticker)}</strong></div> : null}
                 {current.victim_alliance_name ? <span className="kb-hero-alliance">联盟 · {current.victim_alliance_name}</span> : null}
               </div>
-              <div className="kb-hero-meta"><span className="kb-location" title={[current.system_name, current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[current.system_name || '未知星系', current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div>
+              <div className="kb-hero-meta"><span className="kb-location" title={[killboardSystemLabel(current), current.constellation_name, current.region_name].filter(Boolean).join(' / ')}>{[killboardSystemLabel(current), current.constellation_name, current.region_name].filter(Boolean).join(' / ')}</span><span className={`kb-security-chip ${security.className}`} title={`安等 ${security.valueLabel} · ${security.zoneLabel}`}><i aria-hidden="true" />{security.zoneLabel} {security.valueLabel}</span></div>
             </div>
             <div className="kb-hero-value">
               <span>估算损失</span><strong>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><small className="kb-hero-exact">{exactIsk(current.isk_lost)}</small>

@@ -13,6 +13,13 @@ function idLabel(value) {
   return value === null || value === undefined || value === '' ? '' : String(value)
 }
 
+export function killboardSystemLabel(report = {}) {
+  const name = String(report.system_name || '').trim()
+  if (name) return name
+  const id = idLabel(report.system_id).trim()
+  return /^\d+$/.test(id) && Number(id) > 0 ? `星系 #${id}` : '未知星系'
+}
+
 // Legacy records may still carry client localization wrappers. Only remove
 // recognized wrappers, never arbitrary braces that may be meaningful source
 // text. These tokens are emitted by the client item/localization pipeline.

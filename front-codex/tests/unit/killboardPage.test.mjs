@@ -29,9 +29,10 @@ function nodes(tree) {
   return [tree, ...(tree.children || []).flatMap(nodes)]
 }
 
-function harness() {
+function harness(initialKillId = '1') {
   const values = [], refs = [], previousDeps = [], cleanups = [], effects = []
   const calls = { list: [], detail: [], status: [] }
+  const copies = []
   const timers = new Map(), windowEvents = new Map(), documentEvents = new Map()
   let timerId = 0
   const document = {
@@ -45,7 +46,7 @@ function harness() {
     addEventListener: (name, listener) => windowEvents.set(name, listener),
     removeEventListener: name => windowEvents.delete(name),
   }
-  let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = '1', tree
+  let stateIndex = 0, refIndex = 0, effectIndex = 0, killId = initialKillId, tree
   const request = (kind, options) => {
     const call = { ...deferred(), signal: options.signal }
     calls[kind].push(call)
@@ -72,6 +73,7 @@ function harness() {
     getKillReport: (_id, options) => request('detail', options),
     getKillboardStatus: options => request('status', options),
     ...presentation,
+    copyKillboardTag: () => { const copy = deferred(); copies.push(copy); return copy.promise },
   }
   for (const name of ['Activity', 'AlertTriangle', 'Copy', 'Database', 'Layers3', 'LoaderCircle', 'RefreshCw', 'Search', 'Swords', 'X', 'KillParticipantRow', 'GameItemImage']) dependencies[name] = name
   const module = { exports: {} }
@@ -86,7 +88,7 @@ function harness() {
     return tree
   }
   return {
-    calls, format: module.exports.formatKillIsk, formatTime: module.exports.formatKillboardTime, render,
+    calls, copies, format: module.exports.formatKillIsk, formatTime: module.exports.formatKillboardTime, render,
     get tree() { return tree },
     get serializedState() { return JSON.stringify(values) },
     async flush() { await settle(); render() },
@@ -374,11 +376,48 @@ test('the hero identifies corporation tag and hull class without diagnostic iden
   page.unmount()
 })
 
+test('hero report identifier has a dedicated readable class and system ID fallback', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const hero = nodes(page.tree).find(node => node.props.className === 'kb-hero kb-panel')
+  assert.ok(hero)
+  assert.match(JSON.stringify(hero), /kb-report-id/)
+  assert.match(JSON.stringify(hero), /PRIVATE SYSTEM/)
+  page.unmount()
+})
+
+test('route changes clear the previous detail before the new KM arrives', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.route('2')
+  assert.ok(!nodes(page.tree).some(node => node.props.className === 'kb-hero kb-panel'))
+  page.unmount()
+})
+
+test('a late entry list cannot replace a newer route selection', async () => {
+  const page = harness(null)
+  page.render()
+  page.route('2')
+  const detailRequest = page.calls.detail.at(-1)
+  page.calls.list[0].resolve({ results: [privateReport('1'), privateReport('2')], count: 2 })
+  await page.flush()
+  assert.equal(detailRequest.signal.aborted, false)
+  assert.equal(page.calls.detail.length, 1)
+  page.unmount()
+})
+
 test('equipment list uses a compact multi-column layout with independent scrolling', () => {
   const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
   assert.match(css, /\.kb-item-list\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)/)
   assert.match(css, /\.kb-item-list\s*\{[^}]*overflow:auto/)
   assert.match(css, /\.kb-item--dropped\s*\{[^}]*background:/)
+})
+
+test('participant placeholder fills the same framed box as ship art', () => {
+  const css = readFileSync(new URL('../../src/styles/killboard.css', import.meta.url), 'utf8')
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*display:grid/)
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*width:100%/)
+  assert.match(css, /\.kb-participant-ship \.kb-ship-placeholder\s*\{[^}]*height:100%/)
 })
 
 test('raw participant counts are labelled records, not a proven number of players', async () => {
@@ -435,6 +474,41 @@ test('the hero exposes a copyable in-game KM tag and visible exact ISK value', a
   assert.match(serialized, /229,307,984,742 ISK/)
   const copyButton = nodes(page.tree).find(node => node.props['aria-label'] === '复制 KM')
   assert.ok(copyButton)
+  page.unmount()
+})
+
+test('switching KM clears copy feedback and cannot accept a late copy result from the old KM', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  const copyButton = () => nodes(page.tree).find(node => node.props['aria-label'] === '复制 KM')
+  const firstCopy = copyButton().props.onClick()
+  page.copies[0].resolve(true)
+  await firstCopy
+  page.render()
+  assert.match(JSON.stringify(copyButton()), /已复制/)
+  const pendingCopy = copyButton().props.onClick()
+  page.route('2')
+  page.calls.detail.at(-1).resolve(privateReport('2'))
+  await page.flush()
+  assert.doesNotMatch(JSON.stringify(copyButton()), /已复制/)
+  page.copies[1].resolve(true)
+  await pendingCopy
+  page.render()
+  assert.doesNotMatch(JSON.stringify(copyButton()), /已复制/)
+  page.unmount()
+})
+
+test('a new detail request clears the previous KM network error', async () => {
+  const page = harness()
+  await loadPrivate(page)
+  page.route('2')
+  page.calls.detail.at(-1).reject(new Error('OLD KM DETAIL ERROR'))
+  await page.flush()
+  assert.match(JSON.stringify(page.tree), /OLD KM DETAIL ERROR/)
+  page.route('3')
+  page.calls.detail.at(-1).resolve(privateReport('3'))
+  await page.flush()
+  assert.doesNotMatch(JSON.stringify(page.tree), /OLD KM DETAIL ERROR/)
   page.unmount()
 })
 
