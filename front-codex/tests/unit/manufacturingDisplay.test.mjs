@@ -3,6 +3,16 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { formatCompactIsk } from '../../src/utils/manufacturingDisplay.js'
+import * as display from '../../src/utils/manufacturingDisplay.js'
+
+test('missing-material reasons show human-readable labels instead of internal codes', () => {
+  assert.equal(typeof display.formatMissingMaterialReason, 'function')
+  for (const [reason, label] of [
+    ['quote_absent', '尚未采集'], ['quote_uncollected', '尚未采集'],
+    ['quote_stale', '报价已过期'], ['quote_empty', '暂无有效报价'],
+    ['price_invalid', '单价无效'], ['future_reason', '待补价格'],
+  ]) assert.equal(display.formatMissingMaterialReason(reason), label)
+})
 
 test('formats exact values below ten thousand without a compact suffix', () => {
   assert.equal(formatCompactIsk(9999.9), '9,999.9 ISK')

@@ -9,9 +9,10 @@ function imagePriorityProps(priority) {
 }
 
 function ImageForSource({ src, alt, imageClassName, width, height, missingLabel, fallback, priority }) {
-  const [failed, setFailed] = useState(false)
+  const [state, setState] = useState('loading')
+  const failed = state === 'error'
   if (!src || failed) return fallback || <><ImageOff aria-hidden="true" /><span>{missingLabel}</span></>
-  return <img className={imageClassName} src={src} alt={alt} width={width} height={height} {...imagePriorityProps(priority)} decoding="async" style={{ objectFit: 'contain' }} onError={() => setFailed(true)} />
+  return <img className={imageClassName} src={src} alt={alt} width={width} height={height} {...imagePriorityProps(priority)} decoding="async" data-loaded={state === 'loaded' ? 'true' : 'false'} style={{ objectFit: 'contain' }} onLoad={() => setState('loaded')} onError={() => setState('error')} />
 }
 
 export default function GameItemImage({ item, src, alt = '', imageClassName, width, height, missingLabel = '图像待补', fallback, mapping, priority }) {

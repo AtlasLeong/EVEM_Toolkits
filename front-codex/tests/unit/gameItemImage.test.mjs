@@ -89,11 +89,19 @@ test('high priority images opt into eager loading and high fetch priority', asyn
   assert.match(markup, /fetchpriority="high"/)
 })
 
+test('boolean priority and stable loading state are available for visible icons', async () => {
+  const { default: GameItemImage } = await load('../../src/components/GameItemImage.jsx')
+  const markup = renderToStaticMarkup(React.createElement(GameItemImage, { src: '/test.png', priority: true, width: 34, height: 34 }))
+  assert.match(markup, /loading="eager"/)
+  assert.match(markup, /fetchpriority="high"/)
+  assert.match(markup, /data-loaded="false"/)
+})
+
 test('failed loads use the supplied fallback and a different source gets a fresh keyed instance', async () => {
   const { default: GameItemImage } = await load('../../src/components/GameItemImage.jsx')
   const originalUseState = React.useState
-  let failed = false
-  React.useState = () => [failed, value => { failed = value }]
+  let state = 'loading'
+  React.useState = () => [state, value => { state = value }]
   try {
     const fallback = React.createElement('span', { className: 'test-fallback' }, 'missing')
     const child = GameItemImage({ src: '/images/first.png', fallback })

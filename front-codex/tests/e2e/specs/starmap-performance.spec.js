@@ -147,6 +147,10 @@ test('DPR 改变时更新画布分辨率，后续定位不再重设尺寸', asyn
   const session = await context.newCDPSession(page)
   await session.send('Emulation.setDeviceMetricsOverride', { ...page.viewportSize(), deviceScaleFactor: 2, mobile: false })
   await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBe(2)
+  // Chromium's DPR-only CDP override updates matchMedia.matches without
+  // dispatching resolution or resize events. Notify the document explicitly
+  // as a real display/window change would; keep the exact backing-store checks.
+  await page.evaluate(() => window.dispatchEvent(new Event('resize')))
   expect(await page.locator('.tactical-map-viewport').evaluate(node => node.getBoundingClientRect().width)).toBe(cssWidth)
   await expect.poll(() => page.locator('canvas').evaluate(canvas => (
     canvas.width === Math.floor(canvas.parentElement.getBoundingClientRect().width) * 2

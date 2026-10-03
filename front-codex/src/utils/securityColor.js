@@ -1,4 +1,4 @@
-// Light UI foregrounds; the star-map canvas keeps its separate bright palette.
+// Dark-console text foregrounds; the map canvas keeps its separate palette.
 function normalizedSecurityValue(value) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null
   if (typeof value !== 'string' || value.trim() === '') return null
@@ -23,12 +23,12 @@ export function formatSecurityLabel(value, digits = 2) {
 
 export function getSecurityTextColor(value) {
   const level = normalizedSecurityValue(value)
-  if (level === null) return '#6c6a63'
-  if (level <= 0) return '#a13737'
-  if (level < 0.2) return '#9a451a'
-  if (level < 0.5) return '#80551c'
-  if (level < 0.8) return '#356348'
-  return '#315d7b'
+  if (level === null) return '#9bb1b8'
+  if (level <= 0) return '#ee8c8c'
+  if (level < 0.2) return '#efab7e'
+  if (level < 0.5) return '#edc477'
+  if (level < 0.8) return '#86d1a8'
+  return '#9ac6d1'
 }
 
 const KILLBOARD_SECURITY_COLORS = Object.freeze({

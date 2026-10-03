@@ -4,7 +4,7 @@ import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshC
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
 import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
-import { formatCompactIsk } from '../utils/manufacturingDisplay'
+import { formatCompactIsk, formatMissingMaterialReason } from '../utils/manufacturingDisplay'
 import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
@@ -264,7 +264,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
       </dl>
       <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>材料效率 {summary.materialEfficiencyPercent}% 已应用</span></div>
       <p className="manufacturing-price-help">材料按客户端逐批取整；制造费用与时间暂按基础配方估算。</p>
-      {summary.missing.length > 0 ? <div className="manufacturing-missing" role="status"><strong>尚未计入</strong><span>{summary.missing.slice(0, 3).map(entry => `${entry.name}（${entry.reason}）`).join('、')}{summary.missing.length > 3 ? ` 等 ${summary.missing.length} 项` : ''}</span></div> : null}
+      {summary.missing.length > 0 ? <div className="manufacturing-missing" role="status"><strong>尚未计入</strong><span>{summary.missing.slice(0, 3).map(entry => `${entry.name}（${formatMissingMaterialReason(entry.reason)}）`).join('、')}{summary.missing.length > 3 ? ` 等 ${summary.missing.length} 项` : ''}</span></div> : null}
       <section className="manufacturing-price-editor" aria-label="方案价格编辑">
         <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">节点报价</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedPurchase ? <span className="manufacturing-route-pill is-buy">购买</span> : selectedNode ? <span className="manufacturing-route-pill is-make">自造</span> : null}</div>
         {selectedPurchase ? <>

@@ -27,7 +27,7 @@ test('复合输入框只保留外层焦点提示，独立输入框保留键盘�
     await field.focus()
     await expect(field).toHaveCSS('outline-style', 'none')
     await expect(field).toHaveCSS('box-shadow', 'none')
-    await expect(shell).toHaveCSS('border-top-color', 'rgb(166, 83, 62)')
+    await expect(shell).toHaveCSS('border-top-color', 'rgb(239, 181, 102)')
     await expect(shell).not.toHaveCSS('box-shadow', 'none')
   }
   await page.goto('/login')

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { AuthProvider } from './context/AuthContext'
 import './styles.css'
+import './styles/console-unification.css'
 import { installCorporationNavigationGuard } from './utils/corporationNavigationGuard'
 
 installCorporationNavigationGuard()

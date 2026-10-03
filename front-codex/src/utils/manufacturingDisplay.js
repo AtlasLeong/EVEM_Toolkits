@@ -1,5 +1,17 @@
 const numberFormatter = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })
 
+const missingMaterialLabels = {
+  quote_absent: '尚未采集',
+  quote_uncollected: '尚未采集',
+  quote_stale: '报价已过期',
+  quote_empty: '暂无有效报价',
+  price_invalid: '单价无效',
+}
+
+export function formatMissingMaterialReason(reason) {
+  return Object.hasOwn(missingMaterialLabels, reason) ? missingMaterialLabels[reason] : '待补价格'
+}
+
 export function formatCompactIsk(value) {
   if (value === null || value === undefined || value === '') return '待补价格'
   const number = Number(value)

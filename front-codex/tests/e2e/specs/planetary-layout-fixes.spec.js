@@ -36,9 +36,18 @@ test('搜索和清空按钮与四个下拉框上下对齐，展开后不偏移',
 
 test('下拉框边框加深，同时保留展开强调色', async ({ page }) => {
   const values = page.locator('.filter-value')
-  for (const value of await values.all()) await expect(value).toHaveCSS('border-top-color', 'rgb(145, 139, 128)')
+  const controlLine = await page.evaluate(() => {
+    const sample = document.createElement('span')
+    sample.style.color = 'var(--control-line)'
+    document.body.append(sample)
+    const color = getComputedStyle(sample).color
+    sample.remove()
+    return color
+  })
+  expect(controlLine).not.toBe('rgba(0, 0, 0, 0)')
+  for (const value of await values.all()) await expect(value).toHaveCSS('border-top-color', controlLine)
   await page.locator('.resource-disclosure summary').click()
-  await expect(page.locator('.resource-disclosure .filter-value')).toHaveCSS('border-top-color', 'rgb(166, 83, 62)')
+  await expect(page.locator('.resource-disclosure .filter-value')).toHaveCSS('border-top-color', 'rgb(239, 181, 102)')
 })
 
 test('滚动条出现或消失不改变表格可用宽度，末列与滚动条保持间隔', async ({ page }) => {

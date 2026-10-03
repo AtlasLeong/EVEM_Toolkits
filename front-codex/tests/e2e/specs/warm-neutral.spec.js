@@ -22,11 +22,11 @@ async function search(page) {
   await expect(page.locator('.planetary-table tbody tr')).toHaveCount(2)
 }
 
-test('客户页面使用暖白配色、原色透明标识且不出现工作空间', async ({ page }) => {
+test('客户页面使用统一深色配色、原色透明标识且不出现工作空间', async ({ page }) => {
   await page.goto('/planetary')
   await expect(page.getByText('工作空间', { exact: true })).toHaveCount(0)
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(250, 249, 246)')
-  await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(240, 239, 235)')
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(11, 23, 29)')
+  await expect(page.locator('.shell-sidebar')).toHaveCSS('background-color', 'rgb(15, 32, 40)')
   await expect(page.locator('.brand-icon')).toHaveCSS('filter', 'none')
   await expect(page.locator('.brand-icon')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
   await expect(page.locator('.brand-icon')).toHaveCSS('border-top-width', '0px')
@@ -85,10 +85,10 @@ test('结果标题旁仅有一组计算器入口并保留添加行为', async ({
   const add = page.getByRole('button', { name: /加入计算器/ })
   await expect(open).toHaveCount(1)
   await expect(page.locator('.planetary-results-header').getByRole('button', { name: /打开计算器/ })).toBeVisible()
-  await expect(open).toHaveCSS('background-color', 'rgb(36, 36, 34)')
+  await expect(open).toHaveCSS('background-color', 'rgb(239, 181, 102)')
   await page.locator('.planetary-table tbody .table-check-trigger').first().click()
-  await expect(add).toHaveCSS('background-color', 'rgb(166, 83, 62)')
+  await expect(add).toHaveCSS('background-color', 'rgb(239, 181, 102)')
   await add.click()
   await expect(page.locator('.calculator-card tbody tr')).toHaveCount(1)
-  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+  await expect(page.locator('.calculator-card')).toHaveCSS('background-color', 'rgb(18, 37, 46)')
 })
