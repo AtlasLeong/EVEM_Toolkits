@@ -1,0 +1,78 @@
+/* The account entrance explains the product and its actual access policy.
+ * It shares the application's palette, source mark and control language. */
+.site-frame .login-screen:has(.login-layout) {
+  min-height: calc(100svh - 52px);
+  padding: 56px 40px;
+}
+.login-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+  align-items: center;
+  gap: clamp(40px, 6vw, 88px);
+  width: min(100%, 1056px);
+}
+.login-intro { min-width: 0; }
+.login-intro-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 56px; }
+.login-intro-brand img { width: 40px; height: 40px; object-fit: contain; }
+.login-intro-wordmark { font-size: 22px; font-weight: 750; letter-spacing: -.025em; }
+.login-intro-edition {
+  border-left: 1px solid var(--console-line);
+  padding-left: 12px;
+  max-width: 14ch;
+  color: var(--console-muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .11em;
+  line-height: 1.5;
+}
+.login-intro > .eyebrow { margin: 0 0 12px; color: var(--console-accent); }
+.login-intro-title {
+  margin: 0;
+  color: var(--console-text);
+  font-size: clamp(32px, 3.3vw, 44px);
+  font-weight: 700;
+  letter-spacing: -.04em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.login-intro-copy { margin: 18px 0 0; max-width: 32ch; color: var(--console-muted); font-size: 16px; line-height: 1.8; }
+.login-capability-list { list-style: none; padding: 0; margin: 40px 0 0; }
+.login-capability-list li { display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; border-top: 1px solid var(--console-line); }
+.login-capability-list li > svg { flex: 0 0 auto; margin-top: 3px; color: var(--console-muted); }
+.login-capability-list strong { display: block; font-size: 14px; font-weight: 600; }
+.login-capability-list span { display: block; margin-top: 4px; color: var(--console-muted); font-size: var(--type-label); line-height: 1.6; }
+.site-frame .login-layout .auth-card { width: 100%; max-width: none; padding: 28px; border-radius: var(--radius-panel); gap: 20px; }
+.auth-access-notice { display: flex; align-items: flex-start; gap: 10px; padding: 14px; background: var(--console-raised); border-left: 2px solid var(--console-accent); border-radius: 0 var(--radius-control) var(--radius-control) 0; }
+.auth-access-notice > svg { flex: 0 0 auto; color: var(--console-accent); margin-top: 2px; }
+.auth-access-notice strong { font-size: 13px; font-weight: 600; }
+.auth-access-notice p { margin: 6px 0 0; color: var(--console-muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.auth-return-hint { margin: 0; padding-left: 12px; border-left: 2px solid var(--info); color: var(--info); font-size: 13px; line-height: 1.65; }
+.site-frame .login-layout .auth-tabs { padding: 4px; }
+.site-frame .login-layout .auth-tab { font-size: 13px; min-height: 44px; }
+.site-frame .login-layout .auth-section { gap: 16px; }
+.site-frame .login-layout .field-row > label { color: var(--console-muted-strong); font-size: 13px; font-weight: 600; }
+.site-frame .login-layout .auth-footer { padding-top: 16px; border-top: 1px solid var(--console-line); }
+.site-frame .login-layout .login-help { font-size: 12px; line-height: 1.65; text-align: left; }
+.site-frame .auth-inline-message { line-height: 1.6; }
+
+.login-intro-brand .brand-mark { width: 40px; height: 40px; }
+.site-frame .login-brand h2 { margin: 0; font-size: 20px; font-weight: 700; line-height: 1.4; }
+.auth-field-hint { margin: 0; color: var(--console-muted); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 899px) {
+  .site-frame .login-screen:has(.login-layout) { padding: 32px 24px; }
+  .login-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; width: min(100%, 560px); }
+  .login-intro-brand { margin-bottom: 28px; }
+  .login-capability-list { display: none; }
+  .login-intro-copy { max-width: 40ch; }
+}
+
+@media (max-width: 640px) {
+  .site-frame .login-screen:has(.login-layout) { padding: 24px 16px 32px; }
+  .login-layout { gap: 24px; }
+  .login-intro-brand { margin-bottom: 24px; }
+  .login-intro-title { font-size: 30px; }
+  .login-intro-copy { margin-top: 12px; font-size: 14px; }
+  .site-frame .login-layout .auth-card { padding: 20px; gap: 18px; }
+  .auth-access-notice { padding: 12px; }
+}

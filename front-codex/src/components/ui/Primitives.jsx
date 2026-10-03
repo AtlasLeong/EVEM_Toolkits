@@ -29,7 +29,7 @@ export function Panel({ title, subtitle, children, action, className = '' }) {
 
 export function EmptyState({ title, desc }) {
   return (
-    <div className="empty-state">
+    <div className="empty-state" role="status">
       <p className="empty-title">{title}</p>
       {desc ? <p className="empty-desc">{desc}</p> : null}
     </div>
@@ -40,10 +40,11 @@ export function Pill({ children, tone = 'neutral' }) {
   return <span className={`pill ${tone}`}>{children}</span>
 }
 
-export function LoadingBar() {
+export function LoadingBar({ label = '正在加载数据' }) {
   return (
-    <div className="loading-bar">
-      <span />
+    <div className="loading-bar" role="status" aria-live="polite">
+      <span aria-hidden="true" />
+      <span className="sr-only">{label}</span>
     </div>
   )
 }

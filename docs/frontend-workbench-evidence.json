@@ -1,0 +1,400 @@
+{
+  "repository": "AtlasLeong/EVEM_Toolkits",
+  "baseline_commit": "5cda8bef3b05dfb6361c51fb6abde2c07ad7492c",
+  "browser": "Actual user-PC headed Chrome; supported local fixture and anonymous production evidence are distinguished per file.",
+  "scope_note": "Screenshots are visually inspected artifacts. They do not prove production authentication, backend authorization, accessibility conformance, or real-user performance.",
+  "capture_note": "Extra baseline states taken after early shared-shell edits are marked initial_worktree. Rejected sticky-header capture artifacts are excluded.",
+  "consumer_note": "Use each exact library_file_id with Library read or prepare_materialize. This Windows runtime returned extracted text rather than image pixels from read; materialization metadata steps could not persist xattrs, so exact IDs are retained here.",
+  "files": [
+    {
+      "name": "01b-market-desktop-clean-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_4155227d002881918e8e2b708e4cd563"
+    },
+    {
+      "name": "02b-market-mobile-clean-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_b300f95c7fd88191a2cc657451d27a3b"
+    },
+    {
+      "name": "03-manufacturing-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_6f65f2cb16388191b3217b2efb4c6269"
+    },
+    {
+      "name": "03-manufacturing-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_7b84166933288191b0ea9cec3f9ba1cd"
+    },
+    {
+      "name": "04-planetary-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_c32ec463c76481918b6ab0e39abf0b37"
+    },
+    {
+      "name": "04-planetary-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_36a1616ecfd881918851ddefd3033cb2"
+    },
+    {
+      "name": "05-starmap-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_c37bc4f964e88191bd351e2afc2ad650"
+    },
+    {
+      "name": "05-starmap-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_de041133efe48191973c4bc565baf553"
+    },
+    {
+      "name": "06-fraudlist-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_9ed6703f85248191aec3f0da16120a85"
+    },
+    {
+      "name": "06-fraudlist-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_b54fda4c14dc8191af9695406e87f5d1"
+    },
+    {
+      "name": "07-feedback-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_c616e5b3e7f481919508facb059263c6"
+    },
+    {
+      "name": "07-feedback-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_42bd88aa86ac819195f4a79571c57b49"
+    },
+    {
+      "name": "08-infocenter-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_3fb4eb315cb48191972cff69e37c7a35"
+    },
+    {
+      "name": "08-infocenter-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_058d4efaa1308191a5465a66320d7cb2"
+    },
+    {
+      "name": "09-settings-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_6060351c79748191b1f7d3144fcb2dc4"
+    },
+    {
+      "name": "09-settings-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_2fe6177f401c819184d2d92482ea83a8"
+    },
+    {
+      "name": "10-corporations-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_3d46365a48a481918e500508bb43e0bd"
+    },
+    {
+      "name": "10-corporations-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_80227beddc888191b33085f6b2220871"
+    },
+    {
+      "name": "11-starsea-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_a73dec593dfc819185d486aca9335a8b"
+    },
+    {
+      "name": "11-starsea-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_2f5a81590ab881919c011fe889fa9f3e"
+    },
+    {
+      "name": "12-killboard-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_8bce28461bac819183a5ac252d827941"
+    },
+    {
+      "name": "12-killboard-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_067e3c5db940819196b821dafaaf2052"
+    },
+    {
+      "name": "13-tactical-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_b35815faf38c8191a60ba6327610813a"
+    },
+    {
+      "name": "13-tactical-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_505209e94a1881918362ac535ed92dbd"
+    },
+    {
+      "name": "12b-killboard-mobile-scrolled-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_2a7ddf498b4c8191996c2e41a0ec4fec"
+    },
+    {
+      "name": "11b-starsea-fixture-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_63903de8934081919bee69f51e1da2f7"
+    },
+    {
+      "name": "11b-starsea-fixture-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_20717655314081919ceacd8ca24e1b1c"
+    },
+    {
+      "name": "11c-starsea-detail-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_944bc0e20dc08191a6e1e28370f4d165"
+    },
+    {
+      "name": "11c-starsea-detail-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_10dfd5b262188191ad5a5e70c427a9e0"
+    },
+    {
+      "name": "14-fraudadmin-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_c8165b2937e08191a56e7f7ec2d85da3"
+    },
+    {
+      "name": "14-fraudadmin-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_eed30c905ae08191a700fd162ec7467d"
+    },
+    {
+      "name": "15-licenseadmin-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_defb642dca588191b3a3c280f6ec64e3"
+    },
+    {
+      "name": "15-licenseadmin-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_b3b528e6f7dc8191876ae6b4d7f1b6cd"
+    },
+    {
+      "name": "manufacturing-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_d86d405544b88191ac702f1999486035"
+    },
+    {
+      "name": "manufacturing-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_152e1ee7d7a48191a267c457be19363e"
+    },
+    {
+      "name": "manufacturing-1280.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_7fc3623e7478819180561214e64a9f8b"
+    },
+    {
+      "name": "killboard-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_3cbdd479b3ac8191ad71d2944200f982"
+    },
+    {
+      "name": "killboard-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_5b2455ff3f7881918d211c63d1ccefd4"
+    },
+    {
+      "name": "killboard-1280.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_ba19e65591a881919ff996a4f3ac97ae"
+    },
+    {
+      "name": "killboard-equipment-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_179fc80791348191a9be0fd226308e98"
+    },
+    {
+      "name": "killboard-long-content-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_823efa2495d48191928a726187d9530e"
+    },
+    {
+      "name": "killboard-long-content-copy-visible-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_35d9aa24b808819192c9aaf43d7bf7fb"
+    },
+    {
+      "name": "tactical-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_97449b993c508191b5625f225a3fe5bb"
+    },
+    {
+      "name": "tactical-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_1536c277513881918fc465e7f47d9077"
+    },
+    {
+      "name": "licenseadmin-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_72e51efc0690819193255c0376e79a92"
+    },
+    {
+      "name": "licenseadmin-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_42e563bc31d48191beda56155e5d4921"
+    },
+    {
+      "name": "settings-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_2e9d852da55c8191b2a458a5d531d6c7"
+    },
+    {
+      "name": "planetary-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_5c32e9d01fb081919a5b6d235f164dde"
+    },
+    {
+      "name": "corporations-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_fb4f6f8543e8819186c6eafe86b4e3f1"
+    },
+    {
+      "name": "infocenter-after-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_5d320a172f60819199aef224a4b2ac5e"
+    },
+    {
+      "name": "fraudadmin-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_e2b78bfe95848191aae7d6a72e381a92"
+    },
+    {
+      "name": "cached-refresh-failure-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_6310c8b836f08191a2068166120e9c8e"
+    },
+    {
+      "name": "cached-refresh-failure-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_302c03eab2388191ba5303aba8f7c62f"
+    },
+    {
+      "name": "market-stat-hint-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_6b2d64ee6d888191b301f93e3bcf8160"
+    },
+    {
+      "name": "market-stat-hint-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_361bb56043048191a38996459dcaa2d5"
+    },
+    {
+      "name": "short-desktop-1280.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_625ef6ab05d8819190f8a2d13eb4ec81"
+    },
+    {
+      "name": "settings-error-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_8c562c4ae7fc819199df6d9648ae8ec6"
+    },
+    {
+      "name": "settings-error-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_0a069f25fdf88191863ae02726fb99bf"
+    },
+    {
+      "name": "settings-recovery-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_41ae108a81508191be3cfa1da91c9764"
+    },
+    {
+      "name": "licenseadmin-actions-viewport-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "library_file_id": "libfile_6514ac3508f48191bc9f04f74f812655"
+    },
+    {
+      "name": "01-production-login-desktop.png",
+      "stage": "baseline",
+      "mode": "anonymous_production",
+      "library_file_id": "libfile_07af831a9a648191bed26266f6194ea4"
+    },
+    {
+      "name": "03-production-login-mobile.png",
+      "stage": "baseline",
+      "mode": "anonymous_production",
+      "library_file_id": "libfile_275cd43ae40c8191969e18dfae81d300"
+    },
+    {
+      "name": "phase1-local-production-login-desktop.png",
+      "stage": "after",
+      "mode": "local_production_build",
+      "library_file_id": "libfile_5acfcab877588191a520e652c6be7a57"
+    },
+    {
+      "name": "phase1-local-production-login-mobile.png",
+      "stage": "after",
+      "mode": "local_production_build",
+      "library_file_id": "libfile_4abc9c5e11ec8191ac75e37ef17f0564"
+    },
+    {
+      "name": "new-eden-workbench.png",
+      "stage": "approved_direction",
+      "mode": "generated_concept_only",
+      "library_file_id": "libfile_faf9b202e1f481918263b007ae5bb80a"
+    }
+  ]
+}

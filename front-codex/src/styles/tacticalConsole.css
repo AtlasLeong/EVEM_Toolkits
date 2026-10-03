@@ -1,0 +1,88 @@
+/* Complete the shared console palette for tactical controls and readouts. */
+.site-frame .tac-page .tac-strength-summary.tac-summary {
+  background: transparent;
+}
+
+.site-frame .tac-page .tac-strength-summary.tac-summary > .tac-strength-card {
+  background: var(--console-raised);
+  border-color: var(--console-line-strong);
+}
+
+.site-frame .tac-page :is(.tac-connection, .tac-role, .tac-scope-label,
+  .tac-members-card small, .tac-mobile-note, .tac-strength-heading small,
+  .tac-strength-notes, .tac-strength-value > span, .tac-strength-value > small) {
+  color: var(--console-muted);
+}
+
+.site-frame .tac-page .tac-strength-heading > span {
+  color: var(--warning);
+}
+
+.site-frame .tac-page .tac-strength-card.is-friendly .tac-strength-heading > span {
+  color: var(--info);
+}
+
+.site-frame .tac-page .tac-strength-summary.tac-summary .tac-strength-number {
+  color: var(--console-text);
+}
+
+.site-frame .tac-page :is(.tac-text-btn, .tac-mobile-note a) {
+  color: var(--info);
+}
+
+.site-frame .tac-page .tac-command-title > svg {
+  color: var(--console-muted);
+}
+
+.site-frame .tac-page .tac-side-filter button {
+  background: var(--console-raised);
+  border-color: var(--console-line-strong);
+  color: var(--console-muted);
+  font-size: 12px;
+}
+
+.site-frame .tac-page .tac-side-filter button[aria-pressed="true"] {
+  background: var(--accent-surface);
+  border-color: var(--console-accent);
+  color: var(--console-accent);
+}
+
+.site-frame .tac-page .tac-add-force {
+  background: var(--console-raised);
+  border-color: var(--console-line-strong);
+  color: var(--console-text);
+  font-size: 12px;
+}
+
+.site-frame .tac-page :is(.tac-side-filter button, .tac-add-force):hover:not(:disabled) {
+  background: var(--console-surface);
+  border-color: var(--console-accent);
+  color: var(--console-text);
+}
+
+.site-frame .tac-page .tac-side-filter button[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--accent-surface);
+  color: var(--console-accent);
+}
+
+.site-frame .tac-page :is(.tac-panel-tabs, .tac-panel-foot, .tac-force-card,
+  .tac-force-details, .tac-count-list, .tac-organization-bar, .tac-role) {
+  border-color: var(--console-line);
+}
+
+.site-frame .tac-page .tac-search:focus-within {
+  outline-color: var(--focus-ring);
+}
+
+.site-frame .tac-page .tac-text-btn:hover:not(:disabled),
+.site-frame .tac-page .tac-mobile-note a:hover {
+  color: var(--console-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 1099px) {
+  .site-frame .tac-page .tac-add-force {
+    min-height: 44px;
+  }
+}

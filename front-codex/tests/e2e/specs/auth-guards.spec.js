@@ -30,3 +30,13 @@ test('admin login failure stays on page and shows chinese error', async ({ page 
   await expect(page).toHaveURL(/\/fraudlogin$/)
   await expect(page.locator('.form-error')).toContainText('管理员邮箱或密码错误')
 })
+
+test('access denied switch account clears the session and opens login', async ({ page }) => {
+  await seedAuthenticatedSession(page, { userName: 'switching_pilot' })
+  await page.goto('/access-denied')
+  await page.getByRole('button', { name: '切换账号', exact: true }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByLabel('邮箱', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('access_token'))).toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('refresh_token'))).toBeNull()
+})

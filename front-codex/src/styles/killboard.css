@@ -323,3 +323,83 @@
   .kb-equipment-group-items { grid-template-columns:1fr; }
   .kb-hero-victim .kb-victim-name { font-size:15px; }
 }
+
+/* Keep the report rail on desktops and disclose it on touch-sized screens.
+   The report itself must remain a scrollable document below laptop widths. */
+.kb-mobile-index-toggle { display:none; }
+.kb-index-content { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; }
+.kb-index-content > :not(.kb-report-list) { flex-shrink:0; }
+.kb-detail-loading { display:flex; flex:0 0 auto; align-items:center; gap:8px; padding:8px 0; color:var(--kb-muted); font-size:12px; }
+.kb-copy-feedback { font-size:12px; }
+.kb-page .kb-content-grid.is-compact { grid-template-columns:minmax(0,1fr); }
+.kb-page .kb-hero h2,
+.kb-page .kb-location,
+.kb-page .kb-hero-value .kb-hero-exact,
+.kb-page .kb-hero-value strong,
+.kb-page .kb-hero-victim .kb-victim-name,
+.kb-page .kb-hero-victim .kb-hero-alliance {
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+.kb-page .kb-hero-meta .kb-security-chip::before { content:none; }
+.kb-page :is(.kb-hero-value, .kb-report-row-bottom, .kb-participant-stats) { font-variant-numeric:tabular-nums; }
+.kb-page :is(.kb-action, .kb-copy-km, .kb-slot-tabs button, .kb-drop-filter) {
+  transition:background-color var(--motion-feedback, 160ms) ease, border-color var(--motion-feedback, 160ms) ease;
+}
+@media (max-width:1099px) {
+  .site-frame:has(.kb-page) { height:auto; min-height:100dvh; overflow:visible; }
+  .site-frame:has(.kb-page) .site-content,
+  .site-frame .app-shell:has(.kb-page),
+  .site-frame .app-shell .shell-main:has(.kb-page),
+  .site-frame .shell-main .page-stage:has(.kb-page),
+  .site-frame .page-wrapper:has(.kb-page),
+  .site-frame .kb-page.kb-page {
+    height:auto;
+    min-height:0;
+    overflow:visible;
+  }
+  .site-frame .kb-page .kb-workspace,
+  .site-frame .kb-page .kb-main { height:auto; min-height:0; overflow:visible; }
+  .site-frame .kb-page .kb-content-grid { flex:0 0 auto; }
+  .site-frame .kb-page .kb-content-grid > .kb-panel { height:auto; min-height:200px; overflow:visible; }
+  .site-frame .kb-page :is(.kb-participant-list, .kb-item-list) { max-height:480px; }
+  .site-frame .kb-page .kb-report-list { max-height:480px; }
+  .site-frame .kb-page .kb-sidebar { overflow:visible; }
+  .site-frame:has(.kb-page) .site-footer { display:flex; }
+}
+@media (max-width:760px) {
+  .site-frame .kb-page .kb-header { align-items:flex-start; gap:16px; }
+  .site-frame .kb-page .kb-header-actions { gap:8px; }
+  .site-frame .kb-page .kb-security-legend { width:auto; }
+  .site-frame .kb-page .kb-workspace { margin-top:0; }
+  .site-frame .kb-page .kb-sidebar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:12px; }
+  .kb-sidebar-head .kb-eyebrow { display:none; }
+  .kb-sidebar-head h2 { margin:0; font-size:15px; }
+  .kb-mobile-index-toggle {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    min-height:44px;
+    border:1px solid var(--console-line-strong);
+    border-radius:var(--radius-control);
+    padding:8px 10px;
+    background:var(--console-bg);
+    color:var(--kb-text);
+    font:inherit;
+    font-size:12px;
+    cursor:pointer;
+  }
+  .kb-mobile-index-toggle[aria-expanded="true"] { border-color:var(--console-accent); }
+  .kb-mobile-index-toggle[aria-expanded="true"] svg { transform:rotate(180deg); }
+  .kb-index-content { grid-column:1 / -1; }
+  .kb-sidebar:not(.is-index-open) .kb-index-content { display:none; }
+  .site-frame .kb-page .kb-report-list { max-height:300px; }
+  .site-frame .kb-page .kb-hero { display:grid; grid-template-columns:minmax(0,1fr) 88px; gap:12px; padding:16px; }
+  .site-frame .kb-page .kb-hero .kb-asset--ship { grid-column:2; grid-row:1; width:88px; height:88px; align-self:start; }
+  .site-frame .kb-page .kb-hero-copy { grid-column:1; grid-row:1; }
+  .site-frame .kb-page .kb-hero h2 { font-size:25px; }
+  .site-frame .kb-page .kb-hero-value { grid-column:1 / -1; justify-items:start; padding-top:12px; border-top:1px solid var(--kb-border); }
+  .site-frame .kb-page :is(.kb-action, .kb-copy-km, .kb-detail-tabs button, .kb-slot-tabs button, .kb-drop-filter) { min-height:44px; }
+  .site-frame .kb-page .kb-equipment-controls { flex-wrap:wrap; }
+}

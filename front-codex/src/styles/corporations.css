@@ -605,6 +605,24 @@
   background: #e1efed;
   border-color: #c4ded9;
 }
+
+/* Activity labels share the console surfaces used by the surrounding cards. */
+.site-frame .corp-page .corp-tags span {
+  background: var(--console-raised);
+  border-color: var(--console-line);
+  color: var(--console-muted-strong);
+  font-size: 12px;
+}
+.site-frame .corp-page .corp-metadata-tags .corp-tag-type {
+  background: var(--accent-surface);
+  border-color: var(--console-line);
+  color: var(--console-accent);
+}
+.site-frame .corp-page .corp-metadata-tags .corp-tag-region {
+  background: var(--info-surface);
+  border-color: var(--console-line);
+  color: var(--info);
+}
 .corp-benefits {
   display: flex;
   flex-wrap: wrap;

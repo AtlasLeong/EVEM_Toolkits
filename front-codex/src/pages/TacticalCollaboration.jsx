@@ -66,6 +66,7 @@ import PirateIntelBoard from "../components/tactical/PirateIntelBoard";
 import "../styles/tacticalCollaboration.css";
 import "../styles/tacticalOverview.css";
 import "../styles/tacticalWorkspace.css";
+import "../styles/tacticalConsole.css";
 
 function useMobile() {
   const [mobile, setMobile] = useState(

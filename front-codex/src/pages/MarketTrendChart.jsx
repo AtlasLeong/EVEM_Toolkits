@@ -82,6 +82,7 @@ function statEntry(stats, section, key) {
 }
 
 function TrendStats({ stats, section, formatPrice }) {
+  const scrollHintId = useId()
   const entries = [
     ['当前', statEntry(stats, section, 'current')],
     ['区间高', statEntry(stats, section, 'range')?.high],
@@ -89,7 +90,7 @@ function TrendStats({ stats, section, formatPrice }) {
     ['30天高', statEntry(stats, section, 'month')?.high],
     ['30天低', statEntry(stats, section, 'month')?.low],
   ]
-  return <div className="market-trend-stats-viewport" role="region" aria-label={`${section === 'sell' ? '卖价' : '买价'}统计，可左右滚动`} tabIndex={0}>
+  return <><div className="market-trend-stats-viewport" role="region" aria-label={`${section === 'sell' ? '卖价' : '买价'}统计，可左右滚动`} aria-describedby={scrollHintId} tabIndex={0}>
     <dl className="market-trend-stats" aria-label="价格统计（ISK）">
       {entries.map(([label, entry]) => {
         const compact = formatCompactMarketPrice(entry?.value)
@@ -100,7 +101,7 @@ function TrendStats({ stats, section, formatPrice }) {
         </div>
       })}
     </dl>
-  </div>
+  </div><p id={scrollHintId} className="market-stats-scroll-hint">左右滑动查看全部统计 · 支持方向键</p></>
 }
 
 function ChartPanel({ points, field, label, tone, stats, formatPrice, formatTime, activeIndex, activePanel, onActivate, tooltipId, showBuy, showSell }) {

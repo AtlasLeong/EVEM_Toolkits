@@ -4,14 +4,23 @@ import { ChevronDown } from 'lucide-react'
 // Native disclosure semantics keep keyboard and screen-reader state in sync.
 export default function FilterDisclosure({ label, value, valueContent, disabled = false, className = '', children }) {
   const ref = useRef(null)
+  const pointerFromInside = useRef(false)
 
   useEffect(() => {
     const closeOutside = (event) => {
       const node = ref.current
+      pointerFromInside.current = Boolean(node?.open && node.contains(event.target))
       if (node?.open && !node.contains(event.target)) node.open = false
     }
+    const finishPointer = () => { pointerFromInside.current = false }
     document.addEventListener('pointerdown', closeOutside)
-    return () => document.removeEventListener('pointerdown', closeOutside)
+    document.addEventListener('pointerup', finishPointer)
+    document.addEventListener('pointercancel', finishPointer)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('pointerup', finishPointer)
+      document.removeEventListener('pointercancel', finishPointer)
+    }
   }, [])
 
   useEffect(() => {
@@ -23,10 +32,10 @@ export default function FilterDisclosure({ label, value, valueContent, disabled 
       ref={ref}
       className={`filter-disclosure ${className} ${disabled ? 'is-disabled' : ''}`.trim()}
       onBlur={(event) => {
-        // Blank space has no next focus target. Closing details during that blur
-        // can crash Chromium while it is moving focus into the scroll container.
-        // Outside pointer clicks are already handled separately above.
-        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+        // Clicking internal blank space can focus a tabIndex=-1 ancestor outside
+        // details. Keep that pointer interaction open; collapsing during the
+        // native focus move can crash Chromium. Keyboard exits still close.
+        if (!pointerFromInside.current && event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
           event.currentTarget.open = false
         }
       }}

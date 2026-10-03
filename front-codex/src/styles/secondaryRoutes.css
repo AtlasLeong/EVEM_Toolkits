@@ -1,0 +1,127 @@
+.site-frame .settings-password-form .right-actions {
+  align-self: end;
+}
+
+.settings-price-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-control);
+  background: var(--danger-surface);
+  color: var(--danger);
+}
+
+.settings-price-error p {
+  margin: 0;
+  flex: 1 1 180px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.site-frame .info-tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.site-frame .info-tool-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 16px 0 4px;
+  color: var(--info);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.site-frame .info-tool-link:hover {
+  color: var(--console-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.license-table-scroll-hint {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .site-frame .fraud-create-fields.field-grid.four {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-frame .fraud-create-panel .panel-head {
+    flex-wrap: wrap;
+  }
+
+  .site-frame .fraud-create-panel .panel-head > div {
+    min-width: 0;
+    flex: 1 1 180px;
+  }
+
+  .site-frame .fraud-create-panel .panel-head > button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .site-frame .admin-review-toolbar.license-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-frame .license-toolbar > *,
+  .site-frame .license-toolbar .search-box {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .site-frame .license-extend-control {
+    justify-content: space-between;
+  }
+
+  .site-frame .license-create-form.field-grid.four {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-frame .license-table :is(.admin-col-actions, .license-actions-cell) {
+    position: static;
+    box-shadow: none;
+  }
+
+  .site-frame .license-table-scroll-hint {
+    display: block;
+    margin: 14px 0 0;
+    color: var(--console-muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .site-frame .settings-password-form.field-grid.two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-frame .planetary-bulk-actions {
+    flex-wrap: wrap;
+  }
+
+  .site-frame .planetary-bulk-actions :is(.planetary-add-btn, .planetary-open-btn) {
+    flex: 1 1 150px;
+    white-space: nowrap;
+    padding-inline: 12px;
+  }
+
+  .site-frame .planetary-bulk-actions svg,
+  .site-frame .planetary-bulk-actions .calculator-open-count {
+    flex-shrink: 0;
+  }
+
+  .site-frame .info-tool-link {
+    min-height: 44px;
+    box-sizing: border-box;
+  }
+}

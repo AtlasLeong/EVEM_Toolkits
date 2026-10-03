@@ -25,6 +25,7 @@ import {
   updateLicenseCode,
 } from '../services/apiLicense'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
+import '../styles/secondaryRoutes.css'
 
 function formatDate(value) {
   if (!value) return '-'
@@ -60,7 +61,7 @@ function LicenseCodeRow({ item, onCopy, onEditScripts, onExtend, onUnbind, onTog
     <tr>
       <td className="license-code-cell">
         <div className="license-code-wrap">
-          <button type="button" className="license-code-copy" onClick={() => onCopy(item.code)} title="复制激活码">
+          <button type="button" className="license-code-copy" onClick={() => onCopy(item.code)} aria-label={`复制激活码 ${item.code}`} title="复制激活码">
             <Copy size={14} />
           </button>
           <span>{item.code}</span>
@@ -375,12 +376,14 @@ export default function LicenseAdminPage() {
             <Search size={15} />
             <input
               value={filters.search}
+              aria-label="检索激活码"
               onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))}
               placeholder="搜索激活码、备注或设备"
             />
           </div>
           <select
             className="text-input admin-select"
+            aria-label="筛选授权方案"
             value={filters.plan}
             onChange={(event) => setFilters((current) => ({ ...current, plan: event.target.value }))}
           >
@@ -393,6 +396,7 @@ export default function LicenseAdminPage() {
           </select>
           <select
             className="text-input admin-select"
+            aria-label="筛选激活码状态"
             value={filters.is_active}
             onChange={(event) => setFilters((current) => ({ ...current, is_active: event.target.value }))}
           >
@@ -416,7 +420,9 @@ export default function LicenseAdminPage() {
           <EmptyState title="暂无激活码" desc="生成一个默认组或 VIP 激活码后会显示在这里。" />
         ) : null}
         {items.length > 0 ? (
-          <div className="admin-record-table-shell license-table-shell">
+          <>
+          <p className="license-table-scroll-hint">左右滚动查看套餐、状态、到期时间与操作。</p>
+          <div className="admin-record-table-shell license-table-shell" role="region" aria-label="激活码记录，可横向滚动" tabIndex={0}>
             <table className="admin-record-table license-table">
               <colgroup>
                 <col className="license-col-code" />
@@ -455,6 +461,7 @@ export default function LicenseAdminPage() {
               </tbody>
             </table>
           </div>
+          </>
         ) : null}
       </Panel>
 

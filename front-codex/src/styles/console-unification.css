@@ -37,6 +37,14 @@
   --content-gutter: 24px;
   --page-max: 1800px;
   --content-top-gap: 24px;
+  --font-ui: 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --type-caption: 12px;
+  --type-label: 13px;
+  --type-body: 15px;
+  --type-section: 19px;
+  --type-page: 28px;
+  --motion-feedback: 160ms;
+  --motion-panel: 200ms;
   --radius-panel: 12px;
   --radius-control: 8px;
   --shadow-panel: 0 18px 45px rgba(0, 0, 0, .28);
@@ -67,6 +75,9 @@ html {
 
 body {
   min-width: 320px;
+  font-family: var(--font-ui);
+  font-size: var(--type-body);
+  font-variant-numeric: tabular-nums;
   color: var(--console-text);
   background: var(--console-bg);
 }
@@ -847,6 +858,119 @@ body {
   .manufacturing-refresh-button {
     min-height: 44px;
   }
+}
+
+/* A working console: navigation groups provide orientation without reducing
+ * the space available to charts and tables. Compact remains the default. */
+.site-frame .nav-row { gap: 18px; margin-top: 26px; }
+.nav-group, .nav-group-links { display: grid; gap: 3px; min-width: 0; }
+.nav-group-label {
+  margin: 0 0 5px;
+  padding: 0 15px;
+  color: var(--console-muted);
+  font-size: var(--type-caption);
+  font-weight: 600;
+  letter-spacing: .08em;
+  line-height: 1.5;
+}
+.site-frame .nav-item { height: 40px; min-height: 40px; }
+.site-frame .nav-item.active { border-left-color: var(--console-accent); }
+.site-frame .is-sidebar-collapsed .nav-group-label { display: none; }
+.site-frame .is-sidebar-collapsed .nav-row { gap: 12px; }
+.site-frame .is-sidebar-collapsed .nav-group + .nav-group {
+  border-top: 1px solid var(--console-line);
+  padding-top: 12px;
+}
+.shell-skip-link {
+  position: fixed;
+  inset: 12px auto auto 12px;
+  z-index: 1000;
+  padding: 10px 16px;
+  border-radius: var(--radius-control);
+  background: var(--console-accent);
+  color: var(--console-on-accent);
+  font-weight: 650;
+  transform: translateY(-180%);
+}
+.shell-skip-link:focus { transform: translateY(0); }
+.shell-main:focus { outline: none; }
+.site-frame :is(.page-head, .panel-head) > div { min-width: 0; }
+.site-frame :is(.page-head, .panel-head) :is(h1, h2, p) { overflow-wrap: anywhere; }
+.site-frame .page-head p { max-width: 70ch; text-wrap: pretty; }
+.site-frame .data-table tbody tr { transition: background-color var(--motion-feedback) ease; }
+.site-frame .data-table th { font-size: var(--type-label); }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A phone opens on its selected instrument. The complete catalog remains
+ * available through a real disclosure, while desktop keeps its scroll rail. */
+.market-mobile-catalog-toggle { display: none; }
+.market-mobile-selected-item { display: grid; gap: 3px; text-align: left; }
+.market-mobile-selected-item strong { font-size: 14px; font-weight: 650; }
+.market-mobile-selected-item small { color: var(--console-muted); font-size: 12px; line-height: 1.4; }
+.market-mobile-catalog-toggle > span:not(.market-mobile-selected-item) { white-space: nowrap; }
+.market-catalog-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.mobile-nav-group, .mobile-nav-group-links { min-width: 0; }
+.shell-density-control { display: grid; gap: 6px; min-width: 0; }
+.shell-sidebar .shell-density-control { grid-column: 1 / -1; }
+.shell-density-label { color: var(--console-muted); font-size: 12px; }
+.shell-density-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; background: var(--console-bg); border: 1px solid var(--console-line); border-radius: var(--radius-control); }
+.shell-density-options button { min-height: 32px; border: 0; border-radius: 4px; background: transparent; color: var(--console-muted); font-size: 12px; cursor: pointer; }
+.shell-density-options button[aria-pressed='true'] { background: var(--console-raised); color: var(--console-text); }
+.shell-density-options button:hover { color: var(--console-text); }
+.site-frame:has(.app-shell[data-density='comfortable']) .data-table td { padding-block: 18px; }
+.site-frame:has(.app-shell[data-density='comfortable']) .nav-item { height: 44px; }
+.site-frame:has(.app-shell[data-density='comfortable']) .market-item-choice { padding-block: 14px; }
+.is-sidebar-collapsed .shell-density-control { display: none; }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; background: var(--console-text); }
+.brand-mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.mobile-brand .brand-mark, .mobile-brand .brand-mark img { width: 32px; height: 32px; }
+.loading-bar > .sr-only { width: 1px; height: 1px; animation: none; background: transparent; }
+
+@media (max-width: 1179px) {
+  .mobile-nav-links { display: block; }
+  .mobile-nav-group + .mobile-nav-group { margin-top: 14px; }
+  .mobile-nav-group-label { margin: 0 0 6px; color: var(--console-muted); font-size: 12px; font-weight: 600; }
+  .mobile-nav-group-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .mobile-nav .shell-density-control { grid-column: 1 / -1; }
+  .mobile-nav .shell-density-options button { min-height: 40px; }
+}
+@media (max-width: 767px) {
+  .site-frame .market-focus .market-mobile-catalog-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 14px;
+    border: 1px solid var(--console-line-strong);
+    border-radius: var(--radius-control);
+    background: var(--console-raised);
+    color: var(--console-text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .market-mobile-catalog-toggle > span { min-width: 0; overflow-wrap: anywhere; }
+  .market-mobile-catalog-toggle > svg { flex: 0 0 auto; }
+  .site-frame .market-focus .market-terminal-catalog:not(.is-catalog-open) .market-catalog-content { display: none; }
+  .site-frame .market-focus .market-terminal-catalog.is-catalog-open .market-catalog-content { margin-top: 12px; }
+  .site-frame .market-focus .market-terminal-catalog { gap: 10px; }
+}
+@media (max-width: 640px) {
+  .site-frame :is(.page-head, .manufacturing-page-header, .market-terminal-header, .kb-header, .tac-page-head, .ss-page-head) { align-items: flex-start; text-align: left; }
+  .site-frame .page-head > div { width: 100%; }
+  .site-frame .market-focus .market-terminal-heading { justify-content: flex-start; text-align: left; }
+  .site-frame .market-focus .market-terminal-header { justify-items: stretch; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -6,18 +6,27 @@ import { AuthContext } from '../../context/AuthContext'
 import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 import useKillboardAccess from '../../hooks/useKillboardAccess'
 import { pageTransitionKey } from '../../utils/routeTransition.js'
+import { loginReturnPath } from '../../utils/loginDestination'
 
-const navItems = [
-  { to: '/planetary', label: '行星资源', icon: Globe },
-  { to: '/market', label: '市场价格', icon: ChartNoAxesCombined },
-  { to: '/manufacturing', label: '制造估价', icon: Factory },
-  { to: '/killboard', label: '击毁情报', icon: Swords },
-  { to: '/starmap', label: '星系导航', icon: Compass },
-  { to: '/tactical', label: '战术板', icon: Crosshair },
-  { to: '/fraudlist', label: '防诈名单', icon: Shield },
-  { to: '/corporations', label: '军团大厅', icon: Users },
-  { to: '/starsea', label: '星海见闻', icon: Compass },
-  { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
+const navGroups = [
+  { id: 'industry', label: '市场与工业', items: [
+    { to: '/market', label: '市场价格', icon: ChartNoAxesCombined },
+    { to: '/manufacturing', label: '制造估价', icon: Factory },
+    { to: '/planetary', label: '行星资源', icon: Globe },
+  ] },
+  { id: 'operations', label: '星际行动', items: [
+    { to: '/killboard', label: '击毁情报', icon: Swords },
+    { to: '/killboard/admin', label: '击毁采集后台', icon: Swords },
+    { to: '/starmap', label: '星系导航', icon: Compass },
+    { to: '/tactical', label: '战术板', icon: Crosshair },
+    { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined },
+  ] },
+  { id: 'community', label: '社区情报', items: [
+    { to: '/fraudlist', label: '防诈名单', icon: Shield },
+    { to: '/corporations', label: '军团大厅', icon: Users },
+    { to: '/starsea', label: '星海见闻', icon: Compass },
+    { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
+  ] },
 ]
 
 const routeOrder = ['/fraudlist', '/planetary', '/market', '/manufacturing', '/killboard', '/starmap', '/tactical', '/corporations', '/starsea', '/feedback', '/usersetting', '/fraudadmin', '/licenseadmin', '/infocenter']
@@ -36,6 +45,18 @@ function DesktopOnlyMask() {
   )
 }
 
+function DensityControl({ density, onChange }) {
+  return (
+    <div className="shell-density-control" role="group" aria-label="显示密度">
+      <span className="shell-density-label">显示密度</span>
+      <div className="shell-density-options">
+        <button type="button" aria-pressed={density === 'compact'} onClick={() => onChange('compact')}>紧凑</button>
+        <button type="button" aria-pressed={density === 'comfortable'} onClick={() => onChange('comfortable')}>舒适</button>
+      </div>
+    </div>
+  )
+}
+
 export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -43,23 +64,65 @@ export default function AppShell() {
   const usageAccess = useTacticalUsageAccess()
   const killboardAccess = useKillboardAccess()
   const canViewUsage = usageAccess.allowed
-  const killboardNavItems = killboardAccess.allowed ? navItems : navItems.filter(item => item.to !== '/killboard')
-  const ownerNavItems = killboardAccess.allowed ? [...killboardNavItems.slice(0, 4), { to: '/killboard/admin', label: '击毁采集后台', icon: Swords }, ...killboardNavItems.slice(4)] : killboardNavItems
-  const availableNavItems = canViewUsage ? [...ownerNavItems.slice(0, 5), { to: '/tactical/usage', label: '战术板概况', icon: ChartNoAxesCombined }, ...ownerNavItems.slice(5)] : ownerNavItems
+  const exactNavigationMatch = to => to === '/tactical' || (to === '/killboard' && /^\/killboard\/admin(?:\/|$)/.test(location.pathname))
+  const availableNavGroups = navGroups.map(group => ({ ...group, items: group.items.filter(item => {
+    if (item.to.startsWith('/killboard')) return killboardAccess.allowed
+    if (item.to === '/tactical/usage') return canViewUsage
+    return true
+  }) }))
   const reduceMotion = useReducedMotion()
   const displayName = userInfo?.userName?.trim() || '已登录用户'
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('evem-sidebar-collapsed') === 'true' } catch { return false }
   })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [density, setDensity] = useState(() => {
+    try { return localStorage.getItem('evem-content-density') === 'comfortable' ? 'comfortable' : 'compact' } catch { return 'compact' }
+  })
+  const mobileToggleRef = useRef(null)
+  const mobileNavRef = useRef(null)
+  const mainRef = useRef(null)
+  const mobileNavOpenRef = useRef(false)
+  mobileNavOpenRef.current = mobileNavOpen
+  const openLogin = () => navigate('/login', { state: { from: loginReturnPath(location) } })
 
   useEffect(() => {
     try { localStorage.setItem('evem-sidebar-collapsed', String(collapsed)) } catch { /* Navigation remains usable when storage is unavailable. */ }
   }, [collapsed])
 
   useEffect(() => {
+    try { localStorage.setItem('evem-content-density', density) } catch { /* Keep the control usable without persistent storage. */ }
+  }, [density])
+
+  useEffect(() => {
+    if (!mobileNavOpenRef.current) return
     setMobileNavOpen(false)
-  }, [location.pathname])
+    mainRef.current?.focus({ preventScroll: true })
+  }, [location.pathname, location.search])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined
+    const closeOnEscape = event => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      setMobileNavOpen(false)
+      mobileToggleRef.current?.focus({ preventScroll: true })
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [mobileNavOpen])
+
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1180px)')
+    const closeOnDesktop = event => {
+      if (!event.matches) return
+      const focusedMobileNavigation = mobileNavRef.current?.contains(document.activeElement) || document.activeElement === mobileToggleRef.current
+      setMobileNavOpen(false)
+      if (focusedMobileNavigation) mainRef.current?.focus({ preventScroll: true })
+    }
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => desktop.removeEventListener('change', closeOnDesktop)
+  }, [])
 
   const prevPathRef = useRef(location.pathname)
   const prevIndexRef = useRef(routeIndex(location.pathname))
@@ -80,13 +143,19 @@ export default function AppShell() {
 
   return (
     <>
+      <a className="shell-skip-link" href="#main-content" onClick={event => {
+        event.preventDefault()
+        setMobileNavOpen(false)
+        mainRef.current?.focus()
+      }}>跳到主要内容</a>
       <DesktopOnlyMask />
       <header className="mobile-shell-header">
         <Link className="mobile-brand" to="/" aria-label="EVEMToolkit 首页">
-          <img src="/evem-compass-solid.png" alt="" className="mobile-brand-icon" />
+          <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="mobile-brand-icon" /></span>
           <span className="mobile-brand-name">EVEM</span>
         </Link>
         <button
+          ref={mobileToggleRef}
           className="mobile-menu-toggle"
           type="button"
           aria-label={mobileNavOpen ? '关闭导航' : '打开导航'}
@@ -97,18 +166,26 @@ export default function AppShell() {
           {mobileNavOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
       </header>
-      <nav id="mobile-navigation" className={`mobile-nav${mobileNavOpen ? ' is-open' : ''}`} aria-label="移动主导航" aria-hidden={!mobileNavOpen}>
+      <nav ref={mobileNavRef} id="mobile-navigation" className={`mobile-nav${mobileNavOpen ? ' is-open' : ''}`} aria-label="移动主导航" aria-hidden={!mobileNavOpen}>
         <div className="mobile-nav-links">
-          {availableNavItems.map((item) => {
+          {availableNavGroups.map(group => (
+            <div className="mobile-nav-group" key={group.id} role="group" aria-labelledby={`mobile-nav-group-${group.id}`}>
+              <p id={`mobile-nav-group-${group.id}`} className="mobile-nav-group-label">{group.label}</p>
+              <div className="mobile-nav-group-links">
+          {group.items.map((item) => {
             const Icon = item.icon
             return (
-              <NavLink key={item.to} to={item.to} end={item.to === '/tactical'} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink key={item.to} to={item.to} end={exactNavigationMatch(item.to)} aria-label={item.label} className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                 <Icon size={17} aria-hidden="true" />
                 <span>{item.label}</span>
               </NavLink>
             )
           })}
+              </div>
+            </div>
+          ))}
         </div>
+        <DensityControl density={density} onChange={setDensity} />
         <div className="mobile-nav-actions">
           {isAuthenticated ? (
             <>
@@ -117,15 +194,15 @@ export default function AppShell() {
               <button className="ghost-btn top-action-btn top-action-logout" type="button" onClick={logout}><LogOut size={15} />退出</button>
             </>
           ) : (
-            <button className="primary-btn mobile-login-btn" type="button" onClick={() => navigate('/login')}><LogIn size={17} />登录 / 注册</button>
+            <button className="primary-btn mobile-login-btn" type="button" onClick={openLogin}><LogIn size={17} />登录 / 注册</button>
           )}
         </div>
       </nav>
-      <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`}>
+      <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`} data-density={density}>
         <aside className="shell-sidebar" aria-label="工具导航">
           <div className="sidebar-brand-row">
           <Link className="brand" to="/" aria-label="EVEMToolkit 首页">
-            <img src="/evem-compass-solid.png" alt="" className="brand-icon" />
+            <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="brand-icon" /></span>
             <span className="brand-name">EVEM</span>
           </Link>
           <button className="sidebar-toggle" type="button" aria-label={collapsed ? '展开导航' : '收起导航'} title={collapsed ? '展开导航' : '收起导航'} aria-expanded={!collapsed} aria-controls="primary-navigation" onClick={() => setCollapsed(value => !value)}>
@@ -133,13 +210,17 @@ export default function AppShell() {
           </button>
           </div>
           <nav id="primary-navigation" className="nav-row" aria-label="主导航">
-            {availableNavItems.map((item) => {
+            {availableNavGroups.map(group => (
+              <div className="nav-group" key={group.id} role="group" aria-labelledby={`nav-group-${group.id}`}>
+                <p id={`nav-group-${group.id}`} className="nav-group-label">{group.label}</p>
+                <div className="nav-group-links">
+            {group.items.map((item) => {
               const Icon = item.icon
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/tactical'}
+                  end={exactNavigationMatch(item.to)}
                   aria-label={item.label}
                   title={collapsed ? item.label : undefined}
                   className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
@@ -151,8 +232,12 @@ export default function AppShell() {
                 </NavLink>
               )
             })}
+                </div>
+              </div>
+            ))}
           </nav>
           <div className="top-actions">
+            <DensityControl density={density} onChange={setDensity} />
             {isAuthenticated ? (
               <>
                 <div className="top-user-card" title={displayName}>
@@ -171,14 +256,14 @@ export default function AppShell() {
                 </button>
               </>
             ) : (
-              <button className="primary-btn login-btn" aria-label="登录 \ 注册" title={collapsed ? '登录 / 注册' : undefined} onClick={() => navigate('/login')}>
+              <button className="primary-btn login-btn" aria-label="登录 \ 注册" title={collapsed ? '登录 / 注册' : undefined} onClick={openLogin}>
                 <LogIn size={18} /><span>登录 \ 注册</span>
               </button>
             )}
           </div>
         </aside>
 
-        <main className="shell-main">
+        <main ref={mainRef} id="main-content" className="shell-main" tabIndex={-1}>
           <div className="page-stage">
             <motion.div
               key={transitionKey}

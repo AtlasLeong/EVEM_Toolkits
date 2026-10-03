@@ -1455,3 +1455,63 @@
   overflow: visible;
   padding: 0;
 }
+
+/* A short readout before a long route keeps the result within reach on phones.
+   Detailed prices and the editor stay in the full cost rail. */
+.manufacturing-mobile-overview { display: none; }
+.site-frame .manufacturing-page--terminal .manufacturing-cost-breakdown dd,
+.site-frame .manufacturing-page--terminal .manufacturing-market-reference strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.site-frame .manufacturing-page--terminal .manufacturing-tree-copy strong,
+.site-frame .manufacturing-page--terminal .manufacturing-tree-heading h2 {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.site-frame .manufacturing-page--terminal .manufacturing-inline-error {
+  margin: 10px 0 0;
+  color: var(--danger, #ee8c8c);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1099px) {
+  .site-frame .manufacturing-page--terminal .manufacturing-mobile-overview {
+    display: grid;
+    gap: 7px;
+    padding: 16px;
+    border: 1px solid var(--console-line);
+    border-left: 3px solid var(--console-accent);
+    border-radius: var(--radius-panel);
+    color: var(--console-text);
+    background: var(--console-surface);
+  }
+  .manufacturing-mobile-overview > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--console-muted);
+    font-size: 13px;
+  }
+  .manufacturing-mobile-overview > strong {
+    font-size: 24px;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .manufacturing-mobile-overview > small { color: var(--console-muted); font-size: 12px; line-height: 1.6; }
+  .site-frame .manufacturing-page--terminal .manufacturing-route-policy button,
+  .site-frame .manufacturing-page--terminal .manufacturing-tree-expand-actions button { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .manufacturing-page--terminal *,
+  .manufacturing-page--terminal *::before,
+  .manufacturing-page--terminal *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}

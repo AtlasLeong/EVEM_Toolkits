@@ -134,8 +134,7 @@ test('market terminal hides internal ids and explanatory footnotes', async ({ pa
   await expect(page.locator('.market-summary-note')).toHaveCount(0)
 })
 
-test('switching market items keeps the terminal chart mounted while the next series loads', async ({ page }) => {
-  let seriesCalls = 0
+test('switching market items keeps the frame visible without displaying the previous item series', async ({ page }) => {
   let releaseSecondSeries
   const secondSeries = new Promise(resolve => { releaseSecondSeries = resolve })
   await installApiMock(page, async ({ url }) => {
@@ -145,20 +144,26 @@ test('switching market items keeps the terminal chart mounted while the next ser
       { item_id: '1002', name: '另一艘舰船', category: '战列舰', category_id: 1000, best_sell: '230', best_buy: '200', observed_at: freshSample, status: 'fresh', scope: 'global' },
     ] })
     if (url.pathname.endsWith('/series/')) {
-      seriesCalls += 1
-      if (seriesCalls > 1) await secondSeries
-      return json({ count: 1, points: [{ observed_at: freshSample, best_sell: '130', best_buy: '100' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
+      const secondItem = url.pathname.includes('/1002/')
+      if (secondItem) await secondSeries
+      return json({ count: 1, points: [{ observed_at: freshSample, best_sell: secondItem ? '230' : '130', best_buy: secondItem ? '200' : '100' }], change: { best_sell: { absolute: null, percent: null }, best_buy: { absolute: null, percent: null } } })
     }
     return undefined
   })
 
   await page.goto('/market')
   await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
+  await expect(page.getByRole('status', { name: '当前观测报价' })).toContainText('130 ISK')
   await page.getByRole('button', { name: /另一艘舰船/ }).click()
   await expect(page.getByRole('heading', { name: '另一艘舰船' })).toBeVisible()
   await expect(page.locator('.market-terminal-main')).toBeVisible()
-  await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toBeVisible()
+  await expect(page.locator('.market-chart-frame')).toBeVisible()
+  await expect(page.locator('.market-chart-frame')).toContainText('正在读取真实历史报价')
+  await expect(page.locator('.market-trend-panel--sell .market-trend-svg')).toHaveCount(0)
+  await expect(page.getByRole('table', { name: '走势图数据' })).toHaveCount(0)
   releaseSecondSeries()
+  await expect(page.getByRole('status', { name: '当前观测报价' })).toContainText('230 ISK')
+  await expect(page.getByRole('table', { name: '走势图数据' })).not.toContainText('130 ISK')
 })
 
 test('market terminal fills the desktop viewport and keeps chart and order book in view', async ({ page }) => {
@@ -315,7 +320,8 @@ test('a single observed sample shows insufficient change without inventing a tre
   await expect(page.getByText('样本不足').first()).toBeVisible()
   await expect(page.locator('.market-trend-path')).toHaveCount(0)
   await expect(page.getByRole('status', { name: '当前观测报价' })).toContainText('19.25 ISK')
-  await expect(page.getByText('暂无报价').first()).toBeVisible()
+  await expect(page.locator('.market-current-quote--sell .market-quote-value > [aria-hidden="true"]')).toHaveText('暂无报价')
+  await expect(page.locator('.market-current-quote--sell .market-quote-value > [aria-hidden="true"]')).toBeVisible()
 })
 
 test('public market remains usable if collection API fails', async ({ page }) => {
@@ -348,7 +354,7 @@ test('market administration becomes read-only after a write permission denial', 
   await page.goto('/market/admin')
   await expect(page.getByText('会话未配置')).toBeVisible()
   await page.getByRole('button', { name: '保存采集设置' }).click()
-  await expect(page.getByRole('status')).toContainText('没有修改权限')
+  await expect(page.getByRole('status').filter({ hasText: '没有修改权限' })).toBeVisible()
   await expect(page.getByRole('button', { name: '保存采集设置' })).toBeDisabled()
   await expect(page.getByRole('button', { name: '立即采集' })).toBeDisabled()
 })
@@ -468,6 +474,7 @@ test('stale status and relative sample age stay on single lines at 390px', async
     results: [{ item_id: '1001', name: '测试舰船', category: '舰船', scope: 'global', best_sell: '987654321012345678.90', best_buy: null, observed_at: new Date(Date.now() - 86400000).toISOString(), status: 'stale' }],
   }) : undefined)
   await page.goto('/market')
+  await page.getByRole('button', { name: '切换物品', exact: true }).click()
 
   const status = page.locator('.market-choice-status.warning')
   const age = page.locator('.market-sample-age')

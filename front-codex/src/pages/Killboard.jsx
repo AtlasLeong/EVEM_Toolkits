@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Activity, AlertTriangle, Copy, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
+import { Activity, AlertTriangle, ChevronDown, Copy, Database, Layers3, LoaderCircle, RefreshCw, Search, Swords, X } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getKillReport, getKillboardStatus, listKillReports } from '../services/apiKillboard'
 import { copyKillboardTag, corporationLabel, equipmentSlotLabel, formatKillboardName, groupEquipmentItems, itemImage, killboardCollectionLabel, killboardSecurityMeta, killboardSystemLabel, participantVisibilityNote, reportSourceNote, selectedReport, shouldShowKillboardLiveStatus, shipImage, visibleParticipantRows } from '../utils/killboardPresentation'
 import KillParticipantRow from '../components/killboard/KillParticipantRow'
 import GameItemImage from '../components/GameItemImage'
+import { useResponsiveDisclosureFocus } from '../hooks/useResponsiveDisclosureFocus'
 import '../styles/killboard.css'
 
 export function formatKillIsk(value) {
@@ -148,11 +149,16 @@ export default function KillboardPage() {
   const [compactDetail, setCompactDetail] = useState(false)
   const [activePanel, setActivePanel] = useState('people')
   const [copyState, setCopyState] = useState('')
+  const [indexExpanded, setIndexExpanded] = useState(false)
   const contentRef = useRef(null)
+  const indexToggleRef = useRef(null)
+  const indexContentRef = useRef(null)
   const revoked = useRef(false)
   const requests = useRef(new Set())
   const activeRequests = useRef(new Set())
   const copyRequest = useRef(0)
+
+  useResponsiveDisclosureFocus({ mobileQuery: '(max-width: 760px)', toggleRef: indexToggleRef, contentRef: indexContentRef, setOpen: setIndexExpanded })
 
   function revokeAccess() {
     // Latch synchronously: already queued successes must not restore private data.
@@ -277,6 +283,8 @@ export default function KillboardPage() {
   function selectReport(id) {
     if (revoked.current) return
     setSelectedId(String(id))
+    setIndexExpanded(false)
+    if (indexToggleRef.current?.getClientRects().length) indexToggleRef.current.focus({ preventScroll: true })
     navigate(`/killboard/${id}`)
   }
 
@@ -295,15 +303,19 @@ export default function KillboardPage() {
       <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />00地区</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div>{(forbidden || shouldShowKillboardLiveStatus(status)) ? <span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span> : null}<button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
     </header>
     <div className="kb-workspace">
-      <aside className="kb-sidebar" aria-label="击毁报告筛选">
+      <aside className={`kb-sidebar${indexExpanded ? ' is-index-open' : ''}`} aria-label="击毁报告筛选">
         <div className="kb-sidebar-head"><div><span className="kb-eyebrow">REPORT INDEX</span><h2>报告索引</h2></div><span>{total || reports.length}</span></div>
+        <button ref={indexToggleRef} className="kb-mobile-index-toggle" type="button" aria-controls="kb-index-content" aria-expanded={indexExpanded} onClick={() => setIndexExpanded(value => !value)}><span>{indexExpanded ? '收起索引' : '筛选 / 切换报告'}</span><ChevronDown size={16} aria-hidden="true" /></button>
+        <div ref={indexContentRef} className="kb-index-content" id="kb-index-content" tabIndex={-1}>
         <label className="kb-search"><Search size={16} /><input type="search" value={filters.q} disabled={forbidden} onChange={event => { if (!revoked.current) setFilters(value => ({ ...value, q: event.target.value })) }} placeholder="搜索舰船、星系或角色" aria-label="搜索击毁报告" /></label>
         <div className="kb-filter-label">当前收录规则</div><div className="kb-collection-rule"><span>价值阈值</span><strong>&gt; 200 亿 ISK</strong><span>舰船范围</span><strong>不限船型</strong></div>
         <div className="kb-list-head"><span>最新报告</span><span>{loading ? '读取中' : `${reports.length} / ${total}`}</span></div>
-        <div className="kb-report-list">{loading && !reports.length ? <div className="kb-list-loading"><LoaderCircle className="spin" size={20} />读取报告…</div> : reports.length ? reports.map(report => <ReportRow key={report.kill_id} report={report} active={String(report.kill_id) === String(selectedId)} onSelect={selectReport} />) : <EmptyState title="暂无击毁报告">采集器尚未写入符合条件的报告。</EmptyState>}</div>
+        <div className="kb-report-list" aria-busy={loading}>{loading && !reports.length ? <div className="kb-list-loading" role="status"><LoaderCircle className="spin" size={20} aria-hidden="true" />读取报告…</div> : reports.length ? reports.map(report => <ReportRow key={report.kill_id} report={report} active={String(report.kill_id) === String(selectedId)} onSelect={selectReport} />) : <EmptyState title={filters.q.trim() ? '没有匹配报告' : '暂无击毁报告'}>{filters.q.trim() ? '尝试其他舰船、星系或角色名称。' : '采集器尚未写入符合条件的报告。'}</EmptyState>}</div>
+        </div>
       </aside>
       <main className="kb-main" aria-busy={detailLoading}>
         {error ? <div className={`kb-error${forbidden ? ' is-forbidden' : ''}`} role="alert"><AlertTriangle size={17} /><div><strong>{forbidden ? '访问受限' : '加载失败'}</strong><span>{error}</span></div>{!forbidden ? <button type="button" onClick={() => setError('')} aria-label="关闭错误"><X size={15} /></button> : null}</div> : null}
+        {detailLoading ? <div className="kb-detail-loading" role="status"><LoaderCircle className="spin" size={16} aria-hidden="true" />正在读取报告详情…</div> : null}
         {current ? <>
           <section className="kb-hero kb-panel">
             <VisualAsset src={shipImage(current)} kind="ship" alt={formatKillboardName(current.ship_name) || '舰船'} />
@@ -320,7 +332,7 @@ export default function KillboardPage() {
             <div className="kb-hero-value">
               <span>估算损失</span><strong>{formatKillIsk(current.isk_lost)} <small>ISK</small></strong><small className="kb-hero-exact">{exactIsk(current.isk_lost)}</small>
               <time>{formatKillboardTime(current.kill_time_display, current.kill_time_raw, current.source)}</time>
-              <button className="kb-copy-km" type="button" onClick={copyCurrentKillTag} aria-label="复制 KM" title="复制游戏内击毁报告标签"><Copy size={14} />{copyState || '复制 KM'}</button>
+              <button className="kb-copy-km" type="button" onClick={copyCurrentKillTag} aria-label="复制 KM" title="复制游戏内击毁报告标签"><Copy size={14} />{copyState || '复制 KM'}</button>{copyState ? <span className="kb-copy-feedback" role="status">{copyState === '已复制' ? '击毁报告标签已复制' : '复制失败，请重试'}</span> : null}
             </div>
           </section>
           {compactDetail ? <div className="kb-detail-tabs" role="tablist" aria-label="报告详情"><button type="button" role="tab" id="kb-tab-people" aria-controls="kb-panel-people" aria-selected={activePanel === 'people'} tabIndex={activePanel === 'people' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('people')}>人员</button><button type="button" role="tab" id="kb-tab-equipment" aria-controls="kb-panel-equipment" aria-selected={activePanel === 'equipment'} tabIndex={activePanel === 'equipment' ? 0 : -1} onKeyDown={switchPanel} onClick={() => setActivePanel('equipment')}>装备</button></div> : null}
