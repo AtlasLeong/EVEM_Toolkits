@@ -27,6 +27,7 @@ import {
   submitReportApprove,
 } from '../services/apiFraudList'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
+import '../styles/secondaryRoutes.css'
 
 const ACCOUNT_TYPE_OPTIONS = ['游戏ID', 'QQ', '微信', '咸鱼号']
 const FRAUD_TYPE_OPTIONS = ['诈骗', '中间人纠纷']
@@ -675,6 +676,7 @@ export default function FraudAdminPage() {
         <>
           <Panel
             title="新增记录"
+            className="fraud-create-panel"
             subtitle="填写账号信息并选择名单来源，便于后续核验。"
             action={
               <button
@@ -690,10 +692,11 @@ export default function FraudAdminPage() {
             }
           >
             {groupQuery.isPending ? <LoadingBar /> : null}
-            <div className="field-grid four">
+            <div className="field-grid four fraud-create-fields">
               <div className="field-row">
-                <label>诈骗账号</label>
+                <label htmlFor="fraud-create-account">诈骗账号</label>
                 <input
+                  id="fraud-create-account"
                   className="text-input"
                   value={createForm.fraud_account}
                   onChange={(event) => setCreateForm((current) => ({ ...current, fraud_account: event.target.value }))}
@@ -702,8 +705,9 @@ export default function FraudAdminPage() {
               </div>
 
               <div className="field-row">
-                <label>账号类型</label>
+                <label htmlFor="fraud-create-account-type">账号类型</label>
                 <select
+                  id="fraud-create-account-type"
                   className="text-input admin-select"
                   value={createForm.account_type}
                   onChange={(event) => setCreateForm((current) => ({ ...current, account_type: event.target.value }))}
@@ -717,8 +721,9 @@ export default function FraudAdminPage() {
               </div>
 
               <div className="field-row">
-                <label>纠纷类型</label>
+                <label htmlFor="fraud-create-fraud-type">纠纷类型</label>
                 <select
+                  id="fraud-create-fraud-type"
                   className="text-input admin-select"
                   value={createForm.fraud_type}
                   onChange={(event) => setCreateForm((current) => ({ ...current, fraud_type: event.target.value }))}
@@ -732,8 +737,9 @@ export default function FraudAdminPage() {
               </div>
 
               <div className="field-row">
-                <label>来源群组</label>
+                <label htmlFor="fraud-create-source">来源群组</label>
                 <select
+                  id="fraud-create-source"
                   className="text-input admin-select"
                   value={createForm.source_group_id}
                   onChange={(event) => setCreateForm((current) => ({ ...current, source_group_id: event.target.value }))}
@@ -748,8 +754,9 @@ export default function FraudAdminPage() {
               </div>
 
               <div className="field-row admin-span-all">
-                <label>备注</label>
+                <label htmlFor="fraud-create-remark">备注</label>
                 <textarea
+                  id="fraud-create-remark"
                   className="text-input textarea"
                   value={createForm.remark}
                   onChange={(event) => setCreateForm((current) => ({ ...current, remark: event.target.value }))}

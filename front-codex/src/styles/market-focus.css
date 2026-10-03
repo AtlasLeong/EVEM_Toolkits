@@ -84,7 +84,7 @@
 .market-focus.market-page--immersive .market-chart-frame .market-trend-svg-wrap { min-height: 180px; }
 .market-focus .market-trend-path { stroke-width: 2.2; filter: none; }
 .market-focus .market-trend-gridline { stroke: #27454e; }
-.market-focus .market-trend-axis { font-size: 12px; fill: #a8c1c5; }
+.market-focus .market-trend-axis, .market-focus .market-axis-measure-text { font-size: 12px; fill: #a8c1c5; }
 .market-focus .market-trend-last-point--sell { fill: var(--market-amber); }
 .market-focus .market-trend-last-point--buy { fill: var(--market-cyan); }
 .market-focus .market-last-guide { stroke-dasharray: 2 4; opacity: .5; }
@@ -117,6 +117,21 @@
 .market-current-quote small { grid-column: 1 / -1; font-size: 11px; line-height: 1.4; }
 .market-focus.market-page--immersive .market-terminal-summary .market-snapshot-meta { display: grid; margin-top: auto; padding-top: 12px; gap: 7px; font-size: 12px; }
 .market-focus .market-snapshot-meta strong { font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.market-focus .market-data-status { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 3px 12px; margin: 7px 0; color: var(--text-soft); font-size: 11px; line-height: 1.6; }
+.market-focus .market-data-status--warning { color: var(--market-amber-soft); }
+.market-focus .market-data-status time { font-variant-numeric: tabular-nums; }
+.market-focus.market-page--immersive .market-legend { flex-wrap: wrap; gap: 4px 14px; }
+.market-focus .market-legend .market-data-status { flex: 0 1 auto; margin: 0; gap: 3px 8px; }
+.market-focus .market-trend-plot-placeholder { display: grid; place-items: stretch; }
+.market-focus .market-trend-plot-placeholder > :is(.market-chart-message, .market-trend-empty, .market-trend-panel-empty) { min-height: 0; padding: 20px; border: 0; border-radius: 0; }
+.market-focus .market-trend-readout--placeholder { color: var(--text-soft); }
+.market-axis-measure { pointer-events: none; }
+.site-frame .market-focus .market-view-modes button,
+.site-frame .market-focus .market-periods button { min-width: 0; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.market-focus .market-terminal-catalog .market-data-status { margin-inline: 7px; }
+.market-focus .market-snapshot-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 8px; }
+.market-focus .market-snapshot-state { color: var(--text); }
+.market-focus .market-snapshot-state.warning { color: var(--market-amber-soft); }
 .market-focus button:focus-visible, .market-focus a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .market-focus .market-terminal-header button:focus-visible, .market-focus .market-terminal-header a:focus-visible { outline-color: #17333d; }
 @media (min-width: 1180px) and (max-width: 1379px) {
@@ -136,6 +151,7 @@
 }
 /* Auto-height layouts must reserve the plots' real height. Desktop flex-basis
    zero would otherwise let the SVG overflow its panel and overlap the readout. */
+.market-stats-scroll-hint { display: none; }
 @media (max-width: 1179px) {
   .market-focus .market-chart-frame { flex: 0 0 auto; min-height: 0; overflow: visible; }
   .market-focus .market-chart-frame .market-trend-wrap { height: auto; flex: 0 0 auto; }
@@ -153,6 +169,13 @@
   .market-focus.market-page--immersive .market-depth-grid, .market-focus .market-current-quotes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
+  .site-frame .market-focus .market-terminal-catalog .market-data-status { display: grid; gap: 3px; }
+  .site-frame .market-focus.market-page--immersive .market-legend { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; }
+  .site-frame .market-focus .market-legend .market-data-status { grid-column: 1 / -1; grid-row: 2; min-height: 1.6em; }
+  .site-frame .market-focus .market-legend > span { grid-column: 2; grid-row: 1; }
+  .site-frame .market-focus .market-view-modes,
+  .site-frame .market-focus .market-periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .market-focus .market-stats-scroll-hint { display: block; margin: 0 0 8px; color: var(--console-muted); font-size: 12px; line-height: 18px; }
   .shell-main:has(.market-focus) { padding: 12px; }
   .market-focus.market-page--immersive { padding: 0; }
   .market-focus.market-page--immersive .market-terminal-header { gap: 12px; padding-bottom: 8px; }

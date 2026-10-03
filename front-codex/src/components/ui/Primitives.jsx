@@ -40,10 +40,11 @@ export function Pill({ children, tone = 'neutral' }) {
   return <span className={`pill ${tone}`}>{children}</span>
 }
 
-export function LoadingBar() {
+export function LoadingBar({ label = '正在加载数据' }) {
   return (
-    <div className="loading-bar">
-      <span />
+    <div className="loading-bar" role="status" aria-live="polite">
+      <span aria-hidden="true" />
+      <span className="sr-only">{label}</span>
     </div>
   )
 }

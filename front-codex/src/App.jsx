@@ -1,10 +1,11 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { lazy, Suspense, useContext, useEffect } from 'react'
 import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
 import { isViewerAllowed, VIEWER_ACCESS_ENABLED } from './utils/viewerAccess'
 import { resolveSiteTitle } from './utils/siteMetadata'
+import { loginReturnPath } from './utils/loginDestination'
 import useKillboardAccess from './hooks/useKillboardAccess'
 const LoginPage = lazy(() => import('./pages/Login'))
 const InfoCenterPage = lazy(() => import('./pages/InfoCenter'))
@@ -60,16 +61,17 @@ function ScrollToTop() {
 
 function RequireAuth({ children }) {
   const { isAuthenticated } = useContext(AuthContext)
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const location = useLocation()
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loginReturnPath(location), reason: 'authentication' }} />
   return children
 }
 
 function RequireViewerAccess({ children }) {
-  const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
+  const { isAuthenticated, userInfo } = useContext(AuthContext)
   const location = useLocation()
 
   if (!VIEWER_ACCESS_ENABLED) return children
-  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loginReturnPath(location), reason: 'viewer-access' }} />
   if (!isViewerAllowed(userInfo?.email)) {
     return <Navigate to="/access-denied" replace />
   }
@@ -78,20 +80,22 @@ function RequireViewerAccess({ children }) {
 
 function AccessDeniedPage() {
   const { logout } = useContext(AuthContext)
+  const navigate = useNavigate()
   return (
     <main className="access-denied-page" role="alert">
       <p className="eyebrow">EVEM 工具箱</p>
       <h1>暂未开放查看权限</h1>
       <p>当前账号不在查看白名单中，请切换到已获授权的账号。</p>
-      <button type="button" onClick={logout}>切换账号</button>
+      <button type="button" onClick={() => { logout(); navigate('/login', { replace: true }) }}>切换账号</button>
     </main>
   )
 }
 
 function RequireKillboardAccess({ children }) {
   const { isAuthenticated } = useContext(AuthContext)
+  const location = useLocation()
   const access = useKillboardAccess()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loginReturnPath(location), reason: 'authentication' }} />
   if (access.loading) return pageFallback('验证击毁情报权限')
   if (!access.allowed) return <Navigate to="/market" replace />
   return children

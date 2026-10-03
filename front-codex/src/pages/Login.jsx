@@ -1,9 +1,10 @@
-import { motion } from 'framer-motion'
-import { CheckCircle2, CircleAlert, Mail, RotateCcw, ShieldCheck, UserRound } from 'lucide-react'
-import { useContext, useEffect, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { ChartNoAxesCombined, CheckCircle2, CircleAlert, Compass, Mail, RotateCcw, ShieldCheck, UserRound, Users } from 'lucide-react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { loginDestination } from '../utils/loginDestination'
+import { VIEWER_ACCESS_ENABLED } from '../utils/viewerAccess'
 import {
   emailVerification,
   forgetEmaillCheck,
@@ -13,9 +14,15 @@ import {
   signupCheck,
 } from '../services/apiAuthentication'
 import { AuthContext } from '../context/AuthContext'
+import '../styles/account-entry.css'
 
 const EMAIL_PATTERN = /\S+@\S+\.\S{1,}/
 const PASSWORD_PATTERN = /^[A-Za-z0-9@._-]+$/
+const AUTH_MODES = [
+  { key: 'login', label: '登录' },
+  { key: 'register', label: '注册' },
+  { key: 'reset', label: '找回密码' },
+]
 
 function shouldFallbackToChinese(message) {
   if (!message) return true
@@ -73,6 +80,10 @@ function validatePassword(value) {
   return ''
 }
 
+function focusFirstInvalidField(form) {
+  window.requestAnimationFrame(() => form?.querySelector('[aria-invalid="true"]')?.focus())
+}
+
 function normalizeRegisterError(message) {
   switch (message) {
     case 'All fields must be filled and not empty.':
@@ -119,13 +130,13 @@ function resolveForgetEmailCheckMessage(result) {
   return ''
 }
 
-function AuthMessage({ message, tone = 'error' }) {
+function AuthMessage({ id, message, tone = 'error' }) {
   if (!message) return null
 
   const icon = tone === 'success' ? <CheckCircle2 size={15} /> : <CircleAlert size={15} />
 
   return (
-    <div className={`auth-inline-message form-${tone} ${tone === 'success' ? 'is-success' : 'is-error'}`} role="alert" aria-live="polite">
+    <div id={id} className={`auth-inline-message form-${tone} ${tone === 'success' ? 'is-success' : 'is-error'}`} role={tone === 'success' ? 'status' : 'alert'}>
       {icon}
       <span>{message}</span>
     </div>
@@ -134,7 +145,10 @@ function AuthMessage({ message, tone = 'error' }) {
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const destination = loginDestination(useLocation().search)
+  const location = useLocation()
+  const destination = loginDestination(location.search, location.state?.from)
+  const reduceMotion = useReducedMotion()
+  const tabRefs = useRef({})
   const { isAuthenticated, login: loginAction } = useContext(AuthContext)
   const [mode, setMode] = useState('login')
   const [notice, setNotice] = useState('')
@@ -199,7 +213,7 @@ export default function LoginPage() {
       localStorage.setItem('access_token', data.access)
       localStorage.setItem('refresh_token', data.refresh)
       loginAction()
-      navigate('/fraudlist')
+      navigate(destination)
     },
     onError: (error) => {
       setRegisterErrors(normalizeRegisterError(error.message))
@@ -210,6 +224,7 @@ export default function LoginPage() {
     mutationFn: forgetPassword,
     onSuccess: () => {
       setMode('login')
+      window.requestAnimationFrame(() => tabRefs.current.login?.focus())
       setNotice('密码已重置，请使用新密码登录')
       setResetErrors({})
       setResetForm({
@@ -239,6 +254,19 @@ export default function LoginPage() {
     setLoginFieldErrors({})
     setRegisterErrors({})
     setResetErrors({})
+  }
+
+  const handleTabKeyDown = (event, index) => {
+    let nextIndex
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % AUTH_MODES.length
+    else if (event.key === 'ArrowLeft') nextIndex = (index + AUTH_MODES.length - 1) % AUTH_MODES.length
+    else if (event.key === 'Home') nextIndex = 0
+    else if (event.key === 'End') nextIndex = AUTH_MODES.length - 1
+    else return
+    event.preventDefault()
+    const nextMode = AUTH_MODES[nextIndex].key
+    switchMode(nextMode)
+    tabRefs.current[nextMode]?.focus()
   }
 
   const checkRegisterField = async (field, value) => {
@@ -363,6 +391,7 @@ export default function LoginPage() {
 
     if (Object.keys(nextErrors).length) {
       setLoginFieldErrors(nextErrors)
+      focusFirstInvalidField(event.currentTarget)
       return
     }
 
@@ -392,6 +421,7 @@ export default function LoginPage() {
 
     if (Object.keys(nextErrors).length) {
       setRegisterErrors(nextErrors)
+      focusFirstInvalidField(event.currentTarget)
       return
     }
 
@@ -423,6 +453,7 @@ export default function LoginPage() {
 
     if (Object.keys(nextErrors).length) {
       setResetErrors(nextErrors)
+      focusFirstInvalidField(event.currentTarget)
       return
     }
 
@@ -435,11 +466,27 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="login-screen">
+    <main className="login-screen">
+      <div className="login-layout">
+      <section className="login-intro" aria-labelledby="login-intro-title">
+        <div className="login-intro-brand">
+          <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" /></span>
+          <span className="login-intro-wordmark">EVEM</span>
+          <span className="login-intro-edition">EVE ECHOES TOOLKITS</span>
+        </div>
+        <p className="eyebrow">飞行员工具箱</p>
+        <h1 id="login-intro-title" className="login-intro-title">新伊甸工作台</h1>
+        <p className="login-intro-copy">从市场行情到工业估算，把每次出航需要的信息放在一起。</p>
+        <ul className="login-capability-list">
+          <li><ChartNoAxesCombined size={19} aria-hidden="true" /><div><strong>市场与工业</strong><span>价格曲线 · 制造估算 · 行星资源</span></div></li>
+          <li><Compass size={19} aria-hidden="true" /><div><strong>星际行动</strong><span>星系导航 · 战术协作</span></div></li>
+          <li><Users size={19} aria-hidden="true" /><div><strong>社区情报</strong><span>防诈查询 · 军团大厅 · 星海见闻</span></div></li>
+        </ul>
+      </section>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={reduceMotion ? false : { opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
+        transition={{ duration: reduceMotion ? 0 : 0.2 }}
         className="login-card auth-card"
       >
         <div className="login-brand">
@@ -447,35 +494,40 @@ export default function LoginPage() {
             <ShieldCheck size={18} />
           </span>
           <div>
-            <h1>EVEM Toolkits</h1>
+            <h2>EVEM Toolkits</h2>
             <p>账号入口</p>
           </div>
         </div>
 
+        {VIEWER_ACCESS_ENABLED && (
+          <div className="auth-access-notice" role="note">
+            <ShieldCheck size={17} aria-hidden="true" />
+            <div><strong>请使用已获查看权限的账号登录</strong><p>当前站点暂未开放访客浏览。注册账号不会自动获得查看权限。</p></div>
+          </div>
+        )}
+        {location.state?.reason === 'authentication' && <p className="auth-return-hint" role="status">此页面需要登录。完成登录后将返回刚才的页面。</p>}
+        {location.state?.reason === 'viewer-access' && <p className="auth-return-hint" role="status">完成登录并通过查看权限校验后，将返回刚才的页面。</p>}
+
         <div className="auth-tabs" role="tablist" aria-label="认证模式">
-          <button type="button" role="tab" aria-selected={mode === 'login'} aria-controls="auth-panel-login" className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => switchMode('login')}>
-            登录
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'register'}
-            aria-controls="auth-panel-register"
-            className={`auth-tab ${mode === 'register' ? 'active' : ''}`}
-            onClick={() => switchMode('register')}
-          >
-            注册
-          </button>
-          <button type="button" role="tab" aria-selected={mode === 'reset'} aria-controls="auth-panel-reset" className={`auth-tab ${mode === 'reset' ? 'active' : ''}`} onClick={() => switchMode('reset')}>
-            找回密码
-          </button>
+          {AUTH_MODES.map((tab, index) => (
+            <button key={tab.key} ref={element => { tabRefs.current[tab.key] = element }} id={`auth-tab-${tab.key}`} type="button" role="tab" aria-selected={mode === tab.key} aria-controls={`auth-panel-${tab.key}`} tabIndex={mode === tab.key ? 0 : -1} className={`auth-tab ${mode === tab.key ? 'active' : ''}`} onClick={() => switchMode(tab.key)} onKeyDown={event => handleTabKeyDown(event, index)}>
+              {tab.label}
+            </button>
+          ))}
         </div>
 
+        {AUTH_MODES.filter(tab => tab.key !== mode).map(tab => <div key={tab.key} id={`auth-panel-${tab.key}`} role="tabpanel" aria-labelledby={`auth-tab-${tab.key}`} hidden />)}
+
         {mode === 'login' ? (
-          <form id="auth-panel-login" role="tabpanel" className="auth-section" onSubmit={submitLogin} noValidate>
+          <form id="auth-panel-login" role="tabpanel" aria-labelledby="auth-tab-login" className="auth-section" onSubmit={submitLogin} noValidate>
             <div className="field-row">
-              <label>邮箱</label>
+              <label htmlFor="login-email">邮箱</label>
               <input
+                id="login-email"
+                name="username"
+                autoComplete="username"
+                aria-invalid={Boolean(loginFieldErrors.login_email)}
+                aria-describedby={loginFieldErrors.login_email ? 'login-email-error' : undefined}
                 aria-label="邮箱"
                 type="email"
                 className="text-input"
@@ -488,12 +540,17 @@ export default function LoginPage() {
                 placeholder="输入邮箱地址"
                 required
               />
-              <AuthMessage message={loginFieldErrors.login_email} />
+              <AuthMessage id="login-email-error" message={loginFieldErrors.login_email} />
             </div>
 
             <div className="field-row">
-              <label>密码</label>
+              <label htmlFor="login-password">密码</label>
               <input
+                id="login-password"
+                name="password"
+                autoComplete="current-password"
+                aria-invalid={Boolean(loginFieldErrors.login_password)}
+                aria-describedby={loginFieldErrors.login_password ? 'login-password-error' : undefined}
                 aria-label="密码"
                 type="password"
                 className="text-input"
@@ -506,7 +563,7 @@ export default function LoginPage() {
                 placeholder="输入登录密码"
                 required
               />
-              <AuthMessage message={loginFieldErrors.login_password} />
+              <AuthMessage id="login-password-error" message={loginFieldErrors.login_password} />
             </div>
 
             <AuthMessage message={loginError} />
@@ -519,13 +576,18 @@ export default function LoginPage() {
         ) : null}
 
         {mode === 'register' ? (
-          <form id="auth-panel-register" role="tabpanel" className="auth-section" onSubmit={submitRegister} noValidate>
+          <form id="auth-panel-register" role="tabpanel" aria-labelledby="auth-tab-register" className="auth-section" onSubmit={submitRegister} noValidate>
             <div className="auth-grid">
               <div className="field-row">
-                <label>用户名</label>
+                <label htmlFor="register-username">用户名</label>
                 <div className="auth-input-shell">
                   <UserRound size={15} />
                   <input
+                    id="register-username"
+                    name="username"
+                    autoComplete="username"
+                    aria-invalid={Boolean(registerErrors.userName)}
+                    aria-describedby={registerErrors.userName ? 'register-username-error' : undefined}
                     aria-label="用户名"
                     type="text"
                     className="text-input auth-input"
@@ -541,14 +603,19 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                <AuthMessage message={registerErrors.userName} />
+                <AuthMessage id="register-username-error" message={registerErrors.userName} />
               </div>
 
               <div className="field-row">
-                <label>邮箱</label>
+                <label htmlFor="register-email">邮箱</label>
                 <div className="auth-input-shell">
                   <Mail size={15} />
                   <input
+                    id="register-email"
+                    name="email"
+                    autoComplete="email"
+                    aria-invalid={Boolean(registerErrors.email)}
+                    aria-describedby={registerErrors.email ? 'register-email-error' : undefined}
                     aria-label="邮箱"
                     type="email"
                     className="text-input auth-input"
@@ -563,14 +630,20 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                <AuthMessage message={registerErrors.email} />
+                <AuthMessage id="register-email-error" message={registerErrors.email} />
               </div>
             </div>
 
             <div className="field-row">
-              <label>邮箱验证码</label>
+              <label htmlFor="register-code">邮箱验证码</label>
               <div className="auth-code-row">
                 <input
+                  id="register-code"
+                  name="verificationCode"
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  aria-invalid={Boolean(registerErrors.verificationCode)}
+                  aria-describedby={registerErrors.verificationCode ? 'register-code-error' : undefined}
                   aria-label="邮箱验证码"
                   type="text"
                   className="text-input"
@@ -592,13 +665,18 @@ export default function LoginPage() {
                   {registerCodePending ? '发送中...' : registerCountdown > 0 ? `${registerCountdown}s` : '发送验证码'}
                 </button>
               </div>
-              <AuthMessage message={registerErrors.verificationCode} />
+              <AuthMessage id="register-code-error" message={registerErrors.verificationCode} />
             </div>
 
             <div className="auth-grid">
               <div className="field-row">
-                <label>密码</label>
+                <label htmlFor="register-password">密码</label>
                 <input
+                  id="register-password"
+                  name="newPassword"
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(registerErrors.password)}
+                  aria-describedby={`register-password-hint${registerErrors.password ? ' register-password-error' : ''}`}
                   aria-label="密码"
                   type="password"
                   className="text-input"
@@ -611,12 +689,18 @@ export default function LoginPage() {
                   placeholder="8-15 位"
                   required
                 />
-                <AuthMessage message={registerErrors.password} />
+                <p id="register-password-hint" className="auth-field-hint">8–15 位，支持字母、数字和 @._-</p>
+                <AuthMessage id="register-password-error" message={registerErrors.password} />
               </div>
 
               <div className="field-row">
-                <label>确认密码</label>
+                <label htmlFor="register-confirm-password">确认密码</label>
                 <input
+                  id="register-confirm-password"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(registerErrors.confirmPassword)}
+                  aria-describedby={registerErrors.confirmPassword ? 'register-confirm-password-error' : undefined}
                   aria-label="确认密码"
                   type="password"
                   className="text-input"
@@ -629,7 +713,7 @@ export default function LoginPage() {
                   placeholder="再次输入密码"
                   required
                 />
-                <AuthMessage message={registerErrors.confirmPassword} />
+                <AuthMessage id="register-confirm-password-error" message={registerErrors.confirmPassword} />
               </div>
             </div>
 
@@ -643,11 +727,16 @@ export default function LoginPage() {
         ) : null}
 
         {mode === 'reset' ? (
-          <form id="auth-panel-reset" role="tabpanel" className="auth-section" onSubmit={submitReset} noValidate>
+          <form id="auth-panel-reset" role="tabpanel" aria-labelledby="auth-tab-reset" className="auth-section" onSubmit={submitReset} noValidate>
             <div className="field-row">
-              <label>注册邮箱</label>
+              <label htmlFor="reset-email">注册邮箱</label>
               <div className="auth-code-row">
                 <input
+                  id="reset-email"
+                  name="username"
+                  autoComplete="username"
+                  aria-invalid={Boolean(resetErrors.forgetEmail)}
+                  aria-describedby={resetErrors.forgetEmail ? 'reset-email-error' : undefined}
                   aria-label="注册邮箱"
                   type="email"
                   className="text-input"
@@ -669,12 +758,18 @@ export default function LoginPage() {
                   {resetCodePending ? '发送中...' : resetCountdown > 0 ? `${resetCountdown}s` : '发送验证码'}
                 </button>
               </div>
-              <AuthMessage message={resetErrors.forgetEmail} />
+              <AuthMessage id="reset-email-error" message={resetErrors.forgetEmail} />
             </div>
 
             <div className="field-row">
-              <label>邮箱验证码</label>
+              <label htmlFor="reset-code">邮箱验证码</label>
               <input
+                id="reset-code"
+                name="verificationCode"
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                aria-invalid={Boolean(resetErrors.forgetEmailVerification)}
+                aria-describedby={resetErrors.forgetEmailVerification ? 'reset-code-error' : undefined}
                 aria-label="邮箱验证码"
                 type="text"
                 className="text-input"
@@ -687,13 +782,18 @@ export default function LoginPage() {
                 placeholder="输入找回密码验证码"
                 required
               />
-              <AuthMessage message={resetErrors.forgetEmailVerification} />
+              <AuthMessage id="reset-code-error" message={resetErrors.forgetEmailVerification} />
             </div>
 
             <div className="auth-grid">
               <div className="field-row">
-                <label>新密码</label>
+                <label htmlFor="reset-password">新密码</label>
                 <input
+                  id="reset-password"
+                  name="newPassword"
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(resetErrors.forgetNewPassword)}
+                  aria-describedby={`reset-password-hint${resetErrors.forgetNewPassword ? ' reset-password-error' : ''}`}
                   aria-label="新密码"
                   type="password"
                   className="text-input"
@@ -706,12 +806,18 @@ export default function LoginPage() {
                   placeholder="输入新密码"
                   required
                 />
-                <AuthMessage message={resetErrors.forgetNewPassword} />
+                <p id="reset-password-hint" className="auth-field-hint">8–15 位，支持字母、数字和 @._-</p>
+                <AuthMessage id="reset-password-error" message={resetErrors.forgetNewPassword} />
               </div>
 
               <div className="field-row">
-                <label>确认新密码</label>
+                <label htmlFor="reset-confirm-password">确认新密码</label>
                 <input
+                  id="reset-confirm-password"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  aria-invalid={Boolean(resetErrors.forgetConfirmPassword)}
+                  aria-describedby={resetErrors.forgetConfirmPassword ? 'reset-confirm-password-error' : undefined}
                   aria-label="确认新密码"
                   type="password"
                   className="text-input"
@@ -724,7 +830,7 @@ export default function LoginPage() {
                   placeholder="再次输入新密码"
                   required
                 />
-                <AuthMessage message={resetErrors.forgetConfirmPassword} />
+                <AuthMessage id="reset-confirm-password-error" message={resetErrors.forgetConfirmPassword} />
               </div>
             </div>
 
@@ -738,15 +844,20 @@ export default function LoginPage() {
         ) : null}
 
         <div className="auth-footer">
-          <button type="button" className="ghost-btn auth-quick-btn" onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}>
+          <button type="button" className="ghost-btn auth-quick-btn" onClick={() => {
+            const nextMode = mode === 'login' ? 'register' : 'login'
+            switchMode(nextMode)
+            tabRefs.current[nextMode]?.focus()
+          }}>
             <RotateCcw size={14} />
             {mode === 'login' ? '切换到注册' : '返回登录'}
           </button>
           <p className="login-help">
-            仅浏览功能可直接进入 <Link to="/fraudlist">访客模式</Link>
+            {VIEWER_ACCESS_ENABLED ? '登录后仍会按账号权限开放相应工具。' : <>仅浏览功能可直接进入 <Link to="/fraudlist">访客模式</Link></>}
           </p>
         </div>
       </motion.div>
-    </div>
+      </div>
+    </main>
   )
 }

@@ -1,0 +1,879 @@
+{
+  "repository": "AtlasLeong/EVEM_Toolkits",
+  "baseline_commit": "5cda8bef3b05dfb6361c51fb6abde2c07ad7492c",
+  "browser": "Actual Windows user-PC Chrome and Linux CI Chromium renders. Baselines and visual audits used headed user-PC Chrome; later local stress captures and lab measurements may be headless, as identified in their reports. Three genuine Linux CI failure screenshots record the 320px text-pressure defect before its fix. Supported local fixtures, local production builds and anonymous production evidence are distinguished per file.",
+  "scope_note": "Screenshots are visually inspected artifacts. They do not prove production authentication, backend authorization, accessibility conformance, or real-user performance.",
+  "capture_note": "Extra baseline states taken after early shared-shell edits are marked initial_worktree. Rejected sticky-header capture artifacts are excluded.",
+  "consumer_note": "The public index uses evidence_id, filename, stage and available image hashes. The 117 native Library identifiers and consumer download verification are delivered privately; this public file grants no access to private attachments.",
+  "files": [
+    {
+      "name": "01b-market-desktop-clean-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E001"
+    },
+    {
+      "name": "02b-market-mobile-clean-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E002"
+    },
+    {
+      "name": "03-manufacturing-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E003"
+    },
+    {
+      "name": "03-manufacturing-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E004"
+    },
+    {
+      "name": "04-planetary-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E005"
+    },
+    {
+      "name": "04-planetary-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E006"
+    },
+    {
+      "name": "05-starmap-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E007"
+    },
+    {
+      "name": "05-starmap-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E008"
+    },
+    {
+      "name": "06-fraudlist-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E009"
+    },
+    {
+      "name": "06-fraudlist-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E010"
+    },
+    {
+      "name": "07-feedback-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E011"
+    },
+    {
+      "name": "07-feedback-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E012"
+    },
+    {
+      "name": "08-infocenter-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E013"
+    },
+    {
+      "name": "08-infocenter-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E014"
+    },
+    {
+      "name": "09-settings-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E015"
+    },
+    {
+      "name": "09-settings-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E016"
+    },
+    {
+      "name": "10-corporations-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E017"
+    },
+    {
+      "name": "10-corporations-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E018"
+    },
+    {
+      "name": "11-starsea-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E019"
+    },
+    {
+      "name": "11-starsea-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E020"
+    },
+    {
+      "name": "12-killboard-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E021"
+    },
+    {
+      "name": "12-killboard-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E022"
+    },
+    {
+      "name": "13-tactical-desktop-1440.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E023"
+    },
+    {
+      "name": "13-tactical-mobile-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E024"
+    },
+    {
+      "name": "12b-killboard-mobile-scrolled-390.png",
+      "stage": "baseline",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E025"
+    },
+    {
+      "name": "11b-starsea-fixture-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E026"
+    },
+    {
+      "name": "11b-starsea-fixture-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E027"
+    },
+    {
+      "name": "11c-starsea-detail-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E028"
+    },
+    {
+      "name": "11c-starsea-detail-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E029"
+    },
+    {
+      "name": "14-fraudadmin-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E030"
+    },
+    {
+      "name": "14-fraudadmin-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E031"
+    },
+    {
+      "name": "15-licenseadmin-desktop-1440.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E032"
+    },
+    {
+      "name": "15-licenseadmin-mobile-390.png",
+      "stage": "initial_worktree",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E033"
+    },
+    {
+      "name": "manufacturing-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E034"
+    },
+    {
+      "name": "manufacturing-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E035"
+    },
+    {
+      "name": "manufacturing-1280.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E036"
+    },
+    {
+      "name": "killboard-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E037"
+    },
+    {
+      "name": "killboard-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E038"
+    },
+    {
+      "name": "killboard-1280.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E039"
+    },
+    {
+      "name": "killboard-equipment-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E040"
+    },
+    {
+      "name": "killboard-long-content-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E041"
+    },
+    {
+      "name": "killboard-long-content-copy-visible-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E042"
+    },
+    {
+      "name": "tactical-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E043"
+    },
+    {
+      "name": "tactical-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E044"
+    },
+    {
+      "name": "licenseadmin-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E045"
+    },
+    {
+      "name": "licenseadmin-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E046"
+    },
+    {
+      "name": "settings-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E047"
+    },
+    {
+      "name": "planetary-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E048"
+    },
+    {
+      "name": "corporations-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E049"
+    },
+    {
+      "name": "infocenter-after-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E050"
+    },
+    {
+      "name": "fraudadmin-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E051"
+    },
+    {
+      "name": "cached-refresh-failure-1440.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E052"
+    },
+    {
+      "name": "cached-refresh-failure-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E053"
+    },
+    {
+      "name": "market-stat-hint-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E054"
+    },
+    {
+      "name": "market-stat-hint-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E055"
+    },
+    {
+      "name": "short-desktop-1280.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E056"
+    },
+    {
+      "name": "settings-error-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E057"
+    },
+    {
+      "name": "settings-error-after-320.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E058"
+    },
+    {
+      "name": "settings-recovery-after-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E059"
+    },
+    {
+      "name": "licenseadmin-actions-viewport-390.png",
+      "stage": "after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E060"
+    },
+    {
+      "name": "01-production-login-desktop.png",
+      "stage": "baseline",
+      "mode": "anonymous_production",
+      "evidence_id": "E061"
+    },
+    {
+      "name": "03-production-login-mobile.png",
+      "stage": "baseline",
+      "mode": "anonymous_production",
+      "evidence_id": "E062"
+    },
+    {
+      "name": "phase1-local-production-login-desktop.png",
+      "stage": "after",
+      "mode": "local_production_build",
+      "evidence_id": "E063"
+    },
+    {
+      "name": "phase1-local-production-login-mobile.png",
+      "stage": "after",
+      "mode": "local_production_build",
+      "evidence_id": "E064"
+    },
+    {
+      "name": "new-eden-workbench.png",
+      "stage": "approved_direction",
+      "mode": "generated_concept_only",
+      "evidence_id": "E065"
+    },
+    {
+      "name": "market-loading-catalog-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E066"
+    },
+    {
+      "name": "market-loading-series-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E067"
+    },
+    {
+      "name": "market-loading-loaded-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E068"
+    },
+    {
+      "name": "killboard-loading-index-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E069"
+    },
+    {
+      "name": "killboard-loading-detail-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E070"
+    },
+    {
+      "name": "killboard-loading-loaded-390.png",
+      "stage": "loading_diagnostic_before",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E071"
+    },
+    {
+      "name": "phase2-kmcollector-390.png",
+      "stage": "route_state_diagnostic_before",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E072"
+    },
+    {
+      "name": "phase2-fraudadminlogin-guest-390.png",
+      "stage": "route_state_diagnostic_before",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E073"
+    },
+    {
+      "name": "phase2-kmcollector-after-1440.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E074"
+    },
+    {
+      "name": "phase2-kmcollector-after-390.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E075"
+    },
+    {
+      "name": "phase2-kmcollector-after-320.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E076"
+    },
+    {
+      "name": "phase2-fraudadminlogin-after-1440.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E077"
+    },
+    {
+      "name": "phase2-fraudadminlogin-after-390.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E078"
+    },
+    {
+      "name": "phase2-fraudadminlogin-after-320.png",
+      "stage": "route_state_review",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E079"
+    },
+    {
+      "name": "login-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "caption": "Existing login tabs at200% text simulation; password-reset tab's second line is enclosed by its full hit area/background. Reset-form controls inserted after tab switch appear at normal size, so this image is not an all-reset-fields text200 conformance claim.",
+      "evidence_id": "E080"
+    },
+    {
+      "name": "navigation-text-200-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "caption": "Sidebar links at200% text simulation; collector label wraps inside full focus/hit area. Planetary labels/select values in page background are visibly vertically crowded/cropped; parent assigned a separate content fix, so do not caption this as whole-page text200 passed.",
+      "evidence_id": "E081"
+    },
+    {
+      "name": "market-loading-catalog-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E082"
+    },
+    {
+      "name": "market-loading-series-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E083"
+    },
+    {
+      "name": "market-loading-loaded-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E084"
+    },
+    {
+      "name": "market-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E085"
+    },
+    {
+      "name": "killboard-loading-index-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E086"
+    },
+    {
+      "name": "killboard-loading-detail-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E087"
+    },
+    {
+      "name": "killboard-loading-loaded-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E088"
+    },
+    {
+      "name": "killboard-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "local_production_build_fixture",
+      "evidence_id": "E089"
+    },
+    {
+      "name": "auth-reset-text-200-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E090"
+    },
+    {
+      "name": "auth-register-text-200-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E091"
+    },
+    {
+      "name": "auth-login-text-200-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E092"
+    },
+    {
+      "name": "planetary-calculator-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E093"
+    },
+    {
+      "name": "planetary-calculator-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E094"
+    },
+    {
+      "name": "planetary-calculator-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E095"
+    },
+    {
+      "name": "planetary-calculator-table-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E096"
+    },
+    {
+      "name": "planetary-calculator-text-200-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E097"
+    },
+    {
+      "name": "killboard-loaded-320.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E098"
+    },
+    {
+      "name": "planetary-200-after-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E099"
+    },
+    {
+      "name": "planetary-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E100"
+    },
+    {
+      "name": "settings-prices-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E101"
+    },
+    {
+      "name": "license-200-after-1024.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E102"
+    },
+    {
+      "name": "license-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E103"
+    },
+    {
+      "name": "settings-price-edited-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E104"
+    },
+    {
+      "name": "planetary-selected-normal-after-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E105"
+    },
+    {
+      "name": "planetary-selected-normal-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E106"
+    },
+    {
+      "name": "planetary-selected-200-after-1440.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E107"
+    },
+    {
+      "name": "planetary-selected-200-after-390.png",
+      "stage": "refined_after",
+      "mode": "supported_local_fixture",
+      "evidence_id": "E108"
+    },
+    {
+      "name": "auth-fallback/ci-before-reset-320.png",
+      "stage": "phase3_auth_font_fallback_before",
+      "mode": "supported_linux_ci_fixture",
+      "caption": "Confirmed failed CI state: reset mode, Linux Chromium320x844 computed text200, run37152592131/source67efa221; edition brand clips at the right viewport edge. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "60020fd116804ed0d82a116aa8be3e046df890d1afdc0fa5a2e1d522405d9288",
+      "image_size": {
+        "width": 320,
+        "height": 844
+      },
+      "source": {
+        "run_id": 37152592131,
+        "head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "head_tree": "48ca04e446a693a67787a7f951b6fa255ce0255f",
+        "platform": "Linux Chromium / Playwright1.58.2",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "artifact_id": 11284991846
+      },
+      "evidence_id": "E109"
+    },
+    {
+      "name": "auth-fallback/ci-before-login-320.png",
+      "stage": "phase3_auth_font_fallback_before",
+      "mode": "supported_linux_ci_fixture",
+      "caption": "Confirmed failed CI state: login mode, Linux Chromium320x844 computed text200, run37152592131/source67efa221; edition brand clips at the right viewport edge. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "1b7f99a2ef19e99b3064e9fdd150614fb406cec0b8b6ebdb831709a2ec2ddfb0",
+      "image_size": {
+        "width": 320,
+        "height": 844
+      },
+      "source": {
+        "run_id": 37152592131,
+        "head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "head_tree": "48ca04e446a693a67787a7f951b6fa255ce0255f",
+        "platform": "Linux Chromium / Playwright1.58.2",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "artifact_id": 11284991846
+      },
+      "evidence_id": "E110"
+    },
+    {
+      "name": "auth-fallback/ci-before-register-320.png",
+      "stage": "phase3_auth_font_fallback_before",
+      "mode": "supported_linux_ci_fixture",
+      "caption": "Confirmed failed CI state: register mode, Linux Chromium320x844 computed text200, run37152592131/source67efa221; edition brand clips at the right viewport edge. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "8d04360be66735a31bfbabb4e449704871491b08b7a33157906d4a24cf37898a",
+      "image_size": {
+        "width": 320,
+        "height": 844
+      },
+      "source": {
+        "run_id": 37152592131,
+        "head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "head_tree": "48ca04e446a693a67787a7f951b6fa255ce0255f",
+        "platform": "Linux Chromium / Playwright1.58.2",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "artifact_id": 11284991846
+      },
+      "evidence_id": "E111"
+    },
+    {
+      "name": "auth-fallback/auth-login-normal-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, anonymous login form320 normal system font.",
+      "sha256": "7241df395cdedf609d49f2d7999312b314b56cbb2747b28bdf425cd613114fbc",
+      "image_size": {
+        "width": 320,
+        "height": 938
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": false,
+        "mode": "login"
+      },
+      "evidence_id": "E112"
+    },
+    {
+      "name": "auth-fallback/auth-login-normal-390.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, anonymous login form390 normal system font.",
+      "sha256": "f703c0d019e0491ce1ddc8435cffb0cf159f5f55df44bdedceee2496480e96de",
+      "image_size": {
+        "width": 390,
+        "height": 938
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "pressure": false,
+        "mode": "login"
+      },
+      "evidence_id": "E113"
+    },
+    {
+      "name": "auth-fallback/auth-login-normal-1440.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, anonymous login form1440 normal system font.",
+      "sha256": "b3ef16fad7e75e8747a0da960865abc72766eba1d34b5a53b90007604e238c32",
+      "image_size": {
+        "width": 1440,
+        "height": 960
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 1440,
+          "height": 960
+        },
+        "pressure": false,
+        "mode": "login"
+      },
+      "evidence_id": "E114"
+    },
+    {
+      "name": "auth-fallback/auth-login-arial-text-200-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, login320 Arial fallback plus computed text200; full brand glyphs wrap inside viewport. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "760e42168a0bbc69c5c8663ed44e98c003206b04724b2a10904983d42eda2c0d",
+      "image_size": {
+        "width": 320,
+        "height": 1721
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": true,
+        "mode": "login"
+      },
+      "evidence_id": "E115"
+    },
+    {
+      "name": "auth-fallback/auth-register-arial-text-200-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, register320 Arial fallback plus computed text200; settled selected tab and complete controls. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "1402cbd879a62d5221290941d4fe4ad80448126109b4748e37c2ed280fb3e7dd",
+      "image_size": {
+        "width": 320,
+        "height": 2169
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": true,
+        "mode": "register"
+      },
+      "evidence_id": "E116"
+    },
+    {
+      "name": "auth-fallback/auth-reset-arial-text-200-320.png",
+      "stage": "phase3_auth_font_fallback_after",
+      "mode": "supported_local_production_build",
+      "caption": "Accepted after: Windows user-computer headed Chrome, immutable local production-built snapshot20dd9c26, reset320 Arial fallback plus computed text200; settled selected tab and complete controls. Text-only pressure simulation; not native browser zoom.",
+      "sha256": "694dbeb06c7d84334d48f724caa80165e90de337e41d3d1760768b20d1eacf93",
+      "image_size": {
+        "width": 320,
+        "height": 2065
+      },
+      "source": {
+        "base_head_sha": "67efa221920f2bca3b2e09ce9ee59cc873c49828",
+        "account_entry_css_blob": "e7a0be0368dc0cfc67b8bee8cf52ce500f6cec01",
+        "snapshot_index_sha256": "20dd9c266fa170a60fe02a661ac40fd1f76a1735d06eb35244d2545178288541",
+        "browser": "153.0.8010.48",
+        "platform": "Windows user-PC headed Chrome via Playwright CLI",
+        "viewport": {
+          "width": 320,
+          "height": 844
+        },
+        "pressure": true,
+        "mode": "reset"
+      },
+      "evidence_id": "E117"
+    }
+  ]
+}

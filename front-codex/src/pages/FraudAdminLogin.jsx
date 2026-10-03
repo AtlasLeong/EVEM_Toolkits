@@ -126,7 +126,7 @@ export default function FraudAdminLoginPage() {
             </Link>
           </div>
 
-          {adminCheckQuery.isPending ? <p className="login-help">正在验证当前账号的管理员权限...</p> : null}
+          {isAuthenticated && adminCheckQuery.isFetching ? <p className="login-help">正在验证当前账号的管理员权限...</p> : null}
 
           {showUnauthorizedHint ? (
             <div className="admin-login-warning">

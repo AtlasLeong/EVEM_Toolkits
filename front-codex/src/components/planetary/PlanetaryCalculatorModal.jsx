@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import {
   ArrowDownUp,
   CircleAlert,
@@ -28,6 +28,7 @@ import {
   updateProgremma,
 } from '../../services/apiPlanetaryResource'
 import { EmptyState } from '../ui/Primitives'
+import '../../styles/planetary-calculator.css'
 
 const fuelFactorMap = {
   重水: 2,
@@ -149,7 +150,12 @@ function StatCard({ label, value, hint, icon, tone }) {
 }
 
 export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows, isAuthenticated }) {
+  const reduceMotion = useReducedMotion()
   const queryClient = useQueryClient()
+  const dialogRef = useRef(null)
+  const closeButtonRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
   const programmeMenuRef = useRef(null)
   const [castle, setCastle] = useState('dual')
   const [skill, setSkill] = useState('554')
@@ -160,6 +166,41 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
   const [batchValues, setBatchValues] = useState({ arrays_number: '', computation_time: '', unit_price: '' })
   const [status, setStatus] = useState({ tone: '', message: '' })
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' })
+
+  useEffect(() => {
+    if (!open) return undefined
+    const node = dialogRef.current
+    if (!node) return undefined
+    const trigger = document.activeElement
+    const background = document.getElementById('root')
+    const previousInert = background?.inert
+    const previousOverflow = document.body.style.overflow
+    if (background && !background.contains(node)) background.inert = true
+    document.body.style.overflow = 'hidden'
+    closeButtonRef.current?.focus({ preventScroll: true })
+    const handleKey = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+      } else if (event.key === 'Tab') {
+        const controls = [...node.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(control => control.getClientRects().length)
+        const first = controls[0], last = controls.at(-1)
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
+      }
+    }
+    node.addEventListener('keydown', handleKey)
+    return () => {
+      node.removeEventListener('keydown', handleKey)
+      if (background && !background.contains(node)) background.inert = previousInert
+      document.body.style.overflow = previousOverflow
+      if (trigger?.isConnected) {
+        const restore = trigger.disabled || trigger === document.body || trigger === document.documentElement
+          ? document.querySelector('.planetary-open-btn') : trigger
+        restore?.focus({ preventScroll: true })
+      }
+    }
+  }, [open])
 
   const programmeListQuery = useQuery({
     queryKey: ['planetary-programme-list'],
@@ -436,21 +477,25 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
   if (!open) return null
 
   const modal = (
-    <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+    <motion.div className="modal-backdrop planetary-calculator-backdrop" initial={reduceMotion ? false : { opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} transition={{ duration:reduceMotion ? 0 : .2 }} onClick={onClose}>
       <motion.div
+        ref={dialogRef}
         className="modal-card calculator-card"
-        initial={{ opacity: 0, y: 18, scale: 0.985 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="planetary-calculator-title"
+        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 18, scale: 0.985 }}
-        transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18, scale: 0.985 }}
+        transition={{ duration: reduceMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
           <div>
             <p className="modal-kicker">Planetary Calculator</p>
-            <h3>行星资源计算器</h3>
+            <h3 id="planetary-calculator-title">行星资源计算器</h3>
           </div>
-          <button className="ghost-btn modal-close-btn" type="button" onClick={onClose}>
+          <button ref={closeButtonRef} className="ghost-btn modal-close-btn" type="button" onClick={onClose}>
             <X size={16} />
             关闭
           </button>
@@ -463,7 +508,8 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
                 <button
                   key={item.value}
                   type="button"
-                  className={`calculator-segment ${castle === item.value ? 'active' : ''}`}
+                   className={`calculator-segment ${castle === item.value ? 'active' : ''}`}
+                   aria-pressed={castle === item.value}
                   onClick={() => setCastle(item.value)}
                 >
                   {item.label}
@@ -475,7 +521,8 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
                 <button
                   key={item.value}
                   type="button"
-                  className={`calculator-segment ${skill === item.value ? 'active' : ''}`}
+                   className={`calculator-segment ${skill === item.value ? 'active' : ''}`}
+                   aria-pressed={skill === item.value}
                   onClick={() => setSkill(item.value)}
                 >
                   {item.label}
@@ -701,7 +748,9 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
         {status.message ? <p className={`calculator-status ${status.tone}`}>{status.message}</p> : null}
 
         {rows.length ? (
-          <div className="table-shell tall calculator-table-shell">
+          <>
+          <p className="calculator-table-hint" id="calculator-table-hint">左右滚动查看全部 11 列，可直接编辑阵列、时长和单价。</p>
+          <div className="table-shell tall calculator-table-shell" role="region" aria-label="资源计算明细" aria-describedby="calculator-table-hint" tabIndex={0}>
             <table className="data-table planetary-table calculator-table">
               <thead>
                 <tr>
@@ -783,6 +832,7 @@ export default function PlanetaryCalculatorModal({ open, onClose, rows, setRows,
               </tbody>
             </table>
           </div>
+          </>
         ) : (
           <div className="calculator-empty">
             <EmptyState title="计算器为空" desc="先在结果表勾选资源，再加入计算器开始联动计算" />

@@ -142,6 +142,27 @@ async function openTabletOverview(page) {
   return panel
 }
 
+test('phone tactical controls and strength readouts stay readable without page overflow', async ({ page }) => {
+  await installTacticalFixture(page)
+  await page.goto('/tactical')
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 })
+    const panel = page.getByRole('complementary', { name: '兵力总览与上报记录' })
+    await expect(panel.locator('[data-force-row-id="11"]')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
+    await expectReadable(page.locator('.tac-side-filter button'), `${width}px allegiance controls`)
+    await expectReadable(page.locator('.tac-add-force'), `${width}px manual deployment`)
+    await expectReadable(page.locator('.tac-connection, .tac-role, .tac-scope-label'), `${width}px connection and scope`)
+    await expectReadable(page.locator('.tac-strength-heading > span, .tac-strength-heading small, .tac-strength-notes'), `${width}px strength context`)
+    await expectReadable(page.locator('.tac-mobile-note'), `${width}px map instructions`)
+    const enemy = panel.getByRole('button', { name: '仅敌方', exact: true })
+    await enemy.focus()
+    await page.keyboard.press('Enter')
+    await expect(enemy).toHaveAttribute('aria-pressed', 'true')
+    await expectReadable(enemy, `${width}px selected allegiance`)
+  }
+})
+
 test('portalled create organization dialog keeps body labels and help readable in both form modes', async ({ page }) => {
   await seedAuthenticatedSession(page, { user_id: 23 })
   await installApiMock(page, ({ url }) => url.pathname.endsWith('/organizations/') ? json({ organizations: [] }) : json({}))

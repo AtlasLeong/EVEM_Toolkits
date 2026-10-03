@@ -6,7 +6,10 @@ import * as presentation from '../../src/utils/killboardPresentation.js'
 
 // Execute the actual page and effects. Only React scheduling, the router and
 // network boundary are replaced; no browser, credentials or backend is used.
-const source = readFileSync(new URL('../../src/pages/Killboard.jsx', import.meta.url), 'utf8').replace(/^import.*$/gm, '')
+const source = [
+  '../../src/hooks/useResponsiveDisclosureFocus.js',
+  '../../src/pages/Killboard.jsx',
+].map(path => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/^import.*$/gm, '')).join('\n')
 const compiled = await transform(source, { loader: 'jsx', format: 'cjs', jsx: 'transform' })
 const deferred = () => {
   let resolve, reject
@@ -75,7 +78,7 @@ function harness(initialKillId = '1') {
     ...presentation,
     copyKillboardTag: () => { const copy = deferred(); copies.push(copy); return copy.promise },
   }
-  for (const name of ['Activity', 'AlertTriangle', 'Copy', 'Database', 'Layers3', 'LoaderCircle', 'RefreshCw', 'Search', 'Swords', 'X', 'KillParticipantRow', 'GameItemImage']) dependencies[name] = name
+  for (const name of ['Activity', 'AlertTriangle', 'ChevronDown', 'Copy', 'Database', 'Layers3', 'LoaderCircle', 'RefreshCw', 'Search', 'Swords', 'X', 'KillParticipantRow', 'GameItemImage']) dependencies[name] = name
   const module = { exports: {} }
   new Function(...Object.keys(dependencies), 'module', 'exports', compiled.code)(...Object.values(dependencies), module, module.exports)
   const render = () => {

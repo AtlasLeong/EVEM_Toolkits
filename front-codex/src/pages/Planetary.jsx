@@ -9,6 +9,7 @@ import PlanetaryCalculatorModal, { buildCalculatorRow } from '../components/plan
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 import { AuthContext } from '../context/AuthContext'
 import FilterDisclosure from '../components/ui/FilterDisclosure'
+import '../styles/secondaryRoutes.css'
 
 const levelMap = {
   1: '贫瘠',

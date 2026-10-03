@@ -241,7 +241,15 @@ function EfficiencyRateField({ value, onChange }) {
   return <label className="manufacturing-efficiency-field"><span><strong>制造材料效率</strong><small>最终值 · 全链应用</small></span><div className="manufacturing-efficiency-input"><input aria-label="制造效率百分比" aria-describedby="manufacturing-efficiency-help" type="number" min={MIN_MATERIAL_EFFICIENCY} step="0.01" inputMode="decimal" placeholder={String(DEFAULT_MATERIAL_EFFICIENCY)} value={value} onChange={event => onChange(event.target.value)} /><b>%</b></div><em id="manufacturing-efficiency-help">{belowFloor ? '低于客户端下限，按 75% 计算。' : `生效 ${resolveMaterialEfficiency(value)}% · 数值越低，材料越省。`}</em></label>
 }
 
-function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading }) {
+function MobileCostOverview({ summary }) {
+  return <section className="manufacturing-mobile-overview" aria-label="当前方案成本摘要" data-testid="manufacturing-mobile-overview">
+    <div><span>{summary.complete ? '当前方案总成本' : '已覆盖小计'}</span><span className={`manufacturing-complete-state ${summary.complete ? 'is-complete' : 'is-partial'}`}>{summary.complete ? '可计算' : `待补 ${summary.missing.length} 项`}</span></div>
+    <strong>{formatIsk(summary.complete ? summary.total : summary.coveredSubtotal)}</strong>
+    <small>含市场材料与制造费用 · 蓝图费用未计入</small>
+  </section>
+}
+
+function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading, quoteError }) {
   const complete = summary?.complete
   const selectedPurchase = selectedNode?.mode === 'buy'
   return (
@@ -270,6 +278,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
         </> : <p className="manufacturing-price-help">{selectedNode ? '该节点当前为自造，不需要单独购买报价。切换为购买后可设置本方案单价。' : '点击制造链中的节点，可查看市场参考价并设置本方案的购买单价。'}</p>}
       </section>
       <button className="manufacturing-refresh-button" type="button" onClick={onRefreshQuotes} disabled={quoteLoading}><RefreshCw size={15} className={quoteLoading ? 'is-spinning' : ''} />{quoteLoading ? '正在读取行情' : '刷新购买项行情'}</button>
+      {quoteError ? <p className="manufacturing-inline-error" role="status">{quoteError}</p> : null}
     </aside>
   )
 }
@@ -432,16 +441,16 @@ export default function ManufacturingEstimatorPage() {
             <p className="manufacturing-price-help">填写游戏中含技能、设施加成的最终值；初始 150%，最低 75%。当前统一用于所有自造层级。</p>
           </fieldset>
         </aside>
+        <MobileCostOverview summary={summary} />
         <section className="manufacturing-tree-panel" data-testid="manufacturing-route-workspace" aria-label="制造链路">
            <div className="manufacturing-panel-heading manufacturing-tree-heading"><div><span className="eyebrow">制造路线</span><h2>{selectedRecipe.name}</h2></div><div className="manufacturing-tree-actions"><div className="manufacturing-tree-legend"><span><i className="dot dot-make" />自造</span><span><i className="dot dot-buy" />购买</span></div><div className="manufacturing-tree-expand-actions"><button type="button" aria-label="展开全部层级" onClick={expandAll}>展开全部</button><button type="button" aria-label="收起全部层级" onClick={collapseAll}>收起全部</button></div></div></div>
           <div className="manufacturing-route-policy" aria-label="批量路线策略"><span>批量策略</span><button type="button" aria-label="全部自造" onClick={() => applyRoutePolicy('make-all')}>全部自造</button><button type="button" aria-label="购买中间件" onClick={() => applyRoutePolicy('buy-intermediates')}>购买中间件</button><button type="button" aria-label="恢复默认" onClick={() => applyRoutePolicy('default')}>恢复默认</button></div>
           {routeActionMessage ? <p className="manufacturing-route-action-message" role="status" aria-live="polite">{routeActionMessage}</p> : null}
           <p className="manufacturing-tree-hint">点击节点查看价格；将中间产物切换为购买后，其下游制造会从本方案中移除。</p>
           <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} onModeChange={onModeChange} selectedId={selectedNodeId} onSelect={setSelectedNodeId} path="0" expandedNodes={expandedNodes} onToggleExpanded={toggleExpanded} /></ul>
-          {quoteError ? <p className="manufacturing-inline-error" role="status">{quoteError}</p> : null}
           <div className="manufacturing-route-footer"><span>制造时间</span><strong>{Math.ceil((summary.manufacturingTime || 0) / 3600)} 小时</strong><span>购买项</span><strong>{purchaseIds.length} 类</strong></div>
         </section>
-        <SummaryPanel summary={summary} selectedNode={selectedNode} quote={selectedQuote} manualPrice={selectedNodeId ? purchasePrices[selectedNodeId] || '' : ''} onManualPrice={updateManualPrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} />
+        <SummaryPanel summary={summary} selectedNode={selectedNode} quote={selectedQuote} manualPrice={selectedNodeId ? purchasePrices[selectedNodeId] || '' : ''} onManualPrice={updateManualPrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} quoteError={quoteError} />
       </section>
     </main>
   )
