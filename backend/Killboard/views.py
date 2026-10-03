@@ -13,6 +13,10 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 
 from .access import KillboardOwnerPermission, can_view_killboard
+from .diagnostics import (DEFAULT_WINDOW_HOURS, audit_error as _audit_error,
+                          audit_status, bounded_integer as _bounded_integer,
+                          diagnostic_summary, safe_diagnostics as _safe_diagnostics,
+                          validate_window_hours)
 from .models import KillReport, ProbeCursor, ProbeEvent, ProbeRun, ShipClass
 from .worker import paused_reason
 from .serializers import detail_payload, report_payload
@@ -86,67 +90,6 @@ def _minimum_isk_lost():
         return value if value.is_finite() and value >= 0 else Decimal('20000000000.00')
     except (InvalidOperation, TypeError, ValueError):
         return Decimal('20000000000.00')
-
-
-_AUDIT_METHODS = frozenset(('login_sigma', 'request_start_wait', 'get_newbie_info',
-                          'select_character_id', 'get_kill_info', 'get_public_info', 'get_corp_brief'))
-_AUDIT_STAGES = frozenset(('connection', 'authentication', 'kill_report', 'identity'))
-_AUDIT_ERRORS = frozenset((
-    'rate_limited', 'cooldown', 'unauthorized', 'network_error', 'malformed', 'budget_exhausted',
-    'configuration_error', 'empty_threshold', 'max_requests', 'max_seconds', 'time_reversed',
-    'lease_expired', 'lease_lost', 'failed', 'empty', 'report', 'boundary_located',
-    'frontier_search', 'caught_up', 'not_configured', 'CollectorError', 'NeedsAuthError',
-    'locate_budget', 'missing_known_report', 'invalid_strategy_state', 'waiting_visibility', 'id_limit',
-))
-_AUDIT_COUNTS = frozenset(('rpc_count', 'created_count', 'updated_count', 'filtered_value_count',
-                          'filtered_npc_count', 'filtered_policy_count', 'enrichment_deferred_count',
-                          'parsed_count', 'locate_count', 'scan_count', 'history_count'))
-_AUDIT_DISPOSITIONS = frozenset(('created', 'updated', 'filtered_value', 'filtered_npc',
-                               'filtered_policy', 'parsed'))
-
-
-def _audit_error(value):
-    return value if _audit_choice(value, _AUDIT_ERRORS) else ('unknown_error' if value else '')
-
-
-def _audit_choice(value, choices):
-    return isinstance(value, str) and value in choices
-
-
-def _bounded_integer(value, maximum=2**63 - 1):
-    return value if type(value) is int and 0 <= value <= maximum else None
-
-
-def _safe_diagnostics(value):
-    """Revalidate the stored JSON; never return arbitrary fields or remote text."""
-    if not isinstance(value, dict):
-        return {}
-    result = {}
-    slot = value.get('session_slot')
-    if isinstance(slot, str) and 1 <= len(slot) <= 2 and all('A' <= char <= 'Z' for char in slot):
-        ordinal = 0
-        for char in slot:
-            ordinal = ordinal * 26 + ord(char) - ord('A') + 1
-        if ordinal <= 201:
-            result['session_slot'] = slot
-    for key in _AUDIT_COUNTS:
-        number = _bounded_integer(value.get(key), 10000000)
-        if number is not None:
-            result[key] = number
-    for key in ('last_rpc_method', 'failure_rpc_method'):
-        if _audit_choice(value.get(key), _AUDIT_METHODS):
-            result[key] = value[key]
-    if _audit_choice(value.get('stage'), _AUDIT_STAGES):
-        result['stage'] = value['stage']
-    if _audit_choice(value.get('disposition'), _AUDIT_DISPOSITIONS):
-        result['disposition'] = value['disposition']
-    if _audit_choice(value.get('error_code'), _AUDIT_ERRORS):
-        result['error_code'] = value['error_code']
-    if value.get('strategy') == 'latest_first':
-        result['strategy'] = 'latest_first'
-    if value.get('phase') in ('locate', 'scan'):
-        result['phase'] = value['phase']
-    return result
 
 
 def _strategy_summary(value):
@@ -267,7 +210,7 @@ class StatusView(PrivateKillboardView):
         paused = paused_reason(cursor) if cursor else ''
         ready = configured and cursor is not None and cursor.next_probe_id is not None and not paused
         return Response({
-            'state': paused or ('not_configured' if not ready else latest_run.status if latest_run else 'ready'),
+            'state': paused or ('not_configured' if not ready else audit_status(latest_run.status, run=True) if latest_run else 'ready'),
             'configured': configured,
             'collection_enabled': ready,
             'last_collected_at': latest_run.finished_at_ms if latest_run else None,
@@ -275,7 +218,7 @@ class StatusView(PrivateKillboardView):
             'candidate_kill_id': str(cursor.candidate_id) if cursor and cursor.candidate_id else None,
             'coverage_verified': False,
             'cooldown_until_ms': cursor.cooldown_until_ms if cursor else None,
-            'stop_reason': latest_run.stop_reason if latest_run else None,
+            'stop_reason': _audit_error(latest_run.stop_reason) if latest_run else None,
             'last_success_id': str(cursor.last_success_id) if cursor and cursor.last_success_id else None,
         })
 
@@ -284,6 +227,13 @@ class CollectorLogsView(PrivateKillboardView):
     """Read-only collector health and audit data for the configured owner."""
 
     def get(self, request):
+        try:
+            raw_hours = request.query_params.get('window_hours', str(DEFAULT_WINDOW_HOURS))
+            if len(raw_hours) > 3 or not raw_hours.isascii() or not raw_hours.isdecimal():
+                raise ValueError('window_hours must be a bounded integer.')
+            window_hours = validate_window_hours(int(raw_hours))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({'window_hours': str(exc)}) from None
         cursor = ProbeCursor.objects.filter(name='latest').first()
         configured = bool(getattr(settings, 'KILLBOARD_COLLECTION_ENABLED', False))
         latest_report = KillReport.objects.order_by('-collected_at_ms', '-kill_id').first()
@@ -294,7 +244,7 @@ class CollectorLogsView(PrivateKillboardView):
             runs = [
                 {
                     'id': row.pk,
-                    'status': row.status,
+                    'status': audit_status(row.status, run=True),
                     'created_at_ms': row.created_at_ms,
                     'started_at_ms': row.started_at_ms,
                     'finished_at_ms': row.finished_at_ms,
@@ -315,7 +265,7 @@ class CollectorLogsView(PrivateKillboardView):
                     'id': row.pk,
                     'run_id': row.run_id,
                     'kill_id': str(row.kill_id) if row.kill_id is not None else None,
-                    'status': row.status,
+                    'status': audit_status(row.status),
                     'error_code': _audit_error(row.error_code),
                     'observed_at_ms': row.observed_at_ms,
                     'duration_ms': row.duration_ms,
@@ -340,4 +290,5 @@ class CollectorLogsView(PrivateKillboardView):
             },
             'runs': runs,
             'events': events,
+            'summary': diagnostic_summary(cursor, window_hours=window_hours),
         })

@@ -75,6 +75,7 @@ class KillboardApiTests(TestCase):
             '/api/killboard/reports/19748417/',
             '/api/killboard/filters/',
             '/api/killboard/status/',
+            '/api/killboard/collector/logs/',
         ):
             with self.subTest(url=url):
                 response = anonymous.get(url)
@@ -184,6 +185,67 @@ class KillboardApiTests(TestCase):
         response = self.client.get('/api/killboard/collector/logs/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['cursor']['strategy']['deferred_id_count'], 0)
+
+    def test_collector_summary_extends_logs_without_using_the_displayed_rows_as_statistics(self):
+        from unittest.mock import patch
+        from Killboard.diagnostics import DISPOSITION_COUNTS
+        now = 1800000000000
+        cursor = ProbeCursor.objects.create(name='latest')
+        identity = {'material_alias': 'm_' + 'a' * 24, 'material_version': 'v_' + 'b' * 24,
+                    'pool_version': 'p_' + 'c' * 24}
+        for index in range(31):
+            ProbeRun.objects.create(cursor=cursor, created_at_ms=now - 1000, request_count=1, report_count=1,
+                                    diagnostics={**identity, 'session_slot': 'A', 'rpc_count': 5,
+                                                 **dict.fromkeys(DISPOSITION_COUNTS, 0), 'created_count': 1})
+        with patch('Killboard.diagnostics.epoch_ms', return_value=now):
+            response = self.client.get('/api/killboard/collector/logs/?window_hours=24')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data['runs']), 30)
+        summary = response.data['summary']
+        self.assertEqual(summary['totals']['km_response_count'], 31)
+        self.assertEqual(summary['totals']['dispositions']['created_count'], 31)
+        self.assertEqual(summary['materials'][0]['material_alias'], identity['material_alias'])
+        self.assertEqual(summary['materials'][0]['attempted_runs'], 31)
+        self.assertEqual(summary['coverage']['stable_material_runs'], 31)
+        self.assertFalse(summary['coverage']['truncated'])
+        self.assertIsNone(summary['distinct_accounts'])
+        self.assertFalse(summary['account_mapping_used'])
+        self.assertEqual(response['Cache-Control'], 'no-store, private')
+        self.assertIn('Authorization', response['Vary'])
+
+    def test_collector_logs_and_status_sanitize_event_status_errors_and_identity(self):
+        from unittest.mock import patch
+        cursor = ProbeCursor.objects.create(name='latest', next_probe_id=1)
+        run = ProbeRun.objects.create(cursor=cursor, status='PRIVATE STATUS', stop_reason='service_rejected',
+                                      error_code='lease_lost', request_count=1, diagnostics={
+                                          'material_alias': 'm_' + 'a' * 24,
+                                          'material_version': '/PRIVATE/session', 'pool_version': 'p_' + 'c' * 24,
+                                          'rpc_count': 0, 'error_code': 'service_rejected', 'token': 'PRIVATE TOKEN'})
+        ProbeEvent.objects.create(run=run, status='PRIVATE STATUS', error_code='PRIVATE BODY')
+        response = self.client.get('/api/killboard/collector/logs/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['runs'][0]['status'], 'unknown_status')
+        self.assertEqual(response.data['runs'][0]['stop_reason'], 'service_rejected')
+        self.assertEqual(response.data['runs'][0]['error_code'], 'lease_lost')
+        self.assertEqual(response.data['events'][0]['status'], 'unknown_status')
+        self.assertEqual(response.data['events'][0]['error_code'], 'unknown_error')
+        self.assertNotIn('material_alias', response.data['runs'][0]['diagnostics'])
+        self.assertNotIn('PRIVATE', str(response.data))
+        with self.settings(KILLBOARD_COLLECTION_ENABLED=True):
+            status = self.client.get('/api/killboard/status/')
+        self.assertEqual(status.data['state'], 'unknown_status')
+        self.assertEqual(status.data['stop_reason'], 'service_rejected')
+        self.assertNotIn('PRIVATE', str(status.data))
+
+    def test_collector_summary_window_validation_is_bounded_and_does_not_echo_remote_input(self):
+        for value in ('0', '169', '-1', '1.5', '999999999999999999', 'PRIVATE', '\u0661'):
+            with self.subTest(value=value):
+                response = self.client.get('/api/killboard/collector/logs/', {'window_hours': value})
+                self.assertEqual(response.status_code, 400)
+                self.assertNotIn('PRIVATE', str(response.data))
+        response = self.client.get('/api/killboard/collector/logs/?window_hours=168')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['summary']['window']['hours'], 168)
 
     def test_owner_check_reloads_active_email_and_fails_closed_when_setting_missing(self):
         self.client.force_authenticate(self.owner)
