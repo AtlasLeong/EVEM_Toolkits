@@ -1547,3 +1547,80 @@
 .manufacturing-page--terminal .manufacturing-mobile-overview .manufacturing-quote-warning {
   margin-bottom: 0;
 }
+
+/* The purchase list follows the route workbench in the same scroll surface. */
+.site-frame .manufacturing-page--terminal:not(.manufacturing-target-portal) {
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.site-frame .manufacturing-page--terminal .manufacturing-workspace {
+  flex: 0 0 auto;
+}
+.manufacturing-purchase-list {
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid var(--terminal-line);
+  border-radius: 10px;
+  color: var(--terminal-text);
+  background: var(--terminal-panel);
+  scroll-margin-top: 12px;
+}
+.manufacturing-purchase-list:focus-visible { outline: 2px solid var(--terminal-amber); outline-offset: -2px; }
+.manufacturing-purchase-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.manufacturing-purchase-heading h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--terminal-text); font-size: 18px; }
+.manufacturing-purchase-heading h2 svg { color: var(--terminal-amber); }
+.manufacturing-purchase-heading p, .manufacturing-purchase-note, .manufacturing-purchase-footer p { margin: 6px 0 0; color: var(--terminal-muted); font-size: 12px; line-height: 1.65; }
+.manufacturing-purchase-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.manufacturing-purchase-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 1px solid var(--terminal-line-strong); border-radius: 6px; padding: 8px 11px; color: var(--terminal-amber-soft); background: transparent; font-size: 12px; cursor: pointer; }
+.manufacturing-purchase-actions button:hover { border-color: var(--terminal-amber); background: rgb(239 181 102 / 8%); }
+.manufacturing-purchase-actions button:disabled { opacity: .55; cursor: default; }
+.manufacturing-purchase-note { margin-top: 12px; }
+.manufacturing-purchase-table-wrap { min-width: 0; margin-top: 14px; }
+.manufacturing-purchase-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.manufacturing-purchase-table th, .manufacturing-purchase-table td { padding: 13px 10px; border-bottom: 1px solid var(--terminal-line); text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.manufacturing-purchase-table thead th { color: var(--terminal-muted); font-size: 11px; font-weight: 600; background: #0c1d24; }
+.manufacturing-purchase-table thead th:nth-child(1) { width: 22%; }
+.manufacturing-purchase-table thead th:nth-child(2) { width: 10%; }
+.manufacturing-purchase-table thead th:nth-child(3) { width: 21%; }
+.manufacturing-purchase-table thead th:nth-child(4) { width: 26%; }
+.manufacturing-purchase-table thead th:nth-child(5) { width: 21%; }
+.manufacturing-purchase-item { display: flex; gap: 9px; align-items: center; }
+.manufacturing-purchase-item > .market-item-icon { flex: 0 0 30px; }
+.manufacturing-purchase-item > div { min-width: 0; }
+.manufacturing-purchase-item strong { display: block; font-size: 13px; font-weight: 600; }
+.manufacturing-purchase-table small { display: block; margin-top: 5px; color: var(--terminal-muted); font-size: 11px; line-height: 1.5; font-weight: 400; }
+.manufacturing-purchase-quantity, .manufacturing-purchase-unit-price { font-variant-numeric: tabular-nums; }
+.manufacturing-purchase-unit-price { display: block; font-weight: 600; }
+.manufacturing-purchase-source { color: var(--terminal-blue); font-size: 12px; }
+.manufacturing-purchase-source.is-warning { color: var(--terminal-amber-soft); }
+.manufacturing-purchase-table a { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 7px; color: var(--terminal-blue); text-decoration: underline; text-underline-offset: 3px; }
+.manufacturing-purchase-table a:focus-visible { outline: 2px solid var(--terminal-amber); outline-offset: 3px; }
+.manufacturing-purchase-table input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--terminal-line-strong); border-radius: 6px; padding: 8px 9px; color: var(--terminal-text); background: #09191f; font-size: 12px; font-variant-numeric: tabular-nums; }
+.manufacturing-purchase-table input::placeholder { color: var(--terminal-muted); }
+.manufacturing-purchase-table input[aria-invalid="true"] { border-color: var(--terminal-red); }
+.manufacturing-purchase-footer { margin-top: 14px; color: var(--terminal-muted); font-size: 12px; line-height: 1.7; }
+.manufacturing-purchase-footer strong { margin-left: 6px; color: var(--terminal-amber-soft); font-variant-numeric: tabular-nums; }
+.manufacturing-purchase-copy-status { margin: 12px 0 0; color: var(--terminal-amber-soft); font-size: 12px; line-height: 1.6; }
+.manufacturing-purchase-fallback { display: block; margin-top: 10px; color: var(--terminal-muted); font-size: 12px; }
+.manufacturing-purchase-fallback textarea { box-sizing: border-box; display: block; width: 100%; min-height: 160px; margin-top: 6px; border: 1px solid var(--terminal-line-strong); border-radius: 6px; padding: 10px; color: var(--terminal-text); background: #09191f; font-size: 12px; resize: vertical; }
+@media (min-width: 1100px) {
+  .site-frame .manufacturing-page--terminal .manufacturing-workspace { height: clamp(440px, calc(100dvh - 230px), 760px); }
+}
+@media (max-width: 1099px) {
+  .site-frame .manufacturing-page--terminal:not(.manufacturing-target-portal) { overflow: visible; height: auto; }
+  .manufacturing-purchase-list { padding: 15px; }
+}
+@media (max-width: 900px) {
+  .manufacturing-purchase-table thead { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .manufacturing-purchase-table, .manufacturing-purchase-table tbody { display: block; }
+  .manufacturing-purchase-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 14px; padding: 14px 0; border-top: 1px solid var(--terminal-line); }
+  .manufacturing-purchase-table th, .manufacturing-purchase-table td { display: block; border: 0; padding: 0; }
+  .manufacturing-purchase-table td::before { display: block; margin-bottom: 5px; color: var(--terminal-muted); font-size: 10px; content: attr(data-label); }
+  .manufacturing-purchase-table tbody th { grid-column: 1 / -1; }
+  .manufacturing-purchase-actions { width: 100%; }
+  .manufacturing-purchase-actions button { flex: 1 1 auto; min-height: 44px; }
+}

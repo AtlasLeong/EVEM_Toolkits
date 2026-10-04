@@ -247,7 +247,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   await expect(routeGroup.getByRole('button', { name: '购买', exact: true })).toHaveAttribute('data-state', 'active')
   await expect(routeGroup.getByRole('button', { name: '购买', exact: true })).toHaveCSS('background-color', 'rgb(239, 181, 102)')
   await expect(page.locator('[data-testid="manufacturing-tree-row"][data-selected="true"]')).toBeVisible()
-  await expect(page.getByText('市场参考价')).toBeVisible()
+  await expect(page.getByTestId('manufacturing-cost-rail').getByText('市场参考价', { exact: true })).toBeVisible()
 
   const quoteRequestCount = quoteRequests.length
   await page.getByRole('button', { name: '增加制造数量' }).click()
@@ -259,7 +259,7 @@ test('manufacturing estimator selects a target and exposes make/buy route contro
   const manualPrice = page.getByRole('textbox', { name: '方案手填单价' })
   await expect(manualPrice).toBeVisible()
   await manualPrice.fill('99.5')
-  await expect(page.getByText('方案内手填')).toBeVisible()
+  await expect(page.getByTestId('manufacturing-cost-rail').getByText('方案内手填', { exact: true })).toBeVisible()
   await expect(page.getByTestId('manufacturing-cost-rail')).toContainText(/已覆盖小计|总成本/)
 })
 
