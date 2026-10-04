@@ -264,6 +264,8 @@ AUTH_USER_MODEL = 'Authentication.EVEMUser'
 FEEDBACK_UPLOAD_ROOT = config('FEEDBACK_UPLOAD_ROOT', default=None)
 COMMUNITY_UPLOAD_ROOT = config('COMMUNITY_UPLOAD_ROOT', default=None)
 STARSEA_UPLOAD_ROOT = config('STARSEA_UPLOAD_ROOT', default=None)
+# Private, immutable SWEET snapshot; no fallback to the shared GameData catalog.
+STARSEA_SHIP_DB = config('STARSEA_SHIP_DB', default='')
 # The private killboard allowlist is deployment configuration.  Blank means
 # fail closed until the operator explicitly supplies the owner account.
 KILLBOARD_OWNER_EMAIL = config('KILLBOARD_OWNER_EMAIL', default='')

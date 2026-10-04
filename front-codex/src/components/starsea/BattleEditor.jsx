@@ -12,6 +12,7 @@ function ShipRow({ row, label, onChange, onDuplicate, onRemove }) {
   const [q, setQ] = useState(""),
     [catalog, setCatalog] = useState(null),
     [error, setError] = useState(""),
+    [searchAttempt, setSearchAttempt] = useState(0),
     [mode, setMode] = useState(
       row.ship_id
         ? "catalog"
@@ -20,9 +21,9 @@ function ShipRow({ row, label, onChange, onDuplicate, onRemove }) {
           : "unknown",
     );
   useEffect(() => {
+    setCatalog(null);
+    setError("");
     if (!q.trim()) {
-      setCatalog(null);
-      setError("");
       return;
     }
     const controller = new AbortController();
@@ -37,7 +38,10 @@ function ShipRow({ row, label, onChange, onDuplicate, onRemove }) {
             }
           })
           .catch((err) => {
-            if (current && err.name !== "AbortError") setError(err.message);
+            if (current && err.name !== "AbortError") {
+              setCatalog(null);
+              setError(err.message);
+            }
           }),
       220,
     );
@@ -46,7 +50,7 @@ function ShipRow({ row, label, onChange, onDuplicate, onRemove }) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [q, row.ship_class]);
+  }, [q, row.ship_class, searchAttempt]);
   return (
     <div className="ss-loss-row">
       <label>
@@ -121,7 +125,13 @@ function ShipRow({ row, label, onChange, onDuplicate, onRemove }) {
           </label>
         )}
         {mode === "unknown" && <small>保留为未知型号，不猜测舰船。</small>}
-        <ErrorNotice error={error} />
+        <ErrorNotice
+          error={error}
+          retry={() => setSearchAttempt((attempt) => attempt + 1)}
+        />
+        {error && (
+          <small>可继续使用未知型号或自填型号，已填写的信息会保留。</small>
+        )}
         {catalog && (
           <div className="ss-ship-results">
             {catalog.results.map((ship) => (
