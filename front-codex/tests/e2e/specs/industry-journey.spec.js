@@ -52,6 +52,16 @@ test('guest can follow market, manufacturing and a keyboard-accessible purchase 
   expect(await page.evaluate(() => localStorage.getItem('access_token'))).toBeNull()
 })
 
+test('a focused market next step moves focus to the page when desktop navigation replaces the mobile header', async ({ page }) => {
+  await publicFixture(page)
+  await page.setViewportSize({ width: 768, height: 960 })
+  await page.goto('/market')
+  await marketNextLink(page, 768).focus()
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await expect(page.locator('#main-content')).toBeFocused()
+  await expect(marketNextLink(page, 1440)).toBeVisible()
+})
+
 for (const width of [320, 390, 768, 1440]) {
   test(`industry steps and module guidance remain readable and clickable at ${width}px`, async ({ page }) => {
     await publicFixture(page)
@@ -93,7 +103,7 @@ test('200% text size preserves all workflow links and access explanations on a n
   await publicFixture(page)
   await page.setViewportSize({ width: 320, height: 960 })
   await page.goto('/market')
-  await page.addStyleTag({ content: '.mobile-industry-next { font-size: 26px; } .industry-journey { font-size: 24px; } .tool-guide p, .tool-guide a, .tool-guide-access { font-size: 24px !important; } .tool-guide h3 { font-size: 32px; }' })
+  await page.addStyleTag({ content: '.mobile-brand-name { font-size: 32px; } .mobile-industry-next { font-size: 26px; } .industry-journey { font-size: 24px; } .tool-guide p, .tool-guide a, .tool-guide-access { font-size: 24px !important; } .tool-guide h3 { font-size: 32px; }' })
   const next = marketNextLink(page, 320)
   await expect(next).toBeVisible()
   expect(await next.evaluate(element => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)).toBe(true)

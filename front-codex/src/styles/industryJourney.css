@@ -90,15 +90,19 @@
   justify-content: center;
   gap: 6px;
   min-height: 44px;
-  padding: 0 4px;
+  padding: 4px;
   color: var(--info);
   font-size: 13px;
-  line-height: 1.25;
+  line-height: 1.5;
   text-decoration: none;
   box-sizing: border-box;
 }
 
 .mobile-industry-next svg {
+  flex-shrink: 0;
+}
+
+.mobile-shell-header:has(.mobile-industry-next) .mobile-menu-toggle {
   flex-shrink: 0;
 }
 
@@ -109,6 +113,10 @@
 }
 
 @media (max-width: 767px) {
+  .mobile-industry-next svg {
+    display: none;
+  }
+
   .industry-journey {
     column-gap: 8px;
     margin-bottom: 10px;

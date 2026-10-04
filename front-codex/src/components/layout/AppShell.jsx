@@ -67,6 +67,7 @@ export default function AppShell() {
   })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const mobileToggleRef = useRef(null)
+  const mobileIndustryNextRef = useRef(null)
   const mobileNavRef = useRef(null)
   const mainRef = useRef(null)
   const mobileNavOpenRef = useRef(false)
@@ -101,7 +102,7 @@ export default function AppShell() {
 
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 1180px)')
-    const isMobileControl = element => mobileNavRef.current?.contains(element) || element === mobileToggleRef.current
+    const isMobileControl = element => mobileNavRef.current?.contains(element) || element === mobileToggleRef.current || element === mobileIndustryNextRef.current
     let lastFocusedMobile = isMobileControl(document.activeElement) ? document.activeElement : null
     const rememberMobileFocus = event => {
       lastFocusedMobile = isMobileControl(event.target) ? event.target : null
@@ -168,7 +169,7 @@ export default function AppShell() {
           <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="mobile-brand-icon" /></span>
           <span className="mobile-brand-name">EVEM</span>
         </Link>
-        {location.pathname === '/market' && <Link className="mobile-industry-next" to="/manufacturing" aria-label="下一步：制造估价">
+        {location.pathname === '/market' && <Link ref={mobileIndustryNextRef} className="mobile-industry-next" to="/manufacturing" aria-label="下一步：制造估价">
           <span>制造估价</span><ArrowRight size={16} aria-hidden="true" />
         </Link>}
         <button
