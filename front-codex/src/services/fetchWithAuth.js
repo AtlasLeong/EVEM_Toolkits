@@ -1,6 +1,6 @@
 import API_URL from "./backendSetting";
+import { isTokenExpired, readValidatedSession, tokenUserId } from "./validatedSession";
 
-const EXPIRY_SKEW_SECONDS = 30;
 const REFRESH_TIMEOUT_MS = 20000;
 let refreshFlight = null;
 let sessionMarker;
@@ -14,16 +14,18 @@ function safeStorageGet(key) {
 // Access tokens rotate within a session; the refresh token identifies its owner.
 // The fallback preserves access-only callers without treating all of them as guests.
 function captureSession() {
-  const refresh = safeStorageGet("refresh_token");
-  const access = refresh ? null : safeStorageGet("access_token");
-  const marker = refresh ? `refresh:${refresh}` : access ? `access:${access}` : null;
+  const { refreshToken: refresh, accessToken: access, mismatchedPair, identity } = readValidatedSession();
+  // A mixed pair is anonymous, but has its own lifetime so an already pending
+  // authenticated response or refresh cannot cross into this guest state.
+  const marker = mismatchedPair ? `mixed:${refresh}:${access}`
+    : refresh ? `refresh:${refresh}|identity:${identity}` : access ? `access:${access}` : null;
   if (marker !== sessionMarker) {
     refreshFlight?.controller.abort();
     sessionMarker = marker;
     sessionGeneration++;
     refreshFlight = null;
   }
-  return { marker, generation: sessionGeneration };
+  return { marker, generation: sessionGeneration, mismatchedPair };
 }
 
 export class AuthSessionChangedError extends Error {
@@ -45,26 +47,6 @@ if (typeof window !== "undefined") {
   window.addEventListener("storage", () => captureSession());
 }
 
-function decodeJwtPayload(token) {
-  if (!token) return null;
-
-  try {
-    const [, payload] = token.split(".");
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
-    return JSON.parse(decoded);
-  } catch {
-    return null;
-  }
-}
-
-function isTokenExpired(token, skewSeconds = EXPIRY_SKEW_SECONDS) {
-  const payload = decodeJwtPayload(token);
-  if (!payload?.exp) return true;
-  return payload.exp * 1000 <= Date.now() + skewSeconds * 1000;
-}
-
 export function notifyAuthChanged() {
   if (typeof window === "undefined") return;
   captureSession();
@@ -82,11 +64,7 @@ export function clearStoredAuth() {
 }
 
 export function hasActiveSession() {
-  const accessToken = safeStorageGet("access_token");
-  if (accessToken && !isTokenExpired(accessToken)) return true;
-
-  const refreshToken = safeStorageGet("refresh_token");
-  return Boolean(refreshToken && !isTokenExpired(refreshToken));
+  return readValidatedSession().isAuthenticated;
 }
 
 export const refreshAccessToken = async (refreshToken, signal) => {
@@ -126,6 +104,9 @@ function expireSession(session) {
 
 async function ensureFreshAccessToken(session, forceRefresh = false, signal) {
   assertSession(session);
+  // Preserve the pair until a cross-tab replacement converges. Public callers
+  // continue anonymously; neither token may authenticate or refresh this state.
+  if (session.mismatchedPair) return null;
   const accessToken = safeStorageGet("access_token");
   if (!forceRefresh && accessToken && !isTokenExpired(accessToken)) {
     return accessToken;
@@ -161,12 +142,18 @@ async function ensureFreshAccessToken(session, forceRefresh = false, signal) {
     return null;
   }
 
+  const refreshUserId = tokenUserId(refreshToken);
+  const nextAccessUserId = tokenUserId(nextAccessToken);
+  if (refreshUserId != null && nextAccessUserId != null && refreshUserId !== nextAccessUserId) {
+    throw new AuthSessionChangedError();
+  }
+
   window.localStorage.setItem("access_token", nextAccessToken);
   notifyAuthChanged();
   return nextAccessToken;
 }
 
-function buildHeaders(options, accessToken) {
+function buildHeaders(options, accessToken, suppressAuthentication = false) {
   const defaultHeaders = {
     ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
   };
@@ -175,7 +162,13 @@ function buildHeaders(options, accessToken) {
     defaultHeaders["Content-Type"] = "application/json";
   }
 
-  return { ...defaultHeaders, ...options.headers };
+  const headers = { ...defaultHeaders, ...options.headers };
+  if (suppressAuthentication) {
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === "authorization") delete headers[key];
+    }
+  }
+  return headers;
 }
 
 const fetchWithAuth = async (url, options = {}) => {
@@ -186,7 +179,7 @@ const fetchWithAuth = async (url, options = {}) => {
 
   let response = await fetch(url, {
     ...options,
-    headers: buildHeaders(options, accessToken),
+    headers: buildHeaders(options, accessToken, session.mismatchedPair),
     signal: options.signal,
   });
   assertSession(session);
@@ -203,7 +196,7 @@ const fetchWithAuth = async (url, options = {}) => {
 
   response = await fetch(url, {
     ...options,
-    headers: buildHeaders(options, accessToken),
+    headers: buildHeaders(options, accessToken, session.mismatchedPair),
     signal: options.signal,
   });
   assertSession(session);
