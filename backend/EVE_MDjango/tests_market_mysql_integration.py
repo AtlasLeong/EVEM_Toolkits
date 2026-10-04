@@ -145,6 +145,53 @@ class MarketMysqlIntegrationTests(unittest.TestCase):
         self.assertIsNone(run.item_limit)
         self.assertIsNone(run.batch_fallback_reason)
 
+    def test_previous_release_can_write_after_additive_recovery_migration(self):
+        previous_apps = MigrationLoader(connection).project_state([
+            ('Market', '0010_unplanned_item_limit_null'),
+        ]).apps
+        old_config_model = previous_apps.get_model('Market', 'MarketConfig')
+        old_config = old_config_model.objects.using(connection.alias).create(
+            session_status='ready', max_items_per_run=80, updated_at_ms=NOW_MS,
+        )
+        old_item = previous_apps.get_model('Market', 'MarketItem').objects.using(connection.alias).create(
+            id=900000003, name='Synthetic previous-release item', enabled=False,
+        )
+        old_run = previous_apps.get_model('Market', 'CollectionRun').objects.using(connection.alias).create(
+            trigger='scheduled', status='queued',
+        )
+
+        config = MarketConfig.objects.get(pk=old_config.pk)
+        item = MarketItem.objects.get(pk=old_item.pk)
+        run = CollectionRun.objects.get(pk=old_run.pk)
+        self.assertEqual((
+            config.batch_recovery_success_count,
+            config.batch_recovery_probe_attempted,
+            config.batch_recovery_success_at_ms,
+        ), (None, None, None))
+        self.assertIsNone(item.manufacturing_coverage_seeded)
+        self.assertIsNone(run.batch_recovery_probe)
+        self.assertIsNone(run.item_limit)
+        self.assertIsNone(run.expected_count)
+
+        MarketConfig.objects.filter(pk=config.pk).update(
+            batch_recovery_success_count=3,
+            batch_recovery_probe_attempted=False,
+            batch_recovery_success_at_ms=NOW_MS,
+        )
+        # A rollback worker does not know the additive fields. Its timestamp
+        # change must remain visible so the current worker can reject old credit.
+        old_config_model.objects.using(connection.alias).filter(pk=config.pk).update(
+            updated_at_ms=NOW_MS + 1,
+        )
+        config.refresh_from_db()
+        self.assertEqual((
+            config.batch_recovery_success_count,
+            config.batch_recovery_probe_attempted,
+            config.batch_recovery_success_at_ms,
+        ), (3, False, NOW_MS))
+        self.assertEqual(config.updated_at_ms, NOW_MS + 1)
+        self.assertNotEqual(config.batch_recovery_success_at_ms, config.updated_at_ms)
+
     def test_mysql_rejects_unsupported_batch_capacity(self):
         config = MarketConfig.objects.create(max_items_per_run=80)
         with self.assertRaises(IntegrityError) as failure:

@@ -19,6 +19,8 @@ class MarketItem(models.Model):
     market_bucket = models.CharField(max_length=16, default='other', db_index=True)
     scope = models.CharField(max_length=80, default='global')
     enabled = models.BooleanField(default=True)
+    # Tracks only rows enabled by the manufacturing coverage migration.
+    manufacturing_coverage_seeded = models.BooleanField(null=True, blank=True)
     last_attempt_at_ms = models.BigIntegerField(null=True, blank=True)
     last_failure_at_ms = models.BigIntegerField(null=True, blank=True)
     last_error_code = models.CharField(max_length=64, blank=True, default='')
@@ -53,6 +55,10 @@ class MarketConfig(models.Model):
     batch_fallback_until_ms = models.BigIntegerField(null=True, blank=True)
     batch_fallback_reason = models.CharField(max_length=64, blank=True, default='')
     capacity_failure_count = models.PositiveIntegerField(default=0)
+    # Nullable fields keep previous releases able to write after migration.
+    batch_recovery_success_count = models.PositiveSmallIntegerField(null=True, blank=True)
+    batch_recovery_probe_attempted = models.BooleanField(null=True, blank=True)
+    batch_recovery_success_at_ms = models.BigIntegerField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -121,6 +127,7 @@ class CollectionRun(models.Model):
     item_limit = models.PositiveSmallIntegerField(null=True, blank=True)
     expected_count = models.PositiveSmallIntegerField(null=True, blank=True)
     batch_fallback_reason = models.CharField(max_length=64, null=True, blank=True, default='')
+    batch_recovery_probe = models.BooleanField(null=True, blank=True)
     lease_owner = models.CharField(max_length=128, blank=True, default='')
     lease_expires_at_ms = models.BigIntegerField(null=True, blank=True)
 
