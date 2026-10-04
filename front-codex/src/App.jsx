@@ -96,7 +96,7 @@ function RequireKillboardAccess({ children }) {
   const location = useLocation()
   const access = useKillboardAccess()
   if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loginReturnPath(location), reason: 'authentication' }} />
-  if (access.loading) return pageFallback('验证击毁情报权限')
+  if (access.loading) return pageFallback('验证击毁情报 KM 权限')
   if (!access.allowed) return <Navigate to="/market" replace />
   return children
 }

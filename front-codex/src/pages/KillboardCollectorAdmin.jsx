@@ -58,7 +58,7 @@ export default function KillboardCollectorAdminPage() {
   const cursor = data?.cursor
   const strategy = cursor?.strategy
   return <div className="page-stack">
-    <PageHeader title="击毁采集后台" subtitle="只读查看采集游标、轮次执行流水和失败原因；不会显示会话或账号材料。" action={<div className="head-actions"><button type="button" className="ghost-btn" onClick={load}><RefreshCw size={15} />刷新</button><Link className="ghost-btn" to="/killboard">返回击毁情报</Link></div>} />
+    <PageHeader title="击毁采集后台" subtitle="只读查看采集游标、轮次执行流水和失败原因；不会显示会话或账号材料。" action={<div className="head-actions"><button type="button" className="ghost-btn" onClick={load}><RefreshCw size={15} />刷新</button><Link className="ghost-btn" to="/killboard">返回击毁情报 KM</Link></div>} />
     {loading && !data ? <LoadingBar /> : null}
     {error ? <div className="inline-notice" role="alert"><AlertTriangle size={15} />{error}</div> : null}
     {data ? <>

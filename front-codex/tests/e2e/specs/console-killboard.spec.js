@@ -21,7 +21,7 @@ for (const width of [1440, 390]) {
     })
     await page.setViewportSize({ width, height: 900 })
     await page.goto('/killboard')
-    const title = page.getByRole('heading', { name: '击毁情报', exact: true })
+    const title = page.getByRole('heading', { name: '击毁情报 KM', exact: true })
     await expect(title).toHaveCSS('font-size', '28px')
     await expect(page.locator('.kb-workspace')).toHaveCSS('background-color', 'rgb(11, 23, 29)')
     await expect(page.locator('.kb-hero')).toHaveCSS('background-color', 'rgb(18, 37, 46)')
