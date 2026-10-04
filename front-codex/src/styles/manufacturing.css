@@ -1459,6 +1459,19 @@
 /* A short readout before a long route keeps the result within reach on phones.
    Detailed prices and the editor stay in the full cost rail. */
 .manufacturing-mobile-overview { display: none; }
+.site-frame .manufacturing-page--terminal .manufacturing-blueprint-field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  margin-top: 11px;
+}
+.manufacturing-blueprint-field > label { font-size: 12px; font-weight: 700; }
+.site-frame .manufacturing-page--terminal .manufacturing-blueprint-input { min-height: 42px; }
+.manufacturing-blueprint-input input { font-variant-numeric: tabular-nums; }
+.manufacturing-blueprint-input b { flex-shrink: 0; }
+.site-frame .manufacturing-page--terminal .manufacturing-blueprint-input.is-invalid { border-color: var(--terminal-red); }
+.manufacturing-blueprint-help { color: var(--terminal-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.site-frame .manufacturing-page--terminal .manufacturing-blueprint-field .manufacturing-inline-error { margin: 0; }
 .site-frame .manufacturing-page--terminal .manufacturing-cost-breakdown dd,
 .site-frame .manufacturing-page--terminal .manufacturing-market-reference strong {
   min-width: 0;

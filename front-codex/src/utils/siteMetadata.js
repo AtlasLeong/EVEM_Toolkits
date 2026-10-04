@@ -7,7 +7,7 @@ const MODULE_TITLES = [
   ['/market/admin', '市场管理'],
   ['/market', '市场价格'],
   ['/killboard/admin', '击毁采集后台'],
-  ['/killboard', '击毁情报'],
+  ['/killboard', '击毁情报 KM'],
   ['/planetary', '行星资源'],
   ['/starmap', '星系导航'],
   ['/tactical/usage', '战术板使用概况'],

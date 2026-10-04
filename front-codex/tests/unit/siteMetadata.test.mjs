@@ -57,7 +57,7 @@ const routeCases = [
   ['/manufacturing', '制造估价'],
   ['/market', '市场价格'],
   ['/market/admin', '市场管理'],
-  ['/killboard/12345', '击毁情报'],
+  ['/killboard/12345', '击毁情报 KM'],
   ['/killboard/admin', '击毁采集后台'],
   ['/planetary', '行星资源'],
   ['/starmap', '星系导航'],
@@ -101,7 +101,7 @@ test('account data and query parameters never become the public tab title', asyn
   const { resolveSiteTitle } = await loadMetadata()
   assert.equal(resolveSiteTitle('/login?email=account@example.com&next=/manufacturing'), `登录 · ${siteName}`)
   assert.equal(resolveSiteTitle('/tactical?organization=private-team#pilot-name'), `战术板 · ${siteName}`)
-  assert.equal(resolveSiteTitle('/killboard/private-report-id'), `击毁情报 · ${siteName}`)
+  assert.equal(resolveSiteTitle('/killboard/private-report-id'), `击毁情报 KM · ${siteName}`)
 })
 
 test('global router metadata updates document titles when the pathname changes', () => {

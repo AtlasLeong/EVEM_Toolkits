@@ -15,7 +15,7 @@ const navGroups = [
     { to: '/planetary', label: '行星资源', icon: Globe },
   ] },
   { id: 'operations', label: '星际行动', items: [
-    { to: '/killboard', label: '击毁情报', icon: Swords },
+    { to: '/killboard', label: '击毁情报 KM', icon: Swords },
     { to: '/killboard/admin', label: '击毁采集后台', icon: Swords },
     { to: '/starmap', label: '星系导航', icon: Compass },
     { to: '/tactical', label: '战术板', icon: Crosshair },
@@ -45,18 +45,6 @@ function DesktopOnlyMask() {
   )
 }
 
-function DensityControl({ density, onChange }) {
-  return (
-    <div className="shell-density-control" role="group" aria-label="显示密度">
-      <span className="shell-density-label">显示密度</span>
-      <div className="shell-density-options">
-        <button type="button" aria-pressed={density === 'compact'} onClick={() => onChange('compact')}>紧凑</button>
-        <button type="button" aria-pressed={density === 'comfortable'} onClick={() => onChange('comfortable')}>舒适</button>
-      </div>
-    </div>
-  )
-}
-
 export default function AppShell() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -76,9 +64,6 @@ export default function AppShell() {
     try { return localStorage.getItem('evem-sidebar-collapsed') === 'true' } catch { return false }
   })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [density, setDensity] = useState(() => {
-    try { return localStorage.getItem('evem-content-density') === 'comfortable' ? 'comfortable' : 'compact' } catch { return 'compact' }
-  })
   const mobileToggleRef = useRef(null)
   const mobileNavRef = useRef(null)
   const mainRef = useRef(null)
@@ -91,8 +76,8 @@ export default function AppShell() {
   }, [collapsed])
 
   useEffect(() => {
-    try { localStorage.setItem('evem-content-density', density) } catch { /* Keep the control usable without persistent storage. */ }
-  }, [density])
+    try { localStorage.removeItem('evem-content-density') } catch { /* Comfortable layout remains usable without preference storage. */ }
+  }, [])
 
   useEffect(() => {
     if (!mobileNavOpenRef.current) return
@@ -204,7 +189,6 @@ export default function AppShell() {
             </div>
           ))}
         </div>
-        <DensityControl density={density} onChange={setDensity} />
         <div className="mobile-nav-actions">
           {isAuthenticated ? (
             <>
@@ -217,7 +201,7 @@ export default function AppShell() {
           )}
         </div>
       </nav>
-      <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`} data-density={density}>
+      <div className={`app-shell${collapsed ? ' is-sidebar-collapsed' : ''}`} data-density="comfortable">
         <aside className="shell-sidebar" aria-label="工具导航">
           <div className="sidebar-brand-row">
           <Link className="brand" to="/" aria-label="EVEMToolkit 首页">
@@ -256,7 +240,6 @@ export default function AppShell() {
             ))}
           </nav>
           <div className="top-actions">
-            <DensityControl density={density} onChange={setDensity} />
             {isAuthenticated ? (
               <>
                 <div className="top-user-card" title={displayName}>

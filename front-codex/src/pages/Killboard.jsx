@@ -201,7 +201,7 @@ export default function KillboardPage() {
     }).catch(err => {
       if (!alive || revoked.current || err.name === 'AbortError') return
       if (err.status === 403) revokeAccess()
-      else setError(err.message || '击毁情报暂时无法加载')
+      else setError(err.message || '击毁情报 KM 暂时无法加载')
     }).finally(() => { activeRequests.current.delete(controller); if (alive && !revoked.current) setLoading(false) })
     return () => { alive = false; controller.abort(); requests.current.delete(controller); activeRequests.current.delete(controller) }
   }, [filters, refreshKey])
@@ -311,7 +311,7 @@ export default function KillboardPage() {
   const summaryOnly = Boolean(current && !detailLoading && !detailReady)
   return <div className="page-stack kb-page">
     <header className="kb-header">
-      <div><div className="kb-brandline"><Swords size={18} aria-hidden="true" /><span>EVE ECHOES / KILL INTELLIGENCE</span></div><h1>击毁情报</h1>{reportSourceNote(current) ? <p>{reportSourceNote(current)}</p> : null}</div>
+      <div><div className="kb-brandline"><Swords size={18} aria-hidden="true" /><span>EVE ECHOES / KILL INTELLIGENCE</span></div><h1>击毁情报 KM</h1>{reportSourceNote(current) ? <p>{reportSourceNote(current)}</p> : null}</div>
       <div className="kb-header-actions"><div className="kb-security-legend" aria-label="星系安等图例"><span className="is-high"><i aria-hidden="true" />高安</span><span className="is-low"><i aria-hidden="true" />低安</span><span className="is-nullsec"><i aria-hidden="true" />00地区</span><span className="is-unknown"><i aria-hidden="true" />未知</span></div><span className="kb-status-slot">{(forbidden || shouldShowKillboardLiveStatus(status)) ? <span className="kb-live-pill"><Activity size={14} />{forbidden ? '访问受限' : killboardCollectionLabel(status)}</span> : null}</span><button className="kb-action" type="button" disabled={forbidden} onClick={() => { if (!revoked.current) setRefreshKey(value => value + 1) }}><RefreshCw size={15} />刷新</button></div>
     </header>
     <div className="kb-workspace">
@@ -322,7 +322,7 @@ export default function KillboardPage() {
         <label className="kb-search"><Search size={16} /><input type="search" value={filters.q} disabled={forbidden} onChange={event => { if (!revoked.current) setFilters(value => ({ ...value, q: event.target.value })) }} placeholder="搜索舰船、星系或角色" aria-label="搜索击毁报告" /></label>
         <div className="kb-filter-label">当前收录规则</div><div className="kb-collection-rule"><span>价值阈值</span><strong>&gt; 200 亿 ISK</strong><span>舰船范围</span><strong>不限船型</strong></div>
         <div className="kb-list-head"><span>最新报告</span><span>{loading ? '读取中' : `${reports.length} / ${total}`}</span></div>
-        <div className="kb-report-list" aria-busy={loading}>{loading && !reports.length ? <div className="kb-list-loading" role="status"><LoaderCircle className="spin" size={20} aria-hidden="true" />读取报告…</div> : reports.length ? reports.map(report => <ReportRow key={report.kill_id} report={report} active={String(report.kill_id) === String(selectedId)} onSelect={selectReport} />) : <EmptyState title={filters.q.trim() ? '没有匹配报告' : '暂无击毁报告'}>{filters.q.trim() ? '尝试其他舰船、星系或角色名称。' : '采集器尚未写入符合条件的报告。'}</EmptyState>}</div>
+        <div className="kb-report-list" role="region" aria-label="最新击毁报告" tabIndex={forbidden ? -1 : 0} aria-busy={loading}>{loading && !reports.length ? <div className="kb-list-loading" role="status"><LoaderCircle className="spin" size={20} aria-hidden="true" />读取报告…</div> : reports.length ? reports.map(report => <ReportRow key={report.kill_id} report={report} active={String(report.kill_id) === String(selectedId)} onSelect={selectReport} />) : <EmptyState title={filters.q.trim() ? '没有匹配报告' : '暂无击毁报告'}>{filters.q.trim() ? '尝试其他舰船、星系或角色名称。' : '采集器尚未写入符合条件的报告。'}</EmptyState>}</div>
         </div>
       </aside>
       <main className="kb-main" aria-busy={initialPending || detailLoading}>

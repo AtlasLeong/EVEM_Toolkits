@@ -161,6 +161,7 @@ function ceilDiv(quantity, outputNum) {
 
 export const DEFAULT_MATERIAL_EFFICIENCY = 150
 export const MIN_MATERIAL_EFFICIENCY = 75
+export const MAX_BLUEPRINT_COST = '999999999999.99'
 
 // Client material_amend is a multiplier in percent, NOT a percent reduction.
 // Skills/facilities/decoders are already included in this manually entered value.
@@ -495,6 +496,25 @@ function quotePrice(quote) {
   return quote.bestSell ?? quote.best_sell ?? quote.lowestSell ?? quote.lowest_sell ?? quote.sell ?? quote.sellPrice ?? quote.sell_price ?? quote.price
 }
 
+/** Resolve the one-time cost entered for this plan without accepting exponents. */
+export function resolveBlueprintCost(value) {
+  if (value === undefined || value === null) return { value: '0', error: null }
+  if (!['string', 'number', 'bigint'].includes(typeof value)) return { value: null, error: 'invalid' }
+  if (typeof value === 'number' && !Number.isFinite(value)) return { value: null, error: 'invalid' }
+  const raw = String(value)
+  if (raw.length > 64) return { value: null, error: 'invalid' }
+  const text = raw.trim()
+  if (text === '') return { value: '0', error: null }
+  if (!/^\+?(?:[0-9]+(?:\.[0-9]{0,2})?|\.[0-9]{1,2})$/u.test(text)) {
+    return { value: null, error: 'invalid' }
+  }
+  const cost = decimalFrom(text, 'settings.blueprintCost')
+  const maximum = decimalFrom(MAX_BLUEPRINT_COST, 'maximum blueprint cost')
+  const [coefficient, maximumCoefficient] = decimalAlign(cost, maximum)
+  if (coefficient > maximumCoefficient) return { value: null, error: 'too_large' }
+  return { value: decimalToString(cost), error: null }
+}
+
 /**
  * Resolve the expanded purchase leaves against plan-local prices and quotes.
  * `total` is null when any purchase price is missing; `coveredSubtotal` is the
@@ -550,9 +570,10 @@ export function summarizePlan(first, second) {
   }
 
   const manufacturingFee = decimalFrom(expanded.manufacturingFee, 'manufacturing fee')
-  const blueprintCost = decimalFrom(settings.blueprintCost ?? 0, 'settings.blueprintCost')
-  const coveredSubtotal = decimalAdd(decimalAdd(manufacturingFee, blueprintCost), materialSubtotal)
-  const complete = missing.length === 0
+  const blueprint = resolveBlueprintCost(settings.blueprintCost)
+  const knownBlueprintCost = blueprint.error ? decimalZero() : decimalFrom(blueprint.value, 'settings.blueprintCost')
+  const coveredSubtotal = decimalAdd(decimalAdd(manufacturingFee, knownBlueprintCost), materialSubtotal)
+  const complete = missing.length === 0 && blueprint.error === null
 
   return {
     schemaVersion: 1,
@@ -564,7 +585,8 @@ export function summarizePlan(first, second) {
     total: complete ? decimalToString(coveredSubtotal) : null,
     coveredSubtotal: decimalToString(coveredSubtotal),
     manufacturingFee: decimalToString(manufacturingFee),
-    blueprintCost: decimalToString(blueprintCost),
+    blueprintCost: blueprint.value,
+    blueprintCostError: blueprint.error,
     materialSubtotal: decimalToString(materialSubtotal),
     manufacturingTime: expanded.manufacturingTime,
     purchases: resolvedPurchases,

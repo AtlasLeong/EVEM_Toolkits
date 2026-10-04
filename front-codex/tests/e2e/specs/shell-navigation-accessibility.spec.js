@@ -43,7 +43,7 @@ test('键盘可以跳过分组导航直接进入主内容', async ({ page }) => 
   for (const name of ['市场与工业', '星际行动', '社区情报']) {
     await expect(navigation.getByRole('group', { name, exact: true })).toBeVisible()
   }
-  await expect(navigation.getByRole('link', { name: '击毁情报', exact: true })).toHaveCount(0)
+  await expect(navigation.getByRole('link', { name: '击毁情报 KM', exact: true })).toHaveCount(0)
   await expect(navigation.getByRole('link', { name: '战术板概况', exact: true })).toHaveCount(0)
 })
 
@@ -144,7 +144,7 @@ test('击毁详情保持所属导航高亮，采集后台只有一个当前导�
   })
   await page.goto('/killboard/19748417')
   const navigation = page.getByRole('navigation', { name: '主导航', exact: true })
-  const killboard = navigation.getByRole('link', { name: '击毁情报', exact: true })
+  const killboard = navigation.getByRole('link', { name: '击毁情报 KM', exact: true })
   const collector = navigation.getByRole('link', { name: '击毁采集后台', exact: true })
   await expect(killboard).toHaveAttribute('aria-current', 'page')
   await expect(killboard).toHaveClass(/active/)
@@ -156,25 +156,27 @@ test('击毁详情保持所属导航高亮，采集后台只有一个当前导�
   await expect(killboard).not.toHaveClass(/active/)
 })
 
-test('显示密度默认紧凑，切换后跨页面与刷新保持偏好', async ({ page }) => {
+async function expectComfortableLayout(page) {
+  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'comfortable')
+  await expect(page.getByRole('group', { name: '显示密度', exact: true, includeHidden: true })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /^(紧凑|舒适)$/, includeHidden: true })).toHaveCount(0)
+}
+
+test('显示密度固定舒适，无切换控件，跨页面与刷新保持布局', async ({ page }) => {
   await page.goto('/planetary')
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'compact')
-  const density = page.locator('.shell-sidebar').getByRole('group', { name: '显示密度' })
-  await expect(density.getByRole('button', { name: '紧凑', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await density.getByRole('button', { name: '舒适', exact: true }).click()
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'comfortable')
-  await expect(density.getByRole('button', { name: '紧凑', exact: true })).toHaveAttribute('aria-pressed', 'false')
+  await expectComfortableLayout(page)
   await page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '防诈名单', exact: true }).click()
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'comfortable')
+  await expectComfortableLayout(page)
   await page.reload()
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'comfortable')
-  await expect(density.getByRole('button', { name: '舒适', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expectComfortableLayout(page)
 })
 
-test('本地存储不可用时密度和折叠操作仍然可用', async ({ page }) => {
+test('旧compact偏好无法读取或清理时仍使用舒适布局，折叠操作可用', async ({ page }) => {
   await page.addInitScript(() => {
     const originalGet = Storage.prototype.getItem
     const originalSet = Storage.prototype.setItem
+    const originalRemove = Storage.prototype.removeItem
+    originalSet.call(localStorage, 'evem-content-density', 'compact')
     Storage.prototype.getItem = function (key) {
       if (key.startsWith('evem-')) throw new DOMException('Blocked preference storage', 'SecurityError')
       return originalGet.call(this, key)
@@ -183,24 +185,45 @@ test('本地存储不可用时密度和折叠操作仍然可用', async ({ page 
       if (key.startsWith('evem-')) throw new DOMException('Blocked preference storage', 'SecurityError')
       return originalSet.call(this, key, value)
     }
+    Storage.prototype.removeItem = function (key) {
+      if (key.startsWith('evem-')) throw new DOMException('Blocked preference storage', 'SecurityError')
+      return originalRemove.call(this, key)
+    }
   })
   await page.goto('/planetary')
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'compact')
-  const density = page.locator('.shell-sidebar').getByRole('group', { name: '显示密度' })
-  await density.getByRole('button', { name: '舒适', exact: true }).click()
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'comfortable')
+  await expectComfortableLayout(page)
   await page.getByRole('button', { name: '收起导航', exact: true }).click()
   await expect(page.locator('.app-shell')).toHaveClass(/is-sidebar-collapsed/)
   await page.getByRole('button', { name: '展开导航', exact: true }).click()
   await expect(page.locator('.app-shell')).not.toHaveClass(/is-sidebar-collapsed/)
 })
 
-test('移动导航提供同一个显示密度设置', async ({ page }) => {
+test('移动导航保持舒适布局，无密度切换控件且换页焦点正常', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/planetary')
   await page.locator('.mobile-menu-toggle').click()
-  const density = page.getByRole('navigation', { name: '移动主导航' }).getByRole('group', { name: '显示密度' })
-  await density.getByRole('button', { name: '舒适', exact: true }).click()
-  await expect(page.locator('.app-shell')).toHaveAttribute('data-density', 'comfortable')
-  await expect(density.getByRole('button', { name: '舒适', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const navigation = page.getByRole('navigation', { name: '移动主导航' })
+  await expectComfortableLayout(page)
+  await navigation.getByRole('link', { name: '需求与反馈', exact: true }).click()
+  await expect(navigation).toBeHidden()
+  await expect(page.locator('#main-content')).toBeFocused()
+  await expectComfortableLayout(page)
 })
+
+for (const width of [1440, 390]) {
+  test(`旧compact保存值在${width}px被清理，首屏与刷新始终舒适且无密度控件`, async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('evem-content-density', 'compact')
+      localStorage.setItem('unrelated-density-regression', 'preserve')
+    })
+    await page.setViewportSize({ width, height: 960 })
+    await page.goto('/planetary')
+    if (width < 1180) await page.locator('.mobile-menu-toggle').click()
+    await expectComfortableLayout(page)
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('evem-content-density'))).toBeNull()
+    expect(await page.evaluate(() => localStorage.getItem('unrelated-density-regression'))).toBe('preserve')
+    await page.reload()
+    await expectComfortableLayout(page)
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('evem-content-density'))).toBeNull()
+  })
+}

@@ -1,15 +1,148 @@
 import { expect, test } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 
-test('unavailable blueprint pricing has no interactive placeholder', async ({ page }) => {
-  await installApiMock(page, () => undefined)
+const blueprintLabel = '蓝图价格（本次合计）'
+const blueprintCatalog = {
+  schemaVersion: 1, scope: ['ship', 'material', 'building'],
+  recipes: [
+    { productId: '10100000101', name: '蓝图批次样本', category: 'ship', outputNum: 2, materials: [{ itemId: '41000000000', quantity: 2 }], money: 7, time: 60, maxInstallQuantity: 10 },
+    { productId: '10100000103', name: '蓝图另一目标', category: 'ship', outputNum: 1, materials: [{ itemId: '41000000000', quantity: 2 }], money: 11, time: 60, maxInstallQuantity: 10 },
+  ],
+  items: [{ itemId: '41000000000', name: '三钛合金' }],
+}
+
+async function installBlueprintFixture(page) {
+  const quoteRequests = []
+  await page.route('**/industry/manufacturing-scope.json', route => route.fulfill(json(blueprintCatalog)))
+  await installApiMock(page, ({ method, url }) => {
+    if (method === 'GET' && url.pathname === '/api/market/items/') {
+      const itemId = url.searchParams.get('q')
+      quoteRequests.push(itemId)
+      return json({ count: 1, results: [{ item_id: itemId, best_sell: '1200', status: 'fresh', observed_at: '2026-10-04T03:30:00Z' }] })
+    }
+    return json({})
+  })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  return quoteRequests
+}
+
+const blueprintFee = page => page.getByTestId('manufacturing-cost-rail').locator('dl > div').filter({ hasText: '蓝图费用' }).locator('dd')
+const manufacturingTotal = page => page.locator('.manufacturing-total-card > strong')
+
+test('manual blueprint total starts at zero, accepts decimals, and clearing it restores the base cost', async ({ page }) => {
+  await installBlueprintFixture(page)
   await page.goto('/manufacturing')
   await expect(page.getByTestId('manufacturing-config-rail')).toBeVisible()
   await expect(page.getByRole('checkbox', { name: /已拥有蓝图/ })).toHaveCount(0)
-  const blueprintRow = page.getByTestId('manufacturing-cost-rail').locator('dl > div').filter({ hasText: '蓝图费用' })
-  await expect(blueprintRow).toContainText('未计入')
-  await expect(blueprintRow).not.toContainText('0 ISK')
+  const price = page.getByRole('textbox', { name: blueprintLabel, exact: true })
+  await expect(price).toHaveValue('')
+  await expect(price).toHaveAttribute('inputmode', 'decimal')
+  await expect(price).toHaveAttribute('maxlength', '64')
+  await expect(blueprintFee(page)).toHaveText('0 ISK')
+  // One batch yields two products: 3 materials at 150% * 1200 ISK + a 7 ISK fee.
+  await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+  await price.fill('0')
+  await expect(blueprintFee(page)).toHaveText('0 ISK')
+  await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+  await price.fill('1000.10')
+  await expect(blueprintFee(page)).toHaveText('1,000.1 ISK')
+  await expect(manufacturingTotal(page)).toHaveText('4,607.1 ISK')
+  await price.fill('.5')
+  await expect(manufacturingTotal(page)).toHaveText('3,607.5 ISK')
+  await price.fill('')
+  await expect(blueprintFee(page)).toHaveText('0 ISK')
+  await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+  await expect(price).not.toHaveAttribute('aria-invalid', 'true')
 })
+
+test('invalid or oversized blueprint values expose an associated error without a false complete total', async ({ page }) => {
+  const errors = []
+  page.on('pageerror', error => errors.push(error.message))
+  await installBlueprintFixture(page)
+  await page.goto('/manufacturing')
+  const price = page.getByRole('textbox', { name: blueprintLabel, exact: true })
+  const rail = page.getByTestId('manufacturing-cost-rail')
+  await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+  await price.fill('999999999999.99')
+  await expect(price).toHaveValue('999999999999.99')
+  await expect(blueprintFee(page)).toHaveText('999,999,999,999.99 ISK')
+  await expect(manufacturingTotal(page)).toHaveText('1,000,000,003,606.99 ISK')
+  for (const value of ['-1', 'oops', 'NaN', '1e999999', '1.234', '1000000000000', '999999999999999999999999999999.99', '9'.repeat(64)]) {
+    await price.fill(value)
+    await expect(price).toHaveValue(value)
+    await expect(price).toHaveAttribute('aria-invalid', 'true')
+    await expect(price).toHaveAttribute('aria-describedby', /manufacturing-blueprint-price-error/)
+    await expect(page.locator('#manufacturing-blueprint-price-error')).toBeVisible()
+    await expect(rail.locator('.manufacturing-complete-state')).toHaveText('检查蓝图价格')
+    await expect(blueprintFee(page)).toHaveText('待修正')
+    await expect(rail).not.toContainText(/缺少\s*0\s*项|待补\s*0\s*项/)
+    await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+  }
+  await price.fill('0')
+  await expect(price).not.toHaveAttribute('aria-invalid', 'true')
+  await expect(price).not.toHaveAttribute('aria-describedby', /manufacturing-blueprint-price-error/)
+  await expect(rail.locator('.manufacturing-complete-state')).toHaveText('可计算')
+  await expect(blueprintFee(page)).toHaveText('0 ISK')
+  expect(errors).toEqual([])
+})
+
+test('blueprint total is charged once across batch changes and resets when the manufacturing target changes', async ({ page }) => {
+  const quoteRequests = await installBlueprintFixture(page)
+  await page.goto('/manufacturing')
+  const price = page.getByRole('textbox', { name: blueprintLabel, exact: true })
+  const quantity = page.getByRole('spinbutton', { name: '制造数量' })
+  await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+  const originalRequests = quoteRequests.length
+  await price.fill('1000.10')
+  await quantity.fill('2')
+  await expect(manufacturingTotal(page)).toHaveText('4,607.1 ISK')
+  await quantity.fill('3')
+  // Two batches: 6 materials * 1200 + 14 ISK manufacture + one 1000.10 blueprint total.
+  await expect(manufacturingTotal(page)).toHaveText('8,214.1 ISK')
+  await expect(price).toHaveValue('1000.10')
+  await expect(blueprintFee(page)).toHaveText('1,000.1 ISK')
+  await expect.poll(() => quoteRequests.length).toBe(originalRequests)
+  const route = page.getByRole('group', { name: '生产方式 蓝图批次样本', exact: true })
+  await route.getByRole('button', { name: '购买', exact: true }).click()
+  await expect(manufacturingTotal(page)).toHaveText('4,600.1 ISK')
+  await expect(price).toHaveValue('1000.10')
+  await route.getByRole('button', { name: '自造', exact: true }).click()
+  await expect(price).toHaveValue('1000.10')
+  await expect(manufacturingTotal(page)).toHaveText('8,214.1 ISK')
+  await page.getByRole('button', { name: '切换制造目标' }).click()
+  await page.getByRole('option', { name: '蓝图另一目标', exact: true }).click()
+  await expect(price).toHaveValue('')
+  await expect(blueprintFee(page)).toHaveText('0 ISK')
+  await expect(manufacturingTotal(page)).toHaveText('10,833 ISK')
+})
+
+for (const width of [320, 390]) {
+  test(`manual blueprint total stays editable and both cost summaries agree at ${width}px`, async ({ page }) => {
+    await installBlueprintFixture(page)
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/manufacturing')
+    const price = page.getByRole('textbox', { name: blueprintLabel, exact: true })
+    const quick = page.getByTestId('manufacturing-mobile-overview')
+    await price.scrollIntoViewIfNeeded()
+    await expect(price).toBeInViewport({ ratio: 1 })
+    await price.fill('1000.10')
+    await expect(quick.locator('strong')).toHaveText('4,607.1 ISK')
+    await expect(manufacturingTotal(page)).toHaveText('4,607.1 ISK')
+    await price.fill('-1')
+    await expect(price).toHaveAttribute('aria-invalid', 'true')
+    await expect(quick.locator('.manufacturing-complete-state')).toHaveText('检查蓝图价格')
+    await expect(page.getByTestId('manufacturing-cost-rail').locator('.manufacturing-complete-state')).toHaveText('检查蓝图价格')
+    await expect(quick).not.toContainText(/待补\s*0\s*项/)
+    await expect(blueprintFee(page)).toHaveText('待修正')
+    await price.fill('')
+    await expect(quick.locator('strong')).toHaveText('3,607 ISK')
+    await expect(manufacturingTotal(page)).toHaveText('3,607 ISK')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+    const rect = await price.boundingBox()
+    expect(rect.x).toBeGreaterThanOrEqual(0)
+    expect(rect.x + rect.width).toBeLessThanOrEqual(width)
+  })
+}
 
 test('manufacturing estimator selects a target and exposes make/buy route controls', async ({ page }) => {
   const quoteRequests = []
