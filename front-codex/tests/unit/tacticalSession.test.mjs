@@ -383,5 +383,8 @@ test("auth refresh and retry preserve the tactical request abort signal", () => 
   assert.match(fetchWithAuthSource, /waitForRefresh\(refreshFlight\.promise, signal\)/);
   assert.match(fetchWithAuthSource, /ensureFreshAccessToken\(session, false, options\.signal\)/);
   assert.match(fetchWithAuthSource, /ensureFreshAccessToken\(session, true, options\.signal\)/);
-  assert.match(fetchWithAuthSource, /headers: buildHeaders\(options, accessToken\),\s*signal: options\.signal,/s);
+  const requests = fetchWithAuthSource.match(
+    /headers: buildHeaders\(options, accessToken, session\.mismatchedPair\),\s*signal: options\.signal,/gs,
+  );
+  assert.equal(requests?.length, 2);
 });

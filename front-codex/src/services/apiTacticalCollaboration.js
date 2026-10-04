@@ -1,12 +1,15 @@
 import API_URL from "./backendSetting";
-import fetchWithAuth from "./fetchWithAuth";
+import fetchWithAuth, { AuthSessionChangedError } from "./fetchWithAuth";
+import { readValidatedSession } from "./validatedSession";
 import { openTacticalSocket } from "../utils/tacticalSocket";
 
 const base = `${API_URL}/tactical/`;
 // Called only after an authenticated HTTP admission refreshed the access token.
-export const openTacticalStream = (options) => openTacticalSocket({
-  ...options, apiUrl: API_URL, token: window.localStorage.getItem('access_token'),
-});
+export const openTacticalStream = (options) => {
+  const session = readValidatedSession();
+  if (session.mismatchedPair) throw new AuthSessionChangedError();
+  return openTacticalSocket({ ...options, apiUrl: API_URL, token: session.accessToken });
+};
 export class TacticalError extends Error {
   constructor(message, status, code) {
     super(message);
