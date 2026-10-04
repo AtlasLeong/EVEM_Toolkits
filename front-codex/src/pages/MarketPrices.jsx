@@ -4,11 +4,13 @@ import { Link } from 'react-router-dom'
 import { Activity, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react'
 import { AuthContext } from '../context/AuthContext'
 import { LoadingBar } from '../components/ui/Primitives'
-import { getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
+import { getMarketQuality, getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
 import { marketBookEmptyLabel, marketReadOptions } from '../utils/marketDataState'
 import { formatCompactMarketPrice } from '../utils/marketPrice'
 import { marketScopeLabel } from '../utils/marketScope'
+import { qualityRefetchInterval } from '../utils/marketQuality'
 import MarketItemIcon from '../components/MarketItemIcon'
+import MarketQualitySummary from '../components/MarketQualitySummary'
 import MarketTrendChart from './MarketTrendChart'
 import { useResponsiveDisclosureFocus } from '../hooks/useResponsiveDisclosureFocus'
 import '../styles/market.css'
@@ -138,6 +140,7 @@ export default function MarketPricesPage() {
   }, [search])
 
   const categoriesQuery = useQuery({ queryKey: ['market-categories'], queryFn: ({ signal }) => listMarketCategories({ signal }), ...marketReadOptions })
+  const qualityQuery = useQuery({ queryKey: ['market-quality'], queryFn: ({ signal }) => getMarketQuality({ signal }), ...marketReadOptions, staleTime: 300000, refetchInterval: qualityRefetchInterval })
   const itemsQuery = useQuery({
     queryKey: ['market-items', queryText, categoryId, page],
     queryFn: ({ signal }) => listMarketItems({ q: queryText, categoryId, page, signal }),
@@ -181,6 +184,7 @@ export default function MarketPricesPage() {
   }
 
   function refresh() {
+    qualityQuery.refetch()
     categoriesQuery.refetch()
     itemsQuery.refetch()
     if (selected) seriesQuery.refetch()
@@ -189,7 +193,7 @@ export default function MarketPricesPage() {
   return <div className="page-stack market-page market-page--immersive market-terminal market-focus">
     <header className="market-terminal-header">
       <div className="market-terminal-brand"><span className="eyebrow">EVE ECHOES / MARKET INTELLIGENCE</span><div className="market-terminal-heading"><h1>市场价格</h1><ChevronRight className="market-header-divider" size={15} aria-hidden="true" /><span className="market-header-category">{selected?.category || '行情工作台'}</span><span className="market-header-scope" data-testid="market-scope">价格范围：{marketScopeLabel(marketScope)}</span></div></div>
-      <div className="market-header-actions">{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>
+      <div className="market-header-actions"><MarketQualitySummary query={qualityQuery} now={now} />{isAuthenticated ? <Link className="market-terminal-action" to="/market/admin">采集管理</Link> : null}<button type="button" className="market-terminal-action" onClick={refresh} aria-label="刷新市场价格"><RefreshCw size={16} aria-hidden="true" />刷新行情</button></div>
     </header>
 
     <div className="market-terminal-layout">

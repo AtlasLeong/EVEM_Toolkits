@@ -182,7 +182,8 @@ test('retains the selected side across item, historical window and refresh chang
   await expectMode(page, '只看卖价')
   const beforeRefresh = requests.length
   await page.getByRole('button', { name: '刷新市场价格', exact: true }).click()
-  await expect.poll(() => requests.length).toBe(beforeRefresh + 3)
+  // Refresh now also reads the independent market quality summary.
+  await expect.poll(() => requests.length).toBe(beforeRefresh + 4)
   await expectMode(page, '只看卖价')
   await expect(page.locator('.market-trend-panel--sell')).toBeVisible()
   await expect(page.locator('.market-trend-panel--buy')).toHaveCount(0)

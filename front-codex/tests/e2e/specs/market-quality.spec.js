@@ -1,0 +1,128 @@
+import { expect, test } from '@playwright/test'
+import { installApiMock, json } from '../helpers/api'
+import { seedAuthenticatedSession } from '../helpers/auth'
+
+const now = Date.parse('2026-10-04T18:00:00Z')
+const iso = age => new Date(now - age).toISOString()
+const observed = (age, has_sell, has_buy) => ({ observed_at: iso(age), has_sell, has_buy })
+function summary(overrides = {}) {
+  return {
+    generated_at: iso(0), snapshot_at: iso(0), cache_ttl_seconds: 300, stale_after_seconds: 7200,
+    counts: { enabled: 6 },
+    observations: [observed(0, true, true), observed(7200001, true, true), observed(0, false, true), observed(7200001, false, false), { observed_at: null, has_sell: false, has_buy: false }, observed(0, true, false)],
+    last_observed_at: iso(0), oldest_observed_at: iso(7200001),
+    collector: { status: 'recovered', last_attempt_at: iso(0), last_success_at: iso(0), last_failure_at: iso(3600000) },
+    ...overrides,
+  }
+}
+
+async function marketMock(page, quality) {
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/quality/') return quality()
+    if (url.pathname === '/api/market/categories/') return json([{ id: 'minerals', label: '矿物', count: 1 }])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '1', name: '质量样品', best_sell: '10.00', best_buy: null, observed_at: iso(0), status: 'fresh' }] })
+    if (url.pathname.endsWith('/series/')) return json({ count: 0, points: [] })
+    return undefined
+  })
+}
+
+test('quality explains global denominator and overlapping missing/stale books on desktop and phone', async ({ page }) => {
+  await page.clock.install({ time: now })
+  await marketMock(page, () => json(summary()))
+  await page.goto('/market')
+  const quality = page.locator('.market-quality')
+  await expect(quality.getByText('新鲜卖价 2 / 6')).toBeVisible()
+  await expect(quality.getByText('33.3%')).toBeVisible()
+  await quality.locator('summary').click()
+  await expect(quality.getByText(/采集已恢复/)).toBeVisible()
+  await expect(quality.getByText(/与当前搜索、分类及分页无关/)).toBeVisible()
+  await expect(quality.locator('.market-quality-counts > div').filter({ hasText: '缺卖盘' }).locator('dd')).toHaveText('2')
+  await expect(quality.locator('.market-quality-counts > div').filter({ hasText: '双向空盘' }).locator('dd')).toHaveText('1')
+  await expect(quality.locator('.market-quality-counts > div').filter({ hasText: '尚未采集' }).locator('dd')).toHaveText('1')
+  await expect(quality.getByText(/缺价不会作为 0 ISK/)).toBeVisible()
+  await page.setViewportSize({ width: 375, height: 812 })
+  await expect(quality.getByText('新鲜卖价 2 / 6')).toBeVisible()
+  expect(await quality.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBeTruthy()
+  const body = await quality.locator('.market-quality-body').boundingBox()
+  expect(body.x).toBeGreaterThanOrEqual(0)
+  expect(body.x + body.width).toBeLessThanOrEqual(375)
+  await quality.getByRole('region', { name: '报价质量说明' }).focus()
+  await page.keyboard.press('Escape')
+  await expect(quality).not.toHaveAttribute('open', '')
+  await expect(quality.locator('summary')).toBeFocused()
+})
+
+for (const width of [320, 375]) {
+  test(`signed-in quality details remain readable and scrollable at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 568 })
+    await seedAuthenticatedSession(page)
+    await marketMock(page, () => json(summary()))
+    await page.goto('/market')
+    await page.locator('.market-quality summary').click()
+    const body = page.getByRole('region', { name: '报价质量说明' })
+    await expect(body).toBeVisible()
+    const metrics = await body.evaluate(el => ({ width: el.clientWidth, scroll: el.scrollWidth, left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right }))
+    expect(metrics.width).toBeGreaterThanOrEqual(width - 52)
+    expect(metrics.scroll).toBeLessThanOrEqual(metrics.width + 1)
+    expect(metrics.left).toBeGreaterThanOrEqual(0)
+    expect(metrics.right).toBeLessThanOrEqual(width)
+    const actions = await page.locator('.market-header-actions').evaluate(el => [...el.children].map(child => ({ left: child.getBoundingClientRect().left, right: child.getBoundingClientRect().right })))
+    for (const action of actions) {
+      expect(action.left).toBeGreaterThanOrEqual(0)
+      expect(action.right).toBeLessThanOrEqual(width)
+    }
+  })
+}
+
+test('quality re-ages the cached observation at 30 seconds without fetching upstream or refetching API', async ({ page }) => {
+  await page.clock.install({ time: now })
+  let reads = 0
+  await marketMock(page, () => { reads++; return json(summary({ counts: { enabled: 1 }, observations: [observed(7190000, true, false)] })) })
+  await page.goto('/market')
+  await expect(page.locator('.market-quality').getByText('新鲜卖价 1 / 1')).toBeVisible()
+  await page.clock.runFor(31000)
+  await expect(page.locator('.market-quality').getByText('新鲜卖价 0 / 1')).toBeVisible()
+  expect(reads).toBe(1)
+})
+
+test('clock rollback and navigation remount cannot rejuvenate a cached quote', async ({ page }) => {
+  await page.clock.install({ time: now })
+  let reads = 0
+  await marketMock(page, () => { reads++; return json(summary({ counts: { enabled: 1 }, observations: [observed(7190000, true, false)] })) })
+  await page.goto('/market')
+  await expect(page.locator('.market-quality').getByText('新鲜卖价 1 / 1')).toBeVisible()
+  await page.clock.runFor(31000)
+  await expect(page.locator('.market-quality').getByText('新鲜卖价 0 / 1')).toBeVisible()
+  await page.clock.setFixedTime(new Date(now - 3600000))
+  await page.evaluate(() => { history.pushState({}, '', '/fraudlist'); dispatchEvent(new PopStateEvent('popstate')) })
+  await expect(page.locator('.market-quality')).toHaveCount(0)
+  await page.evaluate(() => { history.pushState({}, '', '/market'); dispatchEvent(new PopStateEvent('popstate')) })
+  await expect(page.locator('.market-quality').getByText('新鲜卖价 0 / 1')).toBeVisible()
+  expect(reads).toBe(1)
+})
+
+test('failed refresh retains labelled previous summary and leaves quotes intact', async ({ page }) => {
+  let fail = false
+  await marketMock(page, () => fail ? json({ detail: 'unavailable' }, 503) : json(summary({ collector: { status: 'failed' } })))
+  await page.goto('/market')
+  const quality = page.locator('.market-quality')
+  await quality.locator('summary').click()
+  await expect(quality.getByText(/最近采集失败/)).toBeVisible()
+  fail = true
+  await page.getByRole('button', { name: '刷新市场价格' }).click()
+  await expect(quality.getByText(/摘要刷新失败/)).toBeVisible()
+  await expect(quality.getByText('新鲜卖价 2 / 6')).toBeVisible()
+  await expect(page.getByRole('heading', { name: '质量样品' })).toBeVisible()
+})
+
+test('zero enabled items and unavailable summary never imply valid complete coverage', async ({ page }) => {
+  let unavailable = false
+  await marketMock(page, () => unavailable ? json({}, 503) : json(summary({ counts: { enabled: 0 }, observations: [], last_observed_at: null })))
+  await page.goto('/market')
+  await expect(page.locator('.market-quality').getByText('暂无采集商品')).toBeVisible()
+  await page.locator('.market-quality summary').click()
+  await expect(page.locator('.market-quality').getByText('最后采集 尚无成功采集')).toBeVisible()
+  unavailable = true
+  await page.reload()
+  await expect(page.getByText('报价质量暂不可用')).toBeVisible()
+})
