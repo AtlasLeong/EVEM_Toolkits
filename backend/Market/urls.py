@@ -1,11 +1,13 @@
 from django.urls import path
 
 from . import views
+from .quality_views import PublicQualityView
 
 
 urlpatterns = [
     path('categories/', views.PublicCategoriesView.as_view(), name='market-categories'),
     path('items/', views.PublicItemsView.as_view(), name='market-items'),
+    path('quality/', PublicQualityView.as_view(), name='market-quality'),
     path('items/<int:item_id>/series/', views.PublicSeriesView.as_view(), name='market-item-series'),
     path('items/<int:item_id>/history/', views.PublicHistoryView.as_view(), name='market-item-history'),
     path('admin/config/', views.AdminConfigView.as_view(), name='market-admin-config'),

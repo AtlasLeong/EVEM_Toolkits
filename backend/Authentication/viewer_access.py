@@ -14,7 +14,7 @@ PUBLIC_READ_GET_PATHS = frozenset({
     '/api/bazaarinfo', '/api/bazaarnamelist', '/api/bazaarbox',
     '/api/community/corporations/',
     '/api/game-data/items/', '/api/game-data/status/',
-    '/api/market/categories/', '/api/market/items/',
+    '/api/market/categories/', '/api/market/items/', '/api/market/quality/',
     '/api/planetresources', '/api/planetresourceprice/default', '/api/regions', '/api/constellations', '/api/solarsystem',
     '/api/starsea/posts/', '/api/starsea/ships/', '/api/starsea/locations/',
     '/api/starsea/corporations/',

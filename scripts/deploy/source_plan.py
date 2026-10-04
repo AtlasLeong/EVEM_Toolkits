@@ -12,6 +12,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import sys
 import tempfile
 import urllib.request
 from urllib.parse import urlsplit
@@ -245,7 +246,7 @@ def _valid_sha(value):
     return isinstance(value, str) and SHA.fullmatch(value) is not None
 
 
-def _git(repo, *args, timeout=30, config=()):
+def _git(repo, *args, timeout=30, config=(), object_directory=None):
     # No credential helpers, interactive prompts or global credential/config
     # loading. Partial clones cannot silently contact a remote during ls-tree.
     environment = {key: value for key, value in os.environ.items()
@@ -259,6 +260,11 @@ def _git(repo, *args, timeout=30, config=()):
         'GIT_NO_REPLACE_OBJECTS': '1',
         'GIT_ASKPASS': '',
     })
+    if object_directory is not None:
+        object_directory = Path(object_directory)
+        if not object_directory.is_absolute() or not object_directory.is_dir():
+            raise PlanError('invalid git object directory')
+        environment['GIT_OBJECT_DIRECTORY'] = str(object_directory)
     options = ('credential.helper=', 'credential.interactive=false',
                'core.askPass=', 'http.extraHeader=', 'http.cookieFile=',
                'http.saveCookies=false', 'http.proxy=', *config)
@@ -290,15 +296,29 @@ def _fetch_commit(repo, sha):
             or port is not None or not parsed.path.startswith('/')
             or parsed.path == '/' or parsed.query or parsed.fragment):
         raise PlanError('anonymous public HTTPS origin required')
-    # Use the validated origin URL directly, avoiding remote-specific transport
-    # settings. URL-specific overrides suppress inherited auth headers/cookies.
-    overrides = tuple(f'http.{origin}.{key}={value}' for key, value in (
-        ('extraHeader', ''), ('cookieFile', ''), ('saveCookies', 'false'),
-        ('proxy', ''), ('sslCert', ''), ('sslKey', ''),
-    )) + (f'credential.{origin}.helper=', 'protocol.allow=never',
-          'protocol.https.allow=always')
-    _git(repo, 'fetch', '--depth=1', '--no-tags', '--no-write-fetch-head',
-         origin, sha, timeout=60, config=overrides)
+    # A fresh bare config cannot inherit local authentication or client certs.
+    # Write fetched objects to the caller's store, without changing its refs,
+    # FETCH_HEAD or shallow boundary. Only ls-tree/cat-file need these objects.
+    try:
+        location = _git(repo, 'rev-parse', '--git-path', 'objects').decode('utf-8').strip()
+        if not location:
+            raise PlanError('git object directory unavailable')
+        object_directory = Path(location)
+        if not object_directory.is_absolute():
+            object_directory = Path(repo) / object_directory
+        object_directory = object_directory.resolve(strict=True)
+        if not object_directory.is_dir():
+            raise PlanError('git object directory unavailable')
+        with tempfile.TemporaryDirectory(prefix='evem-public-fetch-') as temporary:
+            isolated = Path(temporary)
+            _git(isolated, 'init', '--bare', '--quiet', '--template=')
+            _git(isolated, 'fetch', '--depth=1', '--no-tags', '--no-write-fetch-head',
+                 origin, sha, timeout=60,
+                 config=('protocol.allow=never', 'protocol.https.allow=always',
+                         'maintenance.auto=false', 'gc.auto=0', 'fetch.writeCommitGraph=false'),
+                 object_directory=object_directory)
+    except (OSError, UnicodeError, ValueError):
+        raise PlanError('anonymous public fetch unavailable') from None
 
 
 def _ensure_commit(repo, sha):
@@ -560,7 +580,16 @@ def read_active_versions(*, timeout=VERSION_TIMEOUT, open_url=None):
             if not isinstance(value, dict) or not _valid_sha(value.get('sha')):
                 raise PlanError('invalid active version response')
             baseline[component] = value['sha']
-        except (OSError, ValueError, TypeError, PlanError, http.client.HTTPException):
+        except (OSError, ValueError, TypeError, PlanError, http.client.HTTPException) as error:
+            # Only fixed component names and exception types are logged. URL
+            # errors can contain credentials or response bodies; never echo them.
+            detail = type(error).__name__
+            if isinstance(error, urllib.error.HTTPError):
+                detail += ':' + str(error.code)
+            elif isinstance(error, urllib.error.URLError):
+                detail += ':' + type(error.reason).__name__
+            print('Active version proof unavailable: ' + component + ' (' + detail + ')',
+                  file=sys.stderr)
             continue
     return baseline if set(baseline) == set(COMPONENTS) else {}
 
@@ -637,6 +666,7 @@ def main():
     except (OSError, PlanError):
         parser.exit(1, 'Unable to prove committed release inputs; planning failed closed.\n')
     print('Release plan: ' + plan['action'] + ' (' + plan['sha'] + ')')
+    print('Release reasons: ' + (', '.join(plan['reasons']) or 'runtime inputs match'))
 
 
 if __name__ == '__main__':

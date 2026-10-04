@@ -35,6 +35,20 @@ function fixture(fetchImpl, authenticated = false) {
 
 const response = (value, status = 200) => ({ ok: status < 400, status, json: async () => value })
 
+test('market quality follows authenticated transport and bypasses the browser cache', async () => {
+  const calls = []
+  const controller = new AbortController()
+  const api = fixture((url, options) => {
+    calls.push({ url, options })
+    return Promise.resolve(response({ counts: { enabled: 0 } }))
+  }, true)
+  await api.getMarketQuality({ signal: controller.signal })
+  assert.equal(calls[0].url, 'http://local-test/api/market/quality/')
+  assert.equal(calls[0].options.cache, 'no-store')
+  assert.match(calls[0].options.headers.Authorization, /^Bearer /)
+  assert.equal(calls[0].options.signal, controller.signal)
+})
+
 test('market search sends the viewer token and encodes the query', async () => {
   const calls = []
   const api = fixture((url, options) => {

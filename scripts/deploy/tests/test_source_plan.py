@@ -345,15 +345,97 @@ class SourcePlanTests(unittest.TestCase):
     def test_public_origin_fetch_is_depth_one_and_credential_free(self):
         missing = 'a' * 40
         origin = 'https://github.com/example/public-repo.git'
-        with mock.patch.object(source_plan, '_git', side_effect=[origin.encode(), b'']) as git:
+        objects = (self.root / '.git/objects').resolve()
+        with mock.patch.object(source_plan, '_git', side_effect=[
+                origin.encode(), str(objects).encode(), b'', b'']) as git:
             source_plan._fetch_commit(self.root, missing)
-        args, kwargs = git.call_args
-        self.assertEqual(args, (self.root, 'fetch', '--depth=1', '--no-tags',
-                                '--no-write-fetch-head', origin, missing))
-        self.assertEqual(kwargs['timeout'], 60)
-        self.assertIn(f'credential.{origin}.helper=', kwargs['config'])
-        self.assertIn(f'http.{origin}.extraHeader=', kwargs['config'])
-        self.assertIn('protocol.https.allow=always', kwargs['config'])
+        calls = git.call_args_list
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(calls[0].args, (self.root, 'remote', 'get-url', 'origin'))
+        self.assertEqual(calls[1].args, (self.root, 'rev-parse', '--git-path', 'objects'))
+        isolated = calls[2].args[0]
+        self.assertNotEqual(isolated, self.root)
+        self.assertEqual(calls[2].args, (isolated, 'init', '--bare', '--quiet', '--template='))
+        self.assertEqual(calls[3].args, (isolated, 'fetch', '--depth=1', '--no-tags',
+                                        '--no-write-fetch-head', origin, missing))
+        self.assertEqual(calls[3].kwargs['timeout'], 60)
+        self.assertEqual(calls[3].kwargs['object_directory'], objects)
+        self.assertEqual(calls[3].kwargs['config'],
+                         ('protocol.allow=never', 'protocol.https.allow=always',
+                          'maintenance.auto=false', 'gc.auto=0', 'fetch.writeCommitGraph=false'))
+        self.assertFalse(isolated.exists())
+
+    def test_git_object_directory_uses_only_an_explicit_absolute_store(self):
+        objects = (self.root / '.git/objects').resolve()
+        with mock.patch.dict(source_plan.os.environ, {'GIT_OBJECT_DIRECTORY': 'inherited-private-store'}):
+            with mock.patch.object(source_plan.subprocess, 'run', return_value=mock.Mock(stdout=b'')) as run:
+                source_plan._git(self.root, 'cat-file', '-e', self.base)
+                self.assertNotIn('GIT_OBJECT_DIRECTORY', run.call_args.kwargs['env'])
+                source_plan._git(self.root, 'cat-file', '-e', self.base, object_directory=objects)
+                self.assertEqual(run.call_args.kwargs['env']['GIT_OBJECT_DIRECTORY'], str(objects))
+        for invalid in (Path('.git/objects'), self.root / 'missing-object-store'):
+            with self.subTest(invalid=invalid):
+                with mock.patch.object(source_plan.subprocess, 'run') as run:
+                    with self.assertRaises(source_plan.PlanError):
+                        source_plan._git(self.root, 'cat-file', '-e', self.base, object_directory=invalid)
+                run.assert_not_called()
+
+    def test_isolated_fetch_populates_shallow_store_without_changing_git_metadata(self):
+        self.write('docs/deploy.md', '# test/docs candidate after old application release\n')
+        candidate = self.commit('docs-only candidate')
+        with tempfile.TemporaryDirectory() as temporary:
+            shallow = Path(temporary)
+            source_plan._git(shallow, 'init', '-q', '--template=')
+            source_plan._git(shallow, 'fetch', '--depth=1', '--no-tags', '--no-write-fetch-head',
+                             self.root.as_uri(), candidate, config=('protocol.file.allow=always',))
+            source_plan._git(shallow, 'update-ref', 'HEAD', candidate)
+            origin = 'https://github.com/example/public-repo.git'
+            source_plan._git(shallow, 'remote', 'add', 'origin', origin)
+            # Synthetic local config must never reach the isolated HTTPS helper.
+            source_plan._git(shallow, 'config', 'http.sslCert', 'must-not-load-client-cert.pem')
+            source_plan._git(shallow, 'config', 'http.extraHeader', 'X-Test-Never-Inherit: fixture')
+            metadata = ('HEAD', 'shallow', 'FETCH_HEAD', 'config')
+            def snapshot():
+                return {name: (shallow / '.git' / name).read_bytes()
+                        if (shallow / '.git' / name).exists() else None for name in metadata}
+            before = snapshot()
+            with self.assertRaises(source_plan.PlanError):
+                source_plan._git(shallow, 'cat-file', '-e', self.base + '^{commit}')
+            original_git = source_plan._git
+            observed = []
+            def local_fixture_transport(repo, *args, **kwargs):
+                if args and args[0] == 'fetch' and args[-2] == origin:
+                    self.assertNotEqual(repo, shallow)
+                    self.assertNotIn('sslCert', (Path(repo) / 'config').read_text())
+                    self.assertNotIn('extraHeader', (Path(repo) / 'config').read_text())
+                    self.assertEqual(kwargs['object_directory'], (shallow / '.git/objects').resolve())
+                    observed.append(repo)
+                    args = (*args[:-2], self.root.as_uri(), args[-1])
+                    kwargs['config'] = (*kwargs['config'], 'protocol.file.allow=always')
+                return original_git(repo, *args, **kwargs)
+            with mock.patch.object(source_plan, '_git', side_effect=local_fixture_transport):
+                result = source_plan.build_plan(shallow, self.baseline)
+            self.assertEqual(len(observed), 1)
+            self.assertFalse(observed[0].exists())
+            metadata_unchanged = snapshot() == before
+            self.assertTrue(metadata_unchanged)
+            self.assertEqual(result['action'], 'noop')
+            original_git(shallow, 'cat-file', '-e', self.base + '^{commit}')
+            # Positive control uses committed product bytes, not working files.
+            self.write('front-codex/src/main.jsx', '// changed product\n')
+            product = self.commit('product-positive control')
+            original_git(shallow, 'fetch', '--depth=1', '--no-tags', '--no-write-fetch-head',
+                         self.root.as_uri(), product, config=('protocol.file.allow=always',))
+            original_git(shallow, 'update-ref', 'HEAD', product)
+            positive = source_plan.build_plan(shallow, self.baseline)
+            self.assertEqual(positive['action'], 'release')
+            self.assertEqual(positive['reasons'], ['runtime-inputs-changed:frontend'])
+            print('Source-plan shallow regression: ' + json.dumps({
+                'action': result['action'], 'sha': result['sha'],
+                'baseline': result['baseline'], 'metadata_unchanged': metadata_unchanged,
+                'positive_action': positive['action'], 'positive_sha': positive['sha'],
+                'positive_reasons': positive['reasons'],
+            }, sort_keys=True), flush=True)
 
     def test_authenticated_or_nonpublic_origin_never_fetches(self):
         for origin in ('https://token@github.com/example/repo.git',
