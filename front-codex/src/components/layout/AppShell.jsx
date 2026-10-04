@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords } from 'lucide-react'
+import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords, CircleHelp } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -7,6 +7,7 @@ import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 import useKillboardAccess from '../../hooks/useKillboardAccess'
 import { pageTransitionKey } from '../../utils/routeTransition.js'
 import { loginReturnPath } from '../../utils/loginDestination'
+import IndustryJourney from './IndustryJourney'
 
 const navGroups = [
   { id: 'industry', label: '市场与工业', items: [
@@ -26,6 +27,7 @@ const navGroups = [
     { to: '/corporations', label: '军团大厅', icon: Users },
     { to: '/starsea', label: '星海见闻', icon: Compass },
     { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
+    { to: '/infocenter', label: '使用与权限', icon: CircleHelp },
   ] },
 ]
 
@@ -278,6 +280,7 @@ export default function AppShell() {
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
               className="page-wrapper"
             >
+              <IndustryJourney />
               <Outlet context={usageAccess} />
             </motion.div>
           </div>
