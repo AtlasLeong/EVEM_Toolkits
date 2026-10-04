@@ -58,3 +58,35 @@ test('reset password wrong verification code shows chinese field error', async (
 
   await expect(resetForm.locator('.form-error')).toContainText('邮箱验证码错误')
 })
+
+for (const [error, message] of [
+  ['Email verification code has expired.', '验证码已过期，请重新获取'],
+  ['Email verification code not found.', '请先获取邮箱验证码'],
+]) {
+  for (const mode of ['register', 'reset']) {
+    test(`${mode} ${error} is attached to the verification field without sending mail`, async ({ page }) => {
+      let mailRequests = 0
+      await installApiMock(page, ({ url, method }) => {
+        if (url.pathname === '/api/user/emailcode') mailRequests += 1
+        if (method === 'POST' && url.pathname === (mode === 'register' ? '/api/user/register' : '/api/user/forgetPassword')) return json({ error }, 400)
+        return json({ duplicate: null })
+      })
+      await page.goto('/login')
+      await page.getByRole('tab', { name: mode === 'register' ? '注册' : '找回密码', exact: true }).click()
+      const form = page.locator('form.auth-section')
+      if (mode === 'register') await page.getByLabel('用户名', { exact: true }).fill('newpilot')
+      await form.locator('input[type="email"]').fill('new-pilot@example.com')
+      const verification = page.getByLabel('邮箱验证码', { exact: true })
+      await verification.fill('123456')
+      await form.locator('input[type="password"]').nth(0).fill('ValidPass_1')
+      await form.locator('input[type="password"]').nth(1).fill('ValidPass_1')
+      await form.getByRole('button', { name: mode === 'register' ? '注册并登录' : '重置密码', exact: true }).click()
+      const errorId = mode === 'register' ? 'register-code-error' : 'reset-code-error'
+      await expect(page.locator(`#${errorId}`)).toHaveText(message)
+      await expect(verification).toHaveAttribute('aria-invalid', 'true')
+      await expect(verification).toHaveAttribute('aria-describedby', errorId)
+      await expect(verification).toHaveValue('123456')
+      expect(mailRequests).toBe(0)
+    })
+  }
+}

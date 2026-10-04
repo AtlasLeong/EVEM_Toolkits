@@ -1,6 +1,6 @@
 import API_URL from "./backendSetting";
 import fetchWithAuth from "./fetchWithAuth";
-import { VIEWER_ACCESS_ENABLED } from "../utils/viewerAccess";
+import { PUBLIC_READ_ACCESS_ENABLED } from "../utils/viewerAccess";
 
 export { ACTIVITY_OPTIONS as ACTIVITIES } from "../utils/corporationActivity.js";
 export const CORPORATION_TYPES = {
@@ -48,7 +48,7 @@ async function checked(response) {
 const request = async (path, options = {}, privateRequest = true) =>
   (
     await checked(
-      await (privateRequest || VIEWER_ACCESS_ENABLED ? fetchWithAuth : fetch)(`${base}${path}`, options),
+      await (privateRequest || !PUBLIC_READ_ACCESS_ENABLED ? fetchWithAuth : fetch)(`${base}${path}`, options),
     )
   ).json();
 const send = (path, body, method = "POST") =>
@@ -123,7 +123,7 @@ export async function fetchCommunityImage(value, isPrivate = false) {
   const url = communityMediaUrl(value);
   if (!url) return null;
   const response = await checked(
-    await (isPrivate || VIEWER_ACCESS_ENABLED ? fetchWithAuth : fetch)(url),
+    await (isPrivate || !PUBLIC_READ_ACCESS_ENABLED ? fetchWithAuth : fetch)(url),
   );
   if (
     !/^image\/(png|jpeg|webp)(?:;|$)/i.test(

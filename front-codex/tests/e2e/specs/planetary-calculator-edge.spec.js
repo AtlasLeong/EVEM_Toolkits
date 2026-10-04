@@ -65,7 +65,7 @@ async function installCalculatorBaseMock(page, extraResolver = () => undefined) 
       ])
     }
 
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') {
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) {
       return json([])
     }
 

@@ -4,7 +4,7 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { loginDestination } from '../utils/loginDestination'
-import { VIEWER_ACCESS_ENABLED } from '../utils/viewerAccess'
+import { PUBLIC_READ_ACCESS_ENABLED } from '../utils/viewerAccess'
 import {
   emailVerification,
   forgetEmaillCheck,
@@ -14,6 +14,7 @@ import {
   signupCheck,
 } from '../services/apiAuthentication'
 import { AuthContext } from '../context/AuthContext'
+import { AuthSessionChangedError } from '../services/fetchWithAuth'
 import '../styles/account-entry.css'
 
 const EMAIL_PATTERN = /\S+@\S+\.\S{1,}/
@@ -23,6 +24,10 @@ const AUTH_MODES = [
   { key: 'register', label: '注册' },
   { key: 'reset', label: '找回密码' },
 ]
+
+function readAuthTokens() {
+  return { access: localStorage.getItem('access_token'), refresh: localStorage.getItem('refresh_token') }
+}
 
 function shouldFallbackToChinese(message) {
   if (!message) return true
@@ -92,6 +97,10 @@ function normalizeRegisterError(message) {
       return { email: '邮箱格式错误' }
     case 'Wrong Email verification code.':
       return { verificationCode: '邮箱验证码错误' }
+    case 'Email verification code has expired.':
+      return { verificationCode: '验证码已过期，请重新获取' }
+    case 'Email verification code not found.':
+      return { verificationCode: '请先获取邮箱验证码' }
     case 'Username is already taken.':
       return { userName: '该用户名已被使用' }
     case 'Email is already in use.':
@@ -111,6 +120,10 @@ function normalizeResetError(message) {
       return { forgetEmail: '邮箱格式错误' }
     case 'Wrong Email verification code.':
       return { forgetEmailVerification: '邮箱验证码错误' }
+    case 'Email verification code has expired.':
+      return { forgetEmailVerification: '验证码已过期，请重新获取' }
+    case 'Email verification code not found.':
+      return { forgetEmailVerification: '请先获取邮箱验证码' }
     case 'Email has not been signup.':
       return { forgetEmail: '该邮箱未注册' }
     case 'confirm Password failed.':
@@ -149,6 +162,7 @@ export default function LoginPage() {
   const destination = loginDestination(location.search, location.state?.from)
   const reduceMotion = useReducedMotion()
   const tabRefs = useRef({})
+  const mountedRef = useRef(false)
   const { isAuthenticated, login: loginAction } = useContext(AuthContext)
   const [mode, setMode] = useState('login')
   const [notice, setNotice] = useState('')
@@ -183,6 +197,34 @@ export default function LoginPage() {
   const [resetCodePending, setResetCodePending] = useState(false)
 
   useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  const assertAuthSubmission = (snapshot) => {
+    const current = readAuthTokens()
+    if (!mountedRef.current || current.access !== snapshot.access || current.refresh !== snapshot.refresh) {
+      throw new AuthSessionChangedError()
+    }
+  }
+
+  const authenticate = async (request, { payload, snapshot }) => {
+    assertAuthSubmission(snapshot)
+    const data = await request(payload)
+    assertAuthSubmission(snapshot)
+    return { data, snapshot }
+  }
+
+  const commitAuthentication = ({ data, snapshot }) => {
+    // A public login/register response may outlive an account change in another tab.
+    assertAuthSubmission(snapshot)
+    localStorage.setItem('access_token', data.access)
+    localStorage.setItem('refresh_token', data.refresh)
+    loginAction()
+    navigate(destination)
+  }
+
+  useEffect(() => {
     if (!registerCountdown) return undefined
     const timer = window.setTimeout(() => setRegisterCountdown((current) => Math.max(0, current - 1)), 1000)
     return () => window.clearTimeout(timer)
@@ -195,27 +237,19 @@ export default function LoginPage() {
   }, [resetCountdown])
 
   const loginMutation = useMutation({
-    mutationFn: login,
-    onSuccess: (data) => {
-      localStorage.setItem('access_token', data.access)
-      localStorage.setItem('refresh_token', data.refresh)
-      loginAction()
-      navigate(destination)
-    },
+    mutationFn: (submission) => authenticate(login, submission),
+    onSuccess: commitAuthentication,
     onError: (error) => {
+      if (!mountedRef.current) return
       setLoginError(normalizeAuthMessage(error.message, '登录失败，请检查邮箱和密码'))
     },
   })
 
   const registerMutation = useMutation({
-    mutationFn: register,
-    onSuccess: (data) => {
-      localStorage.setItem('access_token', data.access)
-      localStorage.setItem('refresh_token', data.refresh)
-      loginAction()
-      navigate(destination)
-    },
+    mutationFn: (submission) => authenticate(register, submission),
+    onSuccess: commitAuthentication,
     onError: (error) => {
+      if (!mountedRef.current) return
       setRegisterErrors(normalizeRegisterError(error.message))
     },
   })
@@ -396,8 +430,8 @@ export default function LoginPage() {
     }
 
     loginMutation.mutate({
-      login_email,
-      login_password,
+      payload: { login_email, login_password },
+      snapshot: readAuthTokens(),
     })
   }
 
@@ -426,10 +460,8 @@ export default function LoginPage() {
     }
 
     registerMutation.mutate({
-      userName,
-      email,
-      verificationCode,
-      password: registerForm.password,
+      payload: { userName, email, verificationCode, password: registerForm.password },
+      snapshot: readAuthTokens(),
     })
   }
 
@@ -499,14 +531,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {VIEWER_ACCESS_ENABLED && (
-          <div className="auth-access-notice" role="note">
-            <ShieldCheck size={17} aria-hidden="true" />
-            <div><strong>请使用已获查看权限的账号登录</strong><p>当前站点暂未开放访客浏览。注册账号不会自动获得查看权限。</p></div>
-          </div>
-        )}
+        <div className="auth-access-notice" role="note">
+          <ShieldCheck size={17} aria-hidden="true" />
+          <div><strong>{PUBLIC_READ_ACCESS_ENABLED ? '普通工具可作为访客浏览' : '当前部署的普通工具需要登录'}</strong><p>新邮箱可通过验证码注册。提交、保存和私人模块需要登录；管理与协作资源还需相应授权。</p></div>
+        </div>
         {location.state?.reason === 'authentication' && <p className="auth-return-hint" role="status">此页面需要登录。完成登录后将返回刚才的页面。</p>}
-        {location.state?.reason === 'viewer-access' && <p className="auth-return-hint" role="status">完成登录并通过查看权限校验后，将返回刚才的页面。</p>}
 
         <div className="auth-tabs" role="tablist" aria-label="认证模式">
           {AUTH_MODES.map((tab, index) => (
@@ -853,7 +882,7 @@ export default function LoginPage() {
             {mode === 'login' ? '切换到注册' : '返回登录'}
           </button>
           <p className="login-help">
-            {VIEWER_ACCESS_ENABLED ? '登录后仍会按账号权限开放相应工具。' : <>仅浏览功能可直接进入 <Link to="/fraudlist">访客模式</Link></>}
+            {PUBLIC_READ_ACCESS_ENABLED ? <>普通页面可直接进入 <Link to="/fraudlist">访客模式</Link>；私人模块仍需登录和授权。</> : '登录后可浏览普通工具；私人模块仍需相应授权。'}
           </p>
         </div>
       </motion.div>

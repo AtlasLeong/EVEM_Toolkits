@@ -37,7 +37,7 @@ test('加载预设价格失败时显示错误提示', async ({ page }) => {
         },
       ])
     }
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') {
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) {
       return json({ message: '读取预设价格失败' }, 500)
     }
     if (method === 'GET' && url.pathname === '/api/programme') {

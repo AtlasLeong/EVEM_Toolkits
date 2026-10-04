@@ -29,7 +29,7 @@ async function installPlanetaryUiMock(page) {
     if (method === 'GET' && url.pathname === '/api/solarsystem') {
       return json([{ ss_id: 21, ss_title: 'Q-TBHW', ss_safetylvl: -0.8 }])
     }
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') {
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) {
       return json([
         { resource_name: '光泽合金', resource_price: 2100 },
         { resource_name: '光彩合金', resource_price: 3200 },

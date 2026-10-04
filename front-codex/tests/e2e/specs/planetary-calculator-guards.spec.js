@@ -16,7 +16,7 @@ async function installPlanetaryBaseMock(page) {
     if (method === 'GET' && url.pathname === '/api/regions') return json([])
     if (method === 'GET' && url.pathname === '/api/constellations') return json([])
     if (method === 'GET' && url.pathname === '/api/solarsystem') return json([])
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') return json([])
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) return json([])
 
     if (method === 'POST' && url.pathname === '/api/searchplanetresource') {
       expect(Array.isArray(body.planetaryResources)).toBeTruthy()
@@ -62,6 +62,22 @@ test('未登录时计算器显示方案限制提示且不展示方案管理按�
   await expect(modal.getByRole('button', { name: '保存新方案' })).toHaveCount(0)
   await expect(modal.getByRole('button', { name: '更新当前方案' })).toHaveCount(0)
   await expect(modal.getByRole('button', { name: '删除方案' })).toHaveCount(0)
+})
+
+test('游客加载预设价只读取公开默认价且不请求私人方案', async ({ page }) => {
+  const reads = []
+  page.on('request', request => {
+    const url = new URL(request.url())
+    if (url.pathname.startsWith('/api/planetresourceprice') || url.pathname === '/api/programme') reads.push(request)
+  })
+  await installPlanetaryBaseMock(page)
+  const modal = await openCalculatorWithOneRow(page)
+  await modal.getByRole('button', { name: '加载预设价格', exact: true }).click()
+  await expect.poll(() => reads.length).toBe(1)
+  expect(new URL(reads[0].url()).pathname).toBe('/api/planetresourceprice/default')
+  expect(new URL(reads[0].url()).search).toBe('')
+  expect(await reads[0].headerValue('authorization')).toBeNull()
+  await expect(modal.getByRole('button', { name: '保存新方案', exact: true })).toHaveCount(0)
 })
 
 test('已加入计算器的结果行会被禁用避免重复加入', async ({ page }) => {

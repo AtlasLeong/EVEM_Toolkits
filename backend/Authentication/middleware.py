@@ -1,30 +1,13 @@
-"""Fail-closed viewer gate for API data routes."""
+"""Require an active JWT account outside explicit anonymous API surfaces."""
 
-from django.conf import settings
 from django.http import JsonResponse
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .access import is_viewer_allowed
-
-
-_PUBLIC_API_PATHS = frozenset({
-    '/api/deploy-version/',
-    '/api/community/ready/',
-    '/api/user/login',
-    '/api/user/register',
-    '/api/user/emailcode',
-    '/api/user/signupcheck',
-    '/api/user/forgetemailcheck',
-    '/api/user/forgetPassword',
-    '/api/user/token/refresh',
-    # 独立脚本通过激活码和机器标识校验，不使用站内登录令牌。
-    '/api/activationcode/validate-code/',
-    '/api/license/validate-code/',
-})
+from .viewer_access import LEGACY_UPLOAD_PATH, allows_anonymous_api_request, allows_legacy_upload
 
 
 class ViewerAccessMiddleware:
-    """Require an allowlisted JWT for every API route carrying app data."""
+    """Keep private and unknown API paths protected in every public-read mode."""
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -32,10 +15,8 @@ class ViewerAccessMiddleware:
 
     def __call__(self, request):
         if (
-            not getattr(settings, 'VIEWER_ALLOWLIST_ENABLED', False)
-            or request.method == 'OPTIONS'
-            or not request.path.startswith('/api/')
-            or request.path in _PUBLIC_API_PATHS
+            not request.path.startswith('/api/')
+            or allows_anonymous_api_request(request.path, request.method)
         ):
             return self.get_response(request)
 
@@ -52,7 +33,9 @@ class ViewerAccessMiddleware:
             )
 
         user, _token = authenticated
-        if not getattr(user, 'is_authenticated', False) or not is_viewer_allowed(getattr(user, 'email', '')):
-            return JsonResponse({'detail': '当前账号暂无查看权限。'}, status=403)
+        if not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', False):
+            return JsonResponse({'detail': '账号不可用。'}, status=403)
+        if request.path == LEGACY_UPLOAD_PATH and not allows_legacy_upload(user):
+            return JsonResponse({'detail': '当前账号暂无上传权限。'}, status=403)
 
         return self.get_response(request)

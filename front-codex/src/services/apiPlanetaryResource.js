@@ -1,5 +1,5 @@
 import API_URL from './backendSetting'
-import fetchWithAuth from './fetchWithAuth'
+import fetchWithAuth, { hasActiveSession } from './fetchWithAuth'
 
 async function parseApiError(response, fallback) {
   const payload = await response.json().catch(async () => {
@@ -33,7 +33,9 @@ export async function searchPlanetResources(searchForm) {
 }
 
 export async function getDefaultResourcePriceSetting(resetPrice) {
-  const res = await fetchWithAuth(`${API_URL}/planetresourceprice?resetPrice=${resetPrice}`)
+  const res = hasActiveSession()
+    ? await fetchWithAuth(`${API_URL}/planetresourceprice?resetPrice=${resetPrice}`)
+    : await fetch(`${API_URL}/planetresourceprice/default`)
   if (!res.ok) {
     throw new Error('Error to fetch default Resource Price')
   }

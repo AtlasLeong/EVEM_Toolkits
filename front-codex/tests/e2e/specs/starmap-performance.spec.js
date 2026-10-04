@@ -146,7 +146,9 @@ test('DPR 改变时更新画布分辨率，后续定位不再重设尺寸', asyn
   const cssWidth = await page.locator('.tactical-map-viewport').evaluate(node => node.getBoundingClientRect().width)
   const session = await context.newCDPSession(page)
   await session.send('Emulation.setDeviceMetricsOverride', { ...page.viewportSize(), deviceScaleFactor: 2, mobile: false })
-  await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBe(2)
+  // Native display scaling can expose CDP's 2x DPR with sub-micro precision.
+  // Keep the backing-store and resize checks below exact.
+  await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBeCloseTo(2, 6)
   // Chromium's DPR-only CDP override updates matchMedia.matches without
   // dispatching resolution or resize events. Notify the document explicitly
   // as a real display/window change would; keep the exact backing-store checks.
@@ -170,9 +172,9 @@ test('快速缩放后立即离开页面会取消待处理绘制，重返星图�
   await page.locator('.tactical-map-viewport').evaluate(node => {
     const rect = node.getBoundingClientRect()
     node.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100, clientX: rect.left + 100, clientY: rect.top + 100 }))
-    document.querySelector('a[href="/feedback"]').click()
+    document.querySelector('a[href="/fraudlist"]').click()
   })
-  await expect(page).toHaveURL(/\/feedback$/)
+  await expect(page).toHaveURL(/\/fraudlist$/)
   await expect(page.locator('canvas')).toHaveCount(0)
   const frames = await page.evaluate(() => window.__mapPerf.frames.length)
   await page.getByRole('link', { name: '星系导航', exact: true }).focus()

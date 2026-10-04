@@ -1,18 +1,14 @@
-const production = Boolean(import.meta.env?.PROD)
-// A legacy VITE_VIEWER_ALLOWLIST_ENABLED=false may remain in an old build
-// environment. It must not silently reopen a newly private production build.
-// Opening later requires the explicit public-access switch.
-const publicAccessValue = String(import.meta.env?.VITE_VIEWER_PUBLIC_ACCESS_ENABLED ?? 'false').trim().toLowerCase()
+// This switch controls ordinary public reads only. Private routes and API
+// resources still require their own authentication and authorization checks.
+// Legacy viewer flags and email lists no longer define account eligibility.
+const publicAccessValue = String(import.meta.env?.VITE_PUBLIC_READ_ACCESS_ENABLED ?? 'true').trim().toLowerCase()
 
-// Local development and e2e previews stay usable without a production login.
-export const VIEWER_ACCESS_ENABLED = production && !['1', 'true', 'yes', 'on'].includes(publicAccessValue)
+export const PUBLIC_READ_ACCESS_ENABLED = ['1', 'true', 'yes', 'on'].includes(publicAccessValue)
 
-const configuredEmails = String(import.meta.env?.VITE_VIEWER_ALLOWLIST_EMAILS ?? '2235102484@qq.com')
-  .split(',')
-  .map(email => email.trim().toLowerCase())
-  .filter(Boolean)
+// Compatibility for callers outside the current frontend. This is a read
+// login switch, never an owner, staff or organization permission.
+export const VIEWER_ACCESS_ENABLED = !PUBLIC_READ_ACCESS_ENABLED
 
-export function isViewerAllowed(email) {
-  if (!VIEWER_ACCESS_ENABLED) return true
-  return configuredEmails.includes(String(email ?? '').trim().toLowerCase())
+export function isViewerAllowed() {
+  return true
 }

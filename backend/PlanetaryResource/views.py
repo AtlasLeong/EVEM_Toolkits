@@ -16,12 +16,24 @@ from rest_framework.decorators import api_view
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from Authentication.permissions import PublicReadOrAuthenticated
 
 import hashlib
 import heapq
 import json
 from .models import (PlanetResource, Region, Constellation, Solarsystem, PlResourcePrice, PreSearchPlanetary,
                      PlanetaryProgramme, UserPrePrice)
+
+
+class DefaultPlResourcePriceList(APIView):
+    """Read public defaults only; never inspect any account's saved prices."""
+
+    permission_classes = [PublicReadOrAuthenticated]
+
+    @staticmethod
+    def get(request):
+        serializer = PlanetResourcePriceSerializer(PlResourcePrice.objects.all(), many=True)
+        return Response(serializer.data)
 
 
 class PlResourcePriceList(APIView):

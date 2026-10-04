@@ -68,7 +68,7 @@ test('计算器关闭再打开后仍保留当前方案并可更新', async ({ pa
 
       return json([])
     }
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') {
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) {
       return json([])
     }
     if (method === 'GET' && url.pathname === '/api/programme' && !url.searchParams.has('programme_id')) {

@@ -1,9 +1,9 @@
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { lazy, Suspense, useContext, useEffect } from 'react'
 import AppShell from './components/layout/AppShell'
 import SiteFooter from './components/layout/SiteFooter'
 import { AuthContext } from './context/AuthContext'
-import { isViewerAllowed, VIEWER_ACCESS_ENABLED } from './utils/viewerAccess'
+import { PUBLIC_READ_ACCESS_ENABLED } from './utils/viewerAccess'
 import { resolveSiteTitle } from './utils/siteMetadata'
 import { loginReturnPath } from './utils/loginDestination'
 import useKillboardAccess from './hooks/useKillboardAccess'
@@ -66,16 +66,8 @@ function RequireAuth({ children }) {
   return children
 }
 
-function RequireViewerAccess({ children }) {
-  const { isAuthenticated, userInfo } = useContext(AuthContext)
-  const location = useLocation()
-
-  if (!VIEWER_ACCESS_ENABLED) return children
-  if (!isAuthenticated) return <Navigate to="/login" replace state={{ from: loginReturnPath(location), reason: 'viewer-access' }} />
-  if (!isViewerAllowed(userInfo?.email)) {
-    return <Navigate to="/access-denied" replace />
-  }
-  return children
+function PublicReadBoundary() {
+  return PUBLIC_READ_ACCESS_ENABLED ? <Outlet /> : <RequireAuth><Outlet /></RequireAuth>
 }
 
 function AccessDeniedPage() {
@@ -84,8 +76,9 @@ function AccessDeniedPage() {
   return (
     <main className="access-denied-page" role="alert">
       <p className="eyebrow">EVEM 工具箱</p>
-      <h1>暂未开放查看权限</h1>
-      <p>当前账号不在查看白名单中，请切换到已获授权的账号。</p>
+      <h1>没有此模块的访问权限</h1>
+      <p>登录后仍需取得该模块的管理或资源权限，请联系相应负责人。</p>
+      <button type="button" onClick={() => navigate('/market', { replace: true })}>返回市场价格</button>
       <button type="button" onClick={() => { logout(); navigate('/login', { replace: true }) }}>切换账号</button>
     </main>
   )
@@ -108,31 +101,33 @@ export default function App() {
       <ScrollToTop />
       <div className="site-content">
         <Routes>
-          <Route element={<RequireViewerAccess><AppShell /></RequireViewerAccess>}>
-            <Route index element={<Navigate replace to="/market" />} />
-            <Route path="/infocenter" element={appRoute(<InfoCenterPage />)} />
-            <Route path="/fraudlist" element={appRoute(<FraudListPage />)} />
-            <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
-            <Route path="/market" element={appRoute(<MarketPricesPage />)} />
-            <Route path="/manufacturing" element={appRoute(<ManufacturingEstimatorPage />)} />
+          <Route element={<AppShell />}>
+            <Route element={<PublicReadBoundary />}>
+              <Route index element={<Navigate replace to="/market" />} />
+              <Route path="/infocenter" element={appRoute(<InfoCenterPage />)} />
+              <Route path="/fraudlist" element={appRoute(<FraudListPage />)} />
+              <Route path="/planetary" element={appRoute(<PlanetaryPage />)} />
+              <Route path="/market" element={appRoute(<MarketPricesPage />)} />
+              <Route path="/manufacturing" element={appRoute(<ManufacturingEstimatorPage />)} />
+              <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
+              <Route path="/corporations/:id" element={corporationRoute(<CorporationDetailPage />)} />
+              <Route path="/starsea" element={starseaRoute(<StarseaPage />)} />
+              <Route path="/starsea/:id" element={starseaRoute(<StarseaDetailPage />)} />
+              <Route path="/starmap" element={<TacticalBoardPage />} />
+              <Route path="/tactical" element={appRoute(<TacticalCollaborationPage />)} />
+            </Route>
             <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
             <Route path="/killboard/admin" element={<RequireKillboardAccess>{appRoute(<KillboardCollectorAdminPage />)}</RequireKillboardAccess>} />
             <Route path="/killboard/:killId?" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
-            <Route path="/feedback" element={appRoute(<FeedbackPage />)} />
-            <Route path="/corporations" element={corporationRoute(<CorporationsModule />)} />
-            <Route path="/corporations/manage" element={corporationRoute(<CorporationManagePage />)} />
-            <Route path="/corporations/review" element={corporationRoute(<CorporationReviewPage />)} />
-            <Route path="/corporations/:id" element={corporationRoute(<CorporationDetailPage />)} />
-            <Route path="/starsea" element={starseaRoute(<StarseaPage />)} />
-            <Route path="/starsea/mine" element={starseaRoute(<StarseaMinePage />)} />
-            <Route path="/starsea/new" element={starseaRoute(<StarseaEditorPage />)} />
-            <Route path="/starsea/review" element={starseaRoute(<StarseaReviewPage />)} />
-            <Route path="/starsea/review/:revisionId" element={starseaRoute(<StarseaReviewPage />)} />
-            <Route path="/starsea/:id/edit" element={starseaRoute(<StarseaEditorPage />)} />
-            <Route path="/starsea/:id" element={starseaRoute(<StarseaDetailPage />)} />
+            <Route path="/feedback" element={<RequireAuth>{appRoute(<FeedbackPage />)}</RequireAuth>} />
+            <Route path="/corporations/manage" element={<RequireAuth>{corporationRoute(<CorporationManagePage />)}</RequireAuth>} />
+            <Route path="/corporations/review" element={<RequireAuth>{corporationRoute(<CorporationReviewPage />)}</RequireAuth>} />
+            <Route path="/starsea/mine" element={<RequireAuth>{starseaRoute(<StarseaMinePage />)}</RequireAuth>} />
+            <Route path="/starsea/new" element={<RequireAuth>{starseaRoute(<StarseaEditorPage />)}</RequireAuth>} />
+            <Route path="/starsea/review" element={<RequireAuth>{starseaRoute(<StarseaReviewPage />)}</RequireAuth>} />
+            <Route path="/starsea/review/:revisionId" element={<RequireAuth>{starseaRoute(<StarseaReviewPage />)}</RequireAuth>} />
+            <Route path="/starsea/:id/edit" element={<RequireAuth>{starseaRoute(<StarseaEditorPage />)}</RequireAuth>} />
             <Route path="/bazaar" element={<Navigate replace to="/starmap" />} />
-            <Route path="/starmap" element={<TacticalBoardPage />} />
-            <Route path="/tactical" element={appRoute(<TacticalCollaborationPage />)} />
             <Route path="/tactical/usage" element={<RequireAuth>{appRoute(<TacticalUsagePage />)}</RequireAuth>} />
             <Route
               path="/usersetting"
