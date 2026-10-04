@@ -41,7 +41,15 @@ test('a new scope version fits the real map while unchanged polling preserves ca
   await expect(page.getByRole('button',{name:'返回上一视野'})).toBeVisible();
   const zoomed=await transform(page).getAttribute('transform');
   expect(zoomed).not.toBe('translate(0 0) scale(1)');
+  // Natural HTTP fallback takes 5s; allow 3s transport margin before starting
+  // the unchanged UI assertions. Only the updated snapshot body proves delivery.
+  const updatedForceSnapshot = page.waitForResponse(async response => {
+    if (!new URL(response.url()).pathname.endsWith('/organizations/1/snapshot/') || !response.ok()) return false;
+    const data = await response.json();
+    return data.organization?.id === 1 && data.forces?.some(force => force.id === 11 && force.people === 33);
+  }, { timeout: 8000 });
   fx.snapshot.forces[0].people=33;
+  await updatedForceSnapshot;
   await expect(page.getByRole('button',{name:'敌方 测试部署 33 人，起点',exact:true})).toBeVisible();
   expect(await transform(page).getAttribute('transform')).toBe(zoomed);
   fx.snapshot.scope={...fx.snapshot.scope,version:2,region_ids:[2]};

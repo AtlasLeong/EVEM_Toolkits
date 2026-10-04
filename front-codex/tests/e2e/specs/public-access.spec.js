@@ -34,16 +34,31 @@ test('guest entry stays on the public fraud list and describes normal registrati
 
 test('ordinary public tools render for guests without private capability calls', async ({ page }) => {
   const privateRequests = []
+  const pageErrors = []
+  page.on('pageerror', error => pageErrors.push(error.message))
   await installApiMock(page, ({ url }) => {
     if (url.pathname.startsWith('/api/killboard/') || url.pathname.startsWith('/api/tactical/')) privateRequests.push(url.pathname)
     if (url.pathname === '/api/market/items/') return json({ count: 0, results: [] })
     if (url.pathname === '/api/community/corporations/' || url.pathname === '/api/starsea/posts/') return json({ count: 0, results: [] })
+    if (url.pathname === '/api/starsea/locations/') return json({ results: [{ id: 1, name: '卡尼迪' }] })
     return json([])
   })
   for (const [path, heading] of [['/market', '市场价格'], ['/manufacturing', '制造估价'], ['/planetary', '行星资源'], ['/corporations', '军团大厅'], ['/starsea', '星海见闻']]) {
+    const regionsResponse = path === '/starsea'
+      ? page.waitForResponse(response => {
+        const url = new URL(response.url())
+        return url.pathname === '/api/starsea/locations/' && url.searchParams.get('kind') === 'regions' && response.request().method() === 'GET'
+      })
+      : null
     await page.goto(path)
     await expect(page).toHaveURL(new RegExp(`${path}$`))
+    if (regionsResponse) {
+      expect((await regionsResponse).status()).toBe(200)
+      // The rendered option proves the response has been consumed; the route heading can appear before that render.
+      await expect(page.getByRole('combobox', { name: '筛选星域' }).locator('option[value="1"]')).toHaveText('卡尼迪')
+    }
     await expect(page.getByRole('heading', { name: heading, exact: true }).first()).toBeVisible()
+    expect(pageErrors).toEqual([])
   }
   expect(privateRequests).toEqual([])
 })
