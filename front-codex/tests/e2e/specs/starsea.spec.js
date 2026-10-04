@@ -230,9 +230,10 @@ test("星海公开目录提供筛选和登录返回路径", async ({ page, baseU
   const privateRequests = [];
   let privateRouteRequested = false;
   page.on("request", (request) => {
-    const path = new URL(request.url()).pathname;
+    const url = new URL(request.url());
+    const path = url.pathname;
     if (privateRouteRequested && path.startsWith("/api/starsea/")) {
-      privateRequests.push({ path, method: request.method() });
+      privateRequests.push({ path, search: url.search, method: request.method() });
     }
   });
   const { writes } = await fixture(page, false);
@@ -240,7 +241,15 @@ test("星海公开目录提供筛选和登录返回路径", async ({ page, baseU
   await expect(
     page.getByRole("heading", { name: "星海见闻", exact: true }),
   ).toBeVisible();
+  const filteredResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" &&
+      url.pathname === "/api/starsea/posts/" &&
+      url.searchParams.get("kind") === "battle" &&
+      response.status() === 200;
+  });
   await page.getByRole("button", { name: "战报", exact: true }).click();
+  expect(await (await filteredResponse).finished()).toBeNull();
   await expect(
     page.getByRole("link", { name: "边境交锋", exact: true }),
   ).toBeVisible();
