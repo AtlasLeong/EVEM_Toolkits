@@ -13,7 +13,7 @@
 .market-quality-counts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
 .market-quality-counts > div { padding: 8px 10px; border: 1px solid #c9d8d2; border-radius: 5px; }
 .market-quality-counts dt { font-size: 12px; }
-.market-quality-counts dd { margin: 3px 0 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.market-quality-counts dd { margin: 3px 0 0; font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .market-quality-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; margin: 12px 0; }
 .market-quality-times > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; }
 .market-quality-times dd { margin: 0; overflow-wrap: anywhere; }
@@ -32,4 +32,7 @@
   .market-quality-counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .market-quality-times { grid-template-columns: minmax(0, 1fr); }
   .market-quality-times > div { grid-template-columns: 100px minmax(0, 1fr); }
+}
+@media (max-width: 374px) {
+  .market-quality-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

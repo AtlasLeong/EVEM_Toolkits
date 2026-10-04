@@ -154,6 +154,39 @@ test('collector acquisition time explicitly describes a recorded completed run, 
   await expect(quality.locator('.market-quality-times > div').filter({ hasText: '最新采集记录' }).locator('dd')).not.toHaveText('尚无记录')
 })
 
+for (const width of [320, 390, 768, 1440]) {
+  test(`four-digit quality counts stay inside their own cards at ${width}px and 200% text`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 960 })
+    await page.clock.install({ time: now })
+    await marketMock(page, () => json(summary({ counts: { enabled: 1000 }, observations: Array.from({ length: 1000 }, () => observed(0, true, true)) })))
+    await page.goto('/market')
+    const quality = page.locator('.market-quality')
+    await quality.locator('summary').click()
+    await page.evaluate(() => {
+      const records = [...document.querySelectorAll('body *')]
+        .filter(el => el.getBoundingClientRect().width && [...el.childNodes].some(node => node.nodeType === 3 && node.textContent.trim()))
+        .map(el => ({ el, font: parseFloat(getComputedStyle(el).fontSize), line: parseFloat(getComputedStyle(el).lineHeight) }))
+      for (const { el, font, line } of records) {
+        if (Number.isFinite(font)) el.style.setProperty('font-size', `${font * 2}px`, 'important')
+        if (Number.isFinite(line)) el.style.setProperty('line-height', `${line * 2}px`, 'important')
+      }
+    })
+    const cards = await quality.locator('.market-quality-counts > div').evaluateAll(elements => elements.map(el => {
+      const range = document.createRange()
+      range.selectNodeContents(el.querySelector('dd'))
+      return { card: el.getBoundingClientRect().toJSON(), text: range.getBoundingClientRect().toJSON() }
+    }))
+    for (const { card, text } of cards) {
+      expect(text.left).toBeGreaterThanOrEqual(card.left - 1)
+      expect(text.right).toBeLessThanOrEqual(card.right + 1)
+      expect(text.top).toBeGreaterThanOrEqual(card.top - 1)
+      expect(text.bottom).toBeLessThanOrEqual(card.bottom + 1)
+    }
+    expect(await quality.locator('.market-quality-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath(`quality-counts-${width}-200.png`), fullPage: true })
+  })
+}
+
 test('quality re-ages the cached observation at 30 seconds without fetching upstream or refetching API', async ({ page }) => {
   await page.clock.install({ time: now })
   let reads = 0
