@@ -4,7 +4,7 @@ import '../../styles/industryJourney.css'
 
 export default function IndustryJourney() {
   const { pathname, hash } = useLocation()
-  if (pathname !== '/market' && pathname !== '/manufacturing') return null
+  if (pathname !== '/manufacturing') return null
   const purchasing = pathname === '/manufacturing' && hash === '#manufacturing-purchase-list'
   const steps = [
     { to: '/market', label: '查市场价格', active: pathname === '/market' },

@@ -20,12 +20,19 @@ async function publicFixture(page) {
   return requests
 }
 
+function marketNextLink(page, width) {
+  return width < 1180
+    ? page.getByRole('link', { name: '下一步：制造估价' })
+    : page.getByRole('navigation', { name: '主导航', exact: true }).getByRole('link', { name: '制造估价', exact: true })
+}
+
 test('guest can follow market, manufacturing and a keyboard-accessible purchase section without private API calls', async ({ page }) => {
   const requests = await publicFixture(page)
+  await page.setViewportSize({ width: 390, height: 960 })
   await page.goto('/market')
   const journey = page.getByRole('navigation', { name: '市场到采购流程' })
-  await expect(journey.getByRole('link', { name: '查市场价格' })).toHaveAttribute('aria-current', 'step')
-  const estimate = journey.getByRole('link', { name: '估制造成本' })
+  await expect(journey).toHaveCount(0)
+  const estimate = marketNextLink(page, 390)
   await estimate.focus()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/\/manufacturing$/)
@@ -51,6 +58,14 @@ for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 960 })
     await page.goto('/market')
     const journey = page.getByRole('navigation', { name: '市场到采购流程' })
+    const next = marketNextLink(page, width)
+    await expect(next).toBeVisible()
+    expect((await next.boundingBox()).height).toBeGreaterThanOrEqual(44)
+    await expect(journey).toHaveCount(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: `output/playwright/market-next-${width}.png`, fullPage: true })
+    await next.click()
+    await expect(page).toHaveURL(/\/manufacturing$/)
     for (const link of await journey.getByRole('link').all()) {
       await expect(link).toBeVisible()
       expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44)
@@ -78,7 +93,13 @@ test('200% text size preserves all workflow links and access explanations on a n
   await publicFixture(page)
   await page.setViewportSize({ width: 320, height: 960 })
   await page.goto('/market')
-  await page.addStyleTag({ content: '.industry-journey { font-size: 24px; } .tool-guide p, .tool-guide a, .tool-guide-access { font-size: 24px !important; } .tool-guide h3 { font-size: 32px; }' })
+  await page.addStyleTag({ content: '.mobile-industry-next { font-size: 26px; } .industry-journey { font-size: 24px; } .tool-guide p, .tool-guide a, .tool-guide-access { font-size: 24px !important; } .tool-guide h3 { font-size: 32px; }' })
+  const next = marketNextLink(page, 320)
+  await expect(next).toBeVisible()
+  expect(await next.evaluate(element => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await next.click()
+  await expect(page).toHaveURL(/\/manufacturing$/)
   const journey = page.getByRole('navigation', { name: '市场到采购流程' })
   for (const link of await journey.getByRole('link').all()) {
     const fits = await link.evaluate(element => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)

@@ -65,7 +65,7 @@ export default function ManufacturingPurchaseList({ summary, targetName, marketQ
     <div className="manufacturing-purchase-heading">
       <div><h2 id="manufacturing-purchase-heading"><ShoppingCart size={18} aria-hidden="true" />采购清单</h2><p>同一材料已合并数量 · {rows.length} 类购买项 · {summary.missing.length ? `待补 ${summary.missing.length} 项价格` : '材料价格已覆盖'}</p></div>
       <div className="manufacturing-purchase-actions">
-        <button type="button" onClick={onRefreshQuotes} disabled={quoteLoading}><RefreshCw size={15} aria-hidden="true" />{quoteLoading ? '正在读取行情' : '刷新清单行情'}</button>
+        <button type="button" onClick={onRefreshQuotes} disabled={quoteLoading}><RefreshCw size={15} aria-hidden="true" />{quoteLoading ? '正在读取清单行情' : '刷新清单行情'}</button>
         <button type="button" onClick={copyList} disabled={!rows.length}><Copy size={15} aria-hidden="true" />复制采购清单</button>
         <button type="button" onClick={exportCsv} disabled={!rows.length}><Download size={15} aria-hidden="true" />导出 CSV</button>
       </div>

@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords, CircleHelp } from 'lucide-react'
+import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords, CircleHelp, ArrowRight } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -168,6 +168,9 @@ export default function AppShell() {
           <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="mobile-brand-icon" /></span>
           <span className="mobile-brand-name">EVEM</span>
         </Link>
+        {location.pathname === '/market' && <Link className="mobile-industry-next" to="/manufacturing" aria-label="下一步：制造估价">
+          <span>制造估价</span><ArrowRight size={16} aria-hidden="true" />
+        </Link>}
         <button
           ref={mobileToggleRef}
           className="mobile-menu-toggle"
@@ -241,7 +244,10 @@ export default function AppShell() {
                   <span className="nav-icon-wrap">
                     <Icon size={18} aria-hidden="true" />
                   </span>
-                  <span className="nav-label">{item.label}</span>
+                  <span className={`nav-label${location.pathname === '/market' && item.to === '/manufacturing' ? ' nav-industry-next' : ''}`}>
+                    {item.label}
+                    {location.pathname === '/market' && item.to === '/manufacturing' && <small>下一步 · 生成采购清单</small>}
+                  </span>
                 </NavLink>
               )
             })}
