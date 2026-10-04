@@ -19,7 +19,8 @@ const deferred = () => {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 };
-const response = (access) => ({ ok: Boolean(access), json: async () => ({ access }) });
+const response = (access) => ({ ok: Boolean(access), status: access ? 200 : 401, json: async () => ({ access }) });
+const failedRefresh = (status) => ({ ok: false, status, json: async () => ({ detail: "controlled refresh failure" }) });
 
 function fixture(fetchImpl) {
   const values = new Map();
@@ -62,7 +63,7 @@ test("logout while refreshing does not resurrect credentials or send the pending
   assert.equal(requests, 0);
 });
 
-for (const result of ["success", "denied", "network-error"]) {
+for (const result of ["success", "denied", "rate-limit", "unavailable", "network-error"]) {
   test(`a late ${result} from A's refresh cannot modify B's session`, async () => {
     const refresh = deferred();
     let requests = 0;
@@ -76,6 +77,8 @@ for (const result of ["success", "denied", "network-error"]) {
     login("B");
     const accessB = values.get("access_token");
     if (result === "network-error") refresh.reject(new Error("offline"));
+    else if (result === "rate-limit") refresh.resolve(failedRefresh(429));
+    else if (result === "unavailable") refresh.resolve(failedRefresh(503));
     else refresh.resolve(response(result === "success" ? jwt("A") : null));
     await assert.rejects(pending, sessionChanged);
     assert.equal(values.get("access_token"), accessB);
@@ -207,6 +210,81 @@ test("ordinary 401 refreshes once and retries with a fresh token", async () => {
   assert.equal(values.get("access_token"), token);
 });
 
+for (const status of [401, 403]) {
+  test(`refresh ${status} clears the rejected session`, async () => {
+    const requests = [];
+    const { auth, login, values } = fixture(async (url, options) => {
+      if (url.endsWith("/refresh")) return failedRefresh(status);
+      requests.push(options.headers.Authorization);
+      return { status: 401 };
+    });
+    login("A", -60);
+    assert.equal((await auth.default("http://local-test/api/private/")).status, 401);
+    assert.equal(values.size, 0);
+    assert.equal(auth.hasActiveSession(), false);
+    assert.deepEqual(requests, [undefined]);
+  });
+}
+
+for (const status of [429, 500, 503]) {
+  test(`refresh ${status} preserves credentials, blocks the pending request and recovers on retry`, async () => {
+    let restored = false, refreshCount = 0;
+    const requests = [];
+    const token = jwt("A", 600, "recovered");
+    const { auth, login, values } = fixture(async (url, options) => {
+      if (url.endsWith("/refresh")) {
+        refreshCount++;
+        return restored ? response(token) : failedRefresh(status);
+      }
+      requests.push(options.headers.Authorization);
+      return { status: 200 };
+    });
+    login("A", -60);
+    const stored = new Map(values);
+    await assert.rejects(auth.default("http://local-test/api/private/", { method: "POST", body: "{}" }),
+      error => error.name === "AuthRefreshError" && error.status === status && error.retryable === true);
+    assert.deepEqual(values, stored);
+    assert.equal(auth.hasActiveSession(), true);
+    assert.equal(requests.length, 0);
+    restored = true;
+    assert.equal((await auth.default("http://local-test/api/private/")).status, 200);
+    assert.equal(refreshCount, 2);
+    assert.equal(values.get("refresh_token"), stored.get("refresh_token"));
+    assert.equal(values.get("access_token"), token);
+    assert.deepEqual(requests, [`Bearer ${token}`]);
+  });
+}
+
+test("a refresh outage after a resource 401 does not replay the mutation anonymously", async () => {
+  const requests = [];
+  const { auth, login, values } = fixture(async (url, options) => {
+    if (url.endsWith("/refresh")) return failedRefresh(503);
+    requests.push(options.headers.Authorization);
+    return { status: 401 };
+  });
+  login("A");
+  const stored = new Map(values);
+  await assert.rejects(auth.default("http://local-test/api/private/", { method: "POST", body: "{}" }),
+    error => error.name === "AuthRefreshError" && error.status === 503);
+  assert.deepEqual(values, stored);
+  assert.deepEqual(requests, [`Bearer ${stored.get("access_token")}`]);
+});
+
+test("a malformed successful refresh response preserves the session and blocks the pending request", async () => {
+  let requests = 0;
+  const { auth, login, values } = fixture(async url => {
+    if (url.endsWith("/refresh")) return { ok: true, status: 200, json: async () => ({}) };
+    requests++;
+    return { status: 200 };
+  });
+  login("A", -60);
+  const stored = new Map(values);
+  await assert.rejects(auth.default("http://local-test/api/private/"),
+    error => error.name === "AuthRefreshError" && error.status === 200 && error.retryable === true);
+  assert.deepEqual(values, stored);
+  assert.equal(requests, 0);
+});
+
 test("a second 401 from an old retry cannot log out the newly signed-in account", async () => {
   const retry = deferred(), started = deferred();
   let count = 0;
@@ -226,17 +304,19 @@ test("a second 401 from an old retry cannot log out the newly signed-in account"
   assert.equal(values.get("access_token"), tokenB);
 });
 
-test("storage events fence a logout and restored-token session from another tab", async () => {
-  const refresh = deferred();
-  const { auth, login, values, window } = fixture(() => refresh.promise);
-  login("A", -60);
-  const stored = new Map(values);
-  const pending = auth.default("http://local-test/api/private/");
-  values.clear();
-  window.dispatchEvent(new Event("storage"));
-  for (const [key, value] of stored) values.set(key, value);
-  window.dispatchEvent(new Event("storage"));
-  refresh.resolve(response(jwt("A")));
-  await assert.rejects(pending, sessionChanged);
-  assert.equal(values.get("access_token"), stored.get("access_token"));
-});
+for (const status of [200, 429, 503]) {
+  test(`storage events fence a late refresh ${status} after logout and token restoration in another tab`, async () => {
+    const refresh = deferred();
+    const { auth, login, values, window } = fixture(() => refresh.promise);
+    login("A", -60);
+    const stored = new Map(values);
+    const pending = auth.default("http://local-test/api/private/");
+    values.clear();
+    window.dispatchEvent(new Event("storage"));
+    for (const [key, value] of stored) values.set(key, value);
+    window.dispatchEvent(new Event("storage"));
+    refresh.resolve(status === 200 ? response(jwt("A")) : failedRefresh(status));
+    await assert.rejects(pending, sessionChanged);
+    assert.deepEqual(values, stored);
+  });
+}

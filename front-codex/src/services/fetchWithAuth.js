@@ -67,6 +67,17 @@ export function hasActiveSession() {
   return readValidatedSession().isAuthenticated;
 }
 
+export class AuthRefreshError extends Error {
+  constructor(status, message, retryable = status === 429 || status >= 500) {
+    super(message || (status === 429
+      ? "登录续期请求过于频繁，请稍后重试。"
+      : `登录续期失败（${status}），请稍后重试。`));
+    this.name = "AuthRefreshError";
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
+
 export const refreshAccessToken = async (refreshToken, signal) => {
   const response = await fetch(`${API_URL}/user/token/refresh`, {
     method: "POST",
@@ -75,10 +86,17 @@ export const refreshAccessToken = async (refreshToken, signal) => {
     signal,
   });
 
-  if (!response.ok) return null;
+  // Only an authentication rejection proves that this session has expired.
+  // Service outages and rate limits must not erase otherwise valid credentials
+  // or allow the pending authenticated request to continue anonymously.
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) throw new AuthRefreshError(response.status);
 
   const data = await response.json().catch(() => ({}));
-  return data.access || null;
+  if (typeof data?.access !== "string" || !data.access) {
+    throw new AuthRefreshError(response.status, "登录续期响应异常，请稍后重试。", true);
+  }
+  return data.access;
 };
 
 function waitForRefresh(promise, signal) {
