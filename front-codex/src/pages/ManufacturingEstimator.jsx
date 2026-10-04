@@ -2,9 +2,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench, X } from 'lucide-react'
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
-import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency } from '../utils/manufacturingPlan'
+import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency, resolveManufacturingQuote } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
-import { formatCompactIsk, formatMissingMaterialReason } from '../utils/manufacturingDisplay'
+import { MANUFACTURING_QUOTE_AGE_TICK_MS, manufacturingQuoteIdsDue, mergeManufacturingQuoteSnapshots } from '../utils/manufacturingQuoteCache'
+import { formatCompactIsk, formatMissingMaterialReason, formatManufacturingObservationTime } from '../utils/manufacturingDisplay'
 import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
@@ -22,16 +23,25 @@ function formatQuantity(value) {
   return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value || 0)
 }
 
-function quotePrice(quote) {
-  if (!quote) return null
-  return quote.best_sell ?? quote.bestSell ?? quote.lowestSell ?? quote.price ?? null
+function quoteState(status) {
+  if (status === 'stale') return '报价已过期'
+  if (status === 'empty') return '暂无有效卖价'
+  if (status === 'invalid') return '报价无效，不参与估算'
+  if (status === 'unknown') return '采集时间未知'
+  return status === 'fresh' ? '最新存量报价' : '尚未采集'
 }
 
-function quoteState(quote) {
-  if (!quote || quote.status === 'absent' || quote.status === 'uncollected') return '尚未采集'
-  if (quote.status === 'stale' || quote.status === 'expired') return '报价已过期'
-  if (quote.status === 'empty') return '暂无挂单'
-  return quotePrice(quote) ? '最新观测' : '尚未采集'
+function QuoteAgeWarning({ summary }) {
+  const stale = summary.stalePurchases || []
+  const unknown = summary.purchases.filter(item => item.quoteStatus === 'unknown')
+  if (!stale.length && !unknown.length) return null
+  const times = stale.map(item => item.observedAt).filter(Boolean).sort()
+  const staleWithoutTime = stale.filter(item => !item.observedAt).length
+  return <p className="manufacturing-quote-warning" data-testid="manufacturing-quote-warning" role="status">
+    {stale.length ? <><b>使用 {stale.length} 项过期报价估算</b><span>已计入最新存量卖价，成交价可能已变化。{times[0] ? <>最早采集时间：<time dateTime={times[0]}>{formatManufacturingObservationTime(times[0])}</time>。</> : null}</span></> : null}
+    {staleWithoutTime ? <span>其中 {staleWithoutTime} 项采集时间未知。</span> : null}
+    {unknown.length ? <span>{unknown.length} 项报价采集时间未知，请核对市场价格。</span> : null}
+  </p>
 }
 
 function TreeNode({ node, catalog, onModeChange, selectedId, onSelect, path, expandedNodes, onToggleExpanded }) {
@@ -262,13 +272,15 @@ function MobileCostOverview({ summary }) {
     <div><span>{summary.complete ? '当前方案总成本' : '已覆盖小计'}</span><span className={`manufacturing-complete-state ${summary.complete ? 'is-complete' : 'is-partial'}`}>{blueprintCostError ? '检查蓝图价格' : summary.complete ? '可计算' : `待补 ${summary.missing.length} 项`}</span></div>
     <strong>{formatIsk(summary.complete ? summary.total : summary.coveredSubtotal)}</strong>
     <small>{blueprintCostError ? '蓝图价格待修正 · 此处仅为已覆盖的材料与制造费用' : '含市场材料、制造费用与蓝图费用 · 蓝图按本次合计计入一次'}</small>
+    <QuoteAgeWarning summary={summary} />
   </section>
 }
 
-function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading, quoteError }) {
+function SummaryPanel({ summary, selectedNode, quote, quoteNow, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading, quoteError }) {
   const complete = summary?.complete
   const blueprintCostError = summary.blueprintCostError
   const selectedPurchase = selectedNode?.mode === 'buy'
+  const resolvedQuote = resolveManufacturingQuote(quote, { now: quoteNow })
   return (
     <aside className="manufacturing-summary" data-testid="manufacturing-cost-rail">
        <div className="manufacturing-summary-heading"><h2>成本概览</h2><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{blueprintCostError ? '检查蓝图价格' : complete ? '可计算' : '待补报价'}</span></div>
@@ -278,6 +290,7 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
         <b className="manufacturing-total-compact" data-testid="manufacturing-total-compact">{formatCompactIsk(complete ? summary.total : summary.coveredSubtotal)}</b>
         <small>{blueprintCostError ? '蓝图价格待修正；这里只显示已覆盖的材料与制造费用。' : complete ? '当前方案所有购买项均有价格' : `缺少 ${summary.missing.length} 项购买价格`}</small>
       </div>
+      <QuoteAgeWarning summary={summary} />
       <dl className="manufacturing-cost-breakdown">
         <div><dt>市场材料</dt><dd>{formatIsk(summary.materialSubtotal)}</dd></div>
         <div><dt>制造费用</dt><dd>{formatIsk(summary.manufacturingFee)}</dd></div>
@@ -289,12 +302,13 @@ function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice
       <section className="manufacturing-price-editor" aria-label="方案价格编辑">
         <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">节点报价</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedPurchase ? <span className="manufacturing-route-pill is-buy">购买</span> : selectedNode ? <span className="manufacturing-route-pill is-make">自造</span> : null}</div>
         {selectedPurchase ? <>
-          <div className="manufacturing-market-reference"><span>市场参考价</span><strong>{formatIsk(quotePrice(quote))}</strong><small>{quoteState(quote)}{quote?.observed_at ? ` · ${new Date(quote.observed_at).toLocaleString('zh-CN', { hour12: false })}` : ''}</small></div>
+          <div className="manufacturing-market-reference"><span>市场参考价</span><strong>{formatIsk(resolvedQuote.price)}</strong><small>{quoteState(resolvedQuote.status)}{resolvedQuote.observedAt ? <> · 采集时间：<time dateTime={resolvedQuote.observedAt}>{formatManufacturingObservationTime(resolvedQuote.observedAt)}</time></> : resolvedQuote.price && resolvedQuote.status !== 'unknown' ? ' · 采集时间未知' : null}</small></div>
           <label className="manufacturing-manual-price"><span>方案手填单价 {manualPrice ? <em className="manufacturing-manual-badge">方案内手填</em> : null}</span><div><input aria-label="方案手填单价" inputMode="decimal" value={manualPrice ?? ''} onChange={event => onManualPrice(event.target.value)} placeholder="留空使用市场参考价" /><span>ISK</span></div></label>
           <p className="manufacturing-price-help">仅保存到当前方案，不会修改公共行情。</p>
         </> : <p className="manufacturing-price-help">{selectedNode ? '该节点当前为自造，不需要单独购买报价。切换为购买后可设置本方案单价。' : '点击制造链中的节点，可查看市场参考价并设置本方案的购买单价。'}</p>}
       </section>
       <button className="manufacturing-refresh-button" type="button" onClick={onRefreshQuotes} disabled={quoteLoading}><RefreshCw size={15} className={quoteLoading ? 'is-spinning' : ''} />{quoteLoading ? '正在读取行情' : '刷新购买项行情'}</button>
+      <p className="manufacturing-price-help">读取后台已采集行情，不触发实时采集；页面每 5 分钟重新检查存量报价。</p>
       {quoteError ? <p className="manufacturing-inline-error" role="status">{quoteError}</p> : null}
     </aside>
   )
@@ -313,6 +327,10 @@ export default function ManufacturingEstimatorPage() {
   const [selectedNodeId, setSelectedNodeId] = useState('')
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [quoteError, setQuoteError] = useState('')
+  const [quoteNow, setQuoteNow] = useState(() => Date.now())
+  const quoteChecksRef = useRef({})
+  const quoteRequestRef = useRef({ generation: 0, controller: null })
+  const quoteScopeRef = useRef('')
   const [expandedNodes, setExpandedNodes] = useState(() => new Set(['0']))
   const [routeActionMessage, setRouteActionMessage] = useState('')
 
@@ -337,8 +355,8 @@ export default function ManufacturingEstimatorPage() {
 
   const plan = useMemo(() => {
     if (!catalog || !selectedId) return null
-    return createManufacturingPlan(catalog, { targetId: selectedId, quantity, overrides, purchasePrices, marketQuotes, settings })
-  }, [catalog, selectedId, quantity, overrides, purchasePrices, marketQuotes, settings])
+    return createManufacturingPlan(catalog, { targetId: selectedId, quantity, overrides, purchasePrices, marketQuotes, settings: { ...settings, now: quoteNow } })
+  }, [catalog, selectedId, quantity, overrides, purchasePrices, marketQuotes, settings, quoteNow])
   const summary = useMemo(() => plan ? summarizeManufacturingPlan(catalog, plan) : null, [catalog, plan])
   const selectedNode = useMemo(() => {
     if (!summary || !selectedNodeId) return null
@@ -361,26 +379,67 @@ export default function ManufacturingEstimatorPage() {
   // stable when the set of purchasable item ids did not actually change.
   const purchaseIdsKey = useMemo(() => [...purchaseIds].sort().join(','), [purchaseIds])
   const stablePurchaseIds = useMemo(() => purchaseIdsKey ? purchaseIdsKey.split(',') : [], [purchaseIdsKey])
+  const quoteScope = `${selectedId}:${purchaseIdsKey}`
+  quoteScopeRef.current = quoteScope
+
+  const cancelQuoteRequest = useCallback(() => {
+    quoteRequestRef.current.controller?.abort()
+    quoteRequestRef.current = { generation: quoteRequestRef.current.generation + 1, controller: null }
+  }, [])
 
   const refreshQuotes = useCallback(async (ids = stablePurchaseIds) => {
     if (!ids.length) return
+    cancelQuoteRequest()
+    const controller = new AbortController()
+    const generation = quoteRequestRef.current.generation
+    quoteRequestRef.current.controller = controller
+    const isCurrent = () => !controller.signal.aborted && quoteRequestRef.current.generation === generation && quoteScopeRef.current === quoteScope
     setQuoteLoading(true)
     setQuoteError('')
     try {
-      const result = await fetchManufacturingQuotes(ids)
-      setMarketQuotes(previous => ({ ...previous, ...result }))
+      const result = await fetchManufacturingQuotes(ids, { signal: controller.signal })
+      if (!isCurrent()) return
+      for (const id of ids) quoteChecksRef.current[id] = Date.now()
+      setMarketQuotes(previous => isCurrent() ? mergeManufacturingQuoteSnapshots(previous, result) : previous)
+      setQuoteNow(Date.now())
     } catch (error) {
-      setQuoteError('市场参考价暂时无法读取，仍可手动填写方案价格。')
+      if (isCurrent()) {
+        // Failed automatic checks wait for the normal TTL. Cancelled requests
+        // never count as a completed check for a subsequently selected target.
+        for (const id of ids) quoteChecksRef.current[id] = Date.now()
+        setQuoteError('市场参考价刷新失败；已保留现有报价。仍可手动填写方案价格。')
+      }
     } finally {
-      setQuoteLoading(false)
+      if (isCurrent()) {
+        quoteRequestRef.current.controller = null
+        setQuoteLoading(false)
+      }
     }
-  }, [stablePurchaseIds])
+  }, [stablePurchaseIds, quoteScope, cancelQuoteRequest])
 
   useEffect(() => {
-    if (!stablePurchaseIds.length) return
-    const missing = stablePurchaseIds.filter(itemId => !Object.prototype.hasOwnProperty.call(marketQuotes, itemId))
-    if (missing.length) refreshQuotes(missing)
-  }, [purchaseIdsKey, stablePurchaseIds, marketQuotes, refreshQuotes])
+    setQuoteLoading(false)
+    setQuoteError('')
+    const due = manufacturingQuoteIdsDue(stablePurchaseIds, quoteChecksRef.current)
+    if (due.length) refreshQuotes(due)
+    return cancelQuoteRequest
+  }, [stablePurchaseIds, refreshQuotes, cancelQuoteRequest])
+
+  useEffect(() => {
+    const recheck = () => {
+      const now = Date.now()
+      setQuoteNow(now)
+      if (document.visibilityState === 'hidden' || quoteRequestRef.current.controller) return
+      const due = manufacturingQuoteIdsDue(stablePurchaseIds, quoteChecksRef.current, now)
+      if (due.length) refreshQuotes(due)
+    }
+    const interval = window.setInterval(recheck, MANUFACTURING_QUOTE_AGE_TICK_MS)
+    document.addEventListener('visibilitychange', recheck)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', recheck)
+    }
+  }, [stablePurchaseIds, refreshQuotes])
 
   const recipeIds = useMemo(() => catalog?.recipes.map(recipe => recipe.productId) || [], [catalog])
 
@@ -403,6 +462,9 @@ export default function ManufacturingEstimatorPage() {
   }
 
   const handleTargetSelect = id => {
+    cancelQuoteRequest()
+    setQuoteLoading(false)
+    setQuoteError('')
     setSelectedId(id)
     setSettings(current => ({ ...current, blueprintCost: '' }))
     setOverrides({})
@@ -469,7 +531,7 @@ export default function ManufacturingEstimatorPage() {
           <ul className="manufacturing-tree" role="tree" aria-label="制造链路"><TreeNode node={summary.tree} catalog={catalog} onModeChange={onModeChange} selectedId={selectedNodeId} onSelect={setSelectedNodeId} path="0" expandedNodes={expandedNodes} onToggleExpanded={toggleExpanded} /></ul>
           <div className="manufacturing-route-footer"><span>制造时间</span><strong>{Math.ceil((summary.manufacturingTime || 0) / 3600)} 小时</strong><span>购买项</span><strong>{purchaseIds.length} 类</strong></div>
         </section>
-        <SummaryPanel summary={summary} selectedNode={selectedNode} quote={selectedQuote} manualPrice={selectedNodeId ? purchasePrices[selectedNodeId] || '' : ''} onManualPrice={updateManualPrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} quoteError={quoteError} />
+        <SummaryPanel summary={summary} selectedNode={selectedNode} quote={selectedQuote} quoteNow={quoteNow} manualPrice={selectedNodeId ? purchasePrices[selectedNodeId] || '' : ''} onManualPrice={updateManualPrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} quoteError={quoteError} />
       </section>
     </main>
   )

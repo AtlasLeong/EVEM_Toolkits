@@ -111,3 +111,121 @@ test('surfaces network failures as transport errors instead of absent quotes', a
   )
 })
 
+test('normalizes expired snapshots and observed time aliases without fabricating a timestamp', () => {
+  const api = fixture()
+  const normalized = api.normalizeManufacturingQuotes({ results: [
+    { item_id: 1, status: 'expired', best_sell: '12', observedAt: '2020-10-04T18:00:00+08:00' },
+    { item_id: 2, status: 'fresh', best_sell: '13', observed_at: 'invalid date' },
+  ] }, ['1', '2'])
+  assert.equal(normalized['1'].status, 'stale')
+  assert.equal(normalized['1'].observed_at, '2020-10-04T10:00:00.000Z')
+  assert.equal(normalized['2'].observed_at, null)
+})
+
+test('invalid calendar dates and ambiguous timestamp strings cannot become credible observations', () => {
+  const api = fixture()
+  for (const observed_at of ['0', '2026-02-30T10:00:00Z', '2026-10-04 10:00:00', 'not a date']) {
+    const row = api.normalizeManufacturingQuotes([{ item_id: '1', status: 'fresh', best_sell: '12', observed_at }], ['1'])['1']
+    assert.equal(row.observed_at, null)
+    assert.equal(row.best_sell, '12')
+  }
+  const invalid = api.normalizeManufacturingQuotes([{ item_id: '1', status: 'invalid', best_sell: 'oops' }], ['1'])['1']
+  assert.equal(invalid.status, 'invalid')
+  const conflict = api.normalizeManufacturingQuotes([{ item_id: '1', status: 'fresh', best_sell: '12', observed_at: '2026-02-30T10:00:00Z', observedAt: '2020-01-01T00:00:00Z' }], ['1'])['1']
+  assert.equal(conflict.observed_at, null)
+  assert.equal(conflict.observedAt, null)
+})
+
+test('default quote transport never exceeds eight simultaneous stored-snapshot reads', async () => {
+  const api = fixture()
+  let active = 0
+  let peak = 0
+  const urls = []
+  const result = await api.fetchManufacturingQuotes(Array.from({ length: 101 }, (_, i) => i + 1), { fetchImpl: async url => {
+    urls.push(url)
+    active += 1
+    peak = Math.max(peak, active)
+    await new Promise(resolve => setTimeout(resolve, 1))
+    active -= 1
+    return { ok: true, json: async () => ({ results: [{ item_id: new URL(url).searchParams.get('q'), status: 'fresh', best_sell: '1' }] }) }
+  } })
+  assert.equal(Object.keys(result).length, 101)
+  assert.equal(peak, 8)
+  assert.ok(urls.every(url => new URL(url).pathname === '/api/market/items/' && new URL(url).searchParams.get('page_size') === '100'))
+  assert.ok(urls.every(url => !/[?&](?:force|refresh|collect)=/u.test(url)))
+})
+
+test('aborting a superseded plan stops scheduling remaining items and rejects late JSON', async () => {
+  const api = fixture()
+  const controller = new AbortController()
+  const calls = []
+  await assert.rejects(api.fetchManufacturingQuotes(['1', '2', '3'], {
+    signal: controller.signal, concurrency: 1,
+    fetchImpl: async url => {
+      calls.push(url)
+      return { ok: true, json: async () => { controller.abort(); return { results: [] } } }
+    },
+  }), error => error.name === 'AbortError')
+  assert.equal(calls.length, 1)
+})
+
+test('one failed item aborts sibling reads and prevents scheduling the remaining batch without aborting the caller', async () => {
+  const api = fixture()
+  const parent = new AbortController()
+  const calls = []
+  let releaseSibling
+  let siblingSignal
+  const deferred = new Promise(resolve => { releaseSibling = resolve })
+  await assert.rejects(api.fetchManufacturingQuotes(['1', '2', '3'], {
+    signal: parent.signal, concurrency: 2,
+    fetchImpl: async (url, options) => {
+      const id = new URL(url).searchParams.get('q')
+      calls.push(id)
+      if (id === '1') return { ok: false, status: 503, json: async () => ({ detail: 'stored snapshot unavailable' }) }
+      siblingSignal = options.signal
+      await deferred
+      return { ok: true, json: async () => ({ results: [{ item_id: id, best_sell: '12', status: 'fresh' }] }) }
+    },
+  }), error => error.name === 'ManufacturingMarketError' && error.status === 503)
+  assert.equal(parent.signal.aborted, false)
+  assert.equal(siblingSignal.aborted, true)
+  assert.deepEqual(calls, ['1', '2'])
+  releaseSibling()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.deepEqual(calls, ['1', '2'])
+  // A native sibling AbortError must not win the aggregate error race and
+  // hide the actual HTTP failure from the page's refresh status.
+  await assert.rejects(api.fetchManufacturingQuotes(['1', '2', '3'], {
+    concurrency: 2,
+    fetchImpl: async (url, options) => {
+      if (new URL(url).searchParams.get('q') === '1') return { ok: false, status: 503, json: async () => ({}) }
+      await new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('sibling cancelled', 'AbortError')), { once: true }))
+      return { ok: true, json: async () => ({ results: [] }) }
+    },
+  }), error => error.name === 'ManufacturingMarketError' && error.status === 503)
+})
+
+test('a target cancellation reaches every active child request and never schedules remaining IDs', async () => {
+  const api = fixture()
+  const parent = new AbortController()
+  const signals = []
+  const calls = []
+  let release
+  const deferred = new Promise(resolve => { release = resolve })
+  const pending = api.fetchManufacturingQuotes(['1', '2', '3'], {
+    signal: parent.signal, concurrency: 2,
+    fetchImpl: async (url, options) => {
+      calls.push(new URL(url).searchParams.get('q'))
+      signals.push(options.signal)
+      await deferred
+      return { ok: true, json: async () => ({ results: [] }) }
+    },
+  })
+  parent.abort()
+  assert.equal(signals.length, 2)
+  assert.ok(signals.every(signal => signal.aborted))
+  release()
+  await assert.rejects(pending, error => error.name === 'AbortError')
+  assert.deepEqual(calls, ['1', '2'])
+})
+

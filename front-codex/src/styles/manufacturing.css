@@ -1528,3 +1528,22 @@
     scroll-behavior: auto !important;
   }
 }
+.manufacturing-quote-warning {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--console-accent, #efb566);
+  background: rgb(239 181 102 / 8%);
+  color: #e6c591;
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.manufacturing-quote-warning b,
+.manufacturing-quote-warning span {
+  display: block;
+}
+
+.manufacturing-page--terminal .manufacturing-mobile-overview .manufacturing-quote-warning {
+  margin-bottom: 0;
+}
