@@ -9,7 +9,7 @@ import MarketItemIcon from '../components/MarketItemIcon'
 import '../styles/manufacturing.css'
 
 const CATEGORY_LABELS = { ship: '舰船', material: '材料', building: '建筑' }
-const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', materialEfficiencyPercent: String(DEFAULT_MATERIAL_EFFICIENCY), building: '标准工厂' }
+const DEFAULT_SETTINGS = { manufacturingSkill: '5', researchSkill: '5', efficiencySkill: '4', materialEfficiencyPercent: String(DEFAULT_MATERIAL_EFFICIENCY), building: '标准工厂', blueprintCost: '' }
 
 function formatIsk(value) {
   if (value === null || value === undefined || value === '') return '待补价格'
@@ -241,30 +241,47 @@ function EfficiencyRateField({ value, onChange }) {
   return <label className="manufacturing-efficiency-field"><span><strong>制造材料效率</strong><small>最终值 · 全链应用</small></span><div className="manufacturing-efficiency-input"><input aria-label="制造效率百分比" aria-describedby="manufacturing-efficiency-help" type="number" min={MIN_MATERIAL_EFFICIENCY} step="0.01" inputMode="decimal" placeholder={String(DEFAULT_MATERIAL_EFFICIENCY)} value={value} onChange={event => onChange(event.target.value)} /><b>%</b></div><em id="manufacturing-efficiency-help">{belowFloor ? '低于客户端下限，按 75% 计算。' : `生效 ${resolveMaterialEfficiency(value)}% · 数值越低，材料越省。`}</em></label>
 }
 
+function BlueprintCostField({ value, error, onChange }) {
+  const errorMessage = error === 'too_large'
+    ? '蓝图价格不得超过 999,999,999,999.99 ISK；请填写非负普通金额，最多 2 位小数。'
+    : '请输入非负普通金额，最多 2 位小数，上限 999,999,999,999.99 ISK。'
+  return <div className="manufacturing-blueprint-field">
+    <label htmlFor="manufacturing-blueprint-price">蓝图价格（本次合计）</label>
+    <div className={`manufacturing-efficiency-input manufacturing-blueprint-input${error ? ' is-invalid' : ''}`}>
+      <input id="manufacturing-blueprint-price" aria-label="蓝图价格（本次合计）" aria-invalid={Boolean(error)} aria-describedby={`manufacturing-blueprint-price-help${error ? ' manufacturing-blueprint-price-error' : ''}`} type="text" inputMode="decimal" maxLength={64} placeholder="0" value={value} onChange={event => onChange(event.target.value)} />
+      <b aria-hidden="true">ISK</b>
+    </div>
+    <small id="manufacturing-blueprint-price-help" className="manufacturing-blueprint-help">留空按 0 ISK；当前方案只计一次。多个蓝图请填合计，不随制造数量重复计费。</small>
+    {error ? <p id="manufacturing-blueprint-price-error" className="manufacturing-inline-error" role="status">{errorMessage}</p> : null}
+  </div>
+}
+
 function MobileCostOverview({ summary }) {
+  const blueprintCostError = summary.blueprintCostError
   return <section className="manufacturing-mobile-overview" aria-label="当前方案成本摘要" data-testid="manufacturing-mobile-overview">
-    <div><span>{summary.complete ? '当前方案总成本' : '已覆盖小计'}</span><span className={`manufacturing-complete-state ${summary.complete ? 'is-complete' : 'is-partial'}`}>{summary.complete ? '可计算' : `待补 ${summary.missing.length} 项`}</span></div>
+    <div><span>{summary.complete ? '当前方案总成本' : '已覆盖小计'}</span><span className={`manufacturing-complete-state ${summary.complete ? 'is-complete' : 'is-partial'}`}>{blueprintCostError ? '检查蓝图价格' : summary.complete ? '可计算' : `待补 ${summary.missing.length} 项`}</span></div>
     <strong>{formatIsk(summary.complete ? summary.total : summary.coveredSubtotal)}</strong>
-    <small>含市场材料与制造费用 · 蓝图费用未计入</small>
+    <small>{blueprintCostError ? '蓝图价格待修正 · 此处仅为已覆盖的材料与制造费用' : '含市场材料、制造费用与蓝图费用 · 蓝图按本次合计计入一次'}</small>
   </section>
 }
 
 function SummaryPanel({ summary, selectedNode, quote, manualPrice, onManualPrice, onRefreshQuotes, quoteLoading, quoteError }) {
   const complete = summary?.complete
+  const blueprintCostError = summary.blueprintCostError
   const selectedPurchase = selectedNode?.mode === 'buy'
   return (
     <aside className="manufacturing-summary" data-testid="manufacturing-cost-rail">
-       <div className="manufacturing-summary-heading"><h2>成本概览</h2><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{complete ? '可计算' : '待补报价'}</span></div>
+       <div className="manufacturing-summary-heading"><h2>成本概览</h2><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{blueprintCostError ? '检查蓝图价格' : complete ? '可计算' : '待补报价'}</span></div>
       <div className="manufacturing-total-card">
         <span>{complete ? '总成本' : '已覆盖小计'}</span>
         <strong>{formatIsk(complete ? summary.total : summary.coveredSubtotal)}</strong>
         <b className="manufacturing-total-compact" data-testid="manufacturing-total-compact">{formatCompactIsk(complete ? summary.total : summary.coveredSubtotal)}</b>
-        <small>{complete ? '当前方案所有购买项均有价格' : `缺少 ${summary.missing.length} 项购买价格`}</small>
+        <small>{blueprintCostError ? '蓝图价格待修正；这里只显示已覆盖的材料与制造费用。' : complete ? '当前方案所有购买项均有价格' : `缺少 ${summary.missing.length} 项购买价格`}</small>
       </div>
       <dl className="manufacturing-cost-breakdown">
         <div><dt>市场材料</dt><dd>{formatIsk(summary.materialSubtotal)}</dd></div>
         <div><dt>制造费用</dt><dd>{formatIsk(summary.manufacturingFee)}</dd></div>
-        <div><dt>蓝图费用</dt><dd>未计入</dd></div>
+        <div><dt>蓝图费用</dt><dd>{blueprintCostError ? '待修正' : formatIsk(summary.blueprintCost)}</dd></div>
       </dl>
       <div className="manufacturing-formula-note"><Settings2 size={15} aria-hidden="true" /><span>材料效率 {summary.materialEfficiencyPercent}% 已应用</span></div>
       <p className="manufacturing-price-help">材料按客户端逐批取整；制造费用与时间暂按基础配方估算。</p>
@@ -387,6 +404,7 @@ export default function ManufacturingEstimatorPage() {
 
   const handleTargetSelect = id => {
     setSelectedId(id)
+    setSettings(current => ({ ...current, blueprintCost: '' }))
     setOverrides({})
     setPurchasePrices({})
     setSelectedNodeId('')
@@ -435,6 +453,7 @@ export default function ManufacturingEstimatorPage() {
           <div className="manufacturing-panel-heading"><h2>方案设置</h2><span className="manufacturing-save-state">本地方案</span></div>
           <TargetPicker recipes={catalog.recipes} selectedId={selectedId} search={search} onSearch={setSearch} onSelect={handleTargetSelect} />
           <SettingField label="制造数量"><div className="manufacturing-quantity-control"><button type="button" aria-label="减少制造数量" onClick={() => setQuantity(value => Math.max(1, value - 1))}><Minus size={15} /></button><input data-testid="manufacturing-quantity-value" aria-label="制造数量" type="number" min="1" value={quantity} onChange={event => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><button type="button" aria-label="增加制造数量" onClick={() => setQuantity(value => value + 1)}><Plus size={15} /></button></div></SettingField>
+          <BlueprintCostField value={settings.blueprintCost} error={summary.blueprintCostError} onChange={value => setSettings(current => ({ ...current, blueprintCost: value }))} />
           <fieldset className="manufacturing-settings" aria-label="技能与效率">
             <legend>技能与效率</legend>
             <EfficiencyRateField value={settings.materialEfficiencyPercent} onChange={value => setSettings(current => ({ ...current, materialEfficiencyPercent: value }))} />

@@ -6,6 +6,8 @@ import {
   createPlan as createRawPlan,
   expandPlan,
   summarizePlan,
+  MAX_BLUEPRINT_COST,
+  resolveBlueprintCost,
 } from '../../src/utils/manufacturingPlan.js'
 
 // Accounting fixtures explicitly use unmodified 100% recipe quantities.
@@ -315,4 +317,128 @@ test('exposes unverified formula status and includes an optional blueprint cost'
   assert.equal(summary.formulaStatus, 'unverified')
   assert.equal(summary.blueprintCost, '0.1')
   assert.equal(summary.total, '5.3')
+})
+
+test('empty blueprint cost is zero and ordinary decimals are normalized exactly', () => {
+  for (const value of [undefined, null, '', '   ', 0, '0', '+0', '000.00']) {
+    assert.deepEqual(resolveBlueprintCost(value), { value: '0', error: null })
+  }
+  for (const [value, expected] of [['0.10', '0.1'], ['.5', '0.5'], ['+000123.40', '123.4'], [' 12.34 ', '12.34']]) {
+    assert.deepEqual(resolveBlueprintCost(value), { value: expected, error: null })
+  }
+})
+
+test('blueprint cost accepts its exact maximum and distinguishes an excessive amount', () => {
+  assert.equal(MAX_BLUEPRINT_COST, '999999999999.99')
+  assert.deepEqual(resolveBlueprintCost(MAX_BLUEPRINT_COST), { value: MAX_BLUEPRINT_COST, error: null })
+  for (const value of ['1000000000000', '1000000000000.00', '99999999999999999999999999999999']) {
+    assert.deepEqual(resolveBlueprintCost(value), { value: null, error: 'too_large' })
+  }
+})
+
+test('blueprint cost rejects unsafe, negative, fractional precision, and exponent inputs without throwing', () => {
+  for (const value of ['-1', '-0', 'not a price', '1,000', '0.001', '.', '+', '1e999999', '1e2', '9'.repeat(65), ' '.repeat(65), NaN, Infinity, -Infinity, {}, true]) {
+    assert.deepEqual(resolveBlueprintCost(value), { value: null, error: 'invalid' }, `value: ${String(value)}`)
+  }
+})
+
+test('blueprint cost is added once while product quantity, batches, and installs change', () => {
+  const catalog = makeCatalog([
+    recipe('100', '多批成品', [{ itemId: '200', quantity: 3 }], { outputNum: 200, money: 10, maxInstallQuantity: 2 }),
+  ])
+  for (const [quantity, batches, installs, materials, total] of [[1, 1, 1, '0.6', '10.7'], [201, 2, 1, '1.2', '21.3'], [801, 5, 3, '3', '53.1']]) {
+    const summary = summarizePlan(createPlan(catalog, {
+      targetId: '100', quantity, settings: { blueprintCost: '0.10' }, purchasePrices: { '200': '0.20' },
+    }))
+    assert.equal(summary.tree.batches, batches)
+    assert.equal(summary.tree.installCount, installs)
+    assert.equal(summary.blueprintCost, '0.1')
+    assert.equal(summary.blueprintCostError, null)
+    assert.equal(summary.materialSubtotal, materials)
+    assert.equal(summary.manufacturingFee, String(batches * 10))
+    assert.equal(summary.total, total)
+  }
+})
+
+test('shared manufacturing recipes do not duplicate the plan-level blueprint cost', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '101', quantity: 1 }, { itemId: '102', quantity: 1 }], { money: 1 }),
+    recipe('101', '部件 A', [{ itemId: '103', quantity: 1 }], { money: 2 }),
+    recipe('102', '部件 B', [{ itemId: '103', quantity: 1 }], { money: 3 }),
+    recipe('103', '共享部件', [{ itemId: '200', quantity: 1 }], { outputNum: 2, money: 4 }),
+  ])
+  const summary = summarizePlan(createPlan(catalog, {
+    targetId: '100', quantity: 1, settings: { blueprintCost: '0.10' }, purchasePrices: { '200': '0.20' },
+  }))
+  assert.equal(summary.manufacturingFee, '10')
+  assert.equal(summary.materialSubtotal, '0.2')
+  assert.equal(summary.blueprintCost, '0.1')
+  assert.equal(summary.total, '10.3')
+  assert.deepEqual(summary.purchases.map(({ itemId, quantity }) => ({ itemId, quantity })), [{ itemId: '200', quantity: 1 }])
+})
+
+test('buying the target retains the explicitly entered plan cost without adding a purchase item', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '200', quantity: 3 }], { money: 10 }),
+  ])
+  const summary = summarizePlan(createPlan(catalog, {
+    targetId: '100', quantity: 3, overrides: { '100': 'buy' },
+    settings: { blueprintCost: '.50' }, purchasePrices: { '100': '2.10' },
+  }))
+  assert.equal(summary.manufacturingFee, '0')
+  assert.equal(summary.materialSubtotal, '6.3')
+  assert.equal(summary.blueprintCost, '0.5')
+  assert.equal(summary.total, '6.8')
+  assert.deepEqual(summary.purchases.map(({ itemId, quantity }) => ({ itemId, quantity })), [{ itemId: '100', quantity: 3 }])
+})
+
+test('invalid blueprint input leaves known costs visible without claiming a complete total', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '200', quantity: 2 }], { money: 5 }),
+  ])
+  for (const [value, error] of [['-1', 'invalid'], ['1e999999', 'invalid'], ['1000000000000', 'too_large']]) {
+    const plan = createPlan(catalog, { targetId: '100', settings: { blueprintCost: value }, purchasePrices: { '200': '0.1' } })
+    const summary = summarizePlan(plan)
+    assert.equal(summary.complete, false)
+    assert.equal(summary.total, null)
+    assert.equal(summary.coveredSubtotal, '5.2')
+    assert.equal(summary.blueprintCost, null)
+    assert.equal(summary.blueprintCostError, error)
+    assert.deepEqual(summary.missing, [])
+    assert.deepEqual(summary.purchases.map(({ itemId, quantity }) => ({ itemId, quantity })), [{ itemId: '200', quantity: 2 }])
+  }
+})
+
+test('missing material quote remains missing when a valid one-time blueprint cost is entered', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '200', quantity: 2 }], { money: 5 }),
+  ])
+  const summary = summarizePlan(createPlan(catalog, { targetId: '100', settings: { blueprintCost: '12.34' } }))
+  assert.equal(summary.complete, false)
+  assert.equal(summary.total, null)
+  assert.equal(summary.coveredSubtotal, '17.34')
+  assert.equal(summary.blueprintCost, '12.34')
+  assert.equal(summary.blueprintCostError, null)
+  assert.deepEqual(summary.missing, [{ itemId: '200', name: '物品 200', quantity: 2, reason: 'quote_absent' }])
+})
+
+test('legacy JSON plans default to zero and settings snapshots isolate blueprint edits', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '200', quantity: 1 }], { money: 2 }),
+  ])
+  const oldOptions = JSON.parse('{"targetId":"100","quantity":1,"settings":{},"purchasePrices":{"200":"3.20"}}')
+  const legacy = createPlan(catalog, oldOptions)
+  assert.equal(legacy.schemaVersion, 1)
+  assert.equal(summarizePlan(legacy).blueprintCost, '0')
+  assert.equal(summarizePlan(legacy).blueprintCostError, null)
+  assert.equal(summarizePlan(legacy).total, '5.2')
+  const options = JSON.parse('{"targetId":"100","quantity":1,"settings":{"blueprintCost":"0.10"},"purchasePrices":{"200":"3.20"}}')
+  const first = createPlan(catalog, options)
+  options.settings.blueprintCost = '9.99'
+  const second = createPlan(catalog, options)
+  first.settings.blueprintCost = '0.20'
+  assert.equal(options.settings.blueprintCost, '9.99')
+  assert.equal(summarizePlan(first).total, '5.4')
+  assert.equal(summarizePlan(second).total, '15.19')
+  assert.equal(summarizePlan(legacy).total, '5.2')
 })
