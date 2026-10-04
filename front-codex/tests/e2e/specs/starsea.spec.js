@@ -226,8 +226,16 @@ test("审核清空最后一页后回到仍有待审内容的首页", async ({ pa
   ).toBeVisible();
 });
 
-test("星海公开目录提供筛选和登录返回路径", async ({ page }) => {
-  await fixture(page, false);
+test("星海公开目录提供筛选和登录返回路径", async ({ page, baseURL }) => {
+  const privateRequests = [];
+  let privateRouteRequested = false;
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (privateRouteRequested && path.startsWith("/api/starsea/")) {
+      privateRequests.push({ path, method: request.method() });
+    }
+  });
+  const { writes } = await fixture(page, false);
   await page.goto("/starsea");
   await expect(
     page.getByRole("heading", { name: "星海见闻", exact: true }),
@@ -236,11 +244,20 @@ test("星海公开目录提供筛选和登录返回路径", async ({ page }) => 
   await expect(
     page.getByRole("link", { name: "边境交锋", exact: true }),
   ).toBeVisible();
+  privateRouteRequested = true;
   await page.goto("/starsea/new");
-  await expect(page.getByRole("link", { name: "登录后继续" })).toHaveAttribute(
-    "href",
-    "/login?next=%2Fstarsea%2Fnew",
-  );
+  await expect(page).toHaveURL(new URL("/login", baseURL).href);
+  expect(await page.evaluate(() => history.state?.usr)).toEqual({
+    from: "/starsea/new",
+    reason: "authentication",
+  });
+  await expect(page.getByRole("status").filter({
+    hasText: "此页面需要登录。完成登录后将返回刚才的页面。",
+  })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "发布见闻", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("标题", { exact: true })).toHaveCount(0);
+  expect(privateRequests).toEqual([]);
+  expect(writes).toEqual([]);
 });
 
 test("星海目录支持从军团页进入关联见闻", async ({ page }) => {

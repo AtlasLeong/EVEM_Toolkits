@@ -31,8 +31,9 @@ async function expectMapReady(page) {
 }
 
 async function leaveMap(page) {
-  await page.getByRole('link', { name: '需求与反馈', exact: true }).click()
-  await expect(page).toHaveURL(/\/feedback$/)
+  // Leaving for a public page preserves the guest SPA and its map query cache.
+  await page.getByRole('link', { name: '防诈名单', exact: true }).click()
+  await expect(page).toHaveURL(/\/fraudlist$/)
   await expect(page.locator('canvas')).toHaveCount(0)
 }
 

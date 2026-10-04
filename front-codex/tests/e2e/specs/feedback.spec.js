@@ -50,13 +50,21 @@ async function fixture(page, { staff = false, createFails = false, listFails = f
   return { posts, queries, commentPosts, attachmentPosts }
 }
 
-test('访客有清晰入口和登录提示，不显示私密反馈', async ({ page }) => {
-  await installApiMock(page, async () => json([]))
+test('访客有清晰入口和登录提示，不显示私密反馈', async ({ page, baseURL }) => {
+  const privateRequests = []
+  await installApiMock(page, async ({ url, method }) => {
+    if (url.pathname.startsWith('/api/feedback/')) privateRequests.push({ path: url.pathname, method })
+    return json([])
+  })
   await page.goto('/planetary')
   await page.getByRole('link', { name: '需求与反馈', exact: true }).click()
-  await expect(page.getByRole('heading', { name: '需求与反馈' })).toBeVisible()
-  await expect(page.getByRole('link', { name: '登录后提交反馈' })).toBeVisible()
+  await expect(page).toHaveURL(new URL('/login', baseURL).href)
+  expect(await page.evaluate(() => history.state?.usr)).toEqual({ from: '/feedback', reason: 'authentication' })
+  await expect(page.getByRole('status').filter({ hasText: '此页面需要登录。完成登录后将返回刚才的页面。' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '需求与反馈', exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('反馈标题', { exact: true })).toHaveCount(0)
   await expect(page.getByText('希望支持方案导出', { exact: true })).toHaveCount(0)
+  expect(privateRequests).toEqual([])
 })
 
 test('提交失败保留表单，重试沿用请求编号且成功后进入详情', async ({ page }) => {
