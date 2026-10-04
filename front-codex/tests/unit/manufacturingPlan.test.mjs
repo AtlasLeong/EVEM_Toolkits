@@ -8,6 +8,8 @@ import {
   summarizePlan,
   MAX_BLUEPRINT_COST,
   resolveBlueprintCost,
+  resolveManufacturingQuote,
+  DEFAULT_MANUFACTURING_QUOTE_MAX_AGE_MS,
 } from '../../src/utils/manufacturingPlan.js'
 
 // Accounting fixtures explicitly use unmodified 100% recipe quantities.
@@ -263,26 +265,221 @@ test('missing quote never becomes zero and reports a covered subtotal', () => {
   assert.deepEqual(summary.missing, [{ itemId: '200', name: '物品 200', quantity: 2, reason: 'quote_absent' }])
 })
 
-test('fresh quote completes the total while stale quote keeps it incomplete', () => {
+test('fresh and stale positive sell quotes both complete the total with distinct age metadata', () => {
   const catalog = makeCatalog([
     recipe('100', '成品', [{ itemId: '200', quantity: 2 }]),
   ])
   const fresh = createPlan(catalog, {
     targetId: '100',
     quantity: 1,
-    marketQuotes: { '200': { status: 'fresh', bestSell: '1.25' } },
+    settings: { now: '2026-10-04T12:00:00Z' },
+    marketQuotes: { '200': { status: 'fresh', bestSell: '1.25', observed_at: '2026-10-04T11:00:00Z' } },
   })
   const stale = createPlan(catalog, {
     targetId: '100',
     quantity: 1,
-    marketQuotes: { '200': { status: 'stale', bestSell: '1.25' } },
+    settings: { now: '2026-10-04T12:00:00Z' },
+    marketQuotes: { '200': { status: 'stale', bestSell: '1.25', observed_at: '2026-10-03T11:00:00Z' } },
   })
 
   assert.equal(summarizePlan(fresh).complete, true)
   assert.equal(summarizePlan(fresh).total, '2.5')
-  assert.equal(summarizePlan(stale).complete, false)
-  assert.equal(summarizePlan(stale).total, null)
-  assert.equal(summarizePlan(stale).missing[0].reason, 'quote_stale')
+  assert.equal(summarizePlan(fresh).hasStaleQuotes, false)
+  assert.equal(summarizePlan(fresh).purchases[0].quoteStatus, 'fresh')
+  const summary = summarizePlan(stale)
+  assert.equal(summary.complete, true)
+  assert.equal(summary.total, '2.5')
+  assert.deepEqual(summary.missing, [])
+  assert.equal(summary.purchases[0].quoteStatus, 'stale')
+  assert.equal(summary.purchases[0].observedAt, '2026-10-03T11:00:00.000Z')
+  assert.equal(summary.hasStaleQuotes, true)
+  assert.deepEqual(summary.stalePurchases, summary.purchases)
+})
+
+test('quote resolver accepts expired sell prices and separates exact age thresholds from availability', () => {
+  const now = '2026-10-04T12:00:00Z'
+  assert.equal(DEFAULT_MANUFACTURING_QUOTE_MAX_AGE_MS, 7_200_000)
+  for (const status of ['fresh', 'stale', 'expired', 'available', 'collected', 'ok']) {
+    const quote = resolveManufacturingQuote({ status, best_sell: '001.250', observed_at: '2026-10-04T11:00:00+00:00' }, { now })
+    assert.deepEqual(quote, {
+      price: '1.25', reason: null, status: ['stale', 'expired'].includes(status) ? 'stale' : 'fresh',
+      observedAt: '2026-10-04T11:00:00.000Z',
+    })
+  }
+  assert.equal(resolveManufacturingQuote({ bestSell: '0.1', collectedAt: '2026-10-04T10:00:00Z' }, { now }).status, 'fresh')
+  assert.equal(resolveManufacturingQuote({ bestSell: '0.1', collectedAt: '2026-10-04T09:59:59.999Z' }, { now }).status, 'stale')
+  assert.equal(resolveManufacturingQuote({ fresh: true, bestSell: '0.1', observedAt: '2026-10-03T10:00:00Z' }, { now }).status, 'stale')
+  assert.equal(resolveManufacturingQuote({ bestSell: '0.1', observedAt: '2026-10-04T11:59:59.999Z' }, { now, quoteMaxAgeMs: 0 }).status, 'stale')
+  for (const extra of [{ stale: true }, { isStale: true }, { fresh: false }, { expiresAt: now }]) {
+    const quote = resolveManufacturingQuote({ bestSell: '0.1', observedAt: now, ...extra }, { now: Date.parse(now) })
+    assert.equal(quote.price, '0.1')
+    assert.equal(quote.reason, null)
+    assert.equal(quote.status, 'stale')
+  }
+  assert.equal(resolveManufacturingQuote({ best_sell: '0.1', observed_at: '2026-10-04T19:00:00.123456+08:00' }, { now }).observedAt, '2026-10-04T11:00:00.123Z')
+})
+
+test('stale status cannot turn an empty or invalid sell book into a zero-cost purchase', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 2 }], { money: 5 })])
+  for (const status of ['fresh', 'stale', 'expired']) {
+    for (const best_sell of [undefined, null, '', ' ', '0', 0, '-1', 'not a price', NaN, Infinity, 'Infinity', '1e999999', '1e-999999']) {
+      const quote = { status, best_sell, best_buy: '9.99', observed_at: '2026-10-03T10:00:00Z' }
+      const reason = best_sell === undefined || best_sell === null || (typeof best_sell === 'string' && best_sell.trim() === '')
+        ? 'quote_empty' : 'quote_invalid'
+      assert.equal(resolveManufacturingQuote(quote).reason, reason)
+      const summary = summarizePlan(createPlan(catalog, { targetId: '100', marketQuotes: { '200': quote } }))
+      assert.equal(summary.complete, false)
+      assert.equal(summary.total, null)
+      assert.equal(summary.coveredSubtotal, '5')
+      assert.equal(summary.materialSubtotal, '0')
+      assert.deepEqual(summary.purchases, [])
+      assert.deepEqual(summary.stalePurchases, [])
+      assert.equal(summary.hasStaleQuotes, false)
+      assert.equal(summary.missing[0].reason, reason)
+    }
+  }
+  assert.deepEqual(resolveManufacturingQuote({ status: 'expired', best_sell: null, price: '10', best_buy: '9' }), {
+    price: null, reason: 'quote_empty', status: 'empty', observedAt: null,
+  })
+  assert.deepEqual(resolveManufacturingQuote({ status: 'stale', best_sell: null, observed_at: '2026-10-03T10:00:00Z' }, { now: '2026-10-04T12:00:00Z' }), {
+    price: null, reason: 'quote_empty', status: 'empty', observedAt: '2026-10-03T10:00:00.000Z',
+  })
+})
+
+test('uncollected, absent, explicitly empty and unknown-status quotes remain missing even with a price', () => {
+  for (const [quote, reason, status] of [
+    [undefined, 'quote_absent', 'absent'], [null, 'quote_absent', 'absent'],
+    [{ status: 'absent', bestSell: '1' }, 'quote_absent', 'absent'],
+    [{ status: 'empty', bestSell: '1' }, 'quote_empty', 'empty'],
+    [{ status: 'invalid', bestSell: '1' }, 'quote_invalid', 'invalid'],
+    ...['uncollected', 'not_collected', 'pending', 'unexpected'].map((status) => [{ status, bestSell: '1' }, 'quote_uncollected', 'uncollected']),
+    [{ collected: false, status: 'stale', bestSell: '1' }, 'quote_uncollected', 'uncollected'],
+    [[], 'quote_empty', 'empty'], [42, 'quote_empty', 'empty'],
+  ]) {
+    assert.deepEqual(resolveManufacturingQuote(quote), { price: null, reason, status, observedAt: null })
+  }
+})
+
+test('legacy, invalid and future observation times stay unknown without rejecting valid sell prices', () => {
+  const settings = { now: '2026-10-04T12:00:00Z' }
+  for (const observed_at of [undefined, null, '', 'not a date', '0', '2026-02-30T12:00:00Z', '2026-10-04T24:00:00Z', Infinity, '2026-10-04T12:00:00.001Z']) {
+    assert.deepEqual(resolveManufacturingQuote({ status: 'fresh', best_sell: '0.20', observed_at }, settings), {
+      price: '0.2', reason: null, status: 'unknown', observedAt: null,
+    })
+    assert.deepEqual(resolveManufacturingQuote({ status: 'expired', best_sell: '0.20', observed_at }, settings), {
+      price: '0.2', reason: null, status: 'stale', observedAt: null,
+    })
+  }
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 2 }])])
+  const summary = summarizePlan(createPlan(catalog, { targetId: '100', settings, marketQuotes: { '200': { bestSell: '0.2' } } }))
+  assert.equal(summary.total, '0.4')
+  assert.equal(summary.purchases[0].quoteStatus, 'unknown')
+  assert.equal(summary.purchases[0].observedAt, null)
+  assert.equal(summary.hasStaleQuotes, false)
+})
+
+test('only actually used stale market prices enter whole-plan warnings, with manual prices taking priority', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 2 }])])
+  const marketQuotes = { '200': { status: 'expired', best_sell: '1.25', observed_at: '2026-10-03T12:00:00Z' } }
+  for (const manual of ['0', '0.10']) {
+    const summary = summarizePlan(createPlan(catalog, { targetId: '100', marketQuotes, purchasePrices: { '200': manual } }))
+    assert.equal(summary.total, manual === '0' ? '0' : '0.2')
+    assert.equal(summary.purchases[0].priceSource, 'manual')
+    assert.equal('quoteStatus' in summary.purchases[0], false)
+    assert.equal('observedAt' in summary.purchases[0], false)
+    assert.deepEqual(summary.stalePurchases, [])
+    assert.equal(summary.hasStaleQuotes, false)
+  }
+  const invalid = summarizePlan(createPlan(catalog, { targetId: '100', marketQuotes, purchasePrices: { '200': 'invalid' } }))
+  assert.equal(invalid.total, null)
+  assert.equal(invalid.missing[0].reason, 'price_invalid')
+  assert.equal(invalid.hasStaleQuotes, false)
+  const blank = summarizePlan(createPlan(catalog, { targetId: '100', marketQuotes, purchasePrices: { '200': '' } }))
+  assert.equal(blank.total, '2.5')
+  assert.equal(blank.hasStaleQuotes, true)
+  assert.equal(marketQuotes['200'].best_sell, '1.25')
+})
+
+test('fresh, stale and genuinely missing inputs preserve exact covered costs and per-input status', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [
+    { itemId: '200', quantity: 3 }, { itemId: '201', quantity: 1 }, { itemId: '202', quantity: 2 },
+  ], { money: 3 })])
+  const summary = summarizePlan(createPlan(catalog, {
+    targetId: '100', settings: { now: '2026-10-04T12:00:00Z', blueprintCost: '0.10' },
+    marketQuotes: {
+      '200': { status: 'expired', best_sell: '0.10', observed_at: '2026-10-03T12:00:00Z' },
+      '201': { status: 'fresh', best_sell: '0.20', observed_at: '2026-10-04T11:00:00Z' },
+      '202': { status: 'stale', best_sell: null, best_buy: '100' },
+    },
+  }))
+  assert.equal(summary.total, null)
+  assert.equal(summary.complete, false)
+  assert.equal(summary.materialSubtotal, '0.5')
+  assert.equal(summary.manufacturingFee, '3')
+  assert.equal(summary.blueprintCost, '0.1')
+  assert.equal(summary.coveredSubtotal, '3.6')
+  assert.deepEqual(summary.missing.map(({ itemId, reason }) => ({ itemId, reason })), [{ itemId: '202', reason: 'quote_empty' }])
+  assert.deepEqual(summary.purchases.map(({ itemId, quoteStatus }) => ({ itemId, quoteStatus })), [
+    { itemId: '200', quoteStatus: 'stale' }, { itemId: '201', quoteStatus: 'fresh' },
+  ])
+  assert.deepEqual(summary.stalePurchases, [summary.purchases[0]])
+})
+
+test('stale prices retain batch, installation, hierarchy and one-time blueprint calculations exactly', () => {
+  const catalog = makeCatalog([
+    recipe('100', '成品', [{ itemId: '101', quantity: 3 }], { outputNum: 2, money: 1, maxInstallQuantity: 1 }),
+    recipe('101', '中间件', [{ itemId: '200', quantity: 1 }], { outputNum: 2, money: 2, maxInstallQuantity: 2 }),
+  ])
+  const options = {
+    targetId: '100', quantity: 5, settings: { blueprintCost: '0.10' },
+    marketQuotes: { '200': { status: 'stale', best_sell: '0.10' }, '101': { status: 'expired', best_sell: '0.20' } },
+  }
+  const made = summarizePlan(createPlan(catalog, options))
+  assert.equal(made.tree.batches, 3)
+  assert.equal(made.tree.installCount, 3)
+  assert.equal(made.tree.children[0].batches, 5)
+  assert.equal(made.tree.children[0].installCount, 3)
+  assert.equal(made.manufacturingFee, '13')
+  assert.equal(made.materialSubtotal, '0.5')
+  assert.equal(made.total, '13.6')
+  assert.deepEqual(made.stalePurchases.map(({ itemId, quantity }) => ({ itemId, quantity })), [{ itemId: '200', quantity: 5 }])
+  const bought = summarizePlan(createPlan(catalog, { ...options, overrides: { '101': 'buy' } }))
+  assert.equal(bought.tree.children[0].children.length, 0)
+  assert.equal(bought.manufacturingFee, '3')
+  assert.equal(bought.materialSubtotal, '1.8')
+  assert.equal(bought.total, '4.9')
+  assert.deepEqual(bought.stalePurchases.map(({ itemId, quantity }) => ({ itemId, quantity })), [{ itemId: '101', quantity: 9 }])
+  assert.equal(made.blueprintCost, '0.1')
+  assert.equal(bought.blueprintCost, '0.1')
+})
+
+test('quote metadata is snapshotted per plan without mutating a caller quote or leaking result edits', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 1 }])])
+  const options = {
+    targetId: '100', settings: { now: '2026-10-04T12:00:00Z' },
+    marketQuotes: { '200': { status: 'expired', best_sell: '1.25', observed_at: '2026-10-03T12:00:00Z' } },
+  }
+  const first = createPlan(catalog, options)
+  options.marketQuotes['200'].best_sell = '2.5'
+  const second = createPlan(catalog, options)
+  const summary = summarizePlan(first)
+  summary.purchases[0].unitPrice = '99'
+  summary.purchases[0].observedAt = null
+  assert.equal(summarizePlan(first).total, '1.25')
+  assert.equal(summarizePlan(first).purchases[0].observedAt, '2026-10-03T12:00:00.000Z')
+  assert.equal(summarizePlan(second).total, '2.5')
+  assert.equal(first.marketQuotes['200'].best_sell, '1.25')
+  assert.equal(options.marketQuotes['200'].best_sell, '2.5')
+})
+
+test('market decimal prices retain their original precision instead of using the validation number', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '200', quantity: 2 }])])
+  const summary = summarizePlan(createPlan(catalog, {
+    targetId: '100', marketQuotes: { '200': { status: 'expired', best_sell: '99999999999999999999.99' } },
+  }))
+  assert.equal(summary.purchases[0].unitPrice, '99999999999999999999.99')
+  assert.equal(summary.total, '199999999999999999999.98')
+  assert.equal(resolveManufacturingQuote({ best_sell: '1e-8' }).price, '0.00000001')
 })
 
 test('adds decimal prices exactly without binary floating-point drift', () => {

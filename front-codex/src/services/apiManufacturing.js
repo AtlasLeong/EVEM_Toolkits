@@ -1,5 +1,6 @@
 import API_URL from './backendSetting'
 import fetchWithAuth from './fetchWithAuth'
+import { resolveManufacturingQuote } from '../utils/manufacturingPlan'
 
 /**
  * The public market list endpoint caps a page at one hundred records.  The
@@ -10,7 +11,7 @@ import fetchWithAuth from './fetchWithAuth'
 export const MARKET_PAGE_SIZE = 100
 export const DEFAULT_QUOTE_CONCURRENCY = 8
 
-const QUOTE_STATUSES = new Set(['fresh', 'stale', 'empty', 'uncollected', 'absent'])
+const QUOTE_STATUSES = new Set(['fresh', 'stale', 'empty', 'invalid', 'uncollected', 'absent'])
 
 export class ManufacturingMarketError extends Error {
   constructor(message, status, { code = 'market_error', cause } = {}) {
@@ -65,6 +66,7 @@ function responseRows(payload) {
 
 function normalizeStatus(value, fallback = 'uncollected') {
   const status = String(value ?? '').trim().toLowerCase()
+  if (status === 'expired') return 'stale'
   if (QUOTE_STATUSES.has(status)) return status
   return fallback
 }
@@ -72,10 +74,14 @@ function normalizeStatus(value, fallback = 'uncollected') {
 function normalizeRow(row, itemId) {
   const source = row && typeof row === 'object' && !Array.isArray(row) ? row : {}
   const normalizedId = normalizeItemId(source.item_id ?? source.itemId) ?? itemId
+  const observedAt = resolveManufacturingQuote(source).observedAt
   return {
     ...source,
     item_id: normalizedId,
     status: normalizeStatus(source.status),
+    observed_at: observedAt,
+    ...(Object.hasOwn(source, 'observedAt') ? { observedAt } : {}),
+    ...(Object.hasOwn(source, 'collectedAt') ? { collectedAt: observedAt } : {}),
   }
 }
 
@@ -124,17 +130,20 @@ function errorMessage(payload, status) {
 }
 
 async function fetchOneQuote(itemId, { apiUrl, fetchImpl, signal }) {
+  signal?.throwIfAborted()
   let response
   try {
     response = await fetchImpl(buildItemsUrl(apiUrl, itemId), {
       signal,
     })
   } catch (cause) {
+    if (signal?.aborted) throw signal.reason ?? cause
     throw new ManufacturingMarketError('行情请求失败，请稍后重试。', undefined, {
       code: 'transport_error',
       cause,
     })
   }
+  signal?.throwIfAborted()
   if (!response?.ok) {
     const payload = typeof response?.json === 'function' ? await response.json().catch(() => ({})) : {}
     throw new ManufacturingMarketError(errorMessage(payload, response?.status), response?.status, {
@@ -151,6 +160,7 @@ async function fetchOneQuote(itemId, { apiUrl, fetchImpl, signal }) {
       cause,
     })
   }
+  signal?.throwIfAborted()
   return normalizeManufacturingQuotes(payload, [itemId])
 }
 
@@ -171,8 +181,9 @@ async function mapWithConcurrency(values, worker, concurrency) {
 /**
  * Fetch read-only public market quotes for manufacturing purchase leaves.
  * `fetchImpl` and `apiUrl` are injectable for tests and local previews. The
- * default transport carries the current viewer session to the protected
- * market API; injected test transports remain deliberately isolated.
+ * This only reads the latest stored snapshot; it does not enqueue collection.
+ * The default transport uses the current session when available. Injected
+ * test transports remain deliberately isolated.
  */
 export async function fetchManufacturingQuotes(itemIds, options = {}) {
   const requested = normalizeItemIds(itemIds)
@@ -189,19 +200,38 @@ export async function fetchManufacturingQuotes(itemIds, options = {}) {
     item_id: itemId,
     status: 'absent',
   }]))
-  for (const chunk of chunkItemIds(requested, MARKET_PAGE_SIZE)) {
-    const records = await mapWithConcurrency(
-      chunk,
-      itemId => fetchOneQuote(itemId, {
-        apiUrl: options.apiUrl ?? options.baseUrl ?? API_URL,
-        fetchImpl,
-        signal: options.signal,
-      }),
-      concurrency,
-    )
-    for (const record of records) Object.assign(merged, record)
+  const controller = new AbortController()
+  const abortFromCaller = () => controller.abort(options.signal.reason)
+  options.signal?.throwIfAborted()
+  options.signal?.addEventListener('abort', abortFromCaller, { once: true })
+  try {
+    for (const chunk of chunkItemIds(requested, MARKET_PAGE_SIZE)) {
+      controller.signal.throwIfAborted()
+      const records = await mapWithConcurrency(
+        chunk,
+        async itemId => {
+          try {
+            return await fetchOneQuote(itemId, {
+              apiUrl: options.apiUrl ?? options.baseUrl ?? API_URL,
+              fetchImpl,
+              signal: controller.signal,
+            })
+          } catch (error) {
+            // Promise.all can reject before its other workers finish. Stop
+            // those requests and prevent them scheduling the rest of the batch.
+            // The caller's controller stays live so its error UI can commit.
+            controller.abort(error)
+            throw controller.signal.reason
+          }
+        },
+        concurrency,
+      )
+      for (const record of records) Object.assign(merged, record)
+    }
+    return merged
+  } finally {
+    options.signal?.removeEventListener('abort', abortFromCaller)
   }
-  return merged
 }
 
 export const fetchManufacturingMarketQuotes = fetchManufacturingQuotes

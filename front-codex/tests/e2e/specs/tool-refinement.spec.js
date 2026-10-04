@@ -74,6 +74,7 @@ for (const width of [320, 390, 768, 1024, 1100, 1179, 1280, 1440]) {
 }
 
 test('manufacturing refresh failure is next to its action and preserves existing priced result', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-04T12:00:00Z'))
   let failRefresh = false
   await manufacturingFixture(page, () => failRefresh)
   await page.goto('/manufacturing')
@@ -81,7 +82,14 @@ test('manufacturing refresh failure is next to its action and preserves existing
   await expect(rail.locator('.manufacturing-total-card > strong')).toHaveText('99,056,000 ISK')
   failRefresh = true
   await rail.getByRole('button', { name: '刷新购买项行情' }).click()
-  await expect(rail.getByRole('status')).toContainText('市场参考价暂时无法读取')
+  const refreshError = rail.locator('.manufacturing-inline-error[role="status"]')
+  await expect(refreshError).toHaveCount(1)
+  await expect(refreshError).toBeVisible()
+  await expect(refreshError).toHaveText('市场参考价刷新失败；已保留现有报价。仍可手动填写方案价格。')
+  const quoteWarning = rail.getByTestId('manufacturing-quote-warning')
+  await expect(quoteWarning).toHaveCount(1)
+  await expect(quoteWarning).toHaveAttribute('role', 'status')
+  await expect(quoteWarning).toBeVisible()
   await expect(rail.locator('.manufacturing-total-card > strong')).toHaveText('99,056,000 ISK')
   await expect(rail.getByRole('button', { name: '刷新购买项行情' })).toBeEnabled()
 })

@@ -9,15 +9,17 @@
  */
 
 const QUOTE_STATUS_REASON = new Map([
-  ['stale', 'quote_stale'],
-  ['expired', 'quote_stale'],
+  ['absent', 'quote_absent'],
   ['empty', 'quote_empty'],
+  ['invalid', 'quote_invalid'],
   ['uncollected', 'quote_uncollected'],
   ['not_collected', 'quote_uncollected'],
   ['pending', 'quote_uncollected'],
 ])
 
-const FRESH_QUOTE_STATUSES = new Set(['fresh', 'ok', 'collected', 'available'])
+const AVAILABLE_QUOTE_STATUSES = new Set(['fresh', 'ok', 'collected', 'available', 'stale', 'expired'])
+
+export const DEFAULT_MANUFACTURING_QUOTE_MAX_AGE_MS = 2 * 60 * 60 * 1000
 
 function fail(message) {
   throw new TypeError(`Invalid manufacturing plan: ${message}`)
@@ -463,37 +465,89 @@ function decimalFromString(value, field) {
   return decimalToString(decimalFrom(value, field))
 }
 
-function quoteReason(quote, settings = {}) {
-  if (quote === undefined || quote === null) return 'quote_absent'
-  if (!isObject(quote)) return 'quote_empty'
-  const status = String(quote.status ?? '').trim().toLowerCase()
-  if (QUOTE_STATUS_REASON.has(status)) return QUOTE_STATUS_REASON.get(status)
-  if (quote.collected === false || quote.collectedAt === null) return 'quote_uncollected'
-  if (quote.stale === true || quote.isStale === true || quote.fresh === false) return 'quote_stale'
-  if (quote.expiresAt !== undefined) {
-    const expiresAt = Date.parse(quote.expiresAt)
-    const now = Date.parse(settings.now ?? new Date().toISOString())
-    if (Number.isFinite(expiresAt) && Number.isFinite(now) && now >= expiresAt) return 'quote_stale'
-  }
-  const price = quote.bestSell ?? quote.best_sell ?? quote.lowestSell ?? quote.lowest_sell ?? quote.sell ?? quote.sellPrice ?? quote.sell_price ?? quote.price
-  if (price === undefined || price === null || price === '') return 'quote_empty'
-  try {
-    const parsed = decimalFrom(price, 'market quote bestSell')
-    if (parsed.coefficient <= 0n) return 'quote_empty'
-  } catch {
-    return 'quote_empty'
-  }
-  if (status && !FRESH_QUOTE_STATUSES.has(status)) return 'quote_uncollected'
-  if (quote.fresh === undefined && settings.quoteMaxAgeMs !== undefined && quote.collectedAt !== undefined) {
-    const collectedAt = Date.parse(quote.collectedAt)
-    const now = Date.parse(settings.now ?? new Date().toISOString())
-    if (Number.isFinite(collectedAt) && Number.isFinite(now) && now - collectedAt > settings.quoteMaxAgeMs) return 'quote_stale'
-  }
-  return null
+function quotePrice(quote) {
+  // An explicitly empty sell field is authoritative; a legacy `price` alias
+  // must not revive it (or reuse a price from a different side of the book).
+  const key = ['bestSell', 'best_sell', 'lowestSell', 'lowest_sell', 'sell', 'sellPrice', 'sell_price', 'price']
+    .find((name) => Object.hasOwn(quote, name) && quote[name] !== undefined)
+  return key === undefined ? undefined : quote[key]
 }
 
-function quotePrice(quote) {
-  return quote.bestSell ?? quote.best_sell ?? quote.lowestSell ?? quote.lowest_sell ?? quote.sell ?? quote.sellPrice ?? quote.sell_price ?? quote.price
+function timestampMs(value) {
+  if (typeof value === 'number') return Number.isFinite(value) && Math.abs(value) <= 8.64e15 ? value : null
+  if (typeof value !== 'string' || value.length > 64) return null
+  const text = value.trim()
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/iu.exec(text)
+  if (!match) return null
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, zoneHour = '0', zoneMinute = '0'] = match
+  const year = Number(yearText)
+  const month = Number(monthText)
+  const day = Number(dayText)
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  if (month < 1 || month > 12 || day < 1 || day > daysInMonth[month - 1]
+    || Number(hourText) > 23 || Number(minuteText) > 59 || Number(secondText) > 59
+    || Number(zoneHour) > 23 || Number(zoneMinute) > 59) return null
+  const parsed = Date.parse(text)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/**
+ * Price availability and quote age are separate: a stored positive sell quote
+ * can price the plan even when stale. Never substitute a buy quote or zero for
+ * a missing sell book, and never invent an observation time for a legacy quote.
+ */
+export function resolveManufacturingQuote(quote, settings = {}) {
+  const unavailable = (reason, observedAt = null) => ({
+    price: null,
+    reason,
+    status: reason === 'quote_absent' ? 'absent'
+      : reason === 'quote_uncollected' ? 'uncollected' : reason === 'quote_invalid' ? 'invalid' : 'empty',
+    observedAt,
+  })
+  if (quote === undefined || quote === null) return unavailable('quote_absent')
+  if (!isObject(quote) || Array.isArray(quote)) return unavailable('quote_empty')
+  const now = timestampMs(settings.now) ?? Date.now()
+  const observation = timestampMs(quote.observed_at ?? quote.observedAt ?? quote.collectedAt)
+  const observedAt = observation !== null && observation <= now ? new Date(observation).toISOString() : null
+  const status = String(quote.status ?? '').trim().toLowerCase()
+  if (QUOTE_STATUS_REASON.has(status)) return unavailable(QUOTE_STATUS_REASON.get(status), observedAt)
+  if (quote.collected === false || (status && !AVAILABLE_QUOTE_STATUSES.has(status))) {
+    return unavailable('quote_uncollected', observedAt)
+  }
+
+  const price = quotePrice(quote)
+  if (price === undefined || price === null || (typeof price === 'string' && price.trim() === '')) {
+    return unavailable('quote_empty', observedAt)
+  }
+  // Reject non-finite/excessive exponents before the exact decimal parser can
+  // allocate a coefficient or scale. This does not round the accepted price.
+  if (!['string', 'number', 'bigint'].includes(typeof price) || !Number.isFinite(Number(price)) || Number(price) <= 0) {
+    return unavailable('quote_invalid', observedAt)
+  }
+  let parsedPrice
+  try {
+    parsedPrice = decimalFrom(price, 'market quote bestSell')
+    if (parsedPrice.coefficient <= 0n) return unavailable('quote_invalid', observedAt)
+  } catch {
+    return unavailable('quote_invalid', observedAt)
+  }
+
+  const expiresAt = timestampMs(quote.expiresAt)
+  const configuredMaxAge = Number(settings.quoteMaxAgeMs ?? DEFAULT_MANUFACTURING_QUOTE_MAX_AGE_MS)
+  const maxAge = Number.isFinite(configuredMaxAge) && configuredMaxAge >= 0
+    ? configuredMaxAge : DEFAULT_MANUFACTURING_QUOTE_MAX_AGE_MS
+  const stale = status === 'stale' || status === 'expired'
+    || quote.stale === true || quote.isStale === true || quote.fresh === false
+    || (expiresAt !== null && now >= expiresAt)
+    || (observedAt !== null && now - observation > maxAge)
+
+  return {
+    price: decimalToString(parsedPrice),
+    reason: null,
+    status: stale ? 'stale' : observedAt === null ? 'unknown' : 'fresh',
+    observedAt,
+  }
 }
 
 /** Resolve the one-time cost entered for this plan without accepting exponents. */
@@ -535,6 +589,7 @@ export function summarizePlan(first, second) {
     const manualValue = recordValue(purchasePrices, purchase.itemId)
     let price
     let priceSource
+    let marketQuote
     if (manualValue !== undefined && manualValue !== null && String(manualValue).trim() !== '') {
       try {
         price = decimalFrom(manualValue, `purchase price ${purchase.itemId}`)
@@ -544,14 +599,11 @@ export function summarizePlan(first, second) {
       }
     } else if (!missing.some((entry) => entry.itemId === purchase.itemId)) {
       const quote = recordValue(marketQuotes, purchase.itemId)
-      const reason = quoteReason(quote, settings)
+      marketQuote = resolveManufacturingQuote(quote, settings)
+      const { reason } = marketQuote
       if (!reason) {
-        try {
-          price = decimalFrom(quotePrice(quote), `market quote ${purchase.itemId}`)
-          priceSource = 'market'
-        } catch {
-          missing.push({ ...purchase, reason: 'quote_empty' })
-        }
+        price = decimalFrom(marketQuote.price, `market quote ${purchase.itemId}`)
+        priceSource = 'market'
       } else {
         missing.push({ ...purchase, reason })
       }
@@ -565,6 +617,7 @@ export function summarizePlan(first, second) {
         unitPrice: decimalToString(price),
         priceSource,
         subtotal: decimalToString(cost),
+        ...(marketQuote ? { quoteStatus: marketQuote.status, observedAt: marketQuote.observedAt } : {}),
       })
     }
   }
@@ -574,6 +627,7 @@ export function summarizePlan(first, second) {
   const knownBlueprintCost = blueprint.error ? decimalZero() : decimalFrom(blueprint.value, 'settings.blueprintCost')
   const coveredSubtotal = decimalAdd(decimalAdd(manufacturingFee, knownBlueprintCost), materialSubtotal)
   const complete = missing.length === 0 && blueprint.error === null
+  const stalePurchases = resolvedPurchases.filter((purchase) => purchase.quoteStatus === 'stale')
 
   return {
     schemaVersion: 1,
@@ -590,6 +644,8 @@ export function summarizePlan(first, second) {
     materialSubtotal: decimalToString(materialSubtotal),
     manufacturingTime: expanded.manufacturingTime,
     purchases: resolvedPurchases,
+    stalePurchases,
+    hasStaleQuotes: stalePurchases.length > 0,
     missing,
     tree: expanded.root,
   }

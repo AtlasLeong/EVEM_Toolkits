@@ -10,8 +10,16 @@ test('missing-material reasons show human-readable labels instead of internal co
   for (const [reason, label] of [
     ['quote_absent', '尚未采集'], ['quote_uncollected', '尚未采集'],
     ['quote_stale', '报价已过期'], ['quote_empty', '暂无有效报价'],
+    ['quote_invalid', '报价无效'],
     ['price_invalid', '单价无效'], ['future_reason', '待补价格'],
   ]) assert.equal(display.formatMissingMaterialReason(reason), label)
+})
+
+test('observation time visibly names UTC and normalizes the same instant across offsets', () => {
+  assert.equal(display.formatManufacturingObservationTime('2026-10-04T15:04:56+08:00'), '2026/10/4 07:04:56 UTC')
+  assert.equal(display.formatManufacturingObservationTime('2026-10-04T07:04:56Z'), '2026/10/4 07:04:56 UTC')
+  assert.equal(display.formatManufacturingObservationTime(null), '采集时间未知')
+  assert.equal(display.formatManufacturingObservationTime('invalid date'), '采集时间未知')
 })
 
 test('formats exact values below ten thousand without a compact suffix', () => {
