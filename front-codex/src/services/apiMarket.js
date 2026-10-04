@@ -26,6 +26,12 @@ async function request(path, { admin = false, ...options } = {}) {
 
 export const listMarketCategories = ({ signal } = {}) => request('categories/', { signal })
 
+export async function getMarketQuality({ signal } = {}) {
+  const data = await request('quality/', { signal, cache: 'no-store' })
+  // Keep the time anchor in the query data so navigation cannot reset its age.
+  return { ...data, client_read_monotonic_ms: typeof performance === 'undefined' ? null : performance.now() }
+}
+
 export function listMarketItems({ q = '', page = 1, categoryId, signal } = {}) {
   const params = new URLSearchParams({ q: q.trim(), page: String(page) })
   if (categoryId !== undefined && categoryId !== null && categoryId !== '') params.set('category_id', String(categoryId))
