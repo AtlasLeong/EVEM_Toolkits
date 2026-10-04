@@ -59,12 +59,13 @@ class UnplannedBatchMigrationTests(TransactionTestCase):
     def setUp(self):
         super().setUp()
         executor = MigrationExecutor(connection)
+        self.latest_targets = executor.loader.graph.leaf_nodes()
         executor.migrate([self.migrate_from])
         self.previous_apps = executor.loader.project_state([self.migrate_from]).apps
         self.addCleanup(self.restore_current_schema)
 
     def restore_current_schema(self):
-        MigrationExecutor(connection).migrate([self.migrate_to])
+        MigrationExecutor(connection).migrate(self.latest_targets)
 
     def test_existing_unstarted_unplanned_queue_is_cleared_without_changing_other_runs(self):
         PreviousRun = self.previous_apps.get_model('Market', 'CollectionRun')

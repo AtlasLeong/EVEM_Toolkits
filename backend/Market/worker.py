@@ -16,11 +16,14 @@ from .batch_policy import (
     RUN_TIME_BUDGET_SECONDS, RPC_RESERVE_SECONDS, SESSION_RESERVE_SECONDS,
     FINISH_RESERVE_SECONDS,
     FALLBACK_DURATION_MS, CAPACITY_FAILURE_THRESHOLD, CAPACITY_ERROR_CODES, batch_policy,
+    RECOVERY_SUCCESS_THRESHOLD, RECOVERABLE_FALLBACK_REASONS,
 )
 
 
 LEASE_MS = 12 * 60 * 1000
 AUTH_RPC_COUNT = 4
+RECOVERY_FIELDS = ['batch_recovery_success_count', 'batch_recovery_probe_attempted',
+                   'batch_recovery_success_at_ms']
 
 
 class RuntimeBudgetExceeded(Exception):
@@ -44,6 +47,60 @@ def _check_lease(locked_run, original_run, now_ms):
         raise LeaseLost()
 
 
+def _reset_recovery(config, *, reset_attempt=False):
+    config.batch_recovery_success_count = 0
+    config.batch_recovery_success_at_ms = None
+    if reset_attempt:
+        config.batch_recovery_probe_attempted = False
+
+
+def _recovery_eligible(config, now_ms, *, session_status=None):
+    """Only transient transport protection can earn an early recovery."""
+    return (
+        config.enabled
+        and config.max_items_per_run == MAX_ITEMS_PER_RUN
+        and (config.session_status if session_status is None else session_status) == 'ready'
+        and not (config.cooldown_until_ms and config.cooldown_until_ms > now_ms)
+        and config.batch_fallback_until_ms is not None
+        and config.batch_fallback_until_ms > now_ms
+        and config.batch_fallback_reason in RECOVERABLE_FALLBACK_REASONS
+        and not config.batch_recovery_probe_attempted
+    )
+
+
+def _recovery_credit(config):
+    # An older release can finish a run without knowing these new fields.
+    # Its updated_at change must invalidate credit left by the new release.
+    if config.batch_recovery_success_at_ms != config.updated_at_ms:
+        return 0
+    return min(config.batch_recovery_success_count or 0, RECOVERY_SUCCESS_THRESHOLD)
+
+
+def _prepare_batch_policy(run, now_ms):
+    """Consume the one probe durably before any session or network operation."""
+    with transaction.atomic():
+        config = MarketConfig.objects.select_for_update().get(pk=1)
+        locked_run = CollectionRun.objects.select_for_update().get(pk=run.pk)
+        _check_lease(locked_run, run, now_ms)
+        credit = _recovery_credit(config)
+        eligible = _recovery_eligible(config, now_ms)
+        if not credit or not eligible or run.trigger != 'scheduled':
+            _reset_recovery(config)
+        policy = batch_policy(config, now_ms)
+        run.batch_recovery_probe = bool(
+            run.trigger == 'scheduled' and eligible
+            and credit >= RECOVERY_SUCCESS_THRESHOLD
+        )
+        if run.batch_recovery_probe:
+            config.batch_recovery_probe_attempted = True
+            _reset_recovery(config)
+            policy['max_items_per_run'] = MAX_ITEMS_PER_RUN
+        config.save(update_fields=RECOVERY_FIELDS)
+        locked_run.batch_recovery_probe = run.batch_recovery_probe
+        locked_run.save(update_fields=['batch_recovery_probe'])
+        return policy
+
+
 def _claim_run(now_ms):
     # A plain read inside this transaction would establish an InnoDB repeatable-
     # read snapshot before the config row lock. A contender could then miss the
@@ -64,12 +121,16 @@ def _claim_run(now_ms):
             config.batch_fallback_until_ms = now_ms + FALLBACK_DURATION_MS
             config.batch_fallback_reason = 'lease_expired'
             config.capacity_failure_count = 0
-            config.save(update_fields=['batch_fallback_until_ms', 'batch_fallback_reason', 'capacity_failure_count'])
+            _reset_recovery(config)
+            config.save(update_fields=['batch_fallback_until_ms', 'batch_fallback_reason',
+                                       'capacity_failure_count'] + RECOVERY_FIELDS)
         elif config.batch_fallback_until_ms and config.batch_fallback_until_ms <= now_ms:
             config.batch_fallback_until_ms = None
             config.batch_fallback_reason = ''
             config.capacity_failure_count = 0
-            config.save(update_fields=['batch_fallback_until_ms', 'batch_fallback_reason', 'capacity_failure_count'])
+            _reset_recovery(config, reset_attempt=True)
+            config.save(update_fields=['batch_fallback_until_ms', 'batch_fallback_reason',
+                                       'capacity_failure_count'] + RECOVERY_FIELDS)
         expired.update(
             status='failed', finished_at_ms=now_ms, error_code='lease_expired',
             lease_owner='', lease_expires_at_ms=None,
@@ -167,18 +228,53 @@ def _finish_run(run, *, config_status, next_due_ms, finished_at_ms, retry_at_ms=
             fallback_reason = run.error_code
         elif getattr(run, '_shared_budget_limited', False):
             fallback_reason = 'shared_budget'
-        if fallback_reason:
+        probe = locked_run.batch_recovery_probe is True
+        full_probe = (
+            probe and run.status == 'succeeded' and config_status == 'ready'
+            and run.item_limit == MAX_ITEMS_PER_RUN
+            and run.expected_count == MAX_ITEMS_PER_RUN and _complete(run)
+            and not getattr(run, '_shared_budget_limited', False)
+        )
+        if full_probe:
+            config.batch_fallback_until_ms = None
+            config.batch_fallback_reason = ''
+            _reset_recovery(config, reset_attempt=True)
+        elif probe:
+            # Any incomplete probe consumes the sole opportunity for this
+            # protected period, including a shared-budget truncation to forty.
+            config.batch_recovery_probe_attempted = True
+            _reset_recovery(config)
+            config.batch_fallback_until_ms = finished_at_ms + FALLBACK_DURATION_MS
+            config.batch_fallback_reason = fallback_reason or run.error_code or 'incomplete_run'
+        elif fallback_reason:
             config.batch_fallback_until_ms = finished_at_ms + FALLBACK_DURATION_MS
             config.batch_fallback_reason = fallback_reason
         elif config.batch_fallback_until_ms and config.batch_fallback_until_ms <= finished_at_ms:
             config.batch_fallback_until_ms = None
             config.batch_fallback_reason = ''
+            _reset_recovery(config, reset_attempt=True)
+        if not probe:
+            healthy_forty = (
+                run.trigger == 'scheduled' and run.status == 'succeeded'
+                and run.item_limit == FALLBACK_ITEMS_PER_RUN
+                and run.expected_count == FALLBACK_ITEMS_PER_RUN and _complete(run)
+                and not getattr(run, '_shared_budget_limited', False)
+                and _recovery_eligible(config, finished_at_ms, session_status=config_status)
+            )
+            if healthy_forty:
+                config.batch_recovery_success_count = min(
+                    _recovery_credit(config) + 1, RECOVERY_SUCCESS_THRESHOLD,
+                )
+                config.batch_recovery_success_at_ms = finished_at_ms
+            else:
+                _reset_recovery(config)
         config.session_status = config_status
         config.next_due_at_ms = next_due_ms
         config.updated_at_ms = finished_at_ms
         config.save(update_fields=['session_status', 'next_due_at_ms', 'updated_at_ms',
                                    'cooldown_until_ms', 'rate_failure_count',
-                                   'capacity_failure_count', 'batch_fallback_until_ms', 'batch_fallback_reason'])
+                                   'capacity_failure_count', 'batch_fallback_until_ms',
+                                   'batch_fallback_reason'] + RECOVERY_FIELDS)
         run.finished_at_ms = finished_at_ms
         run.lease_owner = ''
         run.lease_expires_at_ms = None
@@ -261,7 +357,7 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
     if run is None:
         return None
 
-    policy = batch_policy(MarketConfig.objects.get(pk=1), now_ms)
+    policy = _prepare_batch_policy(run, now_ms)
     run.item_limit = min(MAX_ITEMS_PER_RUN, policy['max_items_per_run'])
     run.batch_fallback_reason = policy['batch_fallback_reason']
     items = list(
