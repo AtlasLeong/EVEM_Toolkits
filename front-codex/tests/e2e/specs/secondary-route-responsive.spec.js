@@ -2,16 +2,16 @@ import { expect, test } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 import { seedAuthenticatedSession } from '../helpers/auth'
 
-test('phone license filters fit while identity and every table field remain reachable', async ({ page }) => {
-  await seedAuthenticatedSession(page, { userName: 'adminUser' })
-  await installApiMock(page, ({ url }) => url.pathname === '/api/license/codes/' ? json({
-    count: 1,
-    results: [{ id: 1, code: 'responsive-license-001', is_active: true,
-      expires_at: '2030-07-02T10:43:32', pc_identifier: 'pc-a', remark: '测试记录',
-      plan: { code: 'default', name: '默认组' }, permissions: { scripts: ['system_monitor'] } }],
-  }) : json({}))
-  await page.goto('/licenseadmin')
-  for (const width of [390, 320]) {
+for (const width of [390, 320]) {
+  test(`phone license filters fit while identity and every table field remain reachable at ${width}px`, async ({ page }) => {
+    await seedAuthenticatedSession(page, { userName: 'adminUser' })
+    await installApiMock(page, ({ url }) => url.pathname === '/api/license/codes/' ? json({
+      count: 1,
+      results: [{ id: 1, code: 'responsive-license-001', is_active: true,
+        expires_at: '2030-07-02T10:43:32', pc_identifier: 'pc-a', remark: '测试记录',
+        plan: { code: 'default', name: '默认组' }, permissions: { scripts: ['system_monitor'] } }],
+    }) : json({}))
+    await page.goto('/licenseadmin')
     await page.setViewportSize({ width, height: 844 })
     const region = page.getByRole('region', { name: '激活码记录，可横向滚动' })
     await expect(region).toBeVisible()
@@ -25,10 +25,11 @@ test('phone license filters fit while identity and every table field remain reac
     expect(code.x).toBeGreaterThanOrEqual(box.x)
     expect(code.x).toBeLessThan(box.x + box.width)
     await region.focus()
+    await expect(region).toBeFocused()
     await page.keyboard.press('ArrowRight')
     await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
-  }
-})
+  })
+}
 
 test('phone password fields have labels and full-width space for entry', async ({ page }) => {
   await seedAuthenticatedSession(page)
