@@ -147,6 +147,14 @@ export default function AppShell() {
     prevIndexRef.current = routeIndex(location.pathname)
   }, [location.pathname])
 
+  useEffect(() => {
+    // Links inside the transitioning page unmount on navigation. Give keyboard
+    // users a stable page destination only when their previous focus was lost.
+    if (hasPathChanged && document.activeElement === document.body) {
+      mainRef.current?.focus({ preventScroll: true })
+    }
+  }, [location.pathname])
+
   return (
     <>
       <a className="shell-skip-link" href="#main-content" onClick={event => {

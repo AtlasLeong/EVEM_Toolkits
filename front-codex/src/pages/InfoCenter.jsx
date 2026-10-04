@@ -30,7 +30,7 @@ const items = [
     title: '诈骗名单',
     desc: '快速检索高风险账号，查看来源与备注，支持用户侧举报链路。',
     access: publicAccessLabel,
-    condition: '查询可公开使用；举报需要登录，截图上传及审核还需相应权限。',
+    condition: '查询与举报分别提供；举报需要登录，截图上传及审核还需相应权限。',
     to: '/fraudlist',
   },
   {
@@ -53,7 +53,7 @@ const items = [
     icon: Radar,
     title: '战术协作',
     desc: '在组织战术板中跟进部署与侦察上报，按成员权限协同作业。',
-    access: '介绍公开 · 协作需登录',
+    access: PUBLIC_READ_ACCESS_ENABLED ? '介绍公开 · 协作需登录' : '登录后进入 · 成员协作',
     condition: '登录后创建组织或申请加入；进入组织需成员资格，编辑与管理按组织角色授权。',
     to: '/tactical',
   },

@@ -708,6 +708,7 @@
 .corp-profile-heading {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 22px;
   margin-top: -46px;
   padding: 0 24px;
@@ -730,19 +731,57 @@
   flex: 1;
   min-width: 0;
 }
+.corp-profile-heading > .corp-profile-identity {
+  flex: 1 1 240px;
+}
 .corp-profile-summary {
   min-width: 0;
 }
 .corp-profile-heading > .corp-profile-actions {
-  display: flex;
-  flex: 0 1 auto;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  flex: 0 1 480px;
+  width: min(100%, 480px);
+  align-items: start;
   gap: 10px;
   padding-top: 28px;
 }
+.corp-profile-actions > * {
+  min-width: 0;
+}
 .corp-profile-actions > button,
 .corp-profile-actions .ghost-btn {
-  white-space: nowrap;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.corp-profile-actions svg {
+  flex-shrink: 0;
+}
+.corp-profile-actions .corp-share {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+/* Copy feedback reserves its own space, including when clipboard access fails. */
+.corp-profile-actions .corp-share-status,
+.corp-profile-actions .corp-share-fallback {
+  position: static;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.corp-profile-actions .corp-share-fallback input {
+  height: auto;
+  min-height: 44px;
 }
 .corp-profile-tag-rail {
   display: flex;
@@ -1503,6 +1542,11 @@
   }
 }
 @media (max-width: 1050px) {
+  .corp-profile-heading > .corp-profile-actions {
+    flex: 1 1 100%;
+    width: 100%;
+    padding-top: 0;
+  }
   .corp-editor-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1573,17 +1617,18 @@
   .corp-profile-heading h1 {
     font-size: 24px;
   }
-  .corp-profile-heading > div {
+  .corp-profile-heading > .corp-profile-identity {
+    flex: 1 1 140px;
     padding-top: 40px;
   }
   .corp-profile-heading > .corp-profile-actions {
     flex: 1 0 100%;
     padding: 0;
     margin-top: 2px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .corp-profile-actions > button,
-  .corp-profile-actions > .corp-share {
-    flex: 1;
+  .corp-profile-actions > a {
+    grid-column: 1 / -1;
   }
   .corp-profile-actions .ghost-btn,
   .corp-profile-actions > button {
@@ -1646,6 +1691,11 @@
   .corp-review-list {
     max-height: 250px;
     overflow: auto;
+  }
+}
+@media (max-width: 359px) {
+  .corp-profile-heading > .corp-profile-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (prefers-reduced-motion: reduce) {

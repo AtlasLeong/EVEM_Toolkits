@@ -550,6 +550,24 @@ export function resolveManufacturingQuote(quote, settings = {}) {
   }
 }
 
+/** Validate a plan-local price before decimal arithmetic can process its scale. */
+export function resolveManualPurchasePrice(value) {
+  if (value === undefined || value === null) return { value: null, error: null }
+  if (!['string', 'number', 'bigint'].includes(typeof value)) return { value: null, error: 'invalid' }
+  if (typeof value === 'number' && !Number.isFinite(value)) return { value: null, error: 'invalid' }
+  const raw = String(value)
+  if (raw.length > 64) return { value: null, error: 'invalid' }
+  const text = raw.trim()
+  if (text === '') return { value: null, error: null }
+  if (!/^\+?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/u.test(text)) {
+    return { value: null, error: 'invalid' }
+  }
+  const [whole = '', fractional = ''] = text.replace(/^\+/u, '').split('.')
+  const integer = whole.replace(/^0+(?=[0-9])/u, '') || '0'
+  const fraction = fractional.replace(/0+$/u, '')
+  return { value: `${integer}${fraction ? `.${fraction}` : ''}`, error: null }
+}
+
 /** Resolve the one-time cost entered for this plan without accepting exponents. */
 export function resolveBlueprintCost(value) {
   if (value === undefined || value === null) return { value: '0', error: null }
@@ -586,17 +604,15 @@ export function summarizePlan(first, second) {
   const settings = plan.settings ?? {}
 
   for (const purchase of expanded.purchases) {
-    const manualValue = recordValue(purchasePrices, purchase.itemId)
+    const manual = resolveManualPurchasePrice(recordValue(purchasePrices, purchase.itemId))
     let price
     let priceSource
     let marketQuote
-    if (manualValue !== undefined && manualValue !== null && String(manualValue).trim() !== '') {
-      try {
-        price = decimalFrom(manualValue, `purchase price ${purchase.itemId}`)
-        priceSource = 'manual'
-      } catch {
-        missing.push({ ...purchase, reason: 'price_invalid' })
-      }
+    if (manual.error) {
+      missing.push({ ...purchase, reason: 'price_invalid' })
+    } else if (manual.value !== null) {
+      price = decimalFrom(manual.value, `purchase price ${purchase.itemId}`)
+      priceSource = 'manual'
     } else if (!missing.some((entry) => entry.itemId === purchase.itemId)) {
       const quote = recordValue(marketQuotes, purchase.itemId)
       marketQuote = resolveManufacturingQuote(quote, settings)
