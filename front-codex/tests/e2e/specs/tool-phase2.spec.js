@@ -147,7 +147,7 @@ async function openCalculator(page) {
   await seedAuthenticatedSession(page, { userName: 'atlas123' })
   await installApiMock(page, ({ url, method }) => {
     if (url.pathname === '/api/planetresources') return json([{ label: '金属', options: [{ label: '光泽合金', value: '光泽合金', icon: TINY_ICON }] }])
-    if (['/api/regions', '/api/constellations', '/api/solarsystem', '/api/planetresourceprice', '/api/programme'].includes(url.pathname)) return json([])
+    if (['/api/regions', '/api/constellations', '/api/solarsystem', '/api/planetresourceprice', '/api/planetresourceprice/default', '/api/programme'].includes(url.pathname)) return json([])
     if (method === 'POST' && url.pathname === '/api/searchplanetresource') return json([{
       resource_name: '光泽合金', resource_type: '金属', region: '德里克', region_security: .5,
       constellation: '德里克核心', constellation_security: .4, solar_system: 'Q-TBHW', solar_system_security: -.8,

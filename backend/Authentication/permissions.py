@@ -1,14 +1,20 @@
 from rest_framework.permissions import BasePermission
-from django.conf import settings
-
-from .access import is_viewer_allowed
+from .viewer_access import LEGACY_UPLOAD_PATH, allows_anonymous_api_request, allows_legacy_upload
 
 
-class IsAllowlistedViewer(BasePermission):
-    message = '当前账号暂无查看权限。'
+class PublicReadOrAuthenticated(BasePermission):
+    """Default API permission; resource-specific permissions stay additive."""
+
+    message = '请先登录。'
 
     def has_permission(self, request, view):
-        if not getattr(settings, 'VIEWER_ALLOWLIST_ENABLED', False):
+        if allows_anonymous_api_request(request.path, request.method):
             return True
         user = getattr(request, 'user', None)
-        return bool(user and user.is_authenticated and is_viewer_allowed(getattr(user, 'email', '')))
+        if request.path == LEGACY_UPLOAD_PATH:
+            return allows_legacy_upload(user)
+        return bool(user and user.is_authenticated and getattr(user, 'is_active', False))
+
+
+class IsAllowlistedViewer(PublicReadOrAuthenticated):
+    """Compatibility name for the market's explicit public-read permission."""

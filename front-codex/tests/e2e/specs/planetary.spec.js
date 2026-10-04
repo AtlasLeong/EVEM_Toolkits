@@ -55,7 +55,7 @@ test('行星资源可搜索、加入计算器并管理方案', async ({ page }) 
         },
       ])
     }
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') {
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) {
       return json([
         { resource_name: '光泽合金', resource_type: '船菜', resource_price: 1200 },
         { resource_name: '光彩合金', resource_type: '船菜', resource_price: 900 },

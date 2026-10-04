@@ -91,10 +91,11 @@ def parse_csv(value):
 def parse_email_allowlist(value):
     return tuple(item.casefold() for item in parse_csv(value) if '@' in item)
 
-# Keep the initial production rollout private. A legacy
-# ``VIEWER_ALLOWLIST_ENABLED=false`` value may already exist on a server from
-# the previous open deployment, so it must not silently reopen the product.
-# Opening production later requires the new, explicit public-access switch.
+# Anonymous access covers only audited read endpoints. Legacy viewer switches
+# remain readable for compatibility but never bypass API or resource permissions.
+PUBLIC_READ_ACCESS_ENABLED = str(config('PUBLIC_READ_ACCESS_ENABLED', default='true')).strip().lower() in {
+    '1', 'true', 'yes', 'on',
+}
 VIEWER_PUBLIC_ACCESS_ENABLED = str(config('VIEWER_PUBLIC_ACCESS_ENABLED', default='false')).strip().lower() in {
     '1', 'true', 'yes', 'on',
 }
@@ -102,8 +103,6 @@ VIEWER_ALLOWLIST_ENABLED = not VIEWER_PUBLIC_ACCESS_ENABLED
 VIEWER_EMAIL_ALLOWLIST = parse_email_allowlist(
     config('VIEWER_EMAIL_ALLOWLIST', default='2235102484@qq.com')
 )
-if VIEWER_ALLOWLIST_ENABLED and not VIEWER_EMAIL_ALLOWLIST:
-    raise RuntimeError('VIEWER_EMAIL_ALLOWLIST must contain at least one email when viewer access is enabled.')
 
 ALLOWED_HOSTS = parse_csv(config('ALLOWED_HOSTS', default='*' if DEBUG else 'localhost,127.0.0.1'))
 
@@ -218,6 +217,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # rest-framework璁剧疆
 REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': (
+        'Authentication.permissions.PublicReadOrAuthenticated',
+    ),
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),

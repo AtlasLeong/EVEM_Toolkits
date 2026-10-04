@@ -18,7 +18,7 @@ async function installPlanetaryMultiMock(page) {
     if (method === 'GET' && url.pathname === '/api/regions') return json([])
     if (method === 'GET' && url.pathname === '/api/constellations') return json([])
     if (method === 'GET' && url.pathname === '/api/solarsystem') return json([])
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') return json([])
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) return json([])
     if (method === 'POST' && url.pathname === '/api/searchplanetresource') {
       return json([
         {

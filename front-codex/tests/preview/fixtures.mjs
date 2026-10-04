@@ -60,6 +60,7 @@ export function resolvePreviewRequest(url, method, body = {}) {
     '/api/constellations': [{ co_id: 11, co_title: '米沃拉', co_safetylvl: 0.2 }],
     '/api/solarsystem': [{ ss_id: 21, ss_title: '夫斯库仑', ss_safetylvl: 0.22 }],
     '/api/planetresourceprice': resources.flatMap(group => group.options.map(item => ({ resource_name: item.value, resource_type: group.label, resource_price: 1280 }))),
+    '/api/planetresourceprice/default': resources.flatMap(group => group.options.map(item => ({ resource_name: item.value, resource_type: group.label, resource_price: 1280 }))),
     '/api/boardsystems': systems,
     '/api/boardregions': [{ region_id: 1, zh_name: '伏尔戈' }],
     '/api/boardconstellations': [{ constellation_id: 11, region_id: 1, zh_name: '米沃拉', x: 0, y: 0, z: 0 }],

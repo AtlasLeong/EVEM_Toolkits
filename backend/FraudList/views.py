@@ -107,7 +107,7 @@ class AdminFraudList(APIView):
         user_id = request.user.id
         fraud_record = request.data.get("fraudRecord")
 
-        if not fraud_record:
+        if not isinstance(fraud_record, dict) or not fraud_record:
             return Response({"error": "Invalid data."}, status=status.HTTP_400_BAD_REQUEST)
 
         target_group_id = fraud_record.get("source_group_id")
@@ -169,7 +169,7 @@ class AdminFraudList(APIView):
         user_id = request.user.id
         fraud_record = request.data.get("fraudRecord")
 
-        if not fraud_record:
+        if not isinstance(fraud_record, dict) or not fraud_record:
             return Response({"error": "Invalid data."}, status=status.HTTP_400_BAD_REQUEST)
 
         fraud_id = fraud_record.get("fraud_id")
@@ -190,7 +190,7 @@ class AdminFraudList(APIView):
         # 检查用户是否属于目标群组
         group_id_list = FraudAuthUserGroup.objects.filter(user_id=user_id).values_list('group_id', flat=True)
 
-        if target_group_id not in group_id_list:
+        if existing_fraud.source_group_id not in group_id_list or target_group_id not in group_id_list:
             return Response({"message": "No permission."}, status=status.HTTP_403_FORBIDDEN)
 
         try:
@@ -219,10 +219,9 @@ class AdminFraudList(APIView):
 
         try:
             # 更新 FraudList 记录
-            for key, value in fraud_record.items():
-                if key in ("source_group_name", "icon"):
-                    continue
-                if hasattr(existing_fraud, key) and value is not None:
+            for key in ("fraud_account", "account_type", "remark", "fraud_type"):
+                value = fraud_record.get(key)
+                if value is not None:
                     setattr(existing_fraud, key, value)
             existing_fraud.source_group_id = target_group_id
             existing_fraud.source_group_name = target_group.group_name

@@ -420,12 +420,12 @@ test("空态与错误态区分，错误可以重试", async ({ page }) => {
   await expect(page.getByText("还没有公开的军团")).toHaveCount(0);
 });
 
-test("游客我的军团入口提示登录", async ({ page }) => {
+test("游客我的军团入口由路由守卫提示登录且不显示私人管理表单", async ({ page }) => {
   await communityFixture(page);
   await page.goto("/corporations/manage");
-  await expect(
-    page.getByRole("link", { name: "登录后管理军团" }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("status")).toHaveText("此页面需要登录。完成登录后将返回刚才的页面。");
+  await expect(page.getByLabel("邮箱", { exact: true })).toBeVisible();
   await expect(page.getByLabel("申请说明")).toHaveCount(0);
 });
 

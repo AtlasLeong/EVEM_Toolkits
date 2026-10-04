@@ -1,6 +1,6 @@
 import API_URL from "./backendSetting";
 import fetchWithAuth from "./fetchWithAuth";
-import { VIEWER_ACCESS_ENABLED } from "../utils/viewerAccess";
+import { PUBLIC_READ_ACCESS_ENABLED } from "../utils/viewerAccess";
 import { safeMediaUrl } from "../utils/starsea";
 
 const base = `${API_URL}/starsea/`;
@@ -29,7 +29,7 @@ const query = (params) =>
 const request = async (path, options = {}, isPrivate = true) =>
   (
     await checked(
-      await (isPrivate || VIEWER_ACCESS_ENABLED ? fetchWithAuth : fetch)(`${base}${path}`, {
+      await (isPrivate || !PUBLIC_READ_ACCESS_ENABLED ? fetchWithAuth : fetch)(`${base}${path}`, {
         cache: "no-store",
         credentials: "omit",
         ...options,
@@ -87,7 +87,7 @@ export function uploadMedia(id, file, requestId) {
 export async function fetchImage(id, isPrivate, signal) {
   const url = safeMediaUrl(`${base}media/${id}/`, API_URL);
   const response = await checked(
-    await (isPrivate || VIEWER_ACCESS_ENABLED ? fetchWithAuth : fetch)(url, {
+    await (isPrivate || !PUBLIC_READ_ACCESS_ENABLED ? fetchWithAuth : fetch)(url, {
       signal,
       cache: "no-store",
       credentials: "omit",

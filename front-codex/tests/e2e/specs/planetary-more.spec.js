@@ -24,7 +24,7 @@ async function installPlanetaryMultiMock(page) {
     if (method === 'GET' && url.pathname === '/api/solarsystem') {
       return json([{ ss_id: 21, ss_title: 'Q-TBHW', ss_safetylvl: -0.8 }])
     }
-    if (method === 'GET' && url.pathname === '/api/planetresourceprice') {
+    if (method === 'GET' && ['/api/planetresourceprice', '/api/planetresourceprice/default'].includes(url.pathname)) {
       return json([])
     }
     if (method === 'POST' && url.pathname === '/api/searchplanetresource') {

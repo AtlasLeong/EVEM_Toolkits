@@ -1,23 +1,11 @@
-"""Viewer access policy shared by authentication and protected read APIs."""
-
-from django.conf import settings
-
-
-def _normalise_email(email):
-    return str(email or '').strip().casefold()
+"""Compatibility account-eligibility helper, not an authentication permission."""
 
 
 def is_viewer_allowed(email):
-    """Return whether an account may view the currently gated product.
+    """Retire the general email gate without granting API or socket access.
 
-    Production is fail-closed when the allowlist switch is enabled. To open
-    the product later, set ``VIEWER_PUBLIC_ACCESS_ENABLED=true`` explicitly.
+    Ordinary accounts may use the product. Callers must still authenticate an
+    active database user and enforce their owner, staff, or membership checks.
+    The legacy viewer flags do not override those checks or the public API list.
     """
-    if not getattr(settings, 'VIEWER_ALLOWLIST_ENABLED', False):
-        return True
-    allowed = {
-        _normalise_email(value)
-        for value in getattr(settings, 'VIEWER_EMAIL_ALLOWLIST', ())
-        if _normalise_email(value)
-    }
-    return bool(allowed) and _normalise_email(email) in allowed
+    return True

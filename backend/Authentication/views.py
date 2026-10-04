@@ -1,35 +1,74 @@
 ﻿import logging
-import random
 import re
+import secrets
 import time
 
 from django.core.mail import send_mail
-from django.db import IntegrityError
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.db import IntegrityError, transaction
+from django.utils.crypto import constant_time_compare
 from rest_framework import status
 from rest_framework.exceptions import Throttled
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import EVEMUser, EmailVerificationCode
-from .access import is_viewer_allowed
 from .serializers import AllowlistedTokenRefreshSerializer, UserTokenObtainPairSerializer
-from .throttle import DailyThrottle, MinuteThrottle
+from .throttle import (
+    AuthPrecheckThrottle, DailyThrottle, LoginAccountThrottle, LoginIPThrottle, MinuteThrottle,
+    PasswordResetAccountThrottle, PasswordResetIPThrottle, RegistrationAccountThrottle,
+    RegistrationIPThrottle, TokenRefreshIPThrottle,
+    VerificationIPDayThrottle, VerificationIPHourThrottle,
+)
 
 logger = logging.getLogger(__name__)
 
-EMAIL_PATTERN = r"[^@]+@[^@]+\.[^@]+"
 PASSWORD_PATTERN = r"^[A-Za-z0-9@._-]+$"
+VERIFICATION_LIFETIME_SECONDS = 600
 
 
 class AllowlistedTokenRefreshView(TokenRefreshView):
     serializer_class = AllowlistedTokenRefreshSerializer
+    throttle_classes = [TokenRefreshIPThrottle]
+
+
+def request_text(request, field):
+    value = request.data.get(field) if hasattr(request.data, 'get') else None
+    if not isinstance(value, str):
+        return ''
+    try:
+        value.encode('utf-8')
+    except UnicodeError:
+        return ''
+    return value.strip()
+
+
+def valid_email(email):
+    if len(email) > EVEMUser._meta.get_field('email').max_length:
+        return False
+    try:
+        validate_email(email)
+    except ValidationError:
+        return False
+    return True
+
+
+def verification_error(verification, code):
+    if verification is None:
+        return 'Email verification code not found.'
+    if verification.created_at <= time.time() - VERIFICATION_LIFETIME_SECONDS:
+        return 'Email verification code has expired.'
+    if not re.fullmatch(r'[0-9]{6}', code) or not constant_time_compare(code, verification.code):
+        return 'Wrong Email verification code.'
+    return None
 
 
 def clean_expired_verifications():
-    expiration_time = int(time.time()) - 600
-    EmailVerificationCode.objects.filter(created_at__lt=expiration_time).delete()
+    expiration_time = time.time() - VERIFICATION_LIFETIME_SECONDS
+    EmailVerificationCode.objects.filter(created_at__lte=expiration_time).delete()
 
 
 def format_wait_seconds(wait):
@@ -49,34 +88,28 @@ def format_wait_seconds(wait):
 
 
 class RegisterView(APIView):
-    throttle_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [RegistrationIPThrottle, RegistrationAccountThrottle]
 
     @staticmethod
     def post(request):
-        username = (request.data.get('userName') or '').strip()
-        password = (request.data.get('password') or '').strip()
-        email = (request.data.get('email') or '').strip()
-        email_verification_code = (request.data.get('verificationCode') or '').strip()
-        eve_id = (request.data.get('eve_id') or '').strip()
-
-        if not is_viewer_allowed(email):
-            return Response({'error': '当前仅允许指定账号访问。'}, status=status.HTTP_403_FORBIDDEN)
-
-        email_db_code = EmailVerificationCode.objects.filter(email=email).values_list('code', flat=True).first()
-        if not email_db_code:
-            return Response({'error': 'Email verification code not found.'}, status=status.HTTP_400_BAD_REQUEST)
+        username = request_text(request, 'userName')
+        password = request_text(request, 'password')
+        email = request_text(request, 'email').casefold()
+        email_verification_code = request_text(request, 'verificationCode')
+        eve_id = request_text(request, 'eve_id')
 
         if not all([username, password, email, email_verification_code]):
             return Response({'error': 'All fields must be filled and not empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not re.match(EMAIL_PATTERN, email):
+        if not valid_email(email):
             return Response({'error': 'Enter a valid email.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not re.match(PASSWORD_PATTERN, password):
             return Response({'error': 'Enter a valid password.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if email_verification_code != email_db_code:
-            return Response({'error': 'Wrong Email verification code.'}, status=status.HTTP_400_BAD_REQUEST)
+        if len(username) > EVEMUser._meta.get_field('username').max_length:
+            return Response({'error': 'Enter a valid username.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if eve_id and (not eve_id.isdigit() or len(eve_id) > 15):
             return Response(
@@ -87,48 +120,44 @@ class RegisterView(APIView):
         if EVEMUser.objects.filter(username=username).exists():
             return Response({'error': 'Username is already taken.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if EVEMUser.objects.filter(email=email).exists():
+        if EVEMUser.objects.filter(email__iexact=email).exists():
             return Response({'error': 'Email is already in use.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            if eve_id:
-                user = EVEMUser.objects.create_user(username=username, password=password, email=email, eve_id=eve_id)
-            else:
-                user = EVEMUser.objects.create_user(username=username, password=password, email=email)
-
-            refresh = UserTokenObtainPairSerializer.get_token(user)
-            return Response(
-                {
-                    'message': 'User created',
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        except IntegrityError as exc:
+            with transaction.atomic():
+                verification = EmailVerificationCode.objects.select_for_update().filter(email__iexact=email).first()
+                error = verification_error(verification, email_verification_code)
+                if error:
+                    return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+                user = EVEMUser.objects.create_user(username=username, password=password, email=email, **({'eve_id': eve_id} if eve_id else {}))
+                verification.delete()
+                refresh = UserTokenObtainPairSerializer.get_token(user)
+                return Response(
+                    {'message': 'User created', 'refresh': str(refresh), 'access': str(refresh.access_token)},
+                    status=status.HTTP_201_CREATED,
+                )
+        except IntegrityError:
             logger.exception('Failed to register user username=%s email=%s', username, email)
-            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Username or email is already in use.'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class EmailVerification(APIView):
-    throttle_classes = [DailyThrottle, MinuteThrottle]
+    permission_classes = [AllowAny]
+    throttle_classes = [DailyThrottle, MinuteThrottle, VerificationIPHourThrottle, VerificationIPDayThrottle]
 
     def throttled(self, request, wait):
         raise Throttled(detail=f'请求过于频繁，请{format_wait_seconds(wait)}后再试', wait=wait)
 
     @staticmethod
     def post(request):
-        email = (request.data.get('email') or '').strip()
+        email = request_text(request, 'email').casefold()
         clean_expired_verifications()
 
-        if not is_viewer_allowed(email):
-            return Response({'error': '当前仅允许指定账号访问。'}, status=status.HTTP_403_FORBIDDEN)
-
-        if not re.match(EMAIL_PATTERN, email):
+        if not valid_email(email):
             logger.warning('Rejected verification email request with invalid email: %s', email)
             return Response({'error': 'Enter a valid email.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        code = str(random.randint(100000, 999999))
+        code = str(secrets.randbelow(900000) + 100000)
         EmailVerificationCode.objects.update_or_create(
             email=email,
             defaults={'code': code, 'created_at': time.time()},
@@ -148,20 +177,19 @@ class EmailVerification(APIView):
 
 
 class SignUpCheck(APIView):
-    throttle_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthPrecheckThrottle]
 
     @staticmethod
     def post(request):
-        accept_username = (request.data.get('userName') or '').strip()
-        accept_email = (request.data.get('email') or '').strip()
+        accept_username = request_text(request, 'userName')
+        accept_email = request_text(request, 'email').casefold()
 
         if accept_email:
-            if not is_viewer_allowed(accept_email):
-                return Response({'duplicate': 'email', 'message': '当前仅允许指定账号访问'}, status=status.HTTP_403_FORBIDDEN)
-            if not re.match(EMAIL_PATTERN, accept_email):
+            if not valid_email(accept_email):
                 return Response({'duplicate': 'email', 'message': '邮箱格式错误'}, status=status.HTTP_200_OK)
 
-            if EVEMUser.objects.filter(email=accept_email).exists():
+            if EVEMUser.objects.filter(email__iexact=accept_email).exists():
                 return Response({'duplicate': 'email', 'message': '该邮箱已被使用'}, status=status.HTTP_200_OK)
 
             return Response({'duplicate': 'emailFalse', 'message': '该邮箱可以使用'}, status=status.HTTP_200_OK)
@@ -176,25 +204,23 @@ class SignUpCheck(APIView):
 
 
 class LoginView(APIView):
-    throttle_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [LoginIPThrottle, LoginAccountThrottle]
 
     @staticmethod
     def post(request):
-        email = (request.data.get('login_email') or '').strip()
-        password = (request.data.get('login_password') or '').strip()
+        email = request_text(request, 'login_email').casefold()
+        password = request_text(request, 'login_password')
 
         if not all([email, password]):
             return Response({'error': 'All fields must be filled and not empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not is_viewer_allowed(email):
-            return Response({'error': '当前仅允许指定账号访问。'}, status=status.HTTP_403_FORBIDDEN)
-
         try:
-            user = EVEMUser.objects.get(email=email)
-        except EVEMUser.DoesNotExist:
+            user = EVEMUser.objects.get(email__iexact=email)
+        except (EVEMUser.DoesNotExist, EVEMUser.MultipleObjectsReturned):
             return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        if not user.check_password(password):
+        if not user.check_password(password) or not user.is_active:
             return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = UserTokenObtainPairSerializer.get_token(user)
@@ -210,13 +236,14 @@ class LoginView(APIView):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_classes = [PasswordResetIPThrottle]
 
     @staticmethod
     def post(request):
         user = request.user
-        old_password = (request.data.get('oldPassword') or '').strip()
-        new_password = (request.data.get('newPassword') or '').strip()
-        confirm_password = (request.data.get('confirmPassword') or '').strip()
+        old_password = request_text(request, 'oldPassword')
+        new_password = request_text(request, 'newPassword')
+        confirm_password = request_text(request, 'confirmPassword')
 
         if not user.check_password(old_password):
             return Response({'error': 'Incorrect old password.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -233,19 +260,18 @@ class ChangePasswordView(APIView):
 
 
 class ForgetPasswordEmailCheck(APIView):
-    throttle_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [AuthPrecheckThrottle]
 
     @staticmethod
     def post(request):
-        accept_email = (request.data.get('email') or '').strip()
+        accept_email = request_text(request, 'email').casefold()
 
         if accept_email:
-            if not is_viewer_allowed(accept_email):
-                return Response({'duplicate': 'error', 'message': '当前仅允许指定账号访问'}, status=status.HTTP_403_FORBIDDEN)
-            if not re.match(EMAIL_PATTERN, accept_email):
+            if not valid_email(accept_email):
                 return Response({'duplicate': 'error', 'message': '邮箱格式错误'}, status=status.HTTP_200_OK)
 
-            if EVEMUser.objects.filter(email=accept_email).exists():
+            if EVEMUser.objects.filter(email__iexact=accept_email).exists():
                 return Response({'duplicate': 'email', 'message': '该邮箱已注册'}, status=status.HTTP_200_OK)
 
             return Response({'duplicate': 'error', 'message': '该邮箱未注册'}, status=status.HTTP_200_OK)
@@ -254,38 +280,40 @@ class ForgetPasswordEmailCheck(APIView):
 
 
 class ForgetPassword(APIView):
-    throttle_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetIPThrottle, PasswordResetAccountThrottle]
 
     @staticmethod
     def post(request):
-        forget_email = (request.data.get('forgetEmail') or '').strip()
-        forget_email_verification = (request.data.get('forgetEmailVerification') or '').strip()
-        forget_new_password = (request.data.get('forgetNewPassword') or '').strip()
-        forget_confirm_password = (request.data.get('forgetConfirmPassword') or '').strip()
-
-        email_db_code = EmailVerificationCode.objects.filter(email=forget_email).values_list('code', flat=True).first()
-        if not email_db_code:
-            return Response({'error': 'Email verification code not found.'}, status=status.HTTP_400_BAD_REQUEST)
+        forget_email = request_text(request, 'forgetEmail').casefold()
+        forget_email_verification = request_text(request, 'forgetEmailVerification')
+        forget_new_password = request_text(request, 'forgetNewPassword')
+        forget_confirm_password = request_text(request, 'forgetConfirmPassword')
 
         if not all([forget_email, forget_email_verification, forget_new_password, forget_confirm_password]):
             return Response({'error': 'All fields must be filled and not empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not re.match(EMAIL_PATTERN, forget_email):
+        if not valid_email(forget_email):
             return Response({'error': 'Enter a valid email.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if not re.match(PASSWORD_PATTERN, forget_new_password):
             return Response({'error': 'Enter a valid password.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if forget_email_verification != email_db_code:
-            return Response({'error': 'Wrong Email verification code.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not EVEMUser.objects.filter(email=forget_email).exists():
-            return Response({'error': 'Email has not been signup.'}, status=status.HTTP_400_BAD_REQUEST)
-
         if forget_new_password != forget_confirm_password:
             return Response({'error': 'confirm Password failed.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = EVEMUser.objects.get(email=forget_email)
-        user.set_password(forget_new_password)
-        user.save()
+        with transaction.atomic():
+            verification = EmailVerificationCode.objects.select_for_update().filter(email__iexact=forget_email).first()
+            error = verification_error(verification, forget_email_verification)
+            if error:
+                return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                user = EVEMUser.objects.select_for_update().get(email__iexact=forget_email)
+            except (EVEMUser.DoesNotExist, EVEMUser.MultipleObjectsReturned):
+                return Response({'error': 'Email has not been signup.'}, status=status.HTTP_400_BAD_REQUEST)
+            if not user.is_active:
+                return Response({'error': 'Invalid email or password.'}, status=status.HTTP_401_UNAUTHORIZED)
+            user.set_password(forget_new_password)
+            user.save(update_fields=['password'])
+            verification.delete()
         return Response({'message': 'Password successfully updated.'}, status=status.HTTP_200_OK)
