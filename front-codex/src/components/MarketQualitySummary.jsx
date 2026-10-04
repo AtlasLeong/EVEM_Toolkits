@@ -42,12 +42,12 @@ export default function MarketQualitySummary({ query, now }) {
         <div><dt>最新采集记录</dt><dd>{timestamp(data.last_observed_at)}</dd></div>
         <div><dt>最老采集记录</dt><dd>{timestamp(data.oldest_observed_at)}{data.oldest_observed_at ? `（${qualityAge(data.oldest_observed_at, ageNow)}）` : ''}</dd></div>
         <div><dt>最近采集尝试</dt><dd>{timestamp(collector.last_attempt_at)}</dd></div>
-        <div><dt>最近取得数据</dt><dd>{timestamp(collector.last_success_at)}</dd></div>
+        <div><dt>最近采集结束（有数据）</dt><dd>{timestamp(collector.last_success_at)}</dd></div>
         {collector.last_failure_at ? <div><dt>最近采集异常</dt><dd>{timestamp(collector.last_failure_at)}</dd></div> : null}
         <div><dt>摘要读取时间</dt><dd>{timestamp(data.generated_at)}</dd></div>
         <div><dt>摘要来源时间</dt><dd>{timestamp(data.snapshot_at)}</dd></div>
       </dl>
-      <p className="market-quality-note">后端摘要缓存 {data.cache_ttl_seconds / 60} 分钟，页面每 5 分钟读取，年龄每 30 秒重新判断。采集状态按摘要来源时间展示。最近取得数据包括部分成功的采集；采集失败时保留先前报价，恢复采集不保证全部商品都有卖单。</p>
+      <p className="market-quality-note">后端摘要缓存 {data.cache_ttl_seconds / 60} 分钟，页面每 5 分钟读取，年龄每 30 秒重新判断。采集状态按摘要来源时间展示。“最近采集结束（有数据）”只统计已结束且有成功记录的运行，显示其结束时间，可包含部分成功或随后失败的运行；进行中或未记入结束统计的采集不会更新此时间。采集失败时保留先前报价，恢复采集不保证全部商品都有卖单。</p>
     </div>
   </details>
 }
