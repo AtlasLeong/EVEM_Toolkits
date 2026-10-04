@@ -1,7 +1,9 @@
 name: Production
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [master]
   workflow_dispatch:
     inputs:
@@ -22,24 +24,254 @@ concurrency:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/master' && inputs.action != 'rollback'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' && inputs.action == 'publish'
     uses: ./.github/workflows/ci.yml
 
-  publish:
-    needs: verify
+  authorize:
     if: >-
-      github.ref == 'refs/heads/master' &&
-      (github.event_name == 'workflow_dispatch' || vars.EVEM_AUTO_DEPLOY == 'true')
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      vars.EVEM_AUTO_DEPLOY == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+      run_id: ${{ steps.gate.outputs.run_id }}
+      run_attempt: ${{ steps.gate.outputs.run_attempt }}
+    steps:
+      # Do not execute repository code or read production secrets before this gate.
+      - name: Validate completed CI run and current master
+        id: gate
+        env:
+          EVEM_GH_TOKEN: ${{ github.token }}
+          EVEM_REPOSITORY_ID: ${{ github.repository_id }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          def require(condition, message):
+              if not condition:
+                  raise SystemExit(message)
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+          repository_id = int(os.environ["EVEM_REPOSITORY_ID"])
+          workflow_path = ".github/workflows/ci.yml"
+          require(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository), "invalid repository")
+          event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+          require(os.environ["GITHUB_EVENT_NAME"] == "workflow_run" and event.get("action") == "completed", "not a completed workflow_run")
+          run = event.get("workflow_run")
+          require(isinstance(run, dict), "missing workflow run")
+          run_id, attempt, sha, workflow_id = (run.get(key) for key in ("id", "run_attempt", "head_sha", "workflow_id"))
+          require(all(type(value) is int and value > 0 for value in (run_id, attempt, workflow_id)), "invalid CI run identity")
+          require(isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{40}", sha), "invalid CI head SHA")
+
+          def same_repository(value):
+              return (isinstance(value, dict) and value.get("full_name") == repository
+                      and type(value.get("id")) is int and value["id"] == repository_id
+                      and value.get("fork") is False)
+
+          def validate_run(value):
+              require(isinstance(value, dict), "invalid CI run metadata")
+              require(all(type(value.get(key)) is int for key in ("id", "run_attempt", "workflow_id")), "invalid CI run identity types")
+              expected = {"id": run_id, "run_attempt": attempt, "head_sha": sha,
+                          "workflow_id": workflow_id, "name": "CI", "event": "push",
+                          "head_branch": "master", "status": "completed", "conclusion": "success"}
+              require(all(value.get(key) == expected_value for key, expected_value in expected.items()), "CI run metadata mismatch")
+              require(value.get("path") in (workflow_path, workflow_path + "@master", workflow_path + "@refs/heads/master"), "unexpected CI workflow path")
+              require(same_repository(value.get("repository")) and same_repository(value.get("head_repository")), "CI run is from another repository or a fork")
+
+          require(same_repository(event.get("repository")), "unexpected event repository")
+          validate_run(run)
+
+          def api(path):
+              request = Request(os.environ["GITHUB_API_URL"].rstrip("/") + "/repos/" + repository + path,
+                                headers={"Authorization": "Bearer " + os.environ["EVEM_GH_TOKEN"],
+                                         "Accept": "application/vnd.github+json",
+                                         "X-GitHub-Api-Version": "2022-11-28"})
+              with urlopen(request, timeout=30) as response:
+                  return json.load(response)
+
+          workflow = api("/actions/workflows/ci.yml")
+          require(type(workflow.get("id")) is int and workflow.get("id") == workflow_id and workflow.get("path") == workflow_path
+                  and workflow.get("name") == "CI" and workflow.get("state") == "active", "CI workflow identity mismatch")
+          # The latest run must still be the exact completed attempt in the event.
+          validate_run(api(f"/actions/runs/{run_id}"))
+          jobs, page = [], 1
+          while True:
+              data = api(f"/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page={page}")
+              batch, total = data.get("jobs"), data.get("total_count")
+              require(isinstance(batch, list) and batch and type(total) is int and 0 < total <= 1000, "incomplete CI jobs response")
+              jobs.extend(batch)
+              require(len(jobs) <= total, "inconsistent CI jobs response")
+              if len(jobs) == total:
+                  break
+              page += 1
+          require(all(isinstance(job, dict) for job in jobs), "invalid CI job")
+          require({"validate", "market_mysql", "package"} <= {job.get("name") for job in jobs}, "missing required CI gates")
+          require(all(type(job.get("id")) is int and job["id"] > 0 for job in jobs)
+                  and len({job["id"] for job in jobs}) == len(jobs), "duplicate or invalid CI jobs")
+          require(all(job.get("run_id") == run_id and job.get("head_sha") == sha
+                      and job.get("status") == "completed" and job.get("conclusion") == "success"
+                      for job in jobs), "every CI job must complete successfully")
+          master = api("/git/ref/heads/master")
+          require(master.get("ref") == "refs/heads/master" and master.get("object", {}).get("type") == "commit"
+                  and master["object"].get("sha") == sha, "stale CI commit: current master has changed")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"sha={sha}\nrun_id={run_id}\nrun_attempt={attempt}\n")
+          PY
+
+  publish:
+    needs: [authorize, verify]
+    if: >-
+      always() && !cancelled() &&
+      ((github.event_name == 'workflow_run' && needs.authorize.result == 'success' &&
+        needs.verify.result == 'skipped' && vars.EVEM_AUTO_DEPLOY == 'true') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master' &&
+        inputs.action == 'publish' && needs.verify.result == 'success' &&
+        needs.authorize.result == 'skipped'))
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      # workflow_run's github.sha is the default-branch head, not the tested SHA.
+      EVEM_RELEASE_SHA: ${{ needs.authorize.outputs.sha || github.sha }}
+      EVEM_CI_RUN_ID: ${{ needs.authorize.outputs.run_id || github.run_id }}
+      EVEM_CI_RUN_ATTEMPT: ${{ needs.authorize.outputs.run_attempt || github.run_attempt }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ env.EVEM_RELEASE_SHA }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - name: Download verified release plan
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: release-${{ github.sha }}
+          name: release-plan-${{ env.EVEM_RELEASE_SHA }}-${{ env.EVEM_CI_RUN_ATTEMPT }}
+          path: ${{ runner.temp }}/evem-release/plan
+          repository: ${{ github.repository }}
+          run-id: ${{ env.EVEM_CI_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Validate release plan before downloading product
+        id: plan
+        env:
+          EVEM_PLAN_PATH: ${{ runner.temp }}/evem-release/plan/release-plan.json
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path.cwd() / "scripts/deploy"))
+          from transfer import inspect_source
+
+          def unique(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise SystemExit("duplicate release-plan key")
+                  result[key] = value
+              return result
+
+          path = Path(os.environ["EVEM_PLAN_PATH"])
+          if path.is_symlink() or not path.is_file() or path.stat().st_size > 4 * 1024 ** 2 or {entry.name for entry in path.parent.iterdir()} != {"release-plan.json"}:
+              raise SystemExit("unexpected release-plan artifact files")
+          raw = path.read_bytes()
+          plan = json.loads(raw, object_pairs_hook=unique)
+          if not isinstance(plan, dict) or type(plan.get("format")) is not int or plan["format"] != 1:
+              raise SystemExit("unsupported release plan")
+          if plan.get("action") not in ("noop", "release") or plan.get("sha") != os.environ["EVEM_RELEASE_SHA"]:
+              raise SystemExit("release-plan action or SHA mismatch")
+          baseline, inputs = plan.get("baseline"), plan.get("inputs")
+          components = {"frontend", "backend"}
+          if not isinstance(baseline, dict) or set(baseline) not in (set(), components) or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value) for value in baseline.values()):
+              raise SystemExit("invalid release-plan baseline")
+          if not isinstance(inputs, dict) or set(inputs) != components:
+              raise SystemExit("invalid release-plan inputs")
+          for evidence in inputs.values():
+              if not isinstance(evidence, dict) or set(evidence) != {"head", "baseline"} or not isinstance(evidence["head"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["head"]) or (evidence["baseline"] is not None and (not isinstance(evidence["baseline"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["baseline"]))):
+                  raise SystemExit("invalid release-plan fingerprint")
+          inspect_source(plan, os.environ["EVEM_RELEASE_SHA"])
+          with Path("release-plan.json").open("xb") as destination:
+              destination.write(raw)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"action={plan['action']}\n")
+          PY
+      - name: Download verified product
+        if: steps.plan.outputs.action == 'release'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-${{ env.EVEM_RELEASE_SHA }}-${{ env.EVEM_CI_RUN_ATTEMPT }}
+          path: ${{ runner.temp }}/evem-release/product
+          repository: ${{ github.repository }}
+          run-id: ${{ env.EVEM_CI_RUN_ID }}
+          github-token: ${{ github.token }}
+      - name: Stage only the verified product files
+        if: steps.plan.outputs.action == 'release'
+        env:
+          EVEM_PRODUCT_DIR: ${{ runner.temp }}/evem-release/product
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import shutil
+
+          directory = Path(os.environ["EVEM_PRODUCT_DIR"])
+          names = {"release.tar.gz", "release-manifest.json"}
+          if {entry.name for entry in directory.iterdir()} != names:
+              raise SystemExit("unexpected release artifact files")
+          for name in sorted(names):
+              source = directory / name
+              if source.is_symlink() or not source.is_file():
+                  raise SystemExit("invalid release artifact file")
+              with source.open("rb") as incoming, Path(name).open("xb") as destination:
+                  shutil.copyfileobj(incoming, destination)
+          PY
+      - name: Recheck current master after approval and artifact download
+        env:
+          EVEM_GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from urllib.request import Request, urlopen
+
+          sha = os.environ["EVEM_RELEASE_SHA"]
+          if not re.fullmatch(r"[0-9a-f]{40}", sha):
+              raise SystemExit("invalid release SHA")
+          def api(path):
+              request = Request(os.environ["GITHUB_API_URL"].rstrip("/") + "/repos/" + os.environ["GITHUB_REPOSITORY"] + path,
+                                headers={"Authorization": "Bearer " + os.environ["EVEM_GH_TOKEN"],
+                                         "Accept": "application/vnd.github+json",
+                                         "X-GitHub-Api-Version": "2022-11-28"})
+              with urlopen(request, timeout=30) as response:
+                  return json.load(response)
+          if os.environ["GITHUB_EVENT_NAME"] == "workflow_run":
+              run_id, attempt = os.environ["EVEM_CI_RUN_ID"], os.environ["EVEM_CI_RUN_ATTEMPT"]
+              if not re.fullmatch(r"[1-9][0-9]*", run_id) or not re.fullmatch(r"[1-9][0-9]*", attempt):
+                  raise SystemExit("invalid verified CI attempt")
+              run = api(f"/actions/runs/{run_id}")
+              expected = {"id": int(run_id), "run_attempt": int(attempt), "head_sha": sha,
+                          "event": "push", "head_branch": "master", "status": "completed", "conclusion": "success"}
+              if any(run.get(key) != value for key, value in expected.items()):
+                  raise SystemExit("verified CI run has changed since approval")
+          master = api("/git/ref/heads/master")
+          if master.get("ref") != "refs/heads/master" or master.get("object", {}).get("type") != "commit" or master["object"].get("sha") != sha:
+              raise SystemExit("stale release: current master has changed; publish the current master after CI succeeds")
+          PY
       - name: Upload verified artifact and publish
         env:
           EVEM_SSH_KEY: ${{ secrets.EVEM_SSH_KEY }}

@@ -54,6 +54,8 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
     defaults:
       run:
         shell: bash
@@ -150,11 +152,153 @@ jobs:
             ci-evidence
           retention-days: 7
           if-no-files-found: ignore
-      - name: Package verified commit
-        run: python scripts/deploy/pack.py
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Plan publishable source changes
+        id: plan
+        env:
+          EVEM_RELEASE_SHA: ${{ github.sha }}
+          EVEM_PLAN_PATH: release-plan.json
+        run: |
+          python scripts/deploy/source_plan.py --output release-plan.json
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path.cwd() / "scripts/deploy"))
+          from transfer import inspect_source
+
+          def unique(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise SystemExit("duplicate release-plan key")
+                  result[key] = value
+              return result
+
+          plan = json.loads(Path(os.environ["EVEM_PLAN_PATH"]).read_text(encoding="utf-8"), object_pairs_hook=unique)
+          if not isinstance(plan, dict) or type(plan.get("format")) is not int or plan["format"] != 1:
+              raise SystemExit("unsupported release plan")
+          if plan.get("action") not in ("noop", "release") or plan.get("sha") != os.environ["EVEM_RELEASE_SHA"]:
+              raise SystemExit("release-plan action or SHA mismatch")
+          baseline, inputs = plan.get("baseline"), plan.get("inputs")
+          components = {"frontend", "backend"}
+          if not isinstance(baseline, dict) or set(baseline) not in (set(), components) or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value) for value in baseline.values()):
+              raise SystemExit("invalid release-plan baseline")
+          if not isinstance(inputs, dict) or set(inputs) != components:
+              raise SystemExit("invalid release-plan inputs")
+          for evidence in inputs.values():
+              if not isinstance(evidence, dict) or set(evidence) != {"head", "baseline"} or not isinstance(evidence["head"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["head"]) or (evidence["baseline"] is not None and (not isinstance(evidence["baseline"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["baseline"]))):
+                  raise SystemExit("invalid release-plan fingerprint")
+          inspect_source(plan, os.environ["EVEM_RELEASE_SHA"])
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"action={plan['action']}\n")
+          PY
+      - name: Keep verified release plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: release-${{ github.sha }}
-          path: release.tar.gz
+          name: verified-release-plan-${{ github.sha }}-${{ github.run_attempt }}
+          path: release-plan.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Keep verified frontend build for packaging
+        if: steps.plan.outputs.action == 'release'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-frontend-${{ github.sha }}-${{ github.run_attempt }}
+          path: front-codex/dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Artifacts for production are available only after every independent CI gate.
+  package:
+    needs: [validate, market_mysql]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.10'
+      - name: Read the plan from this verification attempt
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-release-plan-${{ github.sha }}-${{ github.run_attempt }}
+      - name: Validate verified plan
+        id: plan
+        env:
+          EVEM_RELEASE_SHA: ${{ github.sha }}
+          EVEM_PLAN_PATH: release-plan.json
+          EVEM_EXPECTED_ACTION: ${{ needs.validate.outputs.action }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path.cwd() / "scripts/deploy"))
+          from transfer import inspect_source
+
+          def unique(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise SystemExit("duplicate release-plan key")
+                  result[key] = value
+              return result
+
+          plan = json.loads(Path(os.environ["EVEM_PLAN_PATH"]).read_text(encoding="utf-8"), object_pairs_hook=unique)
+          if not isinstance(plan, dict) or type(plan.get("format")) is not int or plan["format"] != 1:
+              raise SystemExit("unsupported release plan")
+          if plan.get("action") not in ("noop", "release") or plan.get("sha") != os.environ["EVEM_RELEASE_SHA"]:
+              raise SystemExit("release-plan action or SHA mismatch")
+          if plan["action"] != os.environ["EVEM_EXPECTED_ACTION"]:
+              raise SystemExit("verification output and release plan differ")
+          baseline, inputs = plan.get("baseline"), plan.get("inputs")
+          components = {"frontend", "backend"}
+          if not isinstance(baseline, dict) or set(baseline) not in (set(), components) or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{40}", value) for value in baseline.values()):
+              raise SystemExit("invalid release-plan baseline")
+          if not isinstance(inputs, dict) or set(inputs) != components:
+              raise SystemExit("invalid release-plan inputs")
+          for evidence in inputs.values():
+              if not isinstance(evidence, dict) or set(evidence) != {"head", "baseline"} or not isinstance(evidence["head"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["head"]) or (evidence["baseline"] is not None and (not isinstance(evidence["baseline"], str) or not re.fullmatch(r"[0-9a-f]{64}", evidence["baseline"]))):
+                  raise SystemExit("invalid release-plan fingerprint")
+          inspect_source(plan, os.environ["EVEM_RELEASE_SHA"])
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"action={plan['action']}\n")
+          PY
+      - name: Keep publishable release plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-plan-${{ github.sha }}-${{ github.run_attempt }}
+          path: release-plan.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Download verified frontend build
+        if: steps.plan.outputs.action == 'release'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-frontend-${{ github.sha }}-${{ github.run_attempt }}
+          path: front-codex/dist
+      - name: Package verified commit
+        if: steps.plan.outputs.action == 'release'
+        run: python scripts/deploy/pack.py
+      - name: Keep publishable release
+        if: steps.plan.outputs.action == 'release'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            release.tar.gz
+            release-manifest.json
           if-no-files-found: error
           retention-days: 14
