@@ -321,7 +321,7 @@ export default function ManufacturingEstimatorPage() {
   const location = useLocation()
   const manufacturingPageRef = useRef(null)
   const headingRef = useRef(null)
-  const positionedNavigationRef = useRef(null)
+  const navigationRef = useRef(null)
   const [catalog, setCatalog] = useState(null)
   const [catalogError, setCatalogError] = useState('')
   const [selectedId, setSelectedId] = useState('')
@@ -369,18 +369,20 @@ export default function ManufacturingEstimatorPage() {
   useEffect(() => {
     if (!catalogReady) return undefined
     const navigation = `${location.key}:${location.hash}`
-    if (positionedNavigationRef.current === navigation) return undefined
+    if (navigationRef.current === navigation) return undefined
     const purchasing = location.hash === '#manufacturing-purchase-list'
-    const returningToEstimate = !location.hash && positionedNavigationRef.current !== null
+    const returningToEstimate = !location.hash && navigationRef.current !== null
     if (!purchasing && !returningToEstimate) {
-      positionedNavigationRef.current = navigation
+      navigationRef.current = navigation
       return undefined
     }
+    // A rapid history reversal can cancel this frame. Record the navigation
+    // now so the next destination is still handled even when its key repeats.
+    navigationRef.current = navigation
     const frame = window.requestAnimationFrame(() => {
       const main = manufacturingPageRef.current
       const destination = purchasing ? document.getElementById('manufacturing-purchase-list') : headingRef.current
       if (!main || !destination) return
-      positionedNavigationRef.current = navigation
       if (window.matchMedia('(min-width: 1100px)').matches) {
         // Keep the journey and hidden shell ancestors in place on desktop.
         const margin = parseFloat(window.getComputedStyle(destination).scrollMarginTop) || 0
