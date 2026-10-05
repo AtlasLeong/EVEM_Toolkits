@@ -2,7 +2,10 @@
 
 import hashlib
 import importlib
+import io
 import json
+import os
+import runpy
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -10,6 +13,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.db import connection
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.exceptions import APIException, ValidationError
 
@@ -154,6 +159,57 @@ class ShipCatalogTests(CatalogImportMixin, SimpleTestCase):
                 self.catalog.search_ships()
         self.assertEqual(raised.exception.status_code, 503)
 
+    def test_unreadable_source_returns_safe_503(self):
+        for operation in ('stat', 'open'):
+            with self.subTest(operation=operation), patch.object(
+                    Path, operation, side_effect=PermissionError('private snapshot path')):
+                with self.assertRaises(APIException) as raised:
+                    self.catalog.search_ships()
+            self.assertEqual(raised.exception.status_code, 503)
+            self.assertNotIn('private snapshot path', str(raised.exception.detail))
+
+    def test_ship_api_failure_preserves_safe_manual_fallback_and_no_store(self):
+        from rest_framework.test import APIClient
+        original_open = Path.open
+
+        def unreadable_source(path, *args, **kwargs):
+            if path == self.path:
+                raise PermissionError('private snapshot path')
+            return original_open(path, *args, **kwargs)
+
+        with patch.object(Path, 'open', unreadable_source):
+            response = APIClient().get('/api/starsea/ships/', {'q': '护卫'})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('未知或自填', response.json()['detail'])
+        self.assertNotIn('private snapshot path', response.content.decode())
+        self.assertNotIn(str(self.path), response.content.decode())
+        self.assertIn('no-store', response['Cache-Control'])
+
+    def test_read_only_preflight_uses_configured_pinned_loader(self):
+        output = io.StringIO()
+        before = self.path.read_bytes()
+        call_command('starsea_catalog_check', stdout=output)
+        self.assertEqual(json.loads(output.getvalue()), {
+            'status': 'ok', 'source_version': 'SWEET 218811',
+            'sha256': self.catalog.PINNED_SHA256, 'user_version': 218811,
+            'catalog_count': 26, 'ship_class_count': 2,
+        })
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(list(self.path.parent.iterdir()), [self.path])
+
+    def test_preflight_fails_safely_for_missing_or_wrong_version_source(self):
+        with override_settings(STARSEA_SHIP_DB=str(self.path.parent / 'private-missing.db')):
+            with self.assertRaises(CommandError) as raised:
+                call_command('starsea_catalog_check', stdout=io.StringIO())
+        self.assertIn('STARSEA_SHIP_DB', str(raised.exception))
+        self.assertNotIn(str(self.path.parent), str(raised.exception))
+        with closing(sqlite3.connect(self.path)) as db, db:
+            db.execute('PRAGMA user_version=1')
+        digest = hashlib.sha256(self.path.read_bytes()).hexdigest()
+        with patch.object(self.catalog, 'PINNED_SHA256', digest):
+            with self.assertRaises(CommandError):
+                call_command('starsea_catalog_check', stdout=io.StringIO())
+
     def test_version_mismatch_is_rejected_even_with_matching_hash(self):
         with closing(sqlite3.connect(self.path)) as db, db:
             db.execute('PRAGMA user_version=1')
@@ -204,6 +260,42 @@ class ShipCatalogTests(CatalogImportMixin, SimpleTestCase):
         self.assertEqual(report['api_matches_source'], True)
         self.assertEqual(report['source_unchanged'], True)
         self.assertEqual(report['user_version'], 218811)
+
+
+class ShipSourceSettingsTests(SimpleTestCase):
+    def load_production_settings(self, ship_db=None, env_file=None):
+        # Execute the real config wiring with dummy values. Never read .env,
+        # connect to MySQL or create the production settings' log directory.
+        environment = {key: 'isolated-settings-test' for key in (
+            'SECRET_KEY', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_HOST', 'DB_PORT',
+            'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD',
+        )}
+        if ship_db is not None:
+            environment['STARSEA_SHIP_DB'] = ship_db
+        original_exists = Path.exists
+        original_open = Path.open
+
+        def exists(path):
+            return env_file is not None if path.name == '.env' else original_exists(path)
+
+        def open_path(path, *args, **kwargs):
+            return io.StringIO(env_file) if path.name == '.env' else original_open(path, *args, **kwargs)
+
+        source = Path(__file__).resolve().parents[1] / 'EVE_MDjango' / 'settings.py'
+        with patch.dict(os.environ, environment, clear=True), patch.object(Path, 'exists', exists), \
+                patch.object(Path, 'open', open_path), patch.object(Path, 'mkdir'):
+            return runpy.run_path(str(source))
+
+    def test_production_setting_reads_explicit_snapshot_environment(self):
+        path = str(Path(tempfile.gettempdir()) / 'private-sweet' / 'echoes.db')
+        self.assertEqual(self.load_production_settings(ship_db=path)['STARSEA_SHIP_DB'], path)
+
+    def test_production_setting_reads_snapshot_from_existing_env_file(self):
+        path = str(Path(tempfile.gettempdir()) / 'private-sweet' / 'echoes.db')
+        self.assertEqual(self.load_production_settings(env_file='STARSEA_SHIP_DB=' + path)['STARSEA_SHIP_DB'], path)
+
+    def test_production_setting_without_snapshot_stays_unconfigured(self):
+        self.assertEqual(self.load_production_settings()['STARSEA_SHIP_DB'], '')
 
 
 class LocationCatalogTests(CatalogImportMixin, TestCase):

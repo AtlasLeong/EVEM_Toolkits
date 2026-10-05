@@ -195,6 +195,126 @@ test("新行搜索跨舰种真实目录并限制搜索词 80 字", async ({ page
   await expect(page.getByLabel("A方第1行舰种")).toHaveValue("护卫舰");
 });
 
+test("舰船目录 503 清除旧候选并允许保留输入重试", async ({ page }) => {
+  const f = await fixture(page),
+    entry = f.getEntry();
+  entry.revision.content.battle.sides[0].losses = [
+    {
+      ship_id: null,
+      ship_name: "自定义护卫",
+      ship_class: "护卫舰",
+      quantity: 7,
+    },
+  ];
+  f.setEntry(entry);
+  const queries = [];
+  let releaseFailure;
+  const pendingFailure = new Promise((resolve) => {
+    releaseFailure = resolve;
+  });
+  await page.route("**/api/starsea/ships/**", async (route) => {
+    const q = new URL(route.request().url()).searchParams.get("q");
+    queries.push(q);
+    if (queries.length === 2) {
+      await pendingFailure;
+      return route.fulfill({
+        status: 503,
+        json: { detail: "舰船目录暂时不可用" },
+      });
+    }
+    return route.fulfill({
+      json: {
+        count: 1,
+        results: [
+          q === "灾难"
+            ? {
+                id: 7,
+                name: "灾难级",
+                ship_class: "战列舰",
+                source_version: "SWEET 218811",
+              }
+            : {
+                id: 9,
+                name: "惩罚者级",
+                ship_class: "护卫舰",
+                source_version: "SWEET 218811",
+              },
+        ],
+      },
+    });
+  });
+  await page.goto("/starsea/1/edit");
+  const search = page.getByLabel("A方第1行搜索舰船"),
+    oldCandidate = page.getByRole("button", { name: /选择灾难级/ });
+  await search.fill("灾难");
+  await expect(oldCandidate).toBeVisible();
+  await search.fill("惩罚");
+  try {
+    // A new query must hide the old choices before its response arrives.
+    await expect(oldCandidate).toHaveCount(0);
+  } finally {
+    releaseFailure();
+  }
+  await expect(page.getByRole("alert")).toContainText("舰船目录暂时不可用");
+  await expect(oldCandidate).toHaveCount(0);
+  await expect(
+    page.getByText("可继续使用未知型号或自填型号，已填写的信息会保留。"),
+  ).toBeVisible();
+  await expect(search).toHaveValue("惩罚");
+  await expect(page.getByLabel("A方第1行型号来源")).toHaveValue("custom");
+  await expect(page.getByLabel("A方第1行自填型号")).toHaveValue("自定义护卫");
+  await expect(page.getByLabel("A方第1行数量")).toHaveValue("7");
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  const freshCandidate = page.getByRole("button", { name: /选择惩罚者级/ });
+  await expect(freshCandidate).toBeVisible();
+  expect(queries).toEqual(["灾难", "惩罚", "惩罚"]);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByLabel("A方第1行自填型号")).toHaveValue("自定义护卫");
+  await freshCandidate.click();
+  await expect(page.getByLabel("A方第1行型号来源")).toHaveValue("catalog");
+  await expect(page.getByLabel("A方第1行舰种")).toHaveValue("护卫舰");
+  await expect(page.getByLabel("A方第1行数量")).toHaveValue("7");
+});
+
+test("舰船目录 503 时未知和自填型号仍可保存草稿", async ({ page }) => {
+  const { writes } = await fixture(page);
+  await page.route("**/api/starsea/ships/**", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { detail: "舰船目录暂时不可用" },
+    }),
+  );
+  await page.goto("/starsea/new");
+  await page.getByLabel("标题", { exact: true }).fill("目录降级战报");
+  await page.getByRole("button", { name: "A方添加损失" }).click();
+  await page.getByRole("button", { name: "A方添加损失" }).click();
+  await page.getByLabel("A方第1行数量").fill("3");
+  await page.getByLabel("A方第2行型号来源").selectOption("custom");
+  await page.getByLabel("A方第2行自填型号").fill("自定义巡洋舰");
+  await page.getByLabel("A方第2行舰种").fill("巡洋舰");
+  await page.getByLabel("A方第2行数量").fill("5");
+  await page.getByLabel("A方第1行搜索舰船").fill("未知舰船");
+  await page.getByLabel("A方第2行搜索舰船").fill("自定义巡洋舰");
+  await expect(page.getByRole("alert")).toHaveCount(2);
+  await expect(page.getByRole("alert").first()).toContainText("舰船目录暂时不可用");
+  await expect(page.getByRole("alert").last()).toContainText("舰船目录暂时不可用");
+  await expect(page.getByLabel("A方第1行型号来源")).toHaveValue("unknown");
+  await expect(page.getByLabel("A方第2行型号来源")).toHaveValue("custom");
+  await expect(page.getByLabel("A方第2行自填型号")).toHaveValue("自定义巡洋舰");
+  await expect(page.locator(".ss-ship-results")).toHaveCount(0);
+  await page.getByRole("button", { name: "保存草稿", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("草稿已保存");
+  expect(writes.at(-1).body.content.battle.sides[0].losses).toEqual([
+    { ship_id: null, ship_name: "", ship_class: "战列舰", quantity: 3 },
+    {
+      ship_id: null,
+      ship_name: "自定义巡洋舰",
+      ship_class: "巡洋舰",
+      quantity: 5,
+    },
+  ]);
+});
+
 test("审核清空最后一页后回到仍有待审内容的首页", async ({ page }) => {
   const f = await fixture(page),
     entry = f.getEntry();
