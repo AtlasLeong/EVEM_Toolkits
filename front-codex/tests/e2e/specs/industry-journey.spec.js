@@ -7,6 +7,104 @@ const catalog = {
   items: [{ itemId: '41000000000', name: '三钛合金' }],
 }
 
+const navigationItems = Array.from({ length: 8 }, (_, index) => ({
+  itemId: `4100000000${index}`, name: index === 0 ? '三钛合金' : `导航测试材料 ${index + 1}`,
+}))
+const navigationCatalog = {
+  ...catalog,
+  items: navigationItems,
+  recipes: [
+    { ...catalog.recipes[0], materials: navigationItems.map((item, index) => ({ itemId: item.itemId, quantity: index + 2 })) },
+    { ...catalog.recipes[0], productId: '10100000102', name: '导航方案第二目标', money: 11, materials: navigationItems.map(item => ({ itemId: item.itemId, quantity: 3 })) },
+  ],
+}
+
+async function navigationFixture(page, { delayQuotes = false } = {}) {
+  let releaseQuotes
+  const quotesReady = delayQuotes ? new Promise(resolve => { releaseQuotes = resolve }) : Promise.resolve()
+  const quoteRequests = []
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.route('**/industry/manufacturing-scope.json', route => route.fulfill(json(navigationCatalog)))
+  await installApiMock(page, async ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([])
+    if (url.pathname === '/api/market/items/') {
+      const itemId = url.searchParams.get('q')
+      quoteRequests.push(itemId)
+      await quotesReady
+      const item = navigationItems.find(candidate => candidate.itemId === itemId)
+      return json({ count: item ? 1 : 0, results: item ? [{
+        item_id: item.itemId, name: item.name, status: 'fresh', best_sell: '1.25', observed_at: new Date().toISOString(),
+      }] : [] })
+    }
+    return json([])
+  })
+  return { quoteRequests, releaseQuotes: () => releaseQuotes?.() }
+}
+
+function workflow(page) {
+  const journey = page.getByRole('navigation', { name: '市场到采购流程' })
+  return {
+    journey,
+    estimate: journey.getByRole('link', { name: '估制造成本', exact: true }),
+    purchase: journey.getByRole('link', { name: '带走采购清单', exact: true }),
+    main: page.locator('main.manufacturing-page'),
+    heading: page.locator('.manufacturing-page-header h1'),
+    quantity: page.getByTestId('manufacturing-quantity-value'),
+    price: page.getByRole('textbox', { name: '采购单价 三钛合金', exact: true }),
+    purchaseSection: page.getByTestId('manufacturing-purchase-list'),
+  }
+}
+
+async function readNavigationLayout(page) {
+  return page.evaluate(() => {
+    const main = document.querySelector('main.manufacturing-page')
+    const rectangle = element => {
+      const { x, y, width, height, bottom } = element.getBoundingClientRect()
+      return { x, y, width, height, bottom }
+    }
+    const outer = []
+    for (let element = main.parentElement; element; element = element.parentElement) {
+      outer.push({ name: `${element.tagName}.${element.className}`, top: element.scrollTop, left: element.scrollLeft })
+    }
+    return {
+      top: main.scrollTop,
+      windowTop: window.scrollY,
+      outer,
+      main: rectangle(main),
+      journey: rectangle(document.querySelector('.industry-journey')),
+      rails: ['manufacturing-config-rail', 'manufacturing-route-workspace', 'manufacturing-cost-rail'].map(id => (
+        rectangle(document.querySelector(`[data-testid="${id}"]`))
+      )),
+    }
+  })
+}
+
+function expectDesktopShellUnchanged(before, after) {
+  expect(after.outer.length).toBe(before.outer.length)
+  after.outer.forEach((ancestor, index) => {
+    expect(ancestor.name).toBe(before.outer[index].name)
+    expect(Math.abs(ancestor.top - before.outer[index].top), `${ancestor.name} vertical scroll`).toBeLessThanOrEqual(1)
+    expect(Math.abs(ancestor.left - before.outer[index].left), `${ancestor.name} horizontal scroll`).toBeLessThanOrEqual(1)
+  })
+  expect(Math.abs(after.windowTop - before.windowTop)).toBeLessThanOrEqual(1)
+  for (const field of ['x', 'y', 'width', 'height']) {
+    expect(Math.abs(after.journey[field] - before.journey[field]), `journey ${field}`).toBeLessThanOrEqual(1)
+    expect(Math.abs(after.main[field] - before.main[field]), `main ${field}`).toBeLessThanOrEqual(1)
+  }
+  after.rails.forEach((rail, index) => {
+    expect(Math.abs(rail.width - before.rails[index].width), `rail ${index} width`).toBeLessThanOrEqual(1)
+    expect(Math.abs(rail.x - before.rails[index].x), `rail ${index} horizontal position`).toBeLessThanOrEqual(1)
+  })
+}
+
+async function waitForReferenceQuotes(page) {
+  await expect(page.locator('.manufacturing-purchase-source').filter({ hasText: '市场参考价' })).toHaveCount(navigationItems.length)
+  await page.evaluate(async () => {
+    await document.fonts.ready
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
+}
+
 async function publicFixture(page) {
   const requests = []
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -123,3 +221,199 @@ test('200% text size preserves all workflow links and access explanations on a n
   await expect(page.getByLabel('登录与授权说明')).toContainText('私有情报')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+
+for (const width of [1440, 2048, 1100, 1179]) {
+  test(`purchase navigation scrolls only the manufacturing surface and preserves all three rails at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 })
+    await navigationFixture(page)
+    await page.goto('/manufacturing')
+    await waitForReferenceQuotes(page)
+    const controls = workflow(page)
+    const before = await readNavigationLayout(page)
+    for (const rail of before.rails) expect(Math.abs(rail.y - before.rails[0].y)).toBeLessThanOrEqual(1)
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect.poll(() => controls.main.evaluate(element => element.scrollTop)).toBeGreaterThan(before.top)
+    const after = await readNavigationLayout(page)
+    expectDesktopShellUnchanged(before, after)
+    await expect(controls.journey).toBeInViewport()
+    await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+}
+
+for (const width of [390, 768, 1099]) {
+  test(`stacked purchase navigation uses window scrolling and returns to the estimate at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 })
+    await navigationFixture(page)
+    await page.goto('/manufacturing')
+    await waitForReferenceQuotes(page)
+    const controls = workflow(page)
+    const before = await readNavigationLayout(page)
+    expect(before.rails[1].y).toBeGreaterThanOrEqual(before.rails[0].bottom)
+    expect(before.rails[2].y).toBeGreaterThanOrEqual(before.rails[1].bottom)
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect.poll(async () => {
+      const layout = await readNavigationLayout(page)
+      return layout.windowTop + layout.outer.reduce((total, element) => total + element.top, 0)
+    }).toBeGreaterThan(0)
+    await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
+    await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    await page.mouse.move(width / 2, 700)
+    await page.mouse.wheel(0, 6000)
+    const lastPrice = controls.purchaseSection.locator('tbody input').last()
+    await expect(lastPrice).toBeInViewport()
+    expect(await lastPrice.evaluate(element => {
+      const bounds = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+      return hit === element || element.contains(hit)
+    })).toBe(true)
+    // Browser history reaches the return branch without Playwright first
+    // scrolling the offscreen second-step link into view.
+    await page.goBack()
+    await expect(page).toHaveURL(/\/manufacturing$/)
+    await expect(controls.heading).toBeFocused()
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+    await expect(page.locator('.site-frame')).toHaveJSProperty('scrollTop', 0)
+    await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    await expect(controls.journey).toBeInViewport()
+    await expect(controls.heading).toBeInViewport({ ratio: 1 })
+    expect(await controls.heading.evaluate(element => {
+      const header = document.querySelector('.mobile-shell-header')
+      return element.getBoundingClientRect().top >= header.getBoundingClientRect().bottom - 1
+    })).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+}
+
+for (const width of [1440, 390]) {
+  test(`estimate, repeated purchase and history navigation retain the same plan at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 })
+    await navigationFixture(page)
+    await page.goto('/manufacturing')
+    await waitForReferenceQuotes(page)
+    const controls = workflow(page)
+    await controls.quantity.fill('3')
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await controls.price.fill('2.7500')
+    await expect(controls.price).toBeFocused()
+    await controls.estimate.click()
+    await expect(controls.heading).toBeFocused()
+    await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    if (width < 1100) await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+    await expect(controls.quantity).toHaveValue('3')
+    await expect(controls.price).toHaveValue('2.7500')
+    await expect(page.getByRole('button', { name: '当前制造目标：采购路线样本', exact: true })).toBeVisible()
+    await page.goBack()
+    await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect(controls.price).toHaveValue('2.7500')
+    await page.goForward()
+    await expect(page).toHaveURL(/\/manufacturing$/)
+    await expect(controls.heading).toBeFocused()
+    await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    await expect(controls.quantity).toHaveValue('3')
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await controls.price.focus()
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect(controls.price).toHaveValue('2.7500')
+    await expect(controls.quantity).toHaveValue('3')
+  })
+}
+
+test('quantity, manual prices and target changes do not replay the active purchase anchor', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 960 })
+  await navigationFixture(page)
+  await page.goto('/manufacturing')
+  await waitForReferenceQuotes(page)
+  const controls = workflow(page)
+  await controls.purchase.click()
+  await expect(controls.purchaseSection).toBeFocused()
+  await controls.price.focus()
+  const priceScroll = await controls.main.evaluate(element => element.scrollTop)
+  await controls.price.fill('4.125')
+  await expect(controls.price).toBeFocused()
+  await expect.poll(() => controls.main.evaluate(element => element.scrollTop)).toBe(priceScroll)
+  await controls.quantity.focus()
+  const quantityScroll = await controls.main.evaluate(element => element.scrollTop)
+  await controls.quantity.fill('4')
+  await expect(controls.quantity).toBeFocused()
+  await expect.poll(() => controls.main.evaluate(element => element.scrollTop)).toBe(quantityScroll)
+  await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+  const targetButton = page.getByRole('button', { name: '切换制造目标', exact: true })
+  await targetButton.click()
+  await page.getByRole('option', { name: '导航方案第二目标', exact: true }).click()
+  await expect(page.getByRole('button', { name: '当前制造目标：导航方案第二目标', exact: true })).toBeVisible()
+  await expect(targetButton).toBeFocused()
+  await expect(controls.purchaseSection).not.toBeFocused()
+  expect(await controls.main.evaluate(element => element.scrollTop)).toBeLessThan(100)
+  await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+})
+
+test('late market quotes do not move the purchase view or steal an active price input', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 960 })
+  const fixture = await navigationFixture(page, { delayQuotes: true })
+  try {
+    await page.goto('/manufacturing')
+    const controls = workflow(page)
+    await expect(controls.purchaseSection).toBeVisible()
+    await expect.poll(() => fixture.quoteRequests.length).toBe(navigationItems.length)
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await controls.price.focus()
+    await controls.price.fill('3.125')
+    const before = await readNavigationLayout(page)
+    fixture.releaseQuotes()
+    await expect(page.locator('.manufacturing-purchase-source').filter({ hasText: '市场参考价' })).toHaveCount(navigationItems.length - 1)
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+    await expect(controls.price).toBeFocused()
+    await expect(controls.price).toHaveValue('3.125')
+    const after = await readNavigationLayout(page)
+    expectDesktopShellUnchanged(before, after)
+    expect(Math.abs(after.top - before.top)).toBeLessThanOrEqual(1)
+  } finally {
+    fixture.releaseQuotes()
+  }
+})
+
+for (const width of [390, 1440]) {
+  test(`200% workflow and purchase text remain reachable with working return navigation at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 })
+    await navigationFixture(page)
+    await page.goto('/manufacturing')
+    await waitForReferenceQuotes(page)
+    await page.evaluate(() => {
+      const records = [...document.querySelectorAll('.industry-journey, .industry-journey *, #manufacturing-purchase-list, #manufacturing-purchase-list *')]
+        .filter(element => [...element.childNodes].some(node => node.nodeType === 3 && node.textContent.trim()) || element.matches('input'))
+        .map(element => {
+          const style = getComputedStyle(element)
+          return { element, font: parseFloat(style.fontSize), line: parseFloat(style.lineHeight) }
+        })
+      for (const { element, font, line } of records) {
+        if (Number.isFinite(font)) element.style.setProperty('font-size', `${font * 2}px`, 'important')
+        if (Number.isFinite(line)) element.style.setProperty('line-height', `${line * 2}px`, 'important')
+      }
+    })
+    const controls = workflow(page)
+    for (const link of await controls.journey.getByRole('link').all()) {
+      expect(await link.evaluate(element => element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight)).toBe(true)
+    }
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
+    await controls.price.focus()
+    await controls.price.fill('0.25')
+    await expect(controls.price).toBeFocused()
+    await expect(controls.price).toBeInViewport()
+    await expect(controls.purchaseSection.getByRole('button', { name: '导出 CSV', exact: true })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await controls.estimate.click()
+    await expect(controls.heading).toBeFocused()
+    await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    await expect(controls.price).toHaveValue('0.25')
+  })
+}
