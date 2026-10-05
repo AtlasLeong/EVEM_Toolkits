@@ -1611,6 +1611,8 @@
   /* The shell also contains the mobile header below 1180px. Let this flex
      item use the remaining height instead of adding a full-height app below it. */
   .site-frame:has(.manufacturing-page) .app-shell { flex: 1 1 0; height: auto; }
+  /* Native fragment history must not scroll the shell that holds the steps. */
+  .shell-main:has(.manufacturing-page--terminal) { overflow: clip; }
   .site-frame .manufacturing-page--terminal:not(.manufacturing-target-portal) { overscroll-behavior-y: contain; }
   .site-frame .manufacturing-page--terminal .manufacturing-workspace { height: clamp(440px, calc(100dvh - 230px), 760px); }
   .site-frame .manufacturing-page--terminal .manufacturing-summary { grid-column: auto; }

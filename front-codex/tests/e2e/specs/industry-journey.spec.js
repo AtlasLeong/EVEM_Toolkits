@@ -106,6 +106,13 @@ async function waitForReferenceQuotes(page) {
   })
 }
 
+async function settleNavigation(page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
+}
+
 async function doublePurchaseText(page) {
   await page.evaluate(() => {
     const records = [...document.querySelectorAll('.industry-journey, .industry-journey *, #manufacturing-purchase-list, #manufacturing-purchase-list *')]
@@ -304,6 +311,16 @@ for (const [width, textSize] of [1440, 2048, 1100, 1179].flatMap(width => [100, 
       await expect(controls.heading).toBeFocused()
       await expect(controls.main).toHaveJSProperty('scrollTop', 0)
     })
+    await test.step('native Back and Forward after the second step preserve the shell', async () => {
+      await page.evaluate(() => history.back())
+      await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+      await expect(controls.purchaseSection).toBeFocused()
+      expectDesktopShellUnchanged(before, await readNavigationLayout(page))
+      await page.evaluate(() => history.forward())
+      await expect(page).toHaveURL(/\/manufacturing$/)
+      await expect(controls.heading).toBeFocused()
+      await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    })
     expectDesktopShellUnchanged(before, await readNavigationLayout(page))
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   })
@@ -351,6 +368,82 @@ for (const width of [390, 768, 1099]) {
       return element.getBoundingClientRect().top >= header.getBoundingClientRect().bottom - 1
     })).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+}
+
+for (const [width, textSize, narrowWidth] of [[1440, 100, 390], [1100, 100, 1099], [1179, 100, null], [2048, 100, null], [1440, 200, 390]]) {
+  test(`native fragment history keeps the workflow visible at ${width}px and ${textSize}% text`, async ({ page }) => {
+    // Use the shipped catalog and normal API requests. Neither browser history
+    // nor animation frames are replaced or paused in this integration path.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.setViewportSize({ width, height: 960 })
+    await page.goto('/manufacturing')
+    const controls = workflow(page)
+    const firstPrice = controls.purchaseSection.locator('tbody input').first()
+    await expect(firstPrice).toBeAttached()
+    await settleNavigation(page)
+    if (textSize === 200) { await doublePurchaseText(page); await settleNavigation(page) }
+    const before = await readNavigationLayout(page)
+    const physicalClick = async link => {
+      await expect(link).toBeInViewport({ ratio: 1 })
+      const bounds = await link.boundingBox()
+      await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    }
+    const unchangedShell = async () => {
+      await settleNavigation(page)
+      expectDesktopShellUnchanged(before, await readNavigationLayout(page))
+      await expect(controls.journey).toBeInViewport({ ratio: 1 })
+    }
+    await physicalClick(controls.purchase)
+    await expect(controls.purchaseSection).toBeFocused()
+    await physicalClick(controls.estimate)
+    await expect(controls.heading).toBeFocused()
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await page.evaluate(() => history.back())
+      await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+      await expect(controls.purchaseSection).toBeFocused()
+      await unchangedShell()
+      await page.evaluate(() => history.forward())
+      await expect(page).toHaveURL(/\/manufacturing$/)
+      await expect(controls.heading).toBeFocused()
+      await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+      await unchangedShell()
+    }
+    // Reverse again as soon as the Back route commits, without waiting for its
+    // focus frame. The final route must leave the workflow and shell in place.
+    await page.evaluate(() => history.back())
+    await expect(controls.purchase).toHaveAttribute('aria-current', 'step')
+    await page.evaluate(() => history.forward())
+    await expect(controls.estimate).toHaveAttribute('aria-current', 'step')
+    await expect(controls.heading).toBeFocused()
+    await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+    await unchangedShell()
+
+    if (narrowWidth) {
+      await page.setViewportSize({ width: narrowWidth, height: 960 })
+      await settleNavigation(page)
+      await physicalClick(controls.purchase)
+      await expect(controls.purchaseSection).toBeFocused()
+      await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
+      await page.evaluate(() => history.back())
+      await expect(controls.heading).toBeFocused()
+      await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
+      await expect(page.locator('.site-frame')).toHaveJSProperty('scrollTop', 0)
+      await page.setViewportSize({ width, height: 960 })
+      await unchangedShell()
+      await page.evaluate(() => history.forward())
+      await expect(controls.purchaseSection).toBeFocused()
+      await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
+      await unchangedShell()
+    }
+    await page.goto('/manufacturing#manufacturing-purchase-list')
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
+    // Startup hash navigation must preserve every shell ancestor, too.
+    await settleNavigation(page)
+    const direct = await readNavigationLayout(page)
+    expect(direct.outer.every(ancestor => ancestor.top === 0 && ancestor.left === 0)).toBe(true)
+    await expect(controls.journey).toBeInViewport({ ratio: 1 })
   })
 }
 
