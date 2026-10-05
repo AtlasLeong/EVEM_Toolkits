@@ -160,7 +160,11 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
       window.removeEventListener('resize', updatePosition)
       if (root) root.inert = wasInert
       document.body.style.overflow = previousOverflow
-      if (openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true })
+      if (openerRef.current?.isConnected) {
+        openerRef.current.focus({ preventScroll: true })
+        // A layout change may restore an old scroll position behind the picker.
+        openerRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+      }
     }
   }, [open, updatePosition])
 

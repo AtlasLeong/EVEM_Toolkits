@@ -560,6 +560,79 @@ for (const [width, narrowWidth] of [[1440, 390], [1100, 1099]]) {
   })
 }
 
+for (const [narrowWidth, width, textSize, opener] of [[390, 1440, 100, 'change'], [390, 1440, 200, 'change'], [1099, 1100, 100, 'change'], [390, 1440, 100, 'selected']]) {
+  test(`picker restores its ${opener} opener after cached desktop scrolling at ${narrowWidth}px/${width}px and ${textSize}% text`, async ({ page }) => {
+    // The shipped catalog, native layout changes and physical browser input
+    // exercise the inactive desktop scroll offset restored by Chromium.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.setViewportSize({ width: narrowWidth, height: 960 })
+    await page.goto('/manufacturing#manufacturing-purchase-list')
+    const controls = workflow(page)
+    const price = controls.purchaseSection.locator('tbody input').first()
+    await expect(controls.purchaseSection).toBeFocused()
+    await expect(price).toBeAttached()
+    await settleNavigation(page)
+    if (textSize === 200) { await doublePurchaseText(page); await settleNavigation(page) }
+    const plan = { quantity: await controls.quantity.inputValue(), target: await page.locator('.manufacturing-selected-target').innerText() }
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const bounds = await price.boundingBox()
+      if (bounds.y >= 0 && bounds.y + bounds.height <= 960) break
+      await page.mouse.move(narrowWidth - 24, 600)
+      await page.mouse.wheel(0, bounds.y + bounds.height > 960 ? 200 : -200)
+      await settleNavigation(page)
+    }
+    await expect(price).toBeInViewport({ ratio: 1 })
+    const priceBounds = await price.boundingBox()
+    await page.mouse.click(priceBounds.x + priceBounds.width / 2, priceBounds.y + priceBounds.height / 2)
+    await page.keyboard.press('Control+A')
+    await page.keyboard.type('2.7500')
+    await page.setViewportSize({ width, height: 960 })
+    await settleNavigation(page)
+    await expectEditorVisible(price)
+    await expect.poll(() => controls.main.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    await page.setViewportSize({ width: narrowWidth, height: 960 })
+    await settleNavigation(page)
+    await expectEditorVisible(price)
+    await page.mouse.move(narrowWidth / 2, 600)
+    await page.mouse.wheel(0, -16000)
+    await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
+    const trigger = page.locator(opener === 'change' ? '.manufacturing-change-target' : '.manufacturing-selected-target')
+    await expect(trigger).toBeInViewport({ ratio: 1 })
+    const triggerBounds = await trigger.boundingBox()
+    await page.mouse.click(triggerBounds.x + triggerBounds.width / 2, triggerBounds.y + triggerBounds.height / 2)
+    const dialog = page.getByRole('dialog', { name: '选择制造目标' })
+    const search = dialog.getByRole('searchbox')
+    await expect(search).toBeFocused()
+    await page.setViewportSize({ width, height: 960 })
+    await settleNavigation(page)
+    await expect(search).toBeFocused()
+    await expect(dialog).toBeInViewport({ ratio: 1 })
+    await expect(page.locator('#root')).toHaveJSProperty('inert', true)
+    const beforeClose = await readNavigationLayout(page)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    await expect(trigger).toBeInViewport({ ratio: 1 })
+    expect(await trigger.evaluate(element => {
+      const rect = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return hit === element || element.contains(hit)
+    })).toBe(true)
+    await expect(page.locator('#root')).toHaveJSProperty('inert', false)
+    await expect(controls.quantity).toHaveValue(plan.quantity)
+    expect(await page.locator('.manufacturing-selected-target').innerText()).toBe(plan.target)
+    await expect(price).toHaveValue('2.7500')
+    await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+    const afterClose = await readNavigationLayout(page)
+    expectDesktopShellUnchanged(beforeClose, afterClose)
+    expect(afterClose.windowTop).toBe(0)
+    expect(afterClose.outer.every(ancestor => ancestor.top === 0 && ancestor.left === 0)).toBe(true)
+    // Closing reveals the actual opener with only the necessary inner scroll;
+    // it does not replay the purchase anchor or reset the workspace to its top.
+    expect(afterClose.top).toBeLessThanOrEqual(beforeClose.top)
+  })
+}
+
 for (const width of [1440, 390]) {
   test(`estimate, repeated purchase and history navigation retain the same plan at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 960 })
