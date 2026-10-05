@@ -565,12 +565,23 @@ for (const [narrowWidth, width, textSize, opener] of [[390, 1440, 100, 'change']
     // The shipped catalog, native layout changes and physical browser input
     // exercise the inactive desktop scroll offset restored by Chromium.
     await page.emulateMedia({ reducedMotion: 'reduce' })
+    // Keep the shipped recipes while settling quotes locally before measuring
+    // layout. A late production/CORS error adds summary text during resizing.
+    const quoteRequests = []
+    await installApiMock(page, ({ method, url }) => {
+      quoteRequests.push({ method, path: url.pathname })
+      if (url.pathname === '/api/market/items/') return json({ count: 0, results: [] })
+      return json([])
+    })
     await page.setViewportSize({ width: narrowWidth, height: 960 })
     await page.goto('/manufacturing#manufacturing-purchase-list')
     const controls = workflow(page)
     const price = controls.purchaseSection.locator('tbody input').first()
     await expect(controls.purchaseSection).toBeFocused()
     await expect(price).toBeAttached()
+    await expect.poll(() => quoteRequests.length).toBeGreaterThan(0)
+    await expect(controls.purchaseSection.getByRole('button', { name: '刷新清单行情', exact: true })).toBeEnabled()
+    expect(quoteRequests.every(({ method, path }) => method === 'GET' && path === '/api/market/items/')).toBe(true)
     await settleNavigation(page)
     if (textSize === 200) { await doublePurchaseText(page); await settleNavigation(page) }
     const plan = { quantity: await controls.quantity.inputValue(), target: await page.locator('.manufacturing-selected-target').innerText() }
