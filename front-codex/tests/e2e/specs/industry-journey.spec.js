@@ -113,6 +113,33 @@ async function settleNavigation(page) {
   })
 }
 
+async function expectEditorVisible(editor) {
+  // Native scrolling uses integer pixels; allow a fractional border at the
+  // viewport edge while checking the editable center and bottom remain usable.
+  await expect.poll(() => editor.evaluate(element => {
+    const rect = element.getBoundingClientRect()
+    const clip = { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
+    for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      const bounds = ancestor.getBoundingClientRect()
+      const style = getComputedStyle(ancestor)
+      if (style.overflowX !== 'visible') {
+        clip.left = Math.max(clip.left, bounds.left + ancestor.clientLeft)
+        clip.right = Math.min(clip.right, bounds.left + ancestor.clientLeft + ancestor.clientWidth)
+      }
+      if (style.overflowY !== 'visible') {
+        clip.top = Math.max(clip.top, bounds.top + ancestor.clientTop)
+        clip.bottom = Math.min(clip.bottom, bounds.top + ancestor.clientTop + ancestor.clientHeight)
+      }
+    }
+    const center = rect.left + rect.width / 2
+    return {
+      within: rect.left >= clip.left - 1 && rect.right <= clip.right + 1 && rect.top >= clip.top - 1 && rect.bottom <= clip.bottom + 1,
+      center: document.elementFromPoint(center, rect.top + rect.height / 2) === element,
+      bottom: document.elementFromPoint(center, rect.bottom - 1) === element,
+    }
+  })).toEqual({ within: true, center: true, bottom: true })
+}
+
 async function doublePurchaseText(page) {
   await page.evaluate(() => {
     const records = [...document.querySelectorAll('.industry-journey, .industry-journey *, #manufacturing-purchase-list, #manufacturing-purchase-list *')]
@@ -420,18 +447,22 @@ for (const [width, textSize, narrowWidth] of [[1440, 100, 390], [1100, 100, 1099
     await unchangedShell()
 
     if (narrowWidth) {
+      await page.evaluate(() => history.back())
+      await expect(controls.purchaseSection).toBeFocused()
+      await expect.poll(() => controls.main.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
       await page.setViewportSize({ width: narrowWidth, height: 960 })
       await settleNavigation(page)
-      await physicalClick(controls.purchase)
-      await expect(controls.purchaseSection).toBeFocused()
-      await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
-      await page.evaluate(() => history.back())
+      await page.evaluate(() => history.forward())
       await expect(controls.heading).toBeFocused()
+      await expect(controls.main).toHaveJSProperty('scrollTop', 0)
       await expect.poll(() => page.evaluate(() => scrollY)).toBe(0)
       await expect(page.locator('.site-frame')).toHaveJSProperty('scrollTop', 0)
       await page.setViewportSize({ width, height: 960 })
+      await expect(controls.main).toHaveJSProperty('scrollTop', 0)
+      await expect(controls.heading).toBeFocused()
+      await expect(controls.heading).toBeInViewport({ ratio: 1 })
       await unchangedShell()
-      await page.evaluate(() => history.forward())
+      await page.evaluate(() => history.back())
       await expect(controls.purchaseSection).toBeFocused()
       await expect(controls.purchaseSection.locator('h2')).toBeInViewport()
       await unchangedShell()
@@ -444,6 +475,88 @@ for (const [width, textSize, narrowWidth] of [[1440, 100, 390], [1100, 100, 1099
     const direct = await readNavigationLayout(page)
     expect(direct.outer.every(ancestor => ancestor.top === 0 && ancestor.left === 0)).toBe(true)
     await expect(controls.journey).toBeInViewport({ ratio: 1 })
+  })
+}
+
+for (const [width, narrowWidth] of [[1440, 390], [1100, 1099]]) {
+  test(`price editing keeps focus and plan values across ${width}px and ${narrowWidth}px layouts`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 })
+    await navigationFixture(page)
+    await page.goto('/manufacturing')
+    await waitForReferenceQuotes(page)
+    const controls = workflow(page)
+    await controls.quantity.fill('3')
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    await controls.price.fill('2.7500')
+    await expect(controls.price).toBeFocused()
+    await page.setViewportSize({ width: narrowWidth, height: 960 })
+    await expect(controls.price).toBeFocused()
+    await expectEditorVisible(controls.price)
+    await expect(controls.quantity).toHaveValue('3')
+    await expect(controls.price).toHaveValue('2.7500')
+    await page.setViewportSize({ width, height: 960 })
+    await expect(controls.price).toBeFocused()
+    await expectEditorVisible(controls.price)
+    await expect(controls.quantity).toHaveValue('3')
+    await expect(controls.price).toHaveValue('2.7500')
+    const restored = await readNavigationLayout(page)
+    expect(restored.windowTop).toBe(0)
+    expect(restored.outer.every(ancestor => ancestor.top === 0 && ancestor.left === 0)).toBe(true)
+    await expect(page).toHaveURL(/#manufacturing-purchase-list$/)
+  })
+
+  test(`target picker keeps keyboard focus across ${width}px and ${narrowWidth}px layouts`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 })
+    await navigationFixture(page)
+    await page.goto('/manufacturing')
+    await waitForReferenceQuotes(page)
+    const controls = workflow(page)
+    await controls.quantity.fill('3')
+    await controls.purchase.click()
+    await expect(controls.purchaseSection).toBeFocused()
+    const mainBounds = await controls.main.boundingBox()
+    await page.mouse.move(mainBounds.x + mainBounds.width / 2, mainBounds.y + mainBounds.height / 2)
+    await page.mouse.wheel(0, -10000)
+    await expect.poll(() => controls.main.evaluate(element => element.scrollTop)).toBe(0)
+    const trigger = page.locator('.manufacturing-change-target')
+    await expect(trigger).toBeInViewport({ ratio: 1 })
+    await trigger.click()
+    const dialog = page.getByRole('dialog', { name: '选择制造目标' })
+    const search = dialog.getByRole('searchbox')
+    const close = dialog.getByRole('button', { name: '关闭目标选择器' })
+    await expect(search).toBeFocused()
+    await page.setViewportSize({ width: narrowWidth, height: 960 })
+    await settleNavigation(page)
+    await expect(search).toBeFocused()
+    await expect(dialog).toBeInViewport({ ratio: 1 })
+    await expect(page.locator('#root')).toHaveJSProperty('inert', true)
+    await page.keyboard.press('Shift+Tab')
+    await expect(close).toBeFocused()
+    await page.setViewportSize({ width, height: 960 })
+    await settleNavigation(page)
+    await expect(close).toBeFocused()
+    await expect(dialog).toBeInViewport({ ratio: 1 })
+    await expect(page.locator('#root')).toHaveJSProperty('inert', true)
+    await page.keyboard.press('Shift+Tab')
+    await expect.poll(() => dialog.evaluate(element => element.contains(document.activeElement))).toBe(true)
+    await page.keyboard.press('Tab')
+    await expect(close).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(trigger).toBeFocused()
+    await expect(trigger).toBeInViewport({ ratio: 1 })
+    await expect.poll(() => trigger.evaluate(element => {
+      const rect = element.getBoundingClientRect()
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return element === hit || element.contains(hit)
+    })).toBe(true)
+    await expect(controls.quantity).toHaveValue('3')
+    await expect(page.locator('#root')).toHaveJSProperty('inert', false)
+    const restored = await readNavigationLayout(page)
+    expect(restored.top).toBe(0)
+    expect(restored.windowTop).toBe(0)
+    expect(restored.outer.every(ancestor => ancestor.top === 0 && ancestor.left === 0)).toBe(true)
   })
 }
 
