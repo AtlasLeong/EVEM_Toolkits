@@ -19,7 +19,7 @@ const catalog = {
   ],
 }
 
-async function installPurchaseFixture(page, { copyFails = false, catalogDelay = 0 } = {}) {
+async function installPurchaseFixture(page, { copyFails = false, catalogDelay = 0, catalogData = catalog } = {}) {
   const requests = []
   await page.addInitScript(({ copyFails }) => {
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
@@ -31,7 +31,7 @@ async function installPurchaseFixture(page, { copyFails = false, catalogDelay = 
   }, { copyFails })
   await page.route('**/industry/manufacturing-scope.json', async route => {
     if (catalogDelay) await new Promise(resolve => setTimeout(resolve, catalogDelay))
-    await route.fulfill(json(catalog))
+    await route.fulfill(json(catalogData))
   })
   await installApiMock(page, ({ method, url }) => {
     if (method === 'GET' && url.pathname === '/api/market/items/') {
@@ -77,7 +77,9 @@ test('complete procurement list aggregates shared leaves, keeps missing rows, an
   await expect(marketLink).toHaveAttribute('href', '/market')
   await expect(marketLink).toHaveAttribute('target', '_blank')
   await expect(marketLink).toHaveAttribute('rel', 'noopener noreferrer')
-  await expect(list(page)).toContainText('请按材料名称或 ID 搜索')
+  await expect(list(page)).toContainText('请按材料名称搜索')
+  await expect(list(page)).not.toContainText(/\bID\b/u)
+  await expect(row(page, '202').getByRole('rowheader')).toHaveText('未采集材料')
 
   const requestCount = requests.length
   const manual = row(page, '202').getByRole('textbox', { name: '采购单价 未采集材料' })
@@ -113,10 +115,12 @@ test('copy and CSV export carry every row, exact decimal amounts, and stale/miss
   for (const name of ['新价材料', '旧价材料', '未采集材料', '空卖盘材料', '无效报价材料']) expect(copied).toContain(name)
   expect(copied).toContain('9,007,199,254,740,993.125')
   expect(copied).toContain('市场旧价 · 已计入')
+  expect(copied).toContain('名称\t数量\t单价ISK')
+  expect(copied).not.toMatch(/^20[0-4]\t|\bID\b/mu)
   const downloadPromise = page.waitForEvent('download')
   await list(page).getByRole('button', { name: '导出 CSV' }).click()
   const download = await downloadPromise
-  expect(download.suggestedFilename()).toBe('EVEM-采购清单-100.csv')
+  expect(download.suggestedFilename()).toBe('EVEM-采购清单.csv')
   const bytes = await readFile(await download.path())
   expect([...bytes.subarray(0, 3)]).toEqual([239, 187, 191])
   const csv = bytes.toString('utf8')
@@ -129,6 +133,30 @@ test('copy and CSV export carry every row, exact decimal amounts, and stale/miss
   expect(csv).toContain('2021-03-02T04:05:06.000Z')
   expect(csv).toContain('2022-04-03T05:06:07.000Z')
   expect(csv).not.toContain('999')
+  expect(csv).not.toMatch(/^20[0-4],|\bID\b/mu)
+})
+
+test('same-name materials have readable labels and independent price editors without user-facing IDs', async ({ page }) => {
+  const catalogData = structuredClone(catalog)
+  for (const item of catalogData.items) if (['201', '202'].includes(item.itemId)) item.name = '合金'
+  const requests = await installPurchaseFixture(page, { catalogData })
+  await page.goto('/manufacturing')
+  await expect(row(page, '201').getByRole('rowheader')).toHaveText('合金（同名材料 1）')
+  await expect(row(page, '202').getByRole('rowheader')).toHaveText('合金（同名材料 2）')
+  const first = row(page, '201').getByRole('textbox', { name: '采购单价 合金（同名材料 1）', exact: true })
+  const second = row(page, '202').getByRole('textbox', { name: '采购单价 合金（同名材料 2）', exact: true })
+  await second.fill('1.25')
+  await expect(second).toHaveValue('1.25')
+  await expect(first).toHaveValue('')
+  await expect(row(page, '202')).toContainText('方案内手填')
+  await expect(row(page, '201')).toContainText('市场旧价 · 已计入')
+  expect(requests).toContain('201')
+  expect(requests).toContain('202')
+  await list(page).getByRole('button', { name: '复制采购清单' }).click()
+  const copied = await page.evaluate(() => window.copiedPurchaseList)
+  expect(copied).toContain('合金（同名材料 1）')
+  expect(copied).toContain('合金（同名材料 2）')
+  expect(copied).not.toMatch(/^20[0-4]\t|\bID\b/mu)
 })
 
 test('clipboard failure exposes selected text, and an async hash destination focuses once', async ({ page }) => {

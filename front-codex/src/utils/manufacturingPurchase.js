@@ -6,7 +6,7 @@
 
 import { resolveManufacturingQuote } from './manufacturingPlan.js'
 
-const PURCHASE_COLUMNS = ['ID', '名称', '数量', '单价ISK', '小计ISK', '来源', '采集时间', '下一步']
+const PURCHASE_COLUMNS = ['名称', '数量', '单价ISK', '小计ISK', '来源', '采集时间', '下一步']
 const MISSING_LABELS = {
   quote_absent: '未找到市场报价',
   quote_uncollected: '尚未采集报价',
@@ -16,6 +16,27 @@ const MISSING_LABELS = {
 }
 const MISSING_NEXT_STEP = '查看市场或填写方案单价'
 const REFRESH_NEXT_STEP = '刷新存量行情或填写方案单价'
+
+function purchaseName(value) {
+  return typeof value === 'string' && value.trim() ? value : '材料名称暂缺'
+}
+
+// Keep different materials separate by their internal IDs while giving users
+// readable labels for duplicate or unavailable names.
+function withDisplayNames(rows) {
+  const counts = new Map()
+  const seen = new Map()
+  for (const row of rows) {
+    const name = purchaseName(row.name)
+    counts.set(name, (counts.get(name) || 0) + 1)
+  }
+  return rows.map(row => {
+    const name = purchaseName(row.name)
+    const ordinal = (seen.get(name) || 0) + 1
+    seen.set(name, ordinal)
+    return { ...row, name: counts.get(name) > 1 ? `${name}（同名材料 ${ordinal}）` : name }
+  })
+}
 
 function compareItemIds(left, right) {
   const leftId = String(left.itemId)
@@ -77,7 +98,7 @@ export function buildManufacturingPurchaseRows(summary, { marketQuotes = {}, now
       rowsById.set(itemId, { ...row, ...describePrice(row) })
     }
   }
-  return [...rowsById.values()].sort(compareItemIds)
+  return withDisplayNames([...rowsById.values()].sort(compareItemIds))
 }
 
 /** Group the integer part of a decimal string without rounding or Number conversion. */
@@ -104,8 +125,7 @@ function purchaseCells(row, { formatted = false } = {}) {
   const price = row.reason ? '' : decimalCell(row.unitPrice)
   const subtotal = row.reason ? '' : decimalCell(row.subtotal)
   return [
-    String(row.itemId ?? ''),
-    String(row.name ?? ''),
+    purchaseName(row.name),
     quantityCell(row.quantity),
     formatted && price ? formatPurchaseIsk(price) : price,
     formatted && subtotal ? formatPurchaseIsk(subtotal) : subtotal,
@@ -124,10 +144,10 @@ function quoteDelimitedCell(value, delimiter) {
 /** Copyable tab-separated rows plus only the target and material purchase subtotal. */
 export function serializeManufacturingPurchaseList(rows, { targetName = '', quantity = '', materialSubtotal = null } = {}) {
   const lines = [
-    ['制造目标', targetName, '目标数量', quantityCell(quantity)],
+    ['制造目标', typeof targetName === 'string' && targetName.trim() ? targetName : '制造目标名称暂缺', '目标数量', quantityCell(quantity)],
     ['材料采购小计ISK', formatPurchaseIsk(materialSubtotal)],
     PURCHASE_COLUMNS,
-    ...(Array.isArray(rows) ? rows : []).map(row => purchaseCells(row, { formatted: true })),
+    ...withDisplayNames(Array.isArray(rows) ? rows : []).map(row => purchaseCells(row, { formatted: true })),
   ]
   return lines.map(cells => cells.map(cell => quoteDelimitedCell(cell, '\t')).join('\t')).join('\n')
 }
@@ -139,8 +159,8 @@ function safeSpreadsheetText(value) {
 
 /** UTF-8 CSV content with Excel-safe text and exact, unrounded decimal price cells. */
 export function serializeManufacturingPurchaseCsv(rows) {
-  const records = [PURCHASE_COLUMNS, ...(Array.isArray(rows) ? rows : []).map(row => (
-    purchaseCells(row).map((cell, index) => [2, 3, 4].includes(index) ? cell : safeSpreadsheetText(cell))
+  const records = [PURCHASE_COLUMNS, ...withDisplayNames(Array.isArray(rows) ? rows : []).map(row => (
+    purchaseCells(row).map((cell, index) => [1, 2, 3].includes(index) ? cell : safeSpreadsheetText(cell))
   ))]
   return `\uFEFF${records.map(cells => cells.map(cell => quoteDelimitedCell(cell, ',')).join(',')).join('\r\n')}\r\n`
 }

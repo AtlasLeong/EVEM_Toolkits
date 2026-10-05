@@ -54,7 +54,7 @@ export default function ManufacturingPurchaseList({ summary, targetName, marketQ
     const url = URL.createObjectURL(new Blob([serializeManufacturingPurchaseCsv(rows)], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `EVEM-采购清单-${summary.targetId}.csv`
+    link.download = 'EVEM-采购清单.csv'
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -78,7 +78,7 @@ export default function ManufacturingPurchaseList({ summary, targetName, marketQ
         <caption className="sr-only">{targetName}制造方案的全部聚合购买项，含缺价材料</caption>
         <thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">材料</th><th role="columnheader" scope="col">采购数量</th><th role="columnheader" scope="col">生效单价 / 小计</th><th role="columnheader" scope="col">价格来源与下一步</th><th role="columnheader" scope="col">本方案补价</th></tr></thead>
         <tbody role="rowgroup">{rows.map(row => <tr role="row" key={row.itemId} data-item-id={row.itemId} className={row.reason ? 'is-missing' : ''}>
-          <th role="rowheader" scope="row" data-label="材料"><div className="manufacturing-purchase-item"><MarketItemIcon itemId={row.itemId} size={30} /><div><strong>{row.name}</strong><small>ID {row.itemId}</small></div></div></th>
+          <th role="rowheader" scope="row" data-label="材料"><div className="manufacturing-purchase-item"><MarketItemIcon itemId={row.itemId} size={30} /><div><strong>{row.name}</strong></div></div></th>
           <td role="cell" data-label="采购数量" className="manufacturing-purchase-quantity">{new Intl.NumberFormat('zh-CN').format(row.quantity)}</td>
           <td role="cell" data-label="生效单价 / 小计"><strong className="manufacturing-purchase-unit-price">{formatPrice(row.unitPrice)}</strong><small>{row.subtotal == null ? '小计待补价' : `小计 ${formatPrice(row.subtotal)}`}</small></td>
           <td role="cell" data-label="价格来源与下一步"><span className={`manufacturing-purchase-source${row.reason || row.quoteStatus === 'stale' || row.quoteStatus === 'unknown' ? ' is-warning' : ''}`}>{row.statusLabel}</span>{row.priceSource === 'market' || (row.reason && row.reason !== 'price_invalid') ? <small>{row.observedAt ? <time dateTime={row.observedAt}>{formatManufacturingObservationTime(row.observedAt)}</time> : '采集时间未知'}</small> : null}<small>{row.nextStep}</small><Link to="/market" target="_blank" rel="noopener noreferrer" aria-label={`查看 ${row.name} 行情（新标签页）`}>查看行情<ExternalLink size={12} aria-hidden="true" /></Link></td>
@@ -86,6 +86,6 @@ export default function ManufacturingPurchaseList({ summary, targetName, marketQ
         </tr>)}</tbody>
       </table>
     </div> : <p className="manufacturing-purchase-note">当前路线没有需要购买的材料。</p>}
-    <div className="manufacturing-purchase-footer"><span>已覆盖材料小计 <strong>{formatPrice(summary.materialSubtotal)}</strong>{summary.missing.length ? ' · 尚有材料未计价' : ''}</span><p>查看行情会另开标签页，请按材料名称或 ID 搜索。手填只用于当前方案，切换目标或刷新页面会清空。</p></div>
+    <div className="manufacturing-purchase-footer"><span>已覆盖材料小计 <strong>{formatPrice(summary.materialSubtotal)}</strong>{summary.missing.length ? ' · 尚有材料未计价' : ''}</span><p>查看行情会另开标签页，请按材料名称搜索。手填只用于当前方案，切换目标或刷新页面会清空。</p></div>
   </section>
 }

@@ -319,6 +319,9 @@ function SummaryPanel({ summary, selectedNode, quote, quoteNow, manualPrice, onM
 
 export default function ManufacturingEstimatorPage() {
   const location = useLocation()
+  const manufacturingPageRef = useRef(null)
+  const headingRef = useRef(null)
+  const navigationRef = useRef(null)
   const [catalog, setCatalog] = useState(null)
   const [catalogError, setCatalogError] = useState('')
   const [selectedId, setSelectedId] = useState('')
@@ -364,11 +367,35 @@ export default function ManufacturingEstimatorPage() {
   const summary = useMemo(() => plan ? summarizeManufacturingPlan(catalog, plan) : null, [catalog, plan])
   const catalogReady = Boolean(catalog && summary)
   useEffect(() => {
-    if (!catalogReady || location.hash !== '#manufacturing-purchase-list') return undefined
+    if (!catalogReady) return undefined
+    const navigation = `${location.key}:${location.hash}`
+    if (navigationRef.current === navigation) return undefined
+    const purchasing = location.hash === '#manufacturing-purchase-list'
+    const returningToEstimate = !location.hash && navigationRef.current !== null
+    if (!purchasing && !returningToEstimate) {
+      navigationRef.current = navigation
+      return undefined
+    }
+    // A rapid history reversal can cancel this frame. Record the navigation
+    // now so the next destination is still handled even when its key repeats.
+    navigationRef.current = navigation
     const frame = window.requestAnimationFrame(() => {
-      const section = document.getElementById('manufacturing-purchase-list')
-      section?.scrollIntoView({ block: 'start', behavior: 'auto' })
-      section?.focus({ preventScroll: true })
+      const main = manufacturingPageRef.current
+      const destination = purchasing ? document.getElementById('manufacturing-purchase-list') : headingRef.current
+      if (!main || !destination) return
+      if (window.matchMedia('(min-width: 1100px)').matches) {
+        // Keep the journey and hidden shell ancestors in place on desktop.
+        const margin = parseFloat(window.getComputedStyle(destination).scrollMarginTop) || 0
+        const top = purchasing ? main.scrollTop + destination.getBoundingClientRect().top - main.getBoundingClientRect().top - main.clientTop - margin : 0
+        main.scrollTo({ top, behavior: 'auto' })
+      } else if (purchasing) {
+        destination.scrollIntoView({ block: 'start', behavior: 'auto' })
+      } else {
+        // Stacked layouts may scroll the page frame rather than the window.
+        main.closest('.site-frame')?.scrollTo({ top: 0, behavior: 'auto' })
+        window.scrollTo({ top: 0, behavior: 'auto' })
+      }
+      destination.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
   }, [catalogReady, location.hash, location.key])
@@ -522,9 +549,9 @@ export default function ManufacturingEstimatorPage() {
   const selectedRecipe = catalog.byId.get(selectedId)
 
   return (
-    <main className="manufacturing-page manufacturing-page--terminal">
+    <main ref={manufacturingPageRef} className="manufacturing-page manufacturing-page--terminal">
       <header className="manufacturing-page-header" data-testid="manufacturing-terminal-header">
-        <div className="manufacturing-terminal-brand"><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div>
+        <div className="manufacturing-terminal-brand"><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1 ref={headingRef} tabIndex={-1}>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div>
         <div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div>
       </header>
       <section className="manufacturing-workspace">

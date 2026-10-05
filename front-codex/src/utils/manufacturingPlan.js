@@ -137,7 +137,10 @@ function overrideMode(overrides, itemId) {
 }
 
 function itemName(catalog, itemId, recipe) {
-  return catalog.items.get(itemId)?.name ?? recipe?.name ?? `物品 ${itemId}`
+  for (const name of [catalog.items.get(itemId)?.name, recipe?.name]) {
+    if (typeof name === 'string' && name.trim()) return name
+  }
+  return '材料名称暂缺'
 }
 
 function addPurchase(purchases, catalog, itemId, quantity, source = 'leaf') {

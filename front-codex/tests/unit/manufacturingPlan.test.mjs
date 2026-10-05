@@ -49,6 +49,20 @@ function recipe(productId, name, materials, options = {}) {
   }
 }
 
+test('missing display names use a friendly material label while retaining internal item identity', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '864209753', quantity: 2 }])])
+  for (const missing of [undefined, null, '', '   ']) {
+    catalog.items.set('864209753', { itemId: '864209753', name: missing })
+    const plan = createPlan(catalog, { targetId: '100' })
+    const expanded = expandPlan(plan)
+    const summary = summarizePlan(plan)
+    assert.equal(expanded.root.children[0].name, '材料名称暂缺')
+    assert.equal(expanded.root.children[0].itemId, '864209753')
+    assert.equal(summary.missing[0].name, '材料名称暂缺')
+    assert.equal(summary.missing[0].itemId, '864209753')
+  }
+})
+
 test('ceil-divides requested quantity by outputNum before expanding materials', () => {
   const catalog = makeCatalog([
     recipe('100', '成品', [{ itemId: '200', quantity: 3 }], { outputNum: 200, money: 10 }),

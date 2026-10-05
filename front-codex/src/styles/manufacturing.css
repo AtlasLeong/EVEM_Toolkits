@@ -1608,9 +1608,16 @@
 .manufacturing-purchase-fallback { display: block; margin-top: 10px; color: var(--terminal-muted); font-size: 12px; }
 .manufacturing-purchase-fallback textarea { box-sizing: border-box; display: block; width: 100%; min-height: 160px; margin-top: 6px; border: 1px solid var(--terminal-line-strong); border-radius: 6px; padding: 10px; color: var(--terminal-text); background: #09191f; font-size: 12px; resize: vertical; }
 @media (min-width: 1100px) {
+  /* The shell also contains the mobile header below 1180px. Let this flex
+     item use the remaining height instead of adding a full-height app below it. */
+  .site-frame:has(.manufacturing-page) .app-shell { flex: 1 1 0; height: auto; }
+  .site-frame .manufacturing-page--terminal:not(.manufacturing-target-portal) { overscroll-behavior-y: contain; }
   .site-frame .manufacturing-page--terminal .manufacturing-workspace { height: clamp(440px, calc(100dvh - 230px), 760px); }
+  .site-frame .manufacturing-page--terminal .manufacturing-summary { grid-column: auto; }
 }
 @media (max-width: 1099px) {
+  .site-frame:has(.manufacturing-page) { overflow: auto; }
+  .site-frame:has(.manufacturing-page) .site-content { height: auto; }
   .site-frame .manufacturing-page--terminal:not(.manufacturing-target-portal) { overflow: visible; height: auto; }
   .manufacturing-purchase-list { padding: 15px; }
 }

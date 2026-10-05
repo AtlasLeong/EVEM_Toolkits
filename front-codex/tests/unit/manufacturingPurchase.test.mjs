@@ -10,7 +10,7 @@ import {
   serializeManufacturingPurchaseCsv,
 } from '../../src/utils/manufacturingPurchase.js'
 
-const headings = ['ID', '名称', '数量', '单价ISK', '小计ISK', '来源', '采集时间', '下一步']
+const headings = ['名称', '数量', '单价ISK', '小计ISK', '来源', '采集时间', '下一步']
 const observedAt = '2026-10-03T12:00:00.000Z'
 
 function purchase(overrides = {}) {
@@ -192,9 +192,9 @@ test('real missing empty and invalid quote leaves retain diagnostic states and o
     ['201', 'quote_invalid', 'invalid', '2026-10-04T09:30:00.000Z', null, null],
   ])
   const [, ...records] = parseCsv(serializeManufacturingPurchaseCsv(rows))
-  assert.deepEqual(records.map(cells => [cells[0], cells[3], cells[4], cells[6]]), [
-    ['200', '', '', observedAt],
-    ['201', '', '', '2026-10-04T09:30:00.000Z'],
+  assert.deepEqual(records.map(cells => [cells[0], cells[2], cells[3], cells[5]]), [
+    ['暂无卖价材料', '', '', observedAt],
+    ['无效报价材料', '', '', '2026-10-04T09:30:00.000Z'],
   ])
 })
 
@@ -259,7 +259,7 @@ test('formats decimal strings with exact grouping without losing large integers 
   assert.equal(formatPurchaseIsk(null), '待补价格')
 })
 
-test('copied purchase lists contain target metadata and material subtotal followed by all eight columns', () => {
+test('copied purchase lists contain target metadata and material subtotal followed by seven user-facing columns', () => {
   const rows = buildManufacturingPurchaseRows({ purchases: [purchase({ unitPrice: '1234.50', subtotal: '2469.00', quoteStatus: 'stale' })], missing: [{ itemId: '10', name: '缺价材料', quantity: 3, reason: 'quote_absent' }] })
   const text = serializeManufacturingPurchaseList(rows, {
     targetName: '测试舰船', quantity: 5, materialSubtotal: '2469.00',
@@ -269,40 +269,40 @@ test('copied purchase lists contain target metadata and material subtotal follow
   assert.equal(lines[0], '制造目标\t测试舰船\t目标数量\t5')
   assert.equal(lines[1], '材料采购小计ISK\t2,469.00')
   assert.equal(lines[2], headings.join('\t'))
-  assert.deepEqual(lines[3].split('\t'), ['2', '矿石', '2', '1,234.50', '2,469.00', '市场旧价 · 已计入', observedAt, '刷新存量行情或填写方案单价'])
-  assert.deepEqual(lines[4].split('\t').slice(0, 6), ['10', '缺价材料', '3', '', '', '未找到市场报价'])
+  assert.deepEqual(lines[3].split('\t'), ['矿石', '2', '1,234.50', '2,469.00', '市场旧价 · 已计入', observedAt, '刷新存量行情或填写方案单价'])
+  assert.deepEqual(lines[4].split('\t').slice(0, 5), ['缺价材料', '3', '', '', '未找到市场报价'])
   assert.doesNotMatch(text, /manufacturingFee|blueprintCost|918273645|102938475|制造费|蓝图/u)
 })
 
 test('copied lists quote text with tabs, quotes and newlines without creating extra logical cells', () => {
   const text = serializeManufacturingPurchaseList([exportRow({ name: '矿石\t"特选"\n第二行' })], { targetName: '测试舰船', quantity: 1, materialSubtotal: '2.5' })
-  assert.ok(text.includes('\t"矿石\t""特选""\n第二行"\t2\t'), 'TSV must quote multiline names and double literal quotes')
+  assert.ok(text.includes('\n"矿石\t""特选""\n第二行"\t2\t'), 'TSV must quote multiline names and double literal quotes')
 })
 
 test('CSV has a UTF-8 BOM, CRLF records and exact ungrouped decimal amounts', () => {
   const row = exportRow({ unitPrice: '9007199254740993.0100', subtotal: '18014398509481986.0200', statusLabel: '市场旧价 · 已计入', nextStep: '刷新存量行情或填写方案单价' })
   const csv = serializeManufacturingPurchaseCsv([row])
-  assert.equal(csv, '\uFEFF' + headings.join(',') + '\r\n' + ['2', '矿石', '2', '9007199254740993.0100', '18014398509481986.0200', '市场旧价 · 已计入', observedAt, '刷新存量行情或填写方案单价'].join(',') + '\r\n')
+  assert.equal(csv, '\uFEFF' + headings.join(',') + '\r\n' + ['矿石', '2', '9007199254740993.0100', '18014398509481986.0200', '市场旧价 · 已计入', observedAt, '刷新存量行情或填写方案单价'].join(',') + '\r\n')
 })
 
-test('CSV quotes commas, double quotes and embedded newlines while retaining all eight columns', () => {
+test('CSV quotes commas, double quotes and embedded newlines while retaining all seven columns', () => {
   const name = '矿石, "特选"\n第二行'
   const csv = serializeManufacturingPurchaseCsv([exportRow({ name, nextStep: '查看市场, 或填写"方案"单价' })])
   assert.ok(csv.includes('"矿石, ""特选""\n第二行"'))
   const records = parseCsv(csv)
   assert.deepEqual(records[0], headings)
   assert.equal(records.length, 2)
-  assert.equal(records[1].length, 8)
-  assert.equal(records[1][1], name)
-  assert.equal(records[1][7], '查看市场, 或填写"方案"单价')
+  assert.equal(records[1].length, 7)
+  assert.equal(records[1][0], name)
+  assert.equal(records[1][6], '查看市场, 或填写"方案"单价')
 })
 
 test('CSV escapes formulas and leading spreadsheet controls in every text column', () => {
   for (const dangerous of ['=1+1', '+1', '-2', '@SUM(1)', '  =1+1', '\uFEFF@SUM(1)', '\tPlain', '\rPlain', '\nPlain']) {
     const csv = serializeManufacturingPurchaseCsv([exportRow({ itemId: dangerous, name: dangerous, statusLabel: dangerous, observedAt: dangerous, nextStep: dangerous })])
     const [, cells] = parseCsv(csv)
-    for (const index of [0, 1, 5, 6, 7]) assert.equal(cells[index], `'${dangerous}`, `escapes text column ${index} for ${JSON.stringify(dangerous)}`)
-    assert.deepEqual(cells.slice(2, 5), ['2', '1.25', '2.5'], 'valid numeric cells must not receive apostrophe escaping')
+    for (const index of [0, 4, 5, 6]) assert.equal(cells[index], `'${dangerous}`, `escapes text column ${index} for ${JSON.stringify(dangerous)}`)
+    assert.deepEqual(cells.slice(1, 4), ['2', '1.25', '2.5'], 'valid numeric cells must not receive apostrophe escaping')
   }
 })
 
@@ -315,6 +315,40 @@ test('CSV leaves missing prices and invalid numeric inputs blank while preservin
     exportRow({ itemId: '40', quantity: 1, unitPrice: '0', subtotal: '0' }),
   ]
   const [, ...records] = parseCsv(serializeManufacturingPurchaseCsv(rows))
-  assert.deepEqual(records.map(cells => cells.slice(2, 5)), [['3', '', ''], ['', '', ''], ['', '', ''], ['1', '0', '0']])
-  assert.ok(records.every(cells => cells.length === 8))
+  assert.deepEqual(records.map(cells => cells.slice(1, 4)), [['3', '', ''], ['', '', ''], ['', '', ''], ['1', '0', '0']])
+  assert.ok(records.every(cells => cells.length === 7))
+})
+
+test('duplicate names stay separate and receive readable labels without exporting their internal IDs', () => {
+  const summary = { purchases: [
+    purchase({ itemId: '864209752', name: '合金', quantity: 7 }),
+    purchase({ itemId: '864209751', name: '合金', quantity: 3 }),
+  ], missing: [] }
+  const original = structuredClone(summary)
+  const rows = buildManufacturingPurchaseRows(summary)
+  assert.deepEqual(rows.map(row => [row.itemId, row.name, row.quantity]), [
+    ['864209751', '合金（同名材料 1）', 3],
+    ['864209752', '合金（同名材料 2）', 7],
+  ])
+  for (const exported of [serializeManufacturingPurchaseList(rows), serializeManufacturingPurchaseCsv(rows), serializeManufacturingPurchaseCsv(summary.purchases)]) {
+    assert.match(exported, /合金（同名材料 1）/u)
+    assert.match(exported, /合金（同名材料 2）/u)
+    assert.doesNotMatch(exported, /864209751|864209752|\bID\b/u)
+  }
+  assert.deepEqual(summary, original)
+})
+
+test('missing material and target names use friendly messages instead of internal IDs', () => {
+  const purchases = [undefined, null, '', '   '].map((name, index) => purchase({ itemId: `86420975${index}`, name }))
+  const rows = buildManufacturingPurchaseRows({ purchases, missing: [] })
+  assert.equal(rows.length, 4)
+  assert.ok(rows.every(row => row.name.startsWith('材料名称暂缺（同名材料 ')))
+  for (const source of [rows, purchases]) {
+    const copied = serializeManufacturingPurchaseList(source)
+    assert.match(copied, /制造目标\t制造目标名称暂缺/u)
+    for (const exported of [copied, serializeManufacturingPurchaseCsv(source)]) {
+      assert.match(exported, /材料名称暂缺/u)
+      assert.doesNotMatch(exported, /86420975[0-3]|undefined|null|\bID\b/u)
+    }
+  }
 })
