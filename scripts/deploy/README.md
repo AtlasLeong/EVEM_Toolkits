@@ -8,14 +8,24 @@
 
 确认代码后提交并推送 master（或将 PR 合并到 master），无需登录服务器、上传 dist 或手工重启。仅在本地改文件/commit、未推送不会上线。进度和回滚入口：[GitHub Actions → Production](https://github.com/AtlasLeong/EVEM_Toolkits/actions/workflows/deploy.yml)。需回滚时选择 Run workflow → master → action: rollback；它恢复上一成功发布，不回退数据库。
 
-PR 运行 CI；推送 master 运行同一套 CI。只有仓库变量 `EVEM_AUTO_DEPLOY=true` 时，master 的成功检查才自动发布。未设置变量时，push 只验证，不上线。第一次通过 Actions → Production → Run workflow，在 master 上手动 publish；测试不通过就不会拿到生产凭据。rollback 入口不受当前新代码测试失败影响，但仍需 production Environment 和 master 分支。
+PR 与 master push 都保留完整 CI。只有仓库变量 `EVEM_AUTO_DEPLOY=true` 时，Production 才复用该次 master push 的成功 CI 制品，不再重复整套测试。手动 publish 仍先运行完整 CI；rollback 不依赖新代码 CI，仍受 production Environment 和 master 分支限制。
+
+### 发布规划与按需传输
+
+完整测试、迁移检查及两个独立测试 job 全部成功后才产生发布制品。源规划比较生产前端与后端各自实际在运行的 SHA，排除明确审核过的测试与文档路径；不比较 `HEAD^`，因此先前失败或取消的产品变更仍会发布。生产版本证据不可用、未知输入或不支持的文件类型不能证明无变化。
+
+测试或文档变化只保留小型 `release-plan`，不上传前端构建或完整产品包。远端 `noop` 在发布锁内核对精确组件 SHA、实际文件、运行链接、政策版本及健康状态，不修改组件、state 或 previous。产品变化复用一次构建：先通过 SSH 提交小 manifest，由受控 publisher 规划组件与可复用文件，再传输 v2 差异包。完整 SHA-256 清单、内部游戏目录校验、只读迁移门禁、服务锁、事务恢复及回滚均保留。GameData 文件始终完整传输以保留独立内部校验。
+
+自动发布只接受本仓库、非 fork、master push、指定 CI workflow 的精确 run/attempt；所有 job 必须成功，批准后再次核对 master。制品下载到临时目录以免覆盖脚本。仅重跑失败 job 时，旧 attempt 的制品不能复用；请重跑完整 CI 或手动 publish。规划后基线改变也必须重新验证，不能自动修改 base 继续发布。
+
+**上线顺序：**父任务先协调运维安装独立审核过的 `release.py` 与同目录 `source_plan.py` 到 `/usr/local/lib/evem-deploy/`，保留受保护的属主与权限；再合入工作流。旧 publisher 不支持 `plan/noop/v2` 时明确失败，不回退为全量上传。CI 不安装受保护脚本、不调整 SSH/sudo/账户权限。无需新增密钥；部署认证不可用时须恢复既有专用部署通道，不能改用 root。服务端安装与真实发布、回滚验收由父任务串行安排，本 PR 的 CI 和隔离模拟不能代替生产验收。
 
 构建机采用 GitHub Ubuntu runner、Node 22、Python 3.10。服务器沿用现有 CentOS/Python/Gunicorn，不运行 npm。
 
 - `pack.py` 读取 Git HEAD 中的 backend 文件和刚构建的 dist，不递归复制工作目录；包含提交、组件 tree hash 和逐文件 SHA-256。
 - `release.py` 校验完整清单与摘要，拒绝路径穿越、符号链接、`.env`、venv、日志和上传文件。
 - 组件比较使用线上最后成功状态，不仅比较上一条提交；前端单独变更不重启后端。
-- 仅文档/部署说明变更时仍验证并上传产物，但不切换业务组件、不重启服务；线上组件 SHA 保留各自最后实际发布的提交，不一定等于最新 master。
+- 明确的测试/文档变化只验证小型规划证据，不上传产品包、不切换业务组件；线上组件 SHA 保留各自最后实际发布的提交，不一定等于最新 master。
 - 服务器文件锁与 GitHub concurrency 防止重叠发布，切换不主动取消。
 - 后端版本接口 `/api/deploy-version/` 在进程加载时固定 SHA；前端 `/deploy-version.json` 提供对应 SHA。首页、首页引用的 assets、API、服务状态与 SHA 共同检查。
 - 有白名单门禁的目标版本：数据接口的匿名探针仅接受精确的 `401 + WWW-Authenticate: Bearer + 固定未登录 JSON`；其它 401/403/5xx 仍失败。此响应证明门禁在工作，不等于已验证授权用户的数据查询。版本、资源、就绪及 WebSocket 检查不放宽；上线后需单独验证允许账号的只读 API。

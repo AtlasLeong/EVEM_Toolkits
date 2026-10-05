@@ -47,9 +47,9 @@ class MarketReleaseTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
-        self.old = {key: {'path': str(self.root / 'old' / key), 'source': '1' * 40, 'sha': 'a' * 40}
+        self.old = {key: {'path': str(self.root / 'releases' / 'old' / key), 'source': '1' * 40, 'sha': 'a' * 40}
                     for key in ('backend', 'frontend')}
-        self.new = {key: {'path': str(self.root / 'new' / key), 'source': '2' * 40, 'sha': 'b' * 40}
+        self.new = {key: {'path': str(self.root / 'releases' / 'new' / key), 'source': '2' * 40, 'sha': 'b' * 40}
                     for key in ('backend', 'frontend')}
         for state in (self.old, self.new):
             for item in state.values():

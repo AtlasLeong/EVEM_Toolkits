@@ -7,6 +7,7 @@ import argparse
 import base64
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 import http.client
 import json
 import os
@@ -16,6 +17,7 @@ import shutil
 import signal
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import time
@@ -31,6 +33,14 @@ MAX_BYTES = 1024 ** 3
 MARKET_CAPABILITY_FILE = 'Market/management/commands/market_tick.py'
 KILLBOARD_CAPABILITY_FILE = 'Killboard/run-collector.sh'
 MARKET_MSGPACK_VERSION = '1.2.2'
+
+
+def source_policy():
+    # Load the operator-installed sibling, never a module from the application.
+    spec = importlib.util.spec_from_file_location('evem_source_policy', Path(__file__).with_name('source_plan.py'))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 # Run only with the candidate interpreter and its real collector PYTHONPATH.
 # No Django settings, session load, database, or game connection is needed.
@@ -151,6 +161,60 @@ def validate_game_catalog(source, files):
             raise ReleaseError('game catalog checksum mismatch')
 
 
+def validate_manifest(manifest):
+    """Validate small planning metadata with the same rules as release archives."""
+    if (not isinstance(manifest, dict) or type(manifest.get('format')) is not int
+            or manifest['format'] not in (1, 2)
+            or not isinstance(manifest.get('sha'), str) or not SHA.fullmatch(manifest['sha'])
+            or not isinstance(manifest.get('sources'), dict)
+            or set(manifest['sources']) != set(COMPONENTS)
+            or any(not isinstance(s, str) or not SHA.fullmatch(s) for s in manifest['sources'].values())
+            or not isinstance(manifest.get('dependencies'), str) or not HASH.fullmatch(manifest['dependencies'])
+            or not isinstance(manifest.get('files'), dict) or len(manifest['files']) > 20000):
+        raise ReleaseError('invalid manifest metadata')
+    components = list(COMPONENTS)
+    if manifest['format'] == 1 and {'base', 'components', 'candidate', 'reuse'} & set(manifest):
+        raise ReleaseError('delta metadata is forbidden in a full artifact')
+    if manifest['format'] == 2:
+        components = manifest.get('components')
+        if (not isinstance(components, list) or not components
+                or components != [c for c in COMPONENTS if c in components]
+                or not isinstance(manifest.get('base'), str) or not HASH.fullmatch(manifest['base'])
+                or not isinstance(manifest.get('candidate'), dict)
+                or manifest['candidate'].get('format') != 1):
+            raise ReleaseError('invalid delta metadata')
+        candidate = validate_manifest(manifest['candidate'])
+        for key in ('sha', 'sources', 'dependencies', 'policy'):
+            if manifest.get(key) != candidate.get(key):
+                raise ReleaseError('delta candidate metadata mismatch')
+        expected = {name: value for name, value in candidate['files'].items()
+                    if name.split('/')[0] in components}
+        if manifest['files'] != expected:
+            raise ReleaseError('delta candidate inventory mismatch')
+        reuse = manifest.get('reuse', {})
+        if (not isinstance(reuse, dict)
+                or any(name not in expected or value != expected[name]
+                       or name.startswith('backend/GameData/') for name, value in reuse.items())):
+            raise ReleaseError('invalid delta reuse inventory')
+    files = manifest['files']
+    for name, expected in files.items():
+        safe_name(name)
+        if (name == 'manifest.json' or name.split('/')[0] not in components
+                or not isinstance(expected, str) or not HASH.fullmatch(expected)):
+            raise ReleaseError('invalid manifest inventory')
+        if any(str(parent) in files for parent in PurePosixPath(name).parents):
+            raise ReleaseError('archive path collision')
+    required = {'frontend': {'frontend/index.html'},
+                'backend': {'backend/manage.py', 'backend/requirements.txt'}}
+    if any(not required[c] <= set(files) for c in components):
+        raise ReleaseError('incomplete artifact')
+    if 'backend' in components and manifest['dependencies'] != files['backend/requirements.txt']:
+        raise ReleaseError('dependency checksum mismatch')
+    if 'policy' in manifest and (not isinstance(manifest['policy'], str) or not HASH.fullmatch(manifest['policy'])):
+        raise ReleaseError('invalid source policy')
+    return manifest
+
+
 def validate(archive):
     """Validate inventory, types and checksums BEFORE creating any release files."""
     with tarfile.open(archive, 'r:*') as source:
@@ -166,39 +230,39 @@ def validate(archive):
                 raise ReleaseError('only regular files are allowed')
         if 'manifest.json' not in names or source.getmember('manifest.json').size > 4 * 1024 ** 2:
             raise ReleaseError('missing or oversized manifest')
-        manifest = json.load(source.extractfile('manifest.json'))
-        if (manifest.get('format') != 1 or not SHA.fullmatch(manifest.get('sha', ''))
-                or set(manifest.get('sources', {})) != set(COMPONENTS)
-                or not all(SHA.fullmatch(s) for s in manifest['sources'].values())
-                or not HASH.fullmatch(manifest.get('dependencies', ''))):
-            raise ReleaseError('invalid manifest metadata')
-        files = manifest.get('files', {})
-        if set(files) != set(names) - {'manifest.json'}:
+        manifest = validate_manifest(json.load(source.extractfile('manifest.json')))
+        files = manifest['files']
+        payload = {name: value for name, value in files.items()
+                   if name not in manifest.get('reuse', {})}
+        if set(payload) != set(names) - {'manifest.json'}:
             raise ReleaseError('artifact inventory mismatch')
         for name in names:
             if any(str(parent) in files for parent in PurePosixPath(name).parents):
                 raise ReleaseError('archive path collision')
-        required = {'frontend/index.html', 'backend/manage.py', 'backend/requirements.txt'}
-        if not required <= set(files):
-            raise ReleaseError('incomplete artifact')
-        for name, expected in files.items():
+        for name, expected in payload.items():
             actual = hashlib.sha256()
             with source.extractfile(name) as stream:
                 for chunk in iter(lambda: stream.read(1024 ** 2), b''):
                     actual.update(chunk)
             if not HASH.fullmatch(expected) or actual.hexdigest() != expected:
                 raise ReleaseError('artifact checksum mismatch: ' + name)
-        if manifest['dependencies'] != files['backend/requirements.txt']:
-            raise ReleaseError('dependency checksum mismatch')
         validate_game_catalog(source, files)
         return manifest
 
 
-def stage(archive, releases):
+def stage(archive, releases, reuse_state=None):
     manifest = validate(archive)
     releases = Path(releases)
+    reuse = manifest.get('reuse', {})
+    if reuse and (reuse_state is None or state_token(reuse_state) != manifest['base']):
+        raise ReleaseError('verified base state required for reused files')
     releases.mkdir(parents=True, exist_ok=True)
-    target = releases / manifest['sha']
+    identity = manifest['sha']
+    if manifest['format'] == 2:
+        # The same source may be replanned after a rollback or failed preflight.
+        # Keep each verified delta inventory/base immutable and independently reusable.
+        identity += '-' + digest(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode())
+    target = releases / identity
     # An identical retry may reuse staged files, but never trust the directory name alone.
     if target.exists() or target.is_symlink():
         if target.is_symlink() or not target.is_dir():
@@ -231,12 +295,44 @@ def stage(archive, releases):
     temporary = Path(tempfile.mkdtemp(prefix='.staging-', dir=releases))
     try:
         with tarfile.open(archive, 'r:*') as source:
+            payload = set(manifest['files']) - set(reuse)
+            if {member.name for member in source.getmembers()} != payload | {'manifest.json'}:
+                raise ReleaseError('staging inventory changed after validation')
             for member in source.getmembers():
+                safe_name(member.name)
+                if not member.isfile():
+                    raise ReleaseError('staging file type changed after validation')
                 dest = temporary / member.name
                 dest.parent.mkdir(parents=True, exist_ok=True)
+                actual = hashlib.sha256()
                 with source.extractfile(member) as incoming, dest.open('xb') as out:
-                    shutil.copyfileobj(incoming, out)
+                    for chunk in iter(lambda: incoming.read(1024 ** 2), b''):
+                        actual.update(chunk)
+                        out.write(chunk)
+                if member.name == 'manifest.json':
+                    if json.loads(dest.read_text()) != manifest:
+                        raise ReleaseError('staging manifest changed after validation')
+                elif actual.hexdigest() != manifest['files'][member.name]:
+                    raise ReleaseError('staging checksum changed after validation')
                 dest.chmod(0o644)
+        for name, expected in reuse.items():
+            component, relative = name.split('/', 1)
+            directory = Path(reuse_state[component]['path'])
+            origin = directory / relative
+            if (not directory.resolve().is_relative_to(releases.resolve())
+                    or origin.is_symlink() or not origin.is_file()
+                    or not origin.resolve().is_relative_to(directory.resolve())):
+                raise ReleaseError('unsafe reused source: ' + name)
+            dest = temporary / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            actual = hashlib.sha256()
+            with origin.open('rb') as incoming, dest.open('xb') as out:
+                for chunk in iter(lambda: incoming.read(1024 ** 2), b''):
+                    actual.update(chunk)
+                    out.write(chunk)
+            if actual.hexdigest() != expected:
+                raise ReleaseError('reused source checksum mismatch: ' + name)
+            dest.chmod(0o644)
         temporary.chmod(0o755)
         for directory in temporary.rglob('*'):
             if directory.is_dir():
@@ -572,19 +668,184 @@ def server_lock(root):
         yield
 
 
+def state_token(state):
+    return digest(json.dumps(state, sort_keys=True, separators=(',', ':')).encode())
+
+
+def read_active_state(root):
+    root = Path(root).resolve()
+    if root == Path('/') or not (root / 'initialized.json').is_file():
+        raise ReleaseError('server not initialized by an operator')
+    if (root / 'transaction.json').exists():
+        raise ReleaseError('unfinished transaction: operator recovery required')
+    state = json.loads((root / 'state.json').read_text())
+    if not isinstance(state, dict) or set(state) != set(COMPONENTS):
+        raise ReleaseError('invalid recorded state')
+    for component in COMPONENTS:
+        entry = state[component]
+        if (not isinstance(entry, dict) or not isinstance(entry.get('sha'), str)
+                or not SHA.fullmatch(entry['sha']) or not isinstance(entry.get('source'), str)
+                or not SHA.fullmatch(entry['source']) or not isinstance(entry.get('path'), str)):
+            raise ReleaseError('invalid recorded component')
+        recorded = Path(entry['path'])
+        active = root / 'current' / component
+        if (not recorded.is_absolute() or not recorded.resolve().is_relative_to(root / 'releases')
+                or not recorded.is_dir() or not active.is_symlink()
+                or active.resolve() != recorded.resolve()):
+            raise ReleaseError('current links disagree with recorded state')
+    return state
+
+
+def verify_runtime_links(root, directory, manifest):
+    """Verify link identity without reading configuration or persistent contents."""
+    config = json.loads((Path(root) / 'config.json').read_text())
+    environments = json.loads((Path(root) / 'shared/environments.json').read_text())
+    environment = environments.get(manifest['dependencies'])
+    if not isinstance(environment, str) or not (Path(environment) / 'bin/python').is_file():
+        raise ReleaseError('active dependency environment unavailable')
+    targets = {'.venv': environment, '.env': config.get('env_file'),
+               'logs': config.get('logs'), 'static/uploads': config.get('uploads')}
+    for local, target in targets.items():
+        if not isinstance(target, str) or not Path(target).is_absolute() or not Path(target).exists():
+            raise ReleaseError('active runtime target unavailable')
+        item = Path(directory) / local
+        if not item.is_symlink() or item.resolve() != Path(target).resolve():
+            raise ReleaseError('active runtime link disagrees with configuration')
+
+
+def active_inventory(root, state, component):
+    """Check the recorded artifact against actual bytes before claiming reuse."""
+    if state[component].get('legacy') is True:
+        return None
+    directory = Path(state[component]['path'])
+    path = directory.parent / 'manifest.json'
+    if not path.exists():
+        return None  # Legacy initialization has no trustworthy inventory.
+    if path.is_symlink() or path.stat().st_size > 4 * 1024 ** 2:
+        raise ReleaseError('invalid active manifest')
+    manifest = validate_manifest(json.loads(path.read_text()))
+    if (manifest['sha'] != state[component]['sha']
+            or manifest['sources'][component] != state[component]['source']):
+        raise ReleaseError('active manifest disagrees with recorded state')
+    if component == 'backend':
+        verify_runtime_links(root, directory, manifest)
+    files = {name: value for name, value in manifest['files'].items()
+             if name.startswith(component + '/')}
+    if not files:
+        raise ReleaseError('active component inventory missing')
+    for name, expected in files.items():
+        item = directory / name.removeprefix(component + '/')
+        if (item.is_symlink() or not item.resolve().is_relative_to(directory.resolve())
+                or not item.is_file()):
+            raise ReleaseError('unsafe active file: ' + name)
+        actual = hashlib.sha256()
+        with item.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 ** 2), b''):
+                actual.update(chunk)
+        if actual.hexdigest() != expected:
+            raise ReleaseError('active checksum mismatch: ' + name)
+    allowed_links = {'backend/.env', 'backend/.venv', 'backend/logs', 'backend/static/uploads'}
+    for folder, directories, filenames in os.walk(directory, followlinks=False):
+        for leaf in directories + filenames:
+            item = Path(folder) / leaf
+            name = component + '/' + item.relative_to(directory).as_posix()
+            if item.is_symlink():
+                if name not in allowed_links:
+                    raise ReleaseError('unlisted active symlink: ' + name)
+            elif item.is_dir() or name in files:
+                continue
+            elif '__pycache__' in item.relative_to(directory).parts and item.suffix == '.pyc':
+                continue
+            else:
+                raise ReleaseError('unlisted active file: ' + name)
+    return files
+
+
+def product_inventory(files, component):
+    policy = source_policy()
+    return {name: value for name, value in files.items()
+            if name.startswith(component + '/')
+            and name not in {'backend/.release-sha', 'frontend/deploy-version.json'}
+            and (component != 'backend' or policy.runtime_path(name))}
+
+
+def _release_plan(root, old, manifest):
+    validate_manifest(manifest)
+    if manifest['format'] != 1 or manifest.get('policy') != source_policy().policy_digest():
+        raise ReleaseError('incompatible planning source policy')
+    changed, reuse = [], {}
+    for component in COMPONENTS:
+        current = active_inventory(root, old, component)
+        if (current is None or product_inventory(current, component)
+                != product_inventory(manifest['files'], component)):
+            changed.append(component)
+            if current is not None:
+                reuse.update({name: value for name, value in manifest['files'].items()
+                              if name.startswith(component + '/') and current.get(name) == value
+                              and not name.startswith('backend/GameData/')})
+    return {'format': 1, 'sha': manifest['sha'], 'policy': manifest['policy'],
+            'base': state_token(old), 'components': changed, 'reuse': reuse}
+
+
+def plan_release(root, manifest):
+    root = Path(root).resolve()
+    if root == Path('/') or not (root / 'initialized.json').is_file():
+        raise ReleaseError('server not initialized by an operator')
+    with server_lock(root):
+        old = read_active_state(root)
+        plan = _release_plan(root, old, manifest)
+        if not plan['components']:
+            health(json.loads((root / 'config.json').read_text()), old)
+        return plan
+
+
+def confirm_noop(root, plan):
+    """Confirm trusted CI source evidence against the exact locked active pair."""
+    if (not isinstance(plan, dict) or type(plan.get('format')) is not int
+            or plan.get('format') != 1 or plan.get('action') != 'noop'
+            or not isinstance(plan.get('sha'), str) or not SHA.fullmatch(plan['sha'])
+            or plan.get('policy') != source_policy().policy_digest()
+            or not isinstance(plan.get('baseline'), dict) or set(plan['baseline']) != set(COMPONENTS)
+            or not isinstance(plan.get('inputs'), dict) or set(plan['inputs']) != set(COMPONENTS)):
+        raise ReleaseError('invalid no-op source evidence')
+    for component in COMPONENTS:
+        inputs = plan['inputs'][component]
+        if (not isinstance(inputs, dict) or not isinstance(inputs.get('head'), str)
+                or not HASH.fullmatch(inputs['head']) or inputs.get('baseline') != inputs['head']):
+            raise ReleaseError('unequal no-op source inputs')
+    root = Path(root).resolve()
+    if root == Path('/') or not (root / 'initialized.json').is_file():
+        raise ReleaseError('server not initialized by an operator')
+    with server_lock(root):
+        old = read_active_state(root)
+        if any(old[c]['sha'] != plan['baseline'][c] for c in COMPONENTS):
+            raise ReleaseError('active versions changed; rerun complete CI')
+        for component in COMPONENTS:
+            if active_inventory(root, old, component) is None:
+                raise ReleaseError('no verified active inventory; rerun with a product package')
+        health(json.loads((root / 'config.json').read_text()), old)
+        return {'format': 1, 'sha': plan['sha'], 'policy': plan['policy'],
+                'base': state_token(old), 'components': []}
+
+
+def check_delta_plan(root, old, manifest):
+    if manifest['base'] != state_token(old):
+        raise ReleaseError('active state changed after planning; rerun complete CI')
+    plan = _release_plan(root, old, manifest['candidate'])
+    if manifest['components'] != plan['components']:
+        raise ReleaseError('delta does not match required components')
+    if manifest.get('reuse', {}) != plan['reuse']:
+        raise ReleaseError('delta does not match verified reuse inventory')
+    return plan['components']
+
+
 def publish(root, archive=None, rollback=False):
     root = Path(root).resolve()
     if root == Path('/') or not (root / 'initialized.json').is_file():
         raise ReleaseError('server not initialized by an operator')
     with server_lock(root):
-        if (root / 'transaction.json').exists():
-            raise ReleaseError('unfinished transaction: operator recovery required')
+        old = read_active_state(root)
         config = json.loads((root / 'config.json').read_text())
-        old = json.loads((root / 'state.json').read_text())
-        for component in COMPONENTS:
-            active = root / 'current' / component
-            if not active.is_symlink() or active.resolve() != Path(old[component]['path']).resolve():
-                raise ReleaseError('current links disagree with recorded state')
         if rollback:
             new = json.loads((root / 'previous.json').read_text())
             changed = [c for c in COMPONENTS if new[c]['path'] != old[c]['path']]
@@ -604,11 +865,12 @@ def publish(root, archive=None, rollback=False):
                                    required=new['backend'].get('market_collector') is True)
         else:
             manifest = validate(archive)
-            changed = changed_components(old, manifest)
+            changed = (check_delta_plan(root, old, manifest) if manifest['format'] == 2
+                       else changed_components(old, manifest))
             if not changed:
                 print('No component changes since last successful release.')
                 return
-            staged = stage(archive, root / 'releases')
+            staged = stage(archive, root / 'releases', old)
             new = {**old}
             for component in changed:
                 new[component] = {'source': manifest['sources'][component], 'sha': manifest['sha'],
@@ -642,9 +904,19 @@ def main():
     deploy.add_argument('--root', type=Path, default=Path('/EVEMTK/deploy'))
     rollback = sub.add_parser('rollback')
     rollback.add_argument('--root', type=Path, default=Path('/EVEMTK/deploy'))
+    for action in ('plan', 'noop'):
+        command_parser = sub.add_parser(action)
+        command_parser.add_argument('--root', type=Path, default=Path('/EVEMTK/deploy'))
     args = parser.parse_args()
     if args.action == 'verify':
         print(json.dumps(validate(args.archive), sort_keys=True))
+    elif args.action in ('plan', 'noop'):
+        data = sys.stdin.buffer.read(4 * 1024 ** 2 + 1)
+        if len(data) > 4 * 1024 ** 2:
+            raise ReleaseError('oversized planning request')
+        request = json.loads(data)
+        result = plan_release(args.root, request) if args.action == 'plan' else confirm_noop(args.root, request)
+        print(json.dumps(result, sort_keys=True))
     else:
         def interrupted(signum, frame):
             raise ReleaseError('interrupted; attempting safe rollback')
