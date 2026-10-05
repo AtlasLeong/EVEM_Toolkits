@@ -19,6 +19,7 @@ class FuturePrivateAPI(APIView):
 
 urlpatterns = [
     *application_patterns,
+    path('api/user/', include('Authentication.urls')),
     path('api/', include('StarFieldSearch.urls')),
     path('api/', include('PlanetaryResource.urls')),
     path('api/', include('Bazaar.urls')),

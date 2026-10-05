@@ -8,5 +8,6 @@ asgiref==3.7.2
 sqlparse==0.4.4
 tzdata==2023.3
 Pillow==10.1.0
+certifi==2023.11.17
 numpy==1.24.3
 scipy==1.10.1

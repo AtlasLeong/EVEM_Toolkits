@@ -3,11 +3,14 @@
 from datetime import timedelta
 from unittest.mock import patch
 from uuid import uuid4
+import re
 
 import jwt
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core import mail
+from django.core.cache import cache
 from django.db import connection
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient, APIRequestFactory
@@ -109,6 +112,46 @@ class PublicReadIntegrationTests(TestCase):
         self.sign_in(self.ordinary)
         for path in ('/api/market/admin/config/', '/api/community/reviews/', '/api/starsea/reviews/'):
             self.assertEqual(self.client.get(path).status_code, 403, path)
+
+    def test_registered_account_login_refresh_and_local_logout_keep_private_permissions(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        email = 'registered-pilot@example.com'
+        password = 'Syntheticpass9'
+        sent = self.client.post('/api/user/emailcode', {'email': email}, format='json')
+        self.assertEqual(sent.status_code, 200)
+        self.assertEqual(mail.outbox[-1].to, [email])
+        code = re.search(r'\b[0-9]{6}\b', mail.outbox[-1].body).group()
+        registered = self.client.post('/api/user/register', {
+            'email': email, 'userName': 'registered-pilot', 'password': password,
+            'verificationCode': code,
+        }, format='json')
+        self.assertEqual(registered.status_code, 201)
+        user = get_user_model().objects.get(email=email)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.groups.exists())
+        self.assertFalse(user.user_permissions.exists())
+        refreshed = self.client.post('/api/user/token/refresh', {'refresh': registered.data['refresh']}, format='json')
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual(AccessToken(refreshed.data['access'])['user_id'], user.pk)
+        for token in (registered.data['access'], refreshed.data['access']):
+            self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+            self.assertEqual(self.client.get('/api/killboard/access/').json(), {'can_view_killboard': False})
+            self.assertEqual(self.client.get('/api/tactical/usage/access/').json(), {'can_view_usage': False})
+            for path in ('/api/killboard/reports/', '/api/tactical/usage/overview/',
+                         '/api/market/admin/config/', '/api/community/reviews/', '/api/starsea/reviews/'):
+                self.assertEqual(self.client.get(path).status_code, 403, path)
+        # Browser logout clears locally stored credentials. This assertion checks
+        # the subsequent anonymous request; it does not claim JWT revocation.
+        self.client.credentials()
+        for path in ('/api/killboard/access/', '/api/community/mine/', '/api/tactical/usage/access/'):
+            self.assertEqual(self.client.get(path).status_code, 401, path)
+        logged_in = self.client.post('/api/user/login', {'login_email': email, 'login_password': password}, format='json')
+        self.assertEqual(logged_in.status_code, 200)
+        self.assertEqual(AccessToken(logged_in.data['access'])['user_id'], user.pk)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {logged_in.data['access']}")
+        self.assertEqual(self.client.get('/api/killboard/reports/').status_code, 403)
 
     def test_removed_membership_is_rechecked_even_with_the_same_valid_jwt(self):
         organization = Organization.objects.create(name='Private organization', founder=self.owner)
