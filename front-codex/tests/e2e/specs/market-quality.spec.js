@@ -74,6 +74,119 @@ for (const width of [320, 375]) {
   })
 }
 
+for (const signedIn of [false, true]) {
+  test(`quality summary text and disclosure remain within the header at 768px and 200% text (${signedIn ? 'signed in' : 'public'})`, async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 1024 })
+    if (signedIn) await seedAuthenticatedSession(page)
+    await marketMock(page, () => json(summary({ counts: { enabled: 149 }, observations: [...Array.from({ length: 147 }, () => observed(0, true, true)), observed(0, false, false), observed(0, false, false)] })))
+    await page.goto('/market')
+    const quality = page.locator('.market-quality')
+    await expect(quality.getByText('新鲜卖价 147 / 149')).toBeVisible()
+    await page.evaluate(() => {
+      // Text-only pressure, matching the existing accessibility regressions.
+      const fonts = [...document.querySelectorAll('body *')].map(el => [el, parseFloat(getComputedStyle(el).fontSize)])
+      for (const [el, size] of fonts) el.style.setProperty('font-size', `${size * 2}px`, 'important')
+    })
+    const metrics = await quality.evaluate(el => {
+      const summary = el.querySelector('summary')
+      const header = el.closest('.market-terminal-header').getBoundingClientRect()
+      const actions = el.parentElement.getBoundingClientRect()
+      const bounds = summary.getBoundingClientRect()
+      let left = Math.max(header.left, actions.left)
+      let right = Math.min(header.right, actions.right)
+      for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        if (getComputedStyle(ancestor).overflowX !== 'visible') {
+          const clip = ancestor.getBoundingClientRect()
+          left = Math.max(left, clip.left)
+          right = Math.min(right, clip.right)
+        }
+      }
+      const texts = [...summary.children].flatMap(child => {
+        const range = document.createRange()
+        range.selectNodeContents(child)
+        return [...range.getClientRects()].map(rect => ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }))
+      })
+      const actionRects = [...el.parentElement.children].map(child => {
+        const rect = child.getBoundingClientRect()
+        return { left: rect.left, right: rect.right }
+      })
+      return { left: Math.max(left, bounds.left), right: Math.min(right, bounds.right), top: bounds.top, bottom: bounds.bottom, texts, actionRects, visibleLeft: left, visibleRight: right }
+    })
+    for (const rect of metrics.actionRects) {
+      expect(rect.left).toBeGreaterThanOrEqual(metrics.visibleLeft - 1)
+      expect(rect.right).toBeLessThanOrEqual(metrics.visibleRight + 1)
+    }
+    for (const rect of metrics.texts) {
+      expect(rect.left).toBeGreaterThanOrEqual(metrics.left - 1)
+      expect(rect.right).toBeLessThanOrEqual(metrics.right + 1)
+      expect(rect.top).toBeGreaterThanOrEqual(metrics.top - 1)
+      expect(rect.bottom).toBeLessThanOrEqual(metrics.bottom + 1)
+    }
+    const disclosure = quality.locator('.market-quality-disclosure')
+    const box = await disclosure.boundingBox()
+    expect(await disclosure.evaluate(el => {
+      const rect = el.getBoundingClientRect()
+      return el.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2))
+    })).toBeTruthy()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(quality).toHaveAttribute('open', '')
+    await page.keyboard.press('Escape')
+    await expect(quality).not.toHaveAttribute('open', '')
+    await expect(quality.locator('summary')).toBeFocused()
+  })
+}
+
+test('collector acquisition time explicitly describes a recorded completed run, separately from newer observations', async ({ page }) => {
+  let completedAt = iso(3600000)
+  await marketMock(page, () => json(summary({ collector: { status: 'collecting', last_attempt_at: iso(0), last_success_at: completedAt } })))
+  await page.goto('/market')
+  const quality = page.locator('.market-quality')
+  await quality.locator('summary').click()
+  const completed = quality.locator('.market-quality-times > div').filter({ hasText: '最近采集结束（有数据）' }).locator('dd')
+  const expected = await page.evaluate(value => new Date(value).toLocaleString('zh-CN', { hour12: false }), completedAt)
+  await expect(completed).toHaveText(expected)
+  await expect(quality.getByText(/只统计已结束且有成功记录的运行，显示其结束时间/)).toBeVisible()
+  await expect(quality.getByText(/进行中或未记入结束统计的采集不会更新此时间/)).toBeVisible()
+  completedAt = null
+  await page.reload()
+  await quality.locator('summary').click()
+  await expect(completed).toHaveText('尚无记录')
+  await expect(quality.locator('.market-quality-times > div').filter({ hasText: '最新采集记录' }).locator('dd')).not.toHaveText('尚无记录')
+})
+
+for (const width of [320, 390, 768, 1440]) {
+  test(`four-digit quality counts stay inside their own cards at ${width}px and 200% text`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 960 })
+    await page.clock.install({ time: now })
+    await marketMock(page, () => json(summary({ counts: { enabled: 1000 }, observations: Array.from({ length: 1000 }, () => observed(0, true, true)) })))
+    await page.goto('/market')
+    const quality = page.locator('.market-quality')
+    await quality.locator('summary').click()
+    await page.evaluate(() => {
+      const records = [...document.querySelectorAll('body *')]
+        .filter(el => el.getBoundingClientRect().width && [...el.childNodes].some(node => node.nodeType === 3 && node.textContent.trim()))
+        .map(el => ({ el, font: parseFloat(getComputedStyle(el).fontSize), line: parseFloat(getComputedStyle(el).lineHeight) }))
+      for (const { el, font, line } of records) {
+        if (Number.isFinite(font)) el.style.setProperty('font-size', `${font * 2}px`, 'important')
+        if (Number.isFinite(line)) el.style.setProperty('line-height', `${line * 2}px`, 'important')
+      }
+    })
+    const cards = await quality.locator('.market-quality-counts > div').evaluateAll(elements => elements.map(el => {
+      const range = document.createRange()
+      range.selectNodeContents(el.querySelector('dd'))
+      return { card: el.getBoundingClientRect().toJSON(), text: range.getBoundingClientRect().toJSON() }
+    }))
+    for (const { card, text } of cards) {
+      expect(text.left).toBeGreaterThanOrEqual(card.left - 1)
+      expect(text.right).toBeLessThanOrEqual(card.right + 1)
+      expect(text.top).toBeGreaterThanOrEqual(card.top - 1)
+      expect(text.bottom).toBeLessThanOrEqual(card.bottom + 1)
+    }
+    expect(await quality.locator('.market-quality-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
+    await page.screenshot({ path: testInfo.outputPath(`quality-counts-${width}-200.png`), fullPage: true })
+  })
+}
+
 test('quality re-ages the cached observation at 30 seconds without fetching upstream or refetching API', async ({ page }) => {
   await page.clock.install({ time: now })
   let reads = 0

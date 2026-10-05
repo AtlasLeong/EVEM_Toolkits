@@ -1,0 +1,109 @@
+.tool-guide > .panel,
+.tool-guide > .tool-guide-private {
+  margin-top: 20px;
+}
+
+.tool-guide .feature-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+
+.tool-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool-guide-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tool-guide-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--console-line-strong);
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tool-guide-steps h3 {
+  margin: 3px 0 8px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.tool-guide-steps p,
+.tool-guide-private p {
+  margin: 0 0 10px;
+  color: var(--console-muted);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.tool-guide-steps a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  color: var(--info);
+  font-size: 13px;
+  font-weight: 650;
+  text-underline-offset: 4px;
+}
+
+.tool-guide-access {
+  padding: 3px 8px;
+  border: 1px solid var(--console-line);
+  border-radius: 4px;
+  color: var(--console-muted-strong);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.tool-guide .info-tool-card .tool-guide-condition {
+  margin-top: 0;
+  color: var(--console-muted-strong);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.tool-guide-private {
+  padding: 18px 20px;
+  border: 1px solid var(--console-line);
+  border-radius: var(--radius-panel);
+  background: var(--console-raised);
+}
+
+.tool-guide-private h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.tool-guide-private p:last-child {
+  margin-bottom: 0;
+}
+
+.tool-guide a:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+@media (max-width: 767px) {
+  .tool-guide-steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}

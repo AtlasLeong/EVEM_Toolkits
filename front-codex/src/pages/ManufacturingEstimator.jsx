@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useLocation } from 'react-router-dom'
 import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench, X } from 'lucide-react'
 import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
-import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency, resolveManufacturingQuote } from '../utils/manufacturingPlan'
+import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency, resolveManufacturingQuote, resolveManualPurchasePrice } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
 import { MANUFACTURING_QUOTE_AGE_TICK_MS, manufacturingQuoteIdsDue, mergeManufacturingQuoteSnapshots } from '../utils/manufacturingQuoteCache'
 import { formatCompactIsk, formatMissingMaterialReason, formatManufacturingObservationTime } from '../utils/manufacturingDisplay'
 import MarketItemIcon from '../components/MarketItemIcon'
+import ManufacturingPurchaseList from '../components/manufacturing/ManufacturingPurchaseList'
 import '../styles/manufacturing.css'
 
 const CATEGORY_LABELS = { ship: '舰船', material: '材料', building: '建筑' }
@@ -158,7 +160,11 @@ function TargetPicker({ recipes, selectedId, search, onSearch, onSelect }) {
       window.removeEventListener('resize', updatePosition)
       if (root) root.inert = wasInert
       document.body.style.overflow = previousOverflow
-      if (openerRef.current?.isConnected) openerRef.current.focus({ preventScroll: true })
+      if (openerRef.current?.isConnected) {
+        openerRef.current.focus({ preventScroll: true })
+        // A layout change may restore an old scroll position behind the picker.
+        openerRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+      }
     }
   }, [open, updatePosition])
 
@@ -281,6 +287,7 @@ function SummaryPanel({ summary, selectedNode, quote, quoteNow, manualPrice, onM
   const blueprintCostError = summary.blueprintCostError
   const selectedPurchase = selectedNode?.mode === 'buy'
   const resolvedQuote = resolveManufacturingQuote(quote, { now: quoteNow })
+  const manualPriceError = resolveManualPurchasePrice(manualPrice).error
   return (
     <aside className="manufacturing-summary" data-testid="manufacturing-cost-rail">
        <div className="manufacturing-summary-heading"><h2>成本概览</h2><span className={`manufacturing-complete-state ${complete ? 'is-complete' : 'is-partial'}`}>{blueprintCostError ? '检查蓝图价格' : complete ? '可计算' : '待补报价'}</span></div>
@@ -303,8 +310,8 @@ function SummaryPanel({ summary, selectedNode, quote, quoteNow, manualPrice, onM
         <div className="manufacturing-price-editor-heading"><div><span className="eyebrow">节点报价</span><h3>{selectedNode?.name || '选择购买节点'}</h3></div>{selectedPurchase ? <span className="manufacturing-route-pill is-buy">购买</span> : selectedNode ? <span className="manufacturing-route-pill is-make">自造</span> : null}</div>
         {selectedPurchase ? <>
           <div className="manufacturing-market-reference"><span>市场参考价</span><strong>{formatIsk(resolvedQuote.price)}</strong><small>{quoteState(resolvedQuote.status)}{resolvedQuote.observedAt ? <> · 采集时间：<time dateTime={resolvedQuote.observedAt}>{formatManufacturingObservationTime(resolvedQuote.observedAt)}</time></> : resolvedQuote.price && resolvedQuote.status !== 'unknown' ? ' · 采集时间未知' : null}</small></div>
-          <label className="manufacturing-manual-price"><span>方案手填单价 {manualPrice ? <em className="manufacturing-manual-badge">方案内手填</em> : null}</span><div><input aria-label="方案手填单价" inputMode="decimal" value={manualPrice ?? ''} onChange={event => onManualPrice(event.target.value)} placeholder="留空使用市场参考价" /><span>ISK</span></div></label>
-          <p className="manufacturing-price-help">仅保存到当前方案，不会修改公共行情。</p>
+          <label className="manufacturing-manual-price"><span>方案手填单价 {manualPrice ? <em className="manufacturing-manual-badge">方案内手填</em> : null}</span><div><input aria-label="方案手填单价" inputMode="decimal" maxLength={64} aria-invalid={Boolean(manualPriceError)} aria-describedby="manufacturing-manual-price-help" value={manualPrice ?? ''} onChange={event => onManualPrice(event.target.value)} placeholder="留空使用市场参考价" /><span>ISK</span></div></label>
+          <p id="manufacturing-manual-price-help" className={manualPriceError ? 'manufacturing-inline-error' : 'manufacturing-price-help'}>{manualPriceError ? '请输入非负普通十进制单价，不支持指数；最多 64 个字符。清空可恢复市场价。' : '仅保存到当前方案，不会修改公共行情。'}</p>
         </> : <p className="manufacturing-price-help">{selectedNode ? '该节点当前为自造，不需要单独购买报价。切换为购买后可设置本方案单价。' : '点击制造链中的节点，可查看市场参考价并设置本方案的购买单价。'}</p>}
       </section>
       <button className="manufacturing-refresh-button" type="button" onClick={onRefreshQuotes} disabled={quoteLoading}><RefreshCw size={15} className={quoteLoading ? 'is-spinning' : ''} />{quoteLoading ? '正在读取行情' : '刷新购买项行情'}</button>
@@ -315,6 +322,11 @@ function SummaryPanel({ summary, selectedNode, quote, quoteNow, manualPrice, onM
 }
 
 export default function ManufacturingEstimatorPage() {
+  const location = useLocation()
+  const manufacturingPageRef = useRef(null)
+  const headingRef = useRef(null)
+  const navigationRef = useRef(null)
+  const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia('(min-width: 1100px)').matches)
   const [catalog, setCatalog] = useState(null)
   const [catalogError, setCatalogError] = useState('')
   const [selectedId, setSelectedId] = useState('')
@@ -333,6 +345,13 @@ export default function ManufacturingEstimatorPage() {
   const quoteScopeRef = useRef('')
   const [expandedNodes, setExpandedNodes] = useState(() => new Set(['0']))
   const [routeActionMessage, setRouteActionMessage] = useState('')
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1100px)')
+    const updateLayout = event => setDesktopLayout(event.matches)
+    media.addEventListener('change', updateLayout)
+    return () => media.removeEventListener('change', updateLayout)
+  }, [])
 
   const loadCatalog = useCallback(async () => {
     setCatalogError('')
@@ -358,6 +377,49 @@ export default function ManufacturingEstimatorPage() {
     return createManufacturingPlan(catalog, { targetId: selectedId, quantity, overrides, purchasePrices, marketQuotes, settings: { ...settings, now: quoteNow } })
   }, [catalog, selectedId, quantity, overrides, purchasePrices, marketQuotes, settings, quoteNow])
   const summary = useMemo(() => plan ? summarizeManufacturingPlan(catalog, plan) : null, [catalog, plan])
+  const catalogReady = Boolean(catalog && summary)
+  useEffect(() => {
+    if (!catalogReady) return undefined
+    const navigation = `${location.key}:${location.hash}:${desktopLayout}`
+    if (navigationRef.current === navigation) return undefined
+    const layoutOnly = navigationRef.current === `${location.key}:${location.hash}:${!desktopLayout}`
+    const purchasing = location.hash === '#manufacturing-purchase-list'
+    const returningToEstimate = !location.hash && navigationRef.current !== null
+    if (!purchasing && !returningToEstimate) {
+      navigationRef.current = navigation
+      return undefined
+    }
+    // A rapid history reversal can cancel this frame. Record the navigation
+    // now so the next destination is still handled even when its key repeats.
+    navigationRef.current = navigation
+    const frame = window.requestAnimationFrame(() => {
+      const main = manufacturingPageRef.current
+      const destination = purchasing ? document.getElementById('manufacturing-purchase-list') : headingRef.current
+      if (!main || !destination) return
+      // A layout change keeps the current editor or picker. Replaying the
+      // route anchor behind an open picker would leave its opener offscreen.
+      const active = document.activeElement
+      if (layoutOnly && active.closest('.manufacturing-target-portal')) return
+      if (layoutOnly && main.contains(active) && active.matches('input, textarea')) {
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+        return
+      }
+      if (desktopLayout) {
+        // Keep the journey and hidden shell ancestors in place on desktop.
+        const margin = parseFloat(window.getComputedStyle(destination).scrollMarginTop) || 0
+        const top = purchasing ? main.scrollTop + destination.getBoundingClientRect().top - main.getBoundingClientRect().top - main.clientTop - margin : 0
+        main.scrollTo({ top, behavior: 'auto' })
+      } else if (purchasing) {
+        destination.scrollIntoView({ block: 'start', behavior: 'auto' })
+      } else {
+        // Stacked layouts may scroll the page frame rather than the window.
+        main.closest('.site-frame')?.scrollTo({ top: 0, behavior: 'auto' })
+        window.scrollTo({ top: 0, behavior: 'auto' })
+      }
+      destination.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [catalogReady, location.hash, location.key, desktopLayout])
   const selectedNode = useMemo(() => {
     if (!summary || !selectedNodeId) return null
     const stack = [summary.tree]
@@ -478,6 +540,9 @@ export default function ManufacturingEstimatorPage() {
     if (!selectedNodeId) return
     setPurchasePrices(previous => ({ ...previous, [selectedNodeId]: value }))
   }
+  const updatePurchasePrice = (itemId, value) => {
+    setPurchasePrices(previous => ({ ...previous, [itemId]: value }))
+  }
   const selectedQuote = selectedNodeId ? marketQuotes[selectedNodeId] : null
 
   const treePaths = useMemo(() => {
@@ -505,9 +570,9 @@ export default function ManufacturingEstimatorPage() {
   const selectedRecipe = catalog.byId.get(selectedId)
 
   return (
-    <main className="manufacturing-page manufacturing-page--terminal">
+    <main ref={manufacturingPageRef} className="manufacturing-page manufacturing-page--terminal">
       <header className="manufacturing-page-header" data-testid="manufacturing-terminal-header">
-        <div className="manufacturing-terminal-brand"><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div>
+        <div className="manufacturing-terminal-brand"><span className="eyebrow">EVEM INDUSTRY / COST PLANNER</span><h1 ref={headingRef} tabIndex={-1}>制造估价</h1><p>拆解制造链，按节点选择自造或购买。</p></div>
         <div className="manufacturing-header-meta"><span><Boxes size={16} />{catalog.counts.all} 个配方</span><span><Factory size={16} />舰船 · 材料 · 建筑</span></div>
       </header>
       <section className="manufacturing-workspace">
@@ -533,6 +598,7 @@ export default function ManufacturingEstimatorPage() {
         </section>
         <SummaryPanel summary={summary} selectedNode={selectedNode} quote={selectedQuote} quoteNow={quoteNow} manualPrice={selectedNodeId ? purchasePrices[selectedNodeId] || '' : ''} onManualPrice={updateManualPrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} quoteError={quoteError} />
       </section>
+      <ManufacturingPurchaseList summary={summary} targetName={selectedRecipe.name} marketQuotes={marketQuotes} quoteNow={quoteNow} purchasePrices={purchasePrices} onManualPrice={updatePurchasePrice} onRefreshQuotes={() => refreshQuotes()} quoteLoading={quoteLoading} />
     </main>
   )
 }

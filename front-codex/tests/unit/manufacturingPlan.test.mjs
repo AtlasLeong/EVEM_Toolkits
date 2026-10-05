@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { performance } from 'node:perf_hooks'
 
 import { loadManufacturingCatalog } from '../../src/utils/manufacturingCatalog.js'
 import {
@@ -8,6 +9,7 @@ import {
   summarizePlan,
   MAX_BLUEPRINT_COST,
   resolveBlueprintCost,
+  resolveManualPurchasePrice,
   resolveManufacturingQuote,
   DEFAULT_MANUFACTURING_QUOTE_MAX_AGE_MS,
 } from '../../src/utils/manufacturingPlan.js'
@@ -46,6 +48,20 @@ function recipe(productId, name, materials, options = {}) {
     maxInstallQuantity: options.maxInstallQuantity ?? 1,
   }
 }
+
+test('missing display names use a friendly material label while retaining internal item identity', () => {
+  const catalog = makeCatalog([recipe('100', '成品', [{ itemId: '864209753', quantity: 2 }])])
+  for (const missing of [undefined, null, '', '   ']) {
+    catalog.items.set('864209753', { itemId: '864209753', name: missing })
+    const plan = createPlan(catalog, { targetId: '100' })
+    const expanded = expandPlan(plan)
+    const summary = summarizePlan(plan)
+    assert.equal(expanded.root.children[0].name, '材料名称暂缺')
+    assert.equal(expanded.root.children[0].itemId, '864209753')
+    assert.equal(summary.missing[0].name, '材料名称暂缺')
+    assert.equal(summary.missing[0].itemId, '864209753')
+  }
+})
 
 test('ceil-divides requested quantity by outputNum before expanding materials', () => {
   const catalog = makeCatalog([
@@ -249,6 +265,116 @@ test('manual purchase price wins over a fresh market quote and remains isolated 
   assert.equal(summarizePlan(second).total, '4')
   first.purchasePrices['101'] = '99'
   assert.equal(summarizePlan(second).total, '4')
+})
+
+test('manual purchase resolver canonicalizes ordinary decimals exactly and accepts explicit zero', () => {
+  for (const value of [undefined, null, '', ' ', '\t\r\n']) {
+    assert.deepEqual(resolveManualPurchasePrice(value), { value: null, error: null })
+  }
+  for (const [value, expected] of [
+    ['.5', '0.5'], ['1.', '1'], ['0', '0'], ['+1', '1'],
+    ['+.5000', '0.5'], ['0000123.450000', '123.45'], [' +000.000 ', '0'],
+    ['9007199254740993.1234567890123456789000', '9007199254740993.1234567890123456789'],
+    [0, '0'], [1.25, '1.25'], [0n, '0'], [9007199254740993n, '9007199254740993'],
+  ]) {
+    assert.deepEqual(resolveManualPurchasePrice(value), { value: expected, error: null }, `canonical value for ${String(value)}`)
+  }
+})
+
+test('manual purchase prices enforce the 64-character raw limit before trimming or removing insignificant zeros', () => {
+  const longInteger = '9'.repeat(64)
+  const longFraction = `0.${'0'.repeat(61)}1`
+  assert.equal(longFraction.length, 64)
+  for (const [value, expected] of [
+    [longInteger, longInteger], [longFraction, longFraction],
+    [`${' '.repeat(63)}1`, '1'], ['0'.repeat(64), '0'],
+  ]) assert.deepEqual(resolveManualPurchasePrice(value), { value: expected, error: null })
+  assert.deepEqual(resolveManualPurchasePrice(' '.repeat(64)), { value: null, error: null })
+  for (const value of [' '.repeat(65), '0'.repeat(65), '9'.repeat(65), ` ${longFraction}`, `${' '.repeat(64)}1`]) {
+    assert.deepEqual(resolveManualPurchasePrice(value), { value: null, error: 'invalid' })
+  }
+
+  const catalog = makeCatalog([recipe('100', 'Product', [{ itemId: '200', quantity: 1 }])])
+  const marketQuotes = { '200': { best_sell: '1.25' } }
+  const blankWithinLimit = summarizePlan(createPlan(catalog, { targetId: '100', marketQuotes, purchasePrices: { '200': ' '.repeat(64) } }))
+  assert.equal(blankWithinLimit.purchases[0].priceSource, 'market')
+  assert.equal(blankWithinLimit.total, '1.25')
+  const blankTooLong = summarizePlan(createPlan(catalog, { targetId: '100', marketQuotes, purchasePrices: { '200': ' '.repeat(65) } }))
+  assert.equal(blankTooLong.total, null)
+  assert.equal(blankTooLong.missing[0].reason, 'price_invalid')
+  assert.deepEqual(blankTooLong.purchases, [])
+})
+
+test('manual purchase resolver rejects exponent notation, negative values, non-finite numbers and unsupported types', () => {
+  for (const value of [
+    '1e3', '1E-3', '-1', '-0', 'NaN', 'Infinity', '.', '+', '1,000', '1_000', '0x10',
+    -1, -1n, NaN, Infinity, -Infinity, 1e21, 1e-7,
+    true, false, {}, [], new Date(), Symbol('price'), () => '1',
+  ]) {
+    assert.deepEqual(resolveManualPurchasePrice(value), { value: null, error: 'invalid' }, `rejects ${String(value)}`)
+  }
+})
+
+test('summarized manual decimal prices retain every significant digit without falling back to market quotes', () => {
+  const catalog = makeCatalog([recipe('100', 'Product', [{ itemId: '200', quantity: 2 }])])
+  const summary = summarizePlan(createPlan(catalog, {
+    targetId: '100', purchasePrices: { '200': '+9007199254740993.1234567890123456789000' },
+    marketQuotes: { '200': { best_sell: '99' } },
+  }))
+  assert.equal(summary.purchases[0].priceSource, 'manual')
+  assert.equal(summary.purchases[0].unitPrice, '9007199254740993.1234567890123456789')
+  assert.equal(summary.materialSubtotal, '18014398509481986.2469135780246913578')
+  assert.equal(summary.total, '18014398509481986.2469135780246913578')
+  assert.deepEqual(summary.missing, [])
+})
+
+test('extreme manual exponents return invalid and incomplete summaries promptly without decimal expansion', { timeout: 5000 }, () => {
+  const catalog = makeCatalog([recipe('100', 'Product', [{ itemId: '200', quantity: 2 }], { money: 5 })])
+  const plans = ['1e100000000', '1e-100000000'].map(value => createPlan(catalog, {
+    targetId: '100', purchasePrices: { '200': value }, marketQuotes: { '200': { best_sell: '1.25' } },
+  }))
+  const started = performance.now()
+  for (const plan of plans) {
+    assert.deepEqual(resolveManualPurchasePrice(plan.purchasePrices['200']), { value: null, error: 'invalid' })
+    const summary = summarizePlan(plan)
+    assert.equal(summary.complete, false)
+    assert.equal(summary.total, null)
+    assert.equal(summary.coveredSubtotal, '5')
+    assert.equal(summary.materialSubtotal, '0')
+    assert.deepEqual(summary.purchases, [])
+    assert.equal(summary.missing[0].reason, 'price_invalid')
+  }
+  assert.ok(performance.now() - started < 1000, 'extreme exponent rejection must finish within a generous one-second bound')
+})
+
+test('manual validation stays local to its plan and clearing the input restores fresh or stale market references', () => {
+  const catalog = makeCatalog([recipe('100', 'Product', [{ itemId: '200', quantity: 2 }])])
+  const now = '2026-10-04T12:00:00Z'
+  for (const [status, observed_at] of [['fresh', '2026-10-04T11:00:00Z'], ['stale', '2026-10-03T12:00:00Z']]) {
+    const options = {
+      targetId: '100', settings: { now }, purchasePrices: { '200': '0' },
+      marketQuotes: { '200': { status, best_sell: '1.25', observed_at } },
+    }
+    const first = createPlan(catalog, options)
+    const second = createPlan(catalog, options)
+    assert.equal(summarizePlan(first).total, '0')
+    assert.equal(summarizePlan(first).purchases[0].priceSource, 'manual')
+    first.purchasePrices['200'] = '1e100000000'
+    assert.equal(summarizePlan(first).missing[0].reason, 'price_invalid')
+    assert.equal(summarizePlan(second).total, '0')
+    assert.equal(options.purchasePrices['200'], '0')
+    for (const cleared of ['', ' '.repeat(64), null, undefined]) {
+      first.purchasePrices['200'] = cleared
+      const restored = summarizePlan(first)
+      assert.equal(restored.complete, true)
+      assert.equal(restored.total, '2.5')
+      assert.equal(restored.purchases[0].priceSource, 'market')
+      assert.equal(restored.purchases[0].quoteStatus, status)
+      assert.equal(restored.purchases[0].observedAt, new Date(observed_at).toISOString())
+      assert.equal(restored.hasStaleQuotes, status === 'stale')
+      assert.equal(summarizePlan(second).purchases[0].priceSource, 'manual')
+    }
+  }
 })
 
 test('missing quote never becomes zero and reports a covered subtotal', () => {

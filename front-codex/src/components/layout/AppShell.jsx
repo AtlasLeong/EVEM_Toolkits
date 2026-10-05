@@ -1,5 +1,5 @@
 ﻿import { motion, useReducedMotion } from 'framer-motion'
-import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords } from 'lucide-react'
+import { Shield, Globe, Compass, Crosshair, LogOut, Settings, User, Users, MessageSquare, ChevronsLeft, ChevronsRight, LogIn, Menu, X, ChartNoAxesCombined, Factory, Swords, CircleHelp, ArrowRight } from 'lucide-react'
 import { useContext, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../../context/AuthContext'
@@ -7,6 +7,7 @@ import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 import useKillboardAccess from '../../hooks/useKillboardAccess'
 import { pageTransitionKey } from '../../utils/routeTransition.js'
 import { loginReturnPath } from '../../utils/loginDestination'
+import IndustryJourney from './IndustryJourney'
 
 const navGroups = [
   { id: 'industry', label: '市场与工业', items: [
@@ -26,6 +27,7 @@ const navGroups = [
     { to: '/corporations', label: '军团大厅', icon: Users },
     { to: '/starsea', label: '星海见闻', icon: Compass },
     { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
+    { to: '/infocenter', label: '使用与权限', icon: CircleHelp },
   ] },
 ]
 
@@ -65,6 +67,7 @@ export default function AppShell() {
   })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const mobileToggleRef = useRef(null)
+  const mobileIndustryNextRef = useRef(null)
   const mobileNavRef = useRef(null)
   const mainRef = useRef(null)
   const mobileNavOpenRef = useRef(false)
@@ -99,7 +102,7 @@ export default function AppShell() {
 
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 1180px)')
-    const isMobileControl = element => mobileNavRef.current?.contains(element) || element === mobileToggleRef.current
+    const isMobileControl = element => mobileNavRef.current?.contains(element) || element === mobileToggleRef.current || element === mobileIndustryNextRef.current
     let lastFocusedMobile = isMobileControl(document.activeElement) ? document.activeElement : null
     const rememberMobileFocus = event => {
       lastFocusedMobile = isMobileControl(event.target) ? event.target : null
@@ -145,6 +148,14 @@ export default function AppShell() {
     prevIndexRef.current = routeIndex(location.pathname)
   }, [location.pathname])
 
+  useEffect(() => {
+    // Links inside the transitioning page unmount on navigation. Give keyboard
+    // users a stable page destination only when their previous focus was lost.
+    if (hasPathChanged && document.activeElement === document.body) {
+      mainRef.current?.focus({ preventScroll: true })
+    }
+  }, [location.pathname])
+
   return (
     <>
       <a className="shell-skip-link" href="#main-content" onClick={event => {
@@ -158,6 +169,9 @@ export default function AppShell() {
           <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="mobile-brand-icon" /></span>
           <span className="mobile-brand-name">EVEM</span>
         </Link>
+        {location.pathname === '/market' && <Link ref={mobileIndustryNextRef} className="mobile-industry-next" to="/manufacturing" aria-label="下一步：制造估价">
+          <span>制造估价</span><ArrowRight size={16} aria-hidden="true" />
+        </Link>}
         <button
           ref={mobileToggleRef}
           className="mobile-menu-toggle"
@@ -231,7 +245,10 @@ export default function AppShell() {
                   <span className="nav-icon-wrap">
                     <Icon size={18} aria-hidden="true" />
                   </span>
-                  <span className="nav-label">{item.label}</span>
+                  <span className={`nav-label${location.pathname === '/market' && item.to === '/manufacturing' ? ' nav-industry-next' : ''}`}>
+                    {item.label}
+                    {location.pathname === '/market' && item.to === '/manufacturing' && <small>下一步 · 生成采购清单</small>}
+                  </span>
                 </NavLink>
               )
             })}
@@ -278,6 +295,7 @@ export default function AppShell() {
               transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
               className="page-wrapper"
             >
+              <IndustryJourney />
               <Outlet context={usageAccess} />
             </motion.div>
           </div>
