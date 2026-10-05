@@ -322,6 +322,7 @@ export default function ManufacturingEstimatorPage() {
   const manufacturingPageRef = useRef(null)
   const headingRef = useRef(null)
   const navigationRef = useRef(null)
+  const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia('(min-width: 1100px)').matches)
   const [catalog, setCatalog] = useState(null)
   const [catalogError, setCatalogError] = useState('')
   const [selectedId, setSelectedId] = useState('')
@@ -340,6 +341,13 @@ export default function ManufacturingEstimatorPage() {
   const quoteScopeRef = useRef('')
   const [expandedNodes, setExpandedNodes] = useState(() => new Set(['0']))
   const [routeActionMessage, setRouteActionMessage] = useState('')
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1100px)')
+    const updateLayout = event => setDesktopLayout(event.matches)
+    media.addEventListener('change', updateLayout)
+    return () => media.removeEventListener('change', updateLayout)
+  }, [])
 
   const loadCatalog = useCallback(async () => {
     setCatalogError('')
@@ -368,8 +376,9 @@ export default function ManufacturingEstimatorPage() {
   const catalogReady = Boolean(catalog && summary)
   useEffect(() => {
     if (!catalogReady) return undefined
-    const navigation = `${location.key}:${location.hash}`
+    const navigation = `${location.key}:${location.hash}:${desktopLayout}`
     if (navigationRef.current === navigation) return undefined
+    const layoutOnly = navigationRef.current === `${location.key}:${location.hash}:${!desktopLayout}`
     const purchasing = location.hash === '#manufacturing-purchase-list'
     const returningToEstimate = !location.hash && navigationRef.current !== null
     if (!purchasing && !returningToEstimate) {
@@ -383,7 +392,15 @@ export default function ManufacturingEstimatorPage() {
       const main = manufacturingPageRef.current
       const destination = purchasing ? document.getElementById('manufacturing-purchase-list') : headingRef.current
       if (!main || !destination) return
-      if (window.matchMedia('(min-width: 1100px)').matches) {
+      // A layout change keeps the current editor or picker. Replaying the
+      // route anchor behind an open picker would leave its opener offscreen.
+      const active = document.activeElement
+      if (layoutOnly && active.closest('.manufacturing-target-portal')) return
+      if (layoutOnly && main.contains(active) && active.matches('input, textarea')) {
+        active.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' })
+        return
+      }
+      if (desktopLayout) {
         // Keep the journey and hidden shell ancestors in place on desktop.
         const margin = parseFloat(window.getComputedStyle(destination).scrollMarginTop) || 0
         const top = purchasing ? main.scrollTop + destination.getBoundingClientRect().top - main.getBoundingClientRect().top - main.clientTop - margin : 0
@@ -398,7 +415,7 @@ export default function ManufacturingEstimatorPage() {
       destination.focus({ preventScroll: true })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [catalogReady, location.hash, location.key])
+  }, [catalogReady, location.hash, location.key, desktopLayout])
   const selectedNode = useMemo(() => {
     if (!summary || !selectedNodeId) return null
     const stack = [summary.tree]
