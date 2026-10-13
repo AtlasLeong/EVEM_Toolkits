@@ -6,8 +6,7 @@ import stat
 import tempfile
 import time
 
-from Killboard.session_bundle import _reject_link_components, SessionBundleError
-from .protocol import validate_rows, AnomalyProtocolError, MAX_SAFE_INTEGER
+from .validation import validate_rows, AnomalyValidationError, MAX_SAFE_INTEGER
 
 MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
 STATUSES = frozenset({'ok', 'unavailable', 'unauthorized', 'rate_limited', 'network_error',
@@ -44,16 +43,28 @@ def validate_snapshot(value):
                 or collected is not None and (attempted is None or attempted < collected)):
             raise SnapshotError()
         return {**value, 'systems': rows}
-    except (KeyError, TypeError, AnomalyProtocolError):
+    except (KeyError, TypeError, AnomalyValidationError):
         raise SnapshotError() from None
+
+
+def _reject_link_components(path):
+    """Inspect every component with stdlib only; never load private bundles."""
+    for component in (path, *path.parents):
+        if component.is_symlink():
+            raise SnapshotError()
+        try:
+            info = component.lstat()
+        except FileNotFoundError:
+            continue
+        if getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400):
+            raise SnapshotError()
 
 
 def _path(path):
     if not isinstance(path, (str, Path)) or not str(path).strip() or not Path(path).is_absolute():
         raise SnapshotError()
     result = Path(path)
-    try: _reject_link_components(result)
-    except SessionBundleError: raise SnapshotError() from None
+    _reject_link_components(result)
     return result
 
 
@@ -111,7 +122,7 @@ def _write(path, value):
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
         temporary = None
-    except (OSError, ValueError, TypeError, SessionBundleError):
+    except (OSError, ValueError, TypeError):
         raise SnapshotError() from None
     finally:
         if temporary is not None:

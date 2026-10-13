@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from Authentication.permissions import PublicReadOrAuthenticated
-from .protocol import MAX_SAFE_INTEGER, MAX_SYSTEMS
+from .validation import MAX_SAFE_INTEGER, MAX_SYSTEMS
 from .snapshot import read_snapshot
 
 

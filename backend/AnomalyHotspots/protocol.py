@@ -1,16 +1,10 @@
 """Decode only the observed anomaly-statistics wire schema, never heuristics."""
 import msgpack
 
-MAX_SYSTEMS = 10_000
+from .validation import (MAX_SYSTEMS, MAX_SAFE_INTEGER, validate_rows,
+                         AnomalyValidationError as AnomalyProtocolError)
+
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-MAX_SAFE_INTEGER = 2**53 - 1
-
-
-class AnomalyProtocolError(Exception):
-    code = 'malformed'
-
-    def __init__(self):
-        super().__init__('Anomaly statistics are unavailable or malformed.')
 
 
 def _unpack(data):
@@ -23,26 +17,6 @@ def _unpack(data):
                                max_ext_len=MAX_RESPONSE_BYTES)
     except (ValueError, TypeError, RecursionError, msgpack.UnpackException):
         raise AnomalyProtocolError() from None
-
-
-def validate_rows(rows):
-    if not isinstance(rows, list) or len(rows) > MAX_SYSTEMS:
-        raise AnomalyProtocolError()
-    seen, result, total = set(), [], 0
-    for row in rows:
-        if not isinstance(row, dict) or set(row) != {'solar_system_id', 'destroy_num'}:
-            raise AnomalyProtocolError()
-        identifier, count = row['solar_system_id'], row['destroy_num']
-        if (type(identifier) is not int or not 1 <= identifier <= MAX_SAFE_INTEGER
-                or type(count) is not int or not 0 <= count <= MAX_SAFE_INTEGER
-                or identifier in seen):
-            raise AnomalyProtocolError()
-        seen.add(identifier)
-        total += count
-        if total > MAX_SAFE_INTEGER:
-            raise AnomalyProtocolError()
-        result.append({'solar_system_id': identifier, 'destroy_num': count})
-    return sorted(result, key=lambda row: row['solar_system_id'])
 
 
 def decode_statistics(value):
