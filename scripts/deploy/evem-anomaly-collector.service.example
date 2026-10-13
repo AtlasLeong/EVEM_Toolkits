@@ -1,0 +1,24 @@
+[Unit]
+Description=EVEM anomaly-destruction statistics (authorized captured session)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/EVEMTK/deploy/current/backend/AnomalyHotspots/management/commands/anomaly_collect.py
+ConditionPathExists=/EVEMTK/deploy/shared/anomaly/collector.env
+
+[Service]
+Type=oneshot
+User=evem-killboard
+Group=evem-killboard
+WorkingDirectory=/EVEMTK/deploy/current/backend
+EnvironmentFile=/EVEMTK/deploy/shared/anomaly/collector.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONPATH=/EVEMTK/deploy/shared/market-python
+ExecStart=/bin/sh /EVEMTK/deploy/current/backend/AnomalyHotspots/run-collector.sh
+TimeoutStartSec=2min
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadOnlyDirectories=/EVEMTK
+ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock /var/lib/evem-killboard /EVEMTK/deploy/shared/anomaly/snapshots

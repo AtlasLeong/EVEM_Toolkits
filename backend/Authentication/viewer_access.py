@@ -11,6 +11,7 @@ from django.conf import settings
 
 
 PUBLIC_READ_GET_PATHS = frozenset({
+    '/api/anomaly-hotspots/',
     '/api/bazaarinfo', '/api/bazaarnamelist', '/api/bazaarbox',
     '/api/community/corporations/',
     '/api/game-data/items/', '/api/game-data/status/',

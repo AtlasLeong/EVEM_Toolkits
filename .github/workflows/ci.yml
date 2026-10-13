@@ -113,8 +113,12 @@ jobs:
           python -m pip install -r scripts/killboard/requirements-tools.txt
           python -m pip install -r scripts/game_data/client_assets/requirements.txt
           python -m unittest discover -s scripts/killboard/tests -v
+          python -m unittest discover -s scripts/anomaly_hotspots/tests -v
           python -m unittest discover -s scripts/game_data/tests -v
           python -m unittest discover -s scripts/game_data/client_assets/tests -v
+      - name: Anomaly hotspots strict protocol, snapshot and public read boundary (isolated)
+        working-directory: backend
+        run: python manage.py test AnomalyHotspots --settings=EVE_MDjango.anomaly_test_settings --noinput 2>&1 | tee ../ci-evidence/anomaly-hotspots-tests.log
       - name: Frontend dependencies ready
         working-directory: front-codex
         run: node --version

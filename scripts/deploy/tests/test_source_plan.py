@@ -130,6 +130,40 @@ class SourcePlanTests(unittest.TestCase):
         self.assertNotEqual(head, self.base)
         self.assertEqual(result['action'], 'noop')
 
+    def test_anomaly_reviewed_test_directories_are_noop_but_runtime_neighbors_are_not(self):
+        for name in ('backend/AnomalyHotspots/tests/test_protocol.py',
+                     'scripts/anomaly_hotspots/tests/test_capture.py'):
+            self.write(name, '# reviewed isolated anomaly tests\n')
+            self.assertFalse(source_plan.runtime_path(name), name)
+        self.commit('anomaly test-only fixtures')
+        self.assertEqual(self.plan()['action'], 'noop')
+        for name in ('backend/AnomalyHotspots/tests_runtime.py',
+                     'scripts/anomaly_hotspots/extract_session_bundle.py',
+                     'scripts/deploy/evem-anomaly-collector-unreviewed.service'):
+            self.assertTrue(source_plan.runtime_path(name), name)
+
+    def test_anomaly_collector_and_public_api_still_require_backend_release(self):
+        for name in ('backend/AnomalyHotspots/collector.py', 'backend/AnomalyHotspots/views.py'):
+            self.assertTrue(source_plan.runtime_path(name), name)
+            self.write(name, '# anomaly runtime positive control\n')
+            self.commit('anomaly collector/api runtime change')
+            self.assert_changed('backend')
+
+    def test_anomaly_exact_units_and_reviewed_ci_are_controls_but_tampering_is_not(self):
+        for name in ('scripts/deploy/evem-anomaly-collector.service.example',
+                     'scripts/deploy/evem-anomaly-collector.timer.example'):
+            self.assertFalse(source_plan.runtime_path(name), name)
+            self.write(name, '# reviewed anomaly deployment control\n')
+        ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        self.assertTrue(source_plan.frontend_build_context(ci.encode()).startswith(b'reviewed-ci-build-v1\0'))
+        self.assertEqual(source_plan.frontend_build_context(ci.encode()), source_plan.frontend_build_context(CI_WORKFLOW.encode()))
+        altered = ci.replace('test AnomalyHotspots --settings=', 'test AnomalyHotspots --failfast --settings=')
+        self.assertNotEqual(altered, ci)
+        self.assertTrue(source_plan.frontend_build_context(altered.encode()).startswith(b'opaque-ci-build-v1\0'))
+        self.write('.github/workflows/ci.yml', ci)
+        self.commit('reviewed anomaly controls only')
+        self.assertEqual(self.plan()['action'], 'noop')
+
     def test_control_only_release_and_later_tests_keep_old_active_baseline_noop(self):
         final_ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         old_context = source_plan.frontend_build_context(CI_WORKFLOW.encode())

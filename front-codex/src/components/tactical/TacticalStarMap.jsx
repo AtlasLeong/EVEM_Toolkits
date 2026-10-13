@@ -1,6 +1,8 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, RefreshCw, X } from 'lucide-react'
 import { formatSecurityLabel, getSecurityMapColor, getSecurityTextColor } from '../../utils/securityColor'
+import { drawAnomalyHeat, fitAnomalyHotspots, mappedAnomalyPoints } from '../../utils/anomalyHotspots'
+import AnomalyHotspotLeaderboard from './AnomalyHotspotLeaderboard'
 
 const WORLD_WIDTH = 2400
 const WORLD_HEIGHT = 1600
@@ -235,6 +237,9 @@ export default function TacticalStarMap({
   onSetStart,
   onSetEnd,
   onClearRoute,
+  hotspotSnapshot,
+  hotspotRequestFailed = false,
+  hotspotLoading = false,
 }) {
   const containerRef = useRef(null)
   const searchRef = useRef(null)
@@ -257,6 +262,7 @@ export default function TacticalStarMap({
   const isViewMoving = isViewAnimating || isInteracting
   const [systemLabelAlpha, setSystemLabelAlpha] = useState(0)
   const [regionLabelAlpha, setRegionLabelAlpha] = useState(0)
+  const [hotspotLayerVisible, setHotspotLayerVisible] = useState(true)
 
   const model = useMemo(
     () => createMapModel(systems, stargates, constellations, regions),
@@ -272,6 +278,15 @@ export default function TacticalStarMap({
     })
     return map
   }, [model.systems])
+
+  const hotspotPoints = useMemo(
+    () => mappedAnomalyPoints(hotspotSnapshot?.systems, model.systemMap),
+    [hotspotSnapshot?.systems, model.systemMap],
+  )
+  const hotspotPointMap = useMemo(
+    () => new Map(hotspotPoints.map(point => [point.solar_system_id, point])),
+    [hotspotPoints],
+  )
 
   const systemNameMap = useMemo(() => {
     return new Map(model.systems.map((item) => [item.zh_name, item]))
@@ -597,6 +612,9 @@ export default function TacticalStarMap({
     const right = (size.width - view.panX) / view.zoom + margin
     const bottom = (size.height - view.panY) / view.zoom + margin
 
+    // Screen-sized heat circles sit beneath routes and security-color cores.
+    if (hotspotLayerVisible) drawAnomalyHeat(ctx, hotspotPoints, view, size)
+
     if (view.zoom > fitScaleRef.current * 1.75) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)'
       ctx.lineWidth = 1.35 / view.zoom
@@ -739,7 +757,7 @@ export default function TacticalStarMap({
       })
     }
     ctx.restore()
-  }, [isViewMoving, model, pathSegments, regionLabelAlpha, size.height, size.width, size.ratio, startSystemRecord, endSystemRecord, systemLabelAlpha, view])
+  }, [isViewMoving, model, pathSegments, regionLabelAlpha, size.height, size.width, size.ratio, startSystemRecord, endSystemRecord, systemLabelAlpha, view, hotspotPoints, hotspotLayerVisible])
 
   const centerOnSystem = (system) => {
     if (!system || !size.width || !size.height) return
@@ -761,6 +779,21 @@ export default function TacticalStarMap({
     setLocateQuery(target.zh_name)
     setIsLocateOpen(false)
     centerOnSystem(target)
+  }
+
+  const hotspotMemberPoints = region => region.memberSystemIds.map(id => hotspotPointMap.get(id)).filter(Boolean)
+  const locateHotspotSystem = id => {
+    const system = model.systemMap.get(id) || model.systemMap.get(String(id))
+    if (system && hotspotPointMap.has(id)) centerOnSystem(system)
+  }
+  const locateHotspotRegion = region => {
+    const target = fitAnomalyHotspots(hotspotMemberPoints(region), size, {
+      minZoom: fitScaleRef.current, maxZoom: fitScaleRef.current * 28,
+      // Reserve both the ranking and the existing system detail card. At
+      // narrower desktop sizes retain a finite free center instead of overflow.
+      padding: { left: Math.min(300, size.width * .32), right: Math.min(360, size.width * .30), top: 80, bottom: 40 },
+    })
+    if (target) animateToView(target, 860)
   }
 
   const resetView = () => {
@@ -813,6 +846,12 @@ export default function TacticalStarMap({
       panX: dragState.panX + deltaX,
       panY: dragState.panY + deltaY,
     })
+  }
+
+  const finishOverlayDrag = () => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    finishInteraction()
   }
 
   const handlePointerUp = (event) => {
@@ -963,6 +1002,14 @@ export default function TacticalStarMap({
         }}
       >
         <canvas ref={canvasRef} className="tactical-map-canvas" />
+        <div className="anomaly-hotspots-map-overlay">
+          <AnomalyHotspotLeaderboard snapshot={hotspotSnapshot} requestFailed={hotspotRequestFailed}
+            loading={hotspotLoading} canLocateSystem={id => hotspotPointMap.has(id)}
+            canLocateRegion={region => hotspotMemberPoints(region).length > 0}
+            onLocateSystem={locateHotspotSystem} onLocateRegion={locateHotspotRegion}
+            onMapInteractionEnd={finishOverlayDrag}
+            layerVisible={hotspotLayerVisible} onLayerVisibilityChange={setHotspotLayerVisible} />
+        </div>
         <div className="tactical-marker-layer" aria-hidden="true">
           {selectedMarkerPoint &&
           selectedSystemId !== startSystemRecord?.system_id &&
