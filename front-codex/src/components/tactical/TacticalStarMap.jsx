@@ -848,6 +848,12 @@ export default function TacticalStarMap({
     })
   }
 
+  const finishOverlayDrag = () => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    finishInteraction()
+  }
+
   const handlePointerUp = (event) => {
     if (!dragRef.current) return
     const dragState = dragRef.current
@@ -1001,6 +1007,7 @@ export default function TacticalStarMap({
             loading={hotspotLoading} canLocateSystem={id => hotspotPointMap.has(id)}
             canLocateRegion={region => hotspotMemberPoints(region).length > 0}
             onLocateSystem={locateHotspotSystem} onLocateRegion={locateHotspotRegion}
+            onMapInteractionEnd={finishOverlayDrag}
             layerVisible={hotspotLayerVisible} onLayerVisibilityChange={setHotspotLayerVisible} />
         </div>
         <div className="tactical-marker-layer" aria-hidden="true">

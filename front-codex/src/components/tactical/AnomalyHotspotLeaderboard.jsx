@@ -9,7 +9,7 @@ const countLabel = value => value.toLocaleString('en-US')
 export default function AnomalyHotspotLeaderboard({
   snapshot, requestFailed = false, loading = false, allowLocate = true,
   canLocateSystem = () => false, canLocateRegion = () => false,
-  onLocateSystem, onLocateRegion, layerVisible = true, onLayerVisibilityChange,
+  onLocateSystem, onLocateRegion, layerVisible = true, onLayerVisibilityChange, onMapInteractionEnd,
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const [tab, setTab] = useState('systems')
@@ -41,7 +41,8 @@ export default function AnomalyHotspotLeaderboard({
     <section ref={panelRef} className={`anomaly-hotspots-panel${collapsed ? ' is-collapsed' : ''}`}
       aria-label="异常摧毁排行榜"
       onMouseDown={stopMapInteraction} onMouseMove={stopMapInteraction}
-      onMouseUp={stopMapInteraction} onClick={stopMapInteraction} onWheel={stopMapInteraction}>
+      onMouseUp={event => { stopMapInteraction(event); onMapInteractionEnd?.() }}
+      onClick={stopMapInteraction} onWheel={stopMapInteraction}>
       <button type="button" className="anomaly-hotspots-heading" aria-expanded={!collapsed}
         aria-controls={contentId} onClick={() => setCollapsed(value => !value)}>
         <span><strong>异常摧毁热点</strong><small>星系 / 星域 TOP 10</small></span>

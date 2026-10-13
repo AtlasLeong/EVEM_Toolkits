@@ -50,3 +50,23 @@ test('the lazy map feature owns its stylesheet instead of expanding the entry CS
   assert.match(scopedStyles, /\.anomaly-hotspots-panel/)
   assert.doesNotMatch(globalStyles, /\.anomaly-hotspots-panel/)
 })
+
+test('releasing an existing map drag over the panel clears interaction without selecting a star', () => {
+  const handler = map.match(/const finishOverlayDrag = \(\) => \{([\s\S]*?)\n  \}/)?.[1]
+  assert.ok(handler, 'the overlay drag-release cleanup is not implemented')
+  const dragRef = { current: { moved: true, x: 100, y: 100 } }
+  let interacting = true
+  let finishes = 0
+  const finishInteraction = () => { interacting = false; finishes += 1 }
+  // Execute the actual component cleanup against a live drag ref. No selection
+  // callback is supplied: cleanup must not turn a panel release into a map hit.
+  const release = new Function('dragRef', 'finishInteraction', handler)
+  release(dragRef, finishInteraction)
+  assert.equal(dragRef.current, null)
+  assert.equal(interacting, false)
+  assert.equal(finishes, 1)
+  release(dragRef, finishInteraction)
+  assert.equal(finishes, 1, 'ordinary panel clicks do not finish an unrelated interaction')
+  assert.match(map, /onMapInteractionEnd=\{finishOverlayDrag\}/)
+  assert.match(panel, /onMouseUp=\{event => \{ stopMapInteraction\(event\); onMapInteractionEnd\?\.\(\) \}\}/)
+})
