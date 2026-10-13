@@ -55,6 +55,11 @@ class HotspotSession(KillboardSession):
         result = self._raw_rpc(method, None)
         stop = _structured_stop(result)
         if stop: raise CollectorError(stop)
+        # Auth has its own observed result shapes. A successful statistics
+        # response must have the captured outer transport boundary, even when
+        # the list is empty; accepting bare [] could erase a good snapshot.
+        if method == HOTSPOT_METHOD and (not isinstance(result, msgpack.ExtType) or result.code != 10):
+            raise CollectorError('malformed')
         if isinstance(result, msgpack.ExtType) and result.code == 10:
             result = market._unpack(result.data)
         return result

@@ -35,7 +35,7 @@ class CollectorTests(unittest.TestCase):
         lease = FakeLease()
         with patch.object(api, 'account_lease', return_value=lease), patch.object(api.time, 'sleep') as sleep:
             session = api.HotspotSession(bundle())
-            with patch.object(session, '_raw_rpc', return_value=[]):
+            with patch.object(session, '_raw_rpc', side_effect=lambda method, item: wire([]) if method == api.HOTSPOT_METHOD else []):
                 for method in api.REQUIRED_METHODS: session._perform_rpc(method, None, None)
                 with self.assertRaises(api.CollectorError) as error: session._perform_rpc(api.HOTSPOT_METHOD, None, None)
                 self.assertEqual(error.exception.code, 'budget_exhausted')
@@ -44,6 +44,26 @@ class CollectorTests(unittest.TestCase):
                 self.assertEqual(sleep.call_count, 4)
                 self.assertTrue(all(1 <= call.args[0] <= 3 for call in sleep.call_args_list))
                 with self.assertRaises(api.CollectorError): session._perform_rpc('get_kill_info', 1, None)
+
+    def test_hotspot_transport_requires_outer_ext10_and_latches_bare_lists(self):
+        api = self.api()
+        row = {'solar_system_id': 30001211, 'destroy_num': 155}
+        normalized = msgpack.unpackb(wire([row]).data, raw=False)
+        for invalid in ([], normalized):
+            lease = FakeLease()
+            with patch.object(api, 'account_lease', return_value=lease):
+                session = api.HotspotSession(bundle())
+                lease.__enter__()
+                with patch.object(session, '_raw_rpc', return_value=invalid) as raw:
+                    with self.assertRaises(api.CollectorError) as error: session._rpc(api.HOTSPOT_METHOD)
+                    self.assertEqual(error.exception.code, 'malformed')
+                    with self.assertRaises(api.CollectorError): session._rpc(api.HOTSPOT_METHOD)
+                    self.assertEqual(raw.call_count, 1)
+                    self.assertFalse(lease.acquired)
+        with patch.object(api, 'account_lease', return_value=FakeLease()):
+            session = api.HotspotSession(bundle())
+            with patch.object(session, '_raw_rpc', return_value=wire([row])):
+                self.assertEqual(session._rpc(api.HOTSPOT_METHOD), normalized)
 
     def test_remote_rate_rejection_latches_broker_and_never_reconnects(self):
         api = self.api()
