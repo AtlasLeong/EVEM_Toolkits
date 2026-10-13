@@ -131,6 +131,7 @@ INSTALLED_APPS = [
     'Starsea',
     'Market',
     'Killboard',
+    'AnomalyHotspots',
 ]
 
 MIDDLEWARE = [
@@ -234,6 +235,7 @@ REST_FRAMEWORK = {
         'custom': '5/day',
         'market_public': '120/hour',
         'killboard_public': '120/hour',
+        'anomaly_hotspots': '120/hour',
         'killboard_private': '120/hour',
     }
 }
@@ -271,6 +273,7 @@ STARSEA_SHIP_DB = config('STARSEA_SHIP_DB', default='')
 KILLBOARD_OWNER_EMAIL = config('KILLBOARD_OWNER_EMAIL', default='')
 KILLBOARD_COLLECTION_ENABLED = str(config('KILLBOARD_COLLECTION_ENABLED', default='false')).lower() in {'1', 'true', 'yes'}
 KILLBOARD_MIN_ISK_LOST = config('KILLBOARD_MIN_ISK_LOST', default='20000000000.00')
+ANOMALY_SNAPSHOT_FILE = config('ANOMALY_SNAPSHOT_FILE', default='')
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/

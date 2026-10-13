@@ -1,0 +1,13 @@
+[Unit]
+Description=EVEM anomaly statistics every 5-10 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=5min
+AccuracySec=15s
+Persistent=true
+Unit=evem-anomaly-collector.service
+
+[Install]
+WantedBy=timers.target
