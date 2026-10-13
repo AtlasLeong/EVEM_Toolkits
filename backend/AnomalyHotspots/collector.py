@@ -92,7 +92,12 @@ class HotspotSession(KillboardSession):
         if time.monotonic() >= self.deadline:
             raise CollectorError('budget_exhausted')
         if self._audit['rpc_count']:
-            time.sleep(random.uniform(1, 3))
+            remaining = self.deadline - time.monotonic()
+            if remaining <= 0:
+                raise CollectorError('budget_exhausted')
+            time.sleep(min(random.uniform(1, 3), remaining))
+            if time.monotonic() >= self.deadline:
+                raise CollectorError('budget_exhausted')
         if self.before_rpc is not None:
             self.before_rpc()
         self.account_lease.before_rpc()

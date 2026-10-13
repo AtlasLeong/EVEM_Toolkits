@@ -4,7 +4,7 @@ import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from django.db import connection
+from django.db import connection, DatabaseError
 from django.test import TransactionTestCase, override_settings
 from django.core.cache import cache
 from rest_framework.test import APIClient
@@ -70,9 +70,21 @@ class APITests(TransactionTestCase):
             self.assertEqual(self.client.get('/api/anomaly-hotspots/').status_code, 200)
         self.assertEqual(self.client.post('/api/anomaly-hotspots/', {}).status_code, 405)
 
-    def test_throttle_and_metadata_database_failure_fail_safely(self):
+    def test_throttle_enforces_the_configured_scope(self):
         # DRF stores throttle rates on its class at import; patch that actual
         # configuration boundary rather than a cached override_settings value.
         with patch('rest_framework.throttling.ScopedRateThrottle.THROTTLE_RATES', {'anomaly_hotspots': '1/hour'}):
             self.assertEqual(self.client.get('/api/anomaly-hotspots/').status_code, 200)
             self.assertEqual(self.client.get('/api/anomaly-hotspots/').status_code, 429)
+
+    def test_metadata_database_failure_preserves_nonempty_counts_time_and_hides_error(self):
+        write_success(self.path, [{'solar_system_id': 30001211, 'destroy_num': 155}], now_ms=1000)
+        with patch('StarFieldSearch.models.Solarsystem.objects.filter', side_effect=DatabaseError('PRIVATE_DATABASE_PASSWORD_MARKER')):
+            response = self.client.get('/api/anomaly-hotspots/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['collected_at_ms'], 1000)
+        self.assertEqual(response.data['last_attempt_at_ms'], 1000)
+        self.assertEqual(response.data['status'], 'ok')
+        self.assertEqual(response.data['systems'], [{'solar_system_id': 30001211, 'destroy_num': 155,
+                                                    'system_name': None, 'region_id': None, 'region_name': None}])
+        self.assertNotIn('PRIVATE_DATABASE_PASSWORD_MARKER', response.content.decode())

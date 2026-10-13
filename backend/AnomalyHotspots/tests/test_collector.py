@@ -131,6 +131,33 @@ class CollectorTests(unittest.TestCase):
                 self.assertTrue(all(1 <= call.args[0] <= 3 for call in sleep.call_args_list))
                 with self.assertRaises(api.CollectorError): session._perform_rpc('get_kill_info', 1, None)
 
+    def test_near_deadline_jitter_is_capped_and_never_reserves_or_sends_rpc(self):
+        api = self.api()
+        lease, now = FakeLease(), [100]
+        with patch.object(api, 'account_lease', return_value=lease), patch.object(api.time, 'monotonic', side_effect=lambda: now[0]):
+            session = api.HotspotSession(bundle())
+            session._audit['rpc_count'] = 1
+            now[0] = 189.5
+            def sleep(seconds): now[0] += seconds
+            with patch.object(api.random, 'uniform', return_value=2), patch.object(api.time, 'sleep', side_effect=sleep) as slept, patch.object(session, '_raw_rpc') as rpc:
+                with self.assertRaises(api.CollectorError) as error: session._perform_rpc(api.HOTSPOT_METHOD)
+                self.assertEqual(error.exception.code, 'budget_exhausted')
+                slept.assert_called_once_with(0.5)
+                rpc.assert_not_called()
+                self.assertNotIn('rpc', lease.events)
+                self.assertEqual(session._audit['rpc_count'], 1)
+
+    def test_deadline_rechecked_immediately_before_jitter_sleep(self):
+        api = self.api()
+        with patch.object(api, 'account_lease', return_value=FakeLease()), patch.object(api.time, 'monotonic', return_value=100):
+            session = api.HotspotSession(bundle())
+        session._audit['rpc_count'] = 1
+        with patch.object(api.time, 'monotonic', side_effect=[189.5, 190.5]), patch.object(api.time, 'sleep') as slept, patch.object(session, '_raw_rpc') as rpc:
+            with self.assertRaises(api.CollectorError) as error: session._perform_rpc(api.HOTSPOT_METHOD)
+            self.assertEqual(error.exception.code, 'budget_exhausted')
+            slept.assert_not_called()
+            rpc.assert_not_called()
+
     def test_hotspot_transport_requires_outer_ext10_and_latches_bare_lists(self):
         api = self.api()
         row = {'solar_system_id': 30001211, 'destroy_num': 155}
