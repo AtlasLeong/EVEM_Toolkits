@@ -34,12 +34,14 @@ MAX_VERSION_BYTES = 16 * 1024
 NON_RUNTIME_DIRECTORIES = (
     'docs/',
     'front-codex/tests/',
+    'backend/AnomalyHotspots/tests/',
     'backend/GameData/tests/',
     'backend/GameSessions/tests/',
     'backend/Killboard/tests/',
     'backend/Market/tests/',
     'backend/TacticalCollaboration/tests/',
     'scripts/community/tests/',
+    'scripts/anomaly_hotspots/tests/',
     'scripts/deploy/tests/',
     'scripts/game_data/tests/',
     'scripts/game_data/client_assets/tests/',
@@ -119,6 +121,8 @@ CONTROL_FILES = frozenset({
     'scripts/deploy/.gitignore',
     'scripts/deploy/activate_tactical_ws.py',
     'scripts/deploy/config.example.json',
+    'scripts/deploy/evem-anomaly-collector.service.example',
+    'scripts/deploy/evem-anomaly-collector.timer.example',
     'scripts/deploy/evem-backend.override.conf.example',
     'scripts/deploy/evem-killboard-collector.service.example',
     'scripts/deploy/evem-killboard-collector.timer.example',
@@ -165,6 +169,8 @@ CI_CONTROL_METADATA = {
     'outputs': ('8d059df492dced95f4ff36228b43dddef7847802d337bed910b70232a97c0840',),
 }
 CI_CONTROL_STEPS = {
+    'Anomaly hotspots strict protocol, snapshot and public read boundary (isolated)':
+        ('21d3533955f5641e715013cd9938d3f5a9d3ee92fc4d891630610b3b42760a9c',),
     'Community QA tool safety tests (no database or credentials)':
         ('b59d580c62fc7363ac7623553ec877876701d602502704954a05e8a9f6b6f1c2',),
     'Enforce frontend bundle budget':
@@ -200,7 +206,8 @@ CI_CONTROL_STEPS = {
     'Private Killboard and shared game catalog regression':
         ('d0082cb7468f23f6187f835fbea0b3cf5efd405e7b1a9e8f3cbf8a0330934e3f',),
     'Private capture tooling and game data provenance tests':
-        ('5364d623cc4a29e32580f7dcc1a68418b6649ec8d952396bab927fe4fbfaf217',),
+        ('5364d623cc4a29e32580f7dcc1a68418b6649ec8d952396bab927fe4fbfaf217',
+         'd500f71fe6bdf42c793e3c11164856595505c8cd6b62b3558dc0a3dc955f0324'),
     'Public access, account verification and refresh-token policy (isolated)':
         ('33794063ed6b9d5686c06be1c0d315ae455c0be6537bdc2ec5578f1c54f2a10c',),
     'Release safety tests':
