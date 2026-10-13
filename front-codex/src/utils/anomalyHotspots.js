@@ -1,0 +1,170 @@
+const MAX_SYSTEMS = 10_000
+const STALE_AFTER_MS = 20 * 60_000
+const SNAPSHOT_KEYS = ['version', 'collected_at_ms', 'last_attempt_at_ms', 'status', 'systems', 'statistics_window']
+const ROW_KEYS = ['solar_system_id', 'destroy_num', 'system_name', 'region_id', 'region_name']
+const STATUSES = new Set(['ok', 'unavailable', 'unauthorized', 'rate_limited', 'network_error',
+  'malformed', 'budget_exhausted', 'lease_lost', 'configuration_error', 'service_rejected', 'account_busy'])
+const STATUS_LABELS = {
+  unavailable: '尚无可用快照', unauthorized: '采集会话需要更新', rate_limited: '采集限流冷却中',
+  network_error: '采集网络异常', malformed: '采集数据校验失败', budget_exhausted: '等待下轮采集',
+  lease_lost: '采集已安全暂停', configuration_error: '采集配置待处理',
+  service_rejected: '采集服务暂不可用', account_busy: '等待账号空闲',
+}
+const exactKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key))
+const integer = (value, minimum = 0) => Number.isSafeInteger(value) && value >= minimum
+const timestamp = value => value === null || integer(value)
+const nullableName = value => value === null || (typeof value === 'string' && value.length <= 255)
+const compareCountAndId = (idKey) => (left, right) => right.destroy_num - left.destroy_num || left[idKey] - right[idKey]
+const displayName = (name, fallback) => typeof name === 'string' && name.trim() ? name.trim() : fallback
+
+export function validateAnomalySnapshot(value) {
+  const invalid = () => { throw new Error('异常热点数据无效') }
+  if (!exactKeys(value, SNAPSHOT_KEYS) || value.version !== 1 || value.statistics_window !== null
+    || !STATUSES.has(value.status) || !timestamp(value.collected_at_ms) || !timestamp(value.last_attempt_at_ms)
+    || !Array.isArray(value.systems) || value.systems.length > MAX_SYSTEMS) invalid()
+  const seen = new Set()
+  let total = 0
+  for (const row of value.systems) {
+    if (!exactKeys(row, ROW_KEYS) || !integer(row.solar_system_id, 1) || !integer(row.destroy_num)
+      || seen.has(row.solar_system_id) || !nullableName(row.system_name) || !nullableName(row.region_name)
+      || !(row.region_id === null || integer(row.region_id, 1))) invalid()
+    seen.add(row.solar_system_id)
+    total += row.destroy_num
+    if (!Number.isSafeInteger(total)) invalid()
+  }
+  if ((value.collected_at_ms === null && (value.systems.length || value.status === 'ok'))
+    || (value.collected_at_ms !== null && (value.last_attempt_at_ms === null || value.last_attempt_at_ms < value.collected_at_ms))) invalid()
+  return value
+}
+
+export function retainLastGoodAnomalySnapshot(previous, next) {
+  if (next.collected_at_ms !== null || previous?.collected_at_ms == null) return next
+  // A missing/unreadable server file produces a logical unavailable sentinel.
+  // Do not confuse that with a successful measured empty snapshot.
+  return { ...next, collected_at_ms: previous.collected_at_ms, systems: previous.systems,
+    last_attempt_at_ms: Math.max(previous.last_attempt_at_ms, next.last_attempt_at_ms || 0) }
+}
+
+export function rankAnomalySystems(rows, limit = 10) {
+  return [...(rows || [])].sort(compareCountAndId('solar_system_id')).slice(0, limit).map(row => ({
+    ...row, displayName: displayName(row.system_name, `星系 ${row.solar_system_id}`),
+  }))
+}
+
+export function rankAnomalyRegions(rows, limit = 10) {
+  const grouped = new Map()
+  let unknownRegionSystems = 0
+  let unknownRegionDestroyCount = 0
+  // ID order makes member lists and name fallback deterministic across refreshes.
+  for (const row of [...(rows || [])].sort((a, b) => a.solar_system_id - b.solar_system_id)) {
+    if (!integer(row.region_id, 1)) {
+      unknownRegionSystems += 1
+      unknownRegionDestroyCount += row.destroy_num
+      continue
+    }
+    let region = grouped.get(row.region_id)
+    if (!region) {
+      region = { region_id: row.region_id, region_name: null, destroy_num: 0, memberSystemIds: [] }
+      grouped.set(row.region_id, region)
+    }
+    if (!region.region_name && row.region_name?.trim()) region.region_name = row.region_name.trim()
+    region.destroy_num += row.destroy_num
+    region.memberSystemIds.push(row.solar_system_id)
+  }
+  return {
+    regions: [...grouped.values()].sort(compareCountAndId('region_id')).slice(0, limit).map(region => ({
+      ...region, displayName: displayName(region.region_name, `星域 ${region.region_id}`),
+    })),
+    unknownRegionSystems, unknownRegionDestroyCount,
+  }
+}
+
+export function anomalySnapshotState(snapshot, { now = Date.now(), requestFailed = false, loading = false } = {}) {
+  const hasSnapshot = snapshot?.collected_at_ms != null
+  const stale = hasSnapshot && now - snapshot.collected_at_ms >= STALE_AFTER_MS
+  const status = snapshot?.status || 'unavailable'
+  const failed = requestFailed || status !== 'ok'
+  let label = requestFailed ? '热点更新失败' : STATUS_LABELS[status]
+  if (!failed) label = snapshot.systems.length ? '异常摧毁快照' : '当前快照无异常摧毁记录'
+  if (!hasSnapshot && loading && !requestFailed) label = '正在读取热点'
+  return {
+    hasSnapshot, stale,
+    kind: failed || stale ? 'warning' : 'ok',
+    label,
+    detail: hasSnapshot && failed ? '保留最近成功快照，等待采集恢复。'
+      : !hasSnapshot ? '尚未取得成功快照，不代表摧毁数量为零。'
+        : stale ? '快照已超过 20 分钟未更新。' : '',
+  }
+}
+
+export function formatAnomalyUpdatedAt(value) {
+  if (value === null || value === undefined) return '暂无成功快照'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '更新时间无效'
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = name => parts.find(item => item.type === name)?.value
+  return `${part('year')}/${part('month')}/${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+}
+
+// These are website display bands; the game API's statistics window is unconfirmed.
+export function anomalyHeatBand(count) {
+  if (!integer(count, 1)) return null
+  if (count <= 80) return { name: '1–80', color: '#facc15', radius: 14 }
+  if (count <= 200) return { name: '81–200', color: '#fb923c', radius: 22 }
+  return { name: '>200', color: '#ef4444', radius: 29 }
+}
+
+export function mappedAnomalyPoints(rows, systemMap) {
+  return (rows || []).flatMap(row => {
+    const system = systemMap?.get(row.solar_system_id) || systemMap?.get(String(row.solar_system_id))
+    if (!Number.isFinite(system?.px) || !Number.isFinite(system?.py)) return []
+    return [{ ...row, px: system.px, py: system.py }]
+  })
+}
+
+export function fitAnomalyHotspots(points, size, { minZoom = .1, maxZoom = 10, padding = {} } = {}) {
+  const finite = (points || []).filter(point => Number.isFinite(point.px) && Number.isFinite(point.py))
+  if (!finite.length || !Number.isFinite(size?.width) || !Number.isFinite(size?.height)
+    || size.width <= 0 || size.height <= 0 || !Number.isFinite(minZoom) || !Number.isFinite(maxZoom)
+    || minZoom <= 0 || maxZoom < minZoom) return null
+  const pad = Object.fromEntries(['left', 'right', 'top', 'bottom'].map(key => [key,
+    Number.isFinite(padding[key]) ? Math.max(0, padding[key]) : 20]))
+  const availableWidth = size.width - pad.left - pad.right
+  const availableHeight = size.height - pad.top - pad.bottom
+  if (availableWidth <= 0 || availableHeight <= 0) return null
+  const xs = finite.map(point => point.px), ys = finite.map(point => point.py)
+  const minX = Math.min(...xs), maxX = Math.max(...xs)
+  const minY = Math.min(...ys), maxY = Math.max(...ys)
+  const zoom = Math.max(minZoom, Math.min(maxZoom,
+    availableWidth / Math.max(1, maxX - minX), availableHeight / Math.max(1, maxY - minY)))
+  return { zoom,
+    panX: pad.left + availableWidth / 2 - (minX + maxX) / 2 * zoom,
+    panY: pad.top + availableHeight / 2 - (minY + maxY) / 2 * zoom,
+  }
+}
+
+export function drawAnomalyHeat(ctx, points, view, viewport) {
+  if (!Number.isFinite(view.zoom) || view.zoom <= 0) return
+  ctx.save()
+  for (const point of points) {
+    const band = anomalyHeatBand(point.destroy_num)
+    if (!band) continue
+    const screenX = point.px * view.zoom + view.panX
+    const screenY = point.py * view.zoom + view.panY
+    if (screenX < -band.radius || screenX > viewport.width + band.radius
+      || screenY < -band.radius || screenY > viewport.height + band.radius) continue
+    ctx.fillStyle = band.color
+    for (const [radiusFactor, alpha] of [[1, .12], [.55, .22]]) {
+      ctx.globalAlpha = alpha
+      ctx.beginPath()
+      ctx.arc(point.px, point.py, band.radius * radiusFactor / view.zoom, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+  ctx.globalAlpha = 1
+}

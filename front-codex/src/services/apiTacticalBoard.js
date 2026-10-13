@@ -1,5 +1,12 @@
 import API_URL from "./backendSetting";
 import fetchWithAuth from "./fetchWithAuth";
+import { retainLastGoodAnomalySnapshot, validateAnomalySnapshot } from "../utils/anomalyHotspots";
+
+export async function getAnomalyHotspots({ signal, previous } = {}) {
+  const res = await fetchWithAuth(`${API_URL}/anomaly-hotspots/`, { signal });
+  if (!res.ok) throw new Error("异常热点暂时无法更新");
+  return retainLastGoodAnomalySnapshot(previous, validateAnomalySnapshot(await res.json()));
+}
 
 export async function getBoardSystems() {
   const res = await fetchWithAuth(`${API_URL}/boardsystems`);

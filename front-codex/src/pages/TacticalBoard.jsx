@@ -1,14 +1,16 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Route, Sparkles } from 'lucide-react'
 import {
   getBoardStarGate,
   getBoardSystems,
   getConstellations,
   getRegions,
+  getAnomalyHotspots,
   postJumpInfo,
 } from '../services/apiTacticalBoard'
 import TacticalStarMap from '../components/tactical/TacticalStarMap'
+import AnomalyHotspotLeaderboard from '../components/tactical/AnomalyHotspotLeaderboard'
 import { getSecurityTextColor } from '../utils/securityColor'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 
@@ -214,6 +216,7 @@ function RouteSystemCombobox({ label, value, onChange, systems, placeholder }) {
 }
 
 export default function TacticalBoardPage() {
+  const queryClient = useQueryClient()
   const [startSystem, setStartSystem] = useState('')
   const [endSystem, setEndSystem] = useState('')
   const [maxDistance, setMaxDistance] = useState(8)
@@ -221,6 +224,26 @@ export default function TacticalBoardPage() {
   const [inHighSecurity, setInHighSecurity] = useState(true)
   const [pathRows, setPathRows] = useState([])
   const [error, setError] = useState('')
+  const [isPageVisible, setIsPageVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden')
+
+  useEffect(() => {
+    const updateVisibility = () => setIsPageVisible(document.visibilityState !== 'hidden')
+    document.addEventListener('visibilitychange', updateVisibility)
+    return () => document.removeEventListener('visibilitychange', updateVisibility)
+  }, [])
+
+  // This reads the stored snapshot only. It neither triggers game requests nor
+  // invalidates the independent hour-cached static map queries below.
+  const hotspotsQuery = useQuery({
+    queryKey: ['anomaly-hotspots'],
+    queryFn: ({ signal }) => getAnomalyHotspots({ signal, previous: queryClient.getQueryData(['anomaly-hotspots']) }),
+    enabled: isPageVisible,
+    refetchInterval: isPageVisible ? 60_000 : false,
+    refetchIntervalInBackground: false,
+    staleTime: 60_000,
+    gcTime: STATIC_MAP_CACHE_TIME,
+    retry: false,
+  })
 
   const systemsQuery = useQuery({
     queryKey: ['board-systems'],
@@ -359,9 +382,17 @@ export default function TacticalBoardPage() {
               onSetStart={setStartSystem}
               onSetEnd={setEndSystem}
               onClearRoute={clearPlannedRoute}
+              hotspotSnapshot={hotspotsQuery.data}
+              hotspotRequestFailed={hotspotsQuery.isError}
+              hotspotLoading={hotspotsQuery.isPending}
             />
           )}
         </Panel>
+
+        <div className="anomaly-hotspots-mobile">
+          <AnomalyHotspotLeaderboard snapshot={hotspotsQuery.data} requestFailed={hotspotsQuery.isError}
+            loading={hotspotsQuery.isPending} allowLocate={false} />
+        </div>
 
         <Panel
           title="路径条件"
