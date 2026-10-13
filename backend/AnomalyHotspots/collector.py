@@ -1,4 +1,5 @@
 """Single bounded read-only statistics pass; requires shared account leasing."""
+import copy
 import time
 import random
 
@@ -30,6 +31,56 @@ class HotspotSession(KillboardSession):
                 raise CoordinationError()
         except CoordinationError as error:
             raise CollectorError(error.code) from None
+
+    def __enter__(self):
+        """Connection and handshake share a deadline capped by the whole pass."""
+        self._check_session_ready()
+        try:
+            if time.monotonic() >= self.deadline:
+                raise CollectorError('budget_exhausted')
+            self.account_lease.__enter__()
+            now = time.monotonic()
+            if now >= self.deadline:
+                raise CollectorError('budget_exhausted')
+            if self.sock is not None:
+                raise market.ProtocolError('Market session is already connected.')
+            self.client_id = self.proxy_id = None
+            self.next_seq = self.next_server_seq = 0
+            # Do not reset this phase after connect: connection time consumes
+            # the same bounded handshake allowance and the whole-pass budget.
+            handshake_deadline = min(self.deadline, now + self.timeout)
+            self.sock = market.socket.create_connection(tuple(self.bundle['endpoint']),
+                                                        timeout=handshake_deadline - now)
+            market._remaining(self.sock, handshake_deadline)
+            hello = copy.deepcopy(self.bundle['hello'])
+            hello['token'] = str(market.uuid.uuid4())
+            self.sock.sendall(market._pack(1, hello))
+            kind, response = market._read_frame(self.sock, handshake_deadline)
+            if kind != 2 or not isinstance(response, dict) or type(response.get('accepted')) is not bool:
+                raise market.ProtocolError('Invalid market handshake response.')
+            if response['accepted'] is False:
+                raise market.AuthenticationRejected('Market handshake rejected; operator authorization is required.')
+            try:
+                self.client_id = market._identifier(response['info']['node_info']['node_id'])
+            except (KeyError, TypeError):
+                raise market.ProtocolError('Invalid market handshake response.') from None
+            if time.monotonic() >= self.deadline:
+                raise CollectorError('budget_exhausted')
+            self.authenticate()
+            return self
+        except BaseException as error:
+            if isinstance(error, (market.socket.timeout, TimeoutError)):
+                failure = CollectorError('network_error', 'timeout')
+            elif isinstance(error, OSError):
+                failure = CollectorError('network_error', 'connection_unavailable')
+            else:
+                failure = _transport_error(error)
+                if isinstance(error, CollectorError):
+                    failure = error
+            self._latch_failure(failure)
+            if not isinstance(error, Exception):
+                raise
+            raise failure from None
 
     def _perform_rpc(self, method, item_id=None, region_id=None):
         self._check_session_ready()
