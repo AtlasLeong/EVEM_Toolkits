@@ -2,6 +2,9 @@
 import importlib
 import importlib.util
 import unittest
+import os
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 import msgpack
 from .test_core import bundle, wire
@@ -22,6 +25,102 @@ class CollectorTests(unittest.TestCase):
     def api(self):
         self.assertIsNotNone(importlib.util.find_spec('AnomalyHotspots.collector'), 'collector missing')
         return importlib.import_module('AnomalyHotspots.collector')
+
+    def test_selected_pool_index_binds_lease_and_invalid_selection_never_connects(self):
+        api = self.api()
+        with patch.object(api, 'account_lease', return_value=FakeLease()) as selected:
+            try:
+                api.HotspotSession(bundle(), session_index=5, pool_size=7)
+            except TypeError:
+                self.fail('selected pool coordinates are not supported')
+            selected.assert_called_once_with('ANOMALY', 5, 7)
+        for index, size in ((True, 7), (-1, 7), (7, 7), (0, True), (0, 0), (0, 202)):
+            with self.subTest(index=index, size=size), patch.object(api.market.socket, 'create_connection') as opened:
+                with self.assertRaises(api.CollectorError):
+                    api.HotspotSession(bundle(), session_index=index, pool_size=size)
+                opened.assert_not_called()
+
+    def test_shared_global_cooldown_blocks_other_slot_without_connection(self):
+        api = self.api()
+        from GameSessions.coordination import provision, Coordinator
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            parent.chmod(0o700)
+            state = parent / 'coordinator.sqlite3'
+            provision(state)
+            first = Coordinator(state).lease('first')
+            with first:
+                first.pause_rate()
+            env = {'GAME_SESSION_COORDINATOR_FILE': str(state),
+                   'ANOMALY_SESSION_ACCOUNT_IDS': '["first","second"]'}
+            with patch.dict(os.environ, env, clear=True), patch.object(api.market.socket, 'create_connection') as opened:
+                try:
+                    session = api.HotspotSession(bundle(), session_index=1, pool_size=2)
+                except TypeError:
+                    self.fail('selected pool coordinates are not supported')
+                with self.assertRaises(api.CollectorError) as error: session.__enter__()
+                self.assertEqual(error.exception.code, 'rate_limited')
+                opened.assert_not_called()
+                with self.assertRaises(api.CollectorError): session.__enter__()
+                opened.assert_not_called()
+
+    def test_collection_threads_selection_and_reports_actual_safe_statistics_audit(self):
+        api = self.api()
+        from unittest.mock import Mock
+        lease, socket, audit = FakeLease(), Mock(), {}
+        handshake = (2, {'accepted': True, 'info': {'node_info': {'node_id': 7}}})
+        result = {'login_sigma': [0, {'client_id': 42, 'proxy_node_id': 43}],
+                  'request_start_wait': [], 'get_newbie_info': [], 'select_character_id': 1,
+                  api.HOTSPOT_METHOD: wire([{'solar_system_id': 1, 'destroy_num': 5}])}
+        with patch.object(api, 'account_lease', return_value=lease) as selected, patch.object(api.time, 'sleep'), patch.object(api.market.socket, 'create_connection', return_value=socket) as connect, patch.object(api.market, '_read_frame', return_value=handshake), patch.object(api.HotspotSession, '_raw_rpc', side_effect=lambda method, item: result[method]):
+            try:
+                rows = api.collect_once(bundle(), session_index=6, pool_size=7, audit=audit)
+            except TypeError:
+                self.fail('collection cannot forward selection and expose actual safe audit')
+            self.assertEqual(rows, [{'solar_system_id': 1, 'destroy_num': 5}])
+            selected.assert_called_once_with('ANOMALY', 6, 7)
+            connect.assert_called_once()
+            self.assertEqual(audit, {'rpc_count': 5, 'stage': 'statistics'})
+
+    def test_collection_failure_has_one_connection_no_fallback_and_safe_audit(self):
+        api = self.api()
+        for code, reason in (('rate_limited', 'rate_limited'), ('unauthorized', 'unauthorized'),
+                             ('network_error', 'timeout'), ('network_error', 'private-secret')):
+            lease, audit = FakeLease(), {}
+            with self.subTest(code=code, reason=reason), patch.object(api, 'account_lease', return_value=lease), patch.object(api.market.socket, 'create_connection', side_effect=api.CollectorError(code, reason)) as connect:
+                try:
+                    with self.assertRaises(api.CollectorError):
+                        api.collect_once(bundle(), session_index=2, pool_size=7, audit=audit)
+                except TypeError:
+                    self.fail('collection cannot forward selection and expose actual safe audit')
+                connect.assert_called_once()
+                self.assertEqual(audit['rpc_count'], 0)
+                self.assertEqual(audit['stage'], 'connection')
+                self.assertNotIn('private-secret', str(audit))
+
+    def test_audit_rejects_untrusted_types_unknown_phases_and_private_fields(self):
+        api = self.api()
+        for value in (None, [], {'rpc_count': True, 'stage': [], 'reason': {}},
+                      {'rpc_count': 6, 'stage': 'kill_report', 'reason': 'private-secret',
+                       'path': '/private/session.json'}):
+            try:
+                self.assertEqual(api.safe_audit(value), {})
+            except TypeError:
+                self.fail('audit normalizer must reject malformed values without raising')
+        self.assertEqual(api.safe_audit({'rpc_count': 4, 'stage': 'authentication', 'reason': 'timeout',
+                                        'private': 'opaque'}),
+                         {'rpc_count': 4, 'stage': 'authentication', 'reason': 'timeout'})
+
+    def test_invalid_real_alias_maps_fail_before_socket(self):
+        api = self.api()
+        for mapping in ('[]', '["duplicate","duplicate"]', '["first",true]'):
+            env = {'GAME_SESSION_COORDINATOR_FILE': str(Path(tempfile.gettempdir()) / 'synthetic.sqlite3'),
+                   'ANOMALY_SESSION_ACCOUNT_IDS': mapping}
+            with self.subTest(mapping=mapping), patch.dict(os.environ, env, clear=True), patch.object(api.market.socket, 'create_connection') as opened:
+                with self.assertRaises(api.CollectorError) as error:
+                    api.HotspotSession(bundle(), session_index=1, pool_size=2)
+                self.assertEqual(error.exception.code, 'configuration_error')
+                opened.assert_not_called()
 
     def test_missing_coordination_fails_before_connect_and_no_import_network(self):
         api = self.api()

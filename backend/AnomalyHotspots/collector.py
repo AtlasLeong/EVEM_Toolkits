@@ -7,16 +7,36 @@ import msgpack
 from GameSessions.coordination import account_lease, CoordinationError
 from Killboard.collector_transport import (KillboardSession, CollectorError, _timeout,
                                            _structured_stop, _transport_error, market)
-from .session_bundle import validate_session, REQUIRED_METHODS, HOTSPOT_METHOD
+from .session_bundle import validate_session, REQUIRED_METHODS, HOTSPOT_METHOD, MAX_SESSIONS
 from .protocol import decode_statistics, AnomalyProtocolError
 
 MAX_RPCS = 5
 MAX_SECONDS = 90
+AUDIT_STAGES = frozenset({'connection', 'authentication', 'statistics'})
+AUDIT_REASONS = frozenset({'unauthorized', 'rate_limited', 'network_error', 'malformed',
+                         'budget_exhausted', 'lease_lost', 'configuration_error', 'service_rejected',
+                         'account_busy', 'timeout', 'connection_unavailable', 'session_closed',
+                         'unsupported_rpc'})
+
+
+def safe_audit(value):
+    """Only locally normalized count/phase/reason may reach the worker journal."""
+    if not isinstance(value, dict): return {}
+    result = {}
+    count = value.get('rpc_count')
+    if type(count) is int and 0 <= count <= MAX_RPCS: result['rpc_count'] = count
+    stage, reason = value.get('stage'), value.get('reason')
+    if isinstance(stage, str) and stage in AUDIT_STAGES: result['stage'] = stage
+    if isinstance(reason, str) and reason in AUDIT_REASONS: result['reason'] = reason
+    return result
 
 
 class HotspotSession(KillboardSession):
     """Reuse proven framing/latching, with a distinct strict capability schema."""
-    def __init__(self, bundle, timeout=10, *, before_rpc=None):
+    def __init__(self, bundle, timeout=10, *, before_rpc=None, session_index=0, pool_size=1):
+        if (type(pool_size) is not int or not 1 <= pool_size <= MAX_SESSIONS
+                or type(session_index) is not int or not 0 <= session_index < pool_size):
+            raise CollectorError('configuration_error')
         self.bundle = validate_session(bundle)
         self.timeout = _timeout(timeout)
         self.sock = self.client_id = self.proxy_id = None
@@ -26,7 +46,7 @@ class HotspotSession(KillboardSession):
         self.set_before_rpc(before_rpc)
         self.deadline = time.monotonic() + MAX_SECONDS
         try:
-            self.account_lease = account_lease('ANOMALY', 0, 1)
+            self.account_lease = account_lease('ANOMALY', session_index, pool_size)
             if self.account_lease is None:
                 raise CoordinationError()
         except CoordinationError as error:
@@ -106,7 +126,7 @@ class HotspotSession(KillboardSession):
             raise CollectorError('budget_exhausted')
         self.timeout = min(self.timeout, remaining)
         self._audit.update(last_rpc_method=method,
-                           stage='kill_report' if method == HOTSPOT_METHOD else 'authentication')
+                           stage='statistics' if method == HOTSPOT_METHOD else 'authentication')
         self._audit['rpc_count'] += 1
         result = self._raw_rpc(method, None)
         stop = _structured_stop(result)
@@ -121,9 +141,10 @@ class HotspotSession(KillboardSession):
         return result
 
 
-def collect_once(bundle, *, session=None, timeout=10):
+def collect_once(bundle, *, session=None, timeout=10, session_index=0, pool_size=1, audit=None):
     """Exactly four captured auth calls and one full-statistics request, no retry."""
-    session = session or HotspotSession(bundle, timeout=timeout)
+    session = session or HotspotSession(bundle, timeout=timeout, session_index=session_index, pool_size=pool_size)
+    failure = None
     try:
         session.__enter__()
         return decode_statistics(session._rpc(HOTSPOT_METHOD))
@@ -131,13 +152,22 @@ def collect_once(bundle, *, session=None, timeout=10):
         failure = CollectorError('malformed')
         session._latch_failure(failure)
         raise failure from None
-    except CollectorError:
+    except CollectorError as error:
+        failure = error
         raise
     except CoordinationError as error:
-        raise CollectorError(error.code) from None
+        failure = CollectorError(error.code)
+        raise failure from None
     except Exception as error:
         failure = _transport_error(error)
         session._latch_failure(failure)
         raise failure from None
     finally:
-        session.__exit__(None, None, None)
+        try:
+            session.__exit__(None, None, None)
+        finally:
+            if isinstance(audit, dict):
+                value = {**session._audit}
+                if failure is not None: value['reason'] = failure.reason
+                audit.clear()
+                audit.update(safe_audit(value))
