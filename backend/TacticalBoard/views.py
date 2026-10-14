@@ -2,6 +2,8 @@ import math
 
 from django.core.cache import cache
 from django.conf import settings
+from django.utils.decorators import method_decorator
+from django.views.decorators.gzip import gzip_page
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import BoardSystems, BoardStargates, BoardConstellations, BoardRegions
@@ -37,6 +39,7 @@ def _cached_board_response(cache_name, queryset, fields):
     return Response(data, status=status.HTTP_200_OK)
 
 
+@method_decorator(gzip_page, name="dispatch")
 class GetBoardRegionCoordinates(APIView):
     @staticmethod
     def get(request):
@@ -48,6 +51,7 @@ class GetBoardRegionCoordinates(APIView):
         )
 
 
+@method_decorator(gzip_page, name="dispatch")
 class GetBoardSystemCoordinates(APIView):
     @staticmethod
     def get(request):
@@ -61,6 +65,7 @@ class GetBoardSystemCoordinates(APIView):
         )
 
 
+@method_decorator(gzip_page, name="dispatch")
 class GetBoardConstellationsCoordinates(APIView):
     @staticmethod
     def get(request):

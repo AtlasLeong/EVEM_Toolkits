@@ -161,3 +161,46 @@ test('heat circles cull with their full radius and reset alpha before route and 
   assert.equal(calls[0], 'save')
   assert.equal(calls.at(-1), 'restore')
 })
+
+test('snapshot time formatting reuses one formatter instead of constructing it per camera frame', async () => {
+  const Original = Intl.DateTimeFormat
+  let constructors = 0
+  Intl.DateTimeFormat = new Proxy(Original, {
+    construct(target, args) { constructors += 1; return Reflect.construct(target, args) },
+  })
+  try {
+    const fresh = await import('../../src/utils/anomalyHotspots.js?formatter-reuse-test')
+    assert.equal(fresh.formatAnomalyUpdatedAt(Date.UTC(2026, 9, 13, 15)), '2026/10/13 23:00:00')
+    assert.equal(fresh.formatAnomalyUpdatedAt(Date.UTC(2026, 9, 13, 16)), '2026/10/14 00:00:00')
+    assert.equal(constructors, 1)
+  } finally { Intl.DateTimeFormat = Original }
+})
+
+test('DPR-aware heat sprites draw once per visible point and reuse at most three bands', () => {
+  const sprites = [], images = [], sourceArcs = []
+  const ownerDocument = { createElement(tag) {
+    assert.equal(tag, 'canvas')
+    const canvas = { width: 0, height: 0, getContext: () => ({
+      setTransform(...args) { canvas.transform = args }, beginPath() {}, fill() {},
+      arc(x, y, radius) { sourceArcs.push({ radius, alpha: this.globalAlpha }) },
+    }) }
+    sprites.push(canvas)
+    return canvas
+  } }
+  const ctx = { canvas: { ownerDocument }, globalAlpha: 1, save() {}, restore() {},
+    drawImage(...args) { images.push(args) }, beginPath() { assert.fail('heat paths should be cached') },
+    arc() { assert.fail('heat arcs should be cached') }, fill() {} }
+  const points = [1, 81, 201].map((destroy_num, index) => ({ px: 40 + index * 40, py: 50, destroy_num }))
+  const view = { zoom: .5, panX: 0, panY: 0 }, viewport = { width: 300, height: 200, ratio: 2 }
+  use('drawAnomalyHeat', ctx, points, view, viewport)
+  use('drawAnomalyHeat', ctx, points, view, viewport)
+  assert.equal(sprites.length, 3)
+  assert.equal(sourceArcs.length, 6)
+  assert.deepEqual(sourceArcs.map(arc => arc.alpha), [.12, .22, .12, .22, .12, .22])
+  assert.equal(images.length, 6)
+  assert.ok(sprites.every(canvas => canvas.width === canvas.height && canvas.transform[0] === 2))
+  assert.ok(images.every(([canvas, , , width, height]) => width === canvas.width / 2 / view.zoom && height === width))
+  assert.equal(ctx.globalAlpha, 1)
+  use('drawAnomalyHeat', ctx, points, view, { ...viewport, ratio: 1 })
+  assert.equal(sprites.length, 6, 'changing DPR replaces the three active raster surfaces')
+})

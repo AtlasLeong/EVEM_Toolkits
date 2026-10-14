@@ -26,6 +26,22 @@ from .views import (
 class PublicStarMapScopeTests(TestCase):
     """Local-only fixture rows are hidden from the public map projection."""
 
+    coordinate_endpoints = (
+        (GetBoardRegionCoordinates, "regions", "region_id", ("region_id", "zh_name")),
+        (
+            GetBoardConstellationsCoordinates,
+            "constellations",
+            "constellation_id",
+            ("constellation_id", "zh_name", "region_id", "x", "y", "z"),
+        ),
+        (
+            GetBoardSystemCoordinates,
+            "systems",
+            "system_id",
+            ("system_id", "zh_name", "security_status", "x", "y", "z"),
+        ),
+    )
+
     @classmethod
     def setUpClass(cls):
         cls.created_tables = []
@@ -108,6 +124,117 @@ class PublicStarMapScopeTests(TestCase):
     @staticmethod
     def _ids(response, key):
         return {int(row[key]) for row in response.data}
+
+    def _seed_large_coordinate_results(self):
+        # Real ORM rows produce responses large enough to exercise gzip_page's
+        # size threshold. Keep ids outside the deliberately excluded ranges.
+        BoardRegions.objects.bulk_create([
+            BoardRegions(
+                region_id=10010000 + index,
+                name=f"Static region {index}",
+                zh_name=f"星图静态测试星域 {index}",
+            )
+            for index in range(256)
+        ])
+        BoardConstellations.objects.bulk_create([
+            BoardConstellations(
+                constellation_id=20010000 + index,
+                region_id=10010000 + index,
+                name=f"Static constellation {index}",
+                zh_name=f"星图静态测试星座 {index}",
+                x=(index + 1) * 1e16,
+                y=0,
+                z=(index + 1) * -1e16,
+            )
+            for index in range(256)
+        ])
+        BoardSystems.objects.bulk_create([
+            BoardSystems(
+                system_id=30010000 + index,
+                constellation_id=20010000 + index,
+                name=f"Static system {index}",
+                zh_name=f"星图静态测试星系 {index}",
+                security_status=0.6,
+                x=(index + 1) * 1e16,
+                y=0,
+                z=(index + 1) * -1e16,
+            )
+            for index in range(256)
+        ])
+
+    def _render_coordinate_response(self, view, accept_encoding=None):
+        headers = {"HTTP_ACCEPT": "application/json"}
+        if accept_encoding is not None:
+            headers["HTTP_ACCEPT_ENCODING"] = accept_encoding
+        response = view.as_view()(self.factory.get("/api/board", **headers))
+        # gzip_page defers middleware processing until a DRF Response is
+        # rendered. Reading response.data alone would not exercise compression.
+        response.render()
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_coordinate_endpoints_compress_rendered_json_without_changing_projection(self):
+        self._seed_large_coordinate_results()
+        for view, _, _, fields in self.coordinate_endpoints:
+            with self.subTest(view=view.__name__):
+                plain = self._render_coordinate_response(view)
+                compressed = self._render_coordinate_response(view, "gzip")
+
+                self.assertEqual(compressed.get("Content-Encoding"), "gzip")
+                self.assertIn("Accept-Encoding", compressed["Vary"].split(", "))
+                self.assertEqual(gzip.decompress(compressed.content), plain.content)
+                self.assertEqual(json.loads(gzip.decompress(compressed.content)), plain.data)
+                self.assertEqual(compressed.data, plain.data)
+                self.assertGreater(len(plain.data), 250)
+                self.assertTrue(all(set(row) == set(fields) for row in compressed.data))
+                self.assertLess(len(compressed.content), len(plain.content) / 2)
+
+    def test_coordinate_endpoints_without_gzip_acceptance_return_plain_json(self):
+        self._seed_large_coordinate_results()
+        for view, _, _, _ in self.coordinate_endpoints:
+            with self.subTest(view=view.__name__):
+                response = self._render_coordinate_response(view)
+                self.assertNotIn("Content-Encoding", response)
+                self.assertEqual(json.loads(response.content), response.data)
+
+    def test_gzip_requests_reuse_the_existing_python_list_cache_without_queries(self):
+        self._seed_large_coordinate_results()
+        for view, cache_name, _, _ in self.coordinate_endpoints:
+            with self.subTest(view=view.__name__):
+                with self.assertNumQueries(1):
+                    plain = self._render_coordinate_response(view)
+                cached_data = cache.get(f"board:{cache_name}:production:v1")
+                self.assertIsInstance(cached_data, list)
+                self.assertEqual(cached_data, plain.data)
+
+                with self.assertNumQueries(0):
+                    compressed = self._render_coordinate_response(view, "gzip")
+                self.assertEqual(compressed.get("Content-Encoding"), "gzip")
+                self.assertEqual(gzip.decompress(compressed.content), plain.content)
+
+    def test_gzip_coordinate_cache_keeps_local_demo_filtering_separate(self):
+        self._seed_large_coordinate_results()
+        for view, cache_name, id_field, _ in self.coordinate_endpoints:
+            with self.subTest(view=view.__name__):
+                production = self._render_coordinate_response(view, "gzip")
+                self.assertTrue(any(row[id_field] >= 99000000 for row in production.data))
+
+                with override_settings(TACTICAL_LOCAL_DEMO=True):
+                    with self.assertNumQueries(1):
+                        local = self._render_coordinate_response(view, "gzip")
+                    self.assertEqual(local.get("Content-Encoding"), "gzip")
+                    self.assertTrue(all(row[id_field] < 99000000 for row in local.data))
+                    self.assertEqual(json.loads(gzip.decompress(local.content)), local.data)
+                    self.assertEqual(
+                        cache.get(f"board:{cache_name}:local:v1"), local.data
+                    )
+                    with self.assertNumQueries(0):
+                        local_cached = self._render_coordinate_response(view, "gzip")
+                    self.assertEqual(local_cached.data, local.data)
+
+                with self.assertNumQueries(0):
+                    production_cached = self._render_coordinate_response(view, "gzip")
+                self.assertEqual(production_cached.data, production.data)
 
     @override_settings(TACTICAL_LOCAL_DEMO=True)
     def test_public_board_endpoints_hide_reserved_local_rows(self):

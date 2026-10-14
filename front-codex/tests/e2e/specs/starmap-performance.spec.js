@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { installApiMock, json } from '../helpers/api'
 import { installMapData, largeMapData, locateMapSystem, observeMapDrawing, waitForMapIdle } from '../helpers/starmapPerformance'
 
 const systems = [
@@ -17,6 +18,134 @@ const stargates = [
 
 test.beforeEach(async ({ page }) => {
   await observeMapDrawing(page)
+})
+
+test('星门和区域资料延迟时先展示星系，补齐图层不重置定位或起点', async ({ page }) => {
+  let releaseLayers
+  const waiting = new Promise(resolve => { releaseLayers = resolve })
+  await installApiMock(page, async ({ url }) => {
+    if (url.pathname === '/api/boardsystems') return json(systems)
+    if (url.pathname === '/api/anomaly-hotspots/') return json({ version: 1, collected_at_ms: null,
+      last_attempt_at_ms: null, status: 'unavailable', statistics_window: null, systems: [] })
+    if (['/api/boardstargate', '/api/boardregions', '/api/boardconstellations'].includes(url.pathname)) {
+      await waiting
+      if (url.pathname === '/api/boardstargate') return json(stargates)
+      if (url.pathname === '/api/boardregions') return json([{ region_id: 10, zh_name: '迟到星域' }])
+      return json([{ region_id: 10, x: 0, z: 0 }])
+    }
+    return json([])
+  })
+  let canvas, before
+  try {
+    await page.goto('/starmap', { waitUntil: 'domcontentloaded' })
+    await expect(page.locator('canvas')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('status').filter({ hasText: '星门' })).toContainText('加载')
+    await locateMapSystem(page, '中心')
+    await page.locator('.tactical-system-card .ghost-btn').first().click()
+    canvas = await page.locator('canvas').elementHandle()
+    before = await page.locator('.tactical-system-marker.is-start').evaluate(node => ({ x: node.style.left, y: node.style.top }))
+  } finally { releaseLayers() }
+  await expect(page.locator('.tactical-map-hud')).toContainText('星门 4')
+  await waitForMapIdle(page)
+  expect(await canvas.evaluate(node => node.isConnected)).toBe(true)
+  await expect(page.locator('.tactical-map-hud')).toContainText('缩放 7.56x')
+  expect(await page.locator('.tactical-system-marker.is-start').evaluate(node => ({ x: node.style.left, y: node.style.top }))).toEqual(before)
+  await expect(page.locator('.tactical-system-head strong')).toHaveText('中心')
+  await expect(page.getByLabel('起点星系')).toHaveValue('中心')
+})
+
+test('真实规模热圈拖动使用缓存图像且不随相机重复格式化榜单时间', async ({ page }, testInfo) => {
+  const data = largeMapData()
+  const hotspots = Array.from({ length: 1754 }, (_, index) => ({
+    solar_system_id: index + 1, destroy_num: [80, 200, 300][index % 3],
+    system_name: data.systems[index].zh_name, region_id: 10, region_name: '测试星域',
+  }))
+  await installMapData(page, data.systems, data.stargates, hotspots)
+  await page.goto('/starmap')
+  await waitForMapIdle(page)
+  const viewport = await page.locator('.tactical-map-viewport').boundingBox()
+  const x = viewport.x + viewport.width * .6, y = viewport.y + viewport.height * .65
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.evaluate(() => { window.__mapPerf.formatters = 0; window.__mapPerf.frames = []; window.__mapPerf.resizes = 0 })
+  await page.mouse.move(x + 40, y + 20, { steps: 24 })
+  const measured = await page.evaluate(() => ({ ...window.__mapPerf, last: window.__mapPerf.frames.at(-1) }))
+  await page.mouse.up()
+  expect(measured.last.images).toBeGreaterThan(0)
+  expect(measured.last.arcs).toBeLessThanOrEqual(data.systems.length)
+  expect(measured.formatters).toBe(0)
+  expect(measured.resizes).toBe(0)
+  const durations = measured.frames.map(frame => frame.drawMs).sort((a, b) => a - b)
+  const report = { systems: data.systems.length, hotspots: hotspots.length, frames: measured.frames.length,
+    p50DrawMs: durations[Math.floor(durations.length * .5)], p95DrawMs: durations[Math.floor(durations.length * .95)], last: measured.last }
+  console.log(`STARMAP_HOTSPOT_PERF ${JSON.stringify(report)}`)
+  await testInfo.attach('starmap-hotspot-workload.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' })
+})
+
+test('可选星门和标签请求失败后仍保留可用星图并明确提示', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-14T01:00:00Z') })
+  let gateRequests = 0
+  await installApiMock(page, async ({ url }) => {
+    if (url.pathname === '/api/boardsystems') return json(systems)
+    if (url.pathname === '/api/boardstargate') { gateRequests += 1; return json({ error: 'Unavailable' }, 503) }
+    if (['/api/boardregions', '/api/boardconstellations'].includes(url.pathname)) return json({ error: 'Unavailable' }, 503)
+    return json([])
+  })
+  await page.goto('/starmap')
+  await expect(page.locator('canvas')).toBeVisible()
+  for (let attempt = 2; attempt <= 4; attempt += 1) {
+    await page.clock.runFor(50)
+    await page.clock.fastForward(8000)
+    await expect.poll(() => gateRequests).toBe(attempt)
+  }
+  const notice = page.getByRole('status').filter({ hasText: '星门网络加载失败' })
+  await expect(notice).toContainText('星域标签加载失败')
+  await expect(page.locator('.tactical-map-hud')).toContainText('星系 5')
+  await expect(page.getByLabel('搜索并定位星系')).toBeVisible()
+})
+
+test('热圈缓存保留双层重叠透明度、屏幕半径及安等核心像素（DPR 1/2）', async ({ page }) => {
+  await installMapData(page, systems, stargates)
+  await page.goto('/starmap')
+  await waitForMapIdle(page)
+  const comparisons = await page.evaluate(async () => {
+    const { drawAnomalyHeat, anomalyHeatBand } = await import('/src/utils/anomalyHotspots.js')
+    const result = []
+    for (const ratio of [1, 2]) for (const zoom of [.37, 7.56]) for (const count of [50, 155, 201]) {
+      const viewport = { width: 160, height: 140, ratio }
+      const view = { zoom, panX: 5, panY: 7 }
+      const points = [65, 75].map(x => ({ px: (x - view.panX) / zoom, py: (70 - view.panY) / zoom, destroy_num: count }))
+      const canvases = ['sprite', 'vector'].map(() => {
+        const canvas = document.createElement('canvas')
+        canvas.width = viewport.width * ratio; canvas.height = viewport.height * ratio
+        const ctx = canvas.getContext('2d')
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+        ctx.fillStyle = '#0b1117'; ctx.fillRect(0, 0, viewport.width, viewport.height)
+        ctx.translate(view.panX, view.panY); ctx.scale(view.zoom, view.zoom)
+        return { canvas, ctx }
+      })
+      drawAnomalyHeat(canvases[0].ctx, points, view, viewport)
+      const reference = canvases[1].ctx, band = anomalyHeatBand(count)
+      for (const point of points) for (const [radiusFactor, alpha] of [[1, .12], [.55, .22]]) {
+        reference.fillStyle = band.color; reference.globalAlpha = alpha
+        reference.beginPath(); reference.arc(point.px, point.py, band.radius * radiusFactor / zoom, 0, Math.PI * 2); reference.fill()
+      }
+      reference.globalAlpha = 1
+      for (const { ctx } of canvases) {
+        ctx.fillStyle = '#22c55e'; ctx.beginPath(); ctx.arc(points[0].px, points[0].py, 1.25 / zoom, 0, Math.PI * 2); ctx.fill()
+      }
+      const sample = (ctx, x, y) => [...ctx.getImageData(Math.floor(x * ratio), Math.floor(y * ratio), 1, 1).data]
+      const samplePoints = [[65, 70], [70, 70], [55, 70], [115, 70]]
+      result.push({ ratio, zoom, count, samples: samplePoints.map(([x, y]) => ({ x, y,
+        actual: sample(canvases[0].ctx, x, y), expected: sample(canvases[1].ctx, x, y) })) })
+    }
+    return result
+  })
+  expect(comparisons).toHaveLength(12)
+  for (const comparison of comparisons) for (const sample of comparison.samples) {
+    sample.actual.forEach((channel, index) => expect(Math.abs(channel - sample.expected[index])).toBeLessThanOrEqual(2))
+    if (sample.x === 115) expect(sample.actual).toEqual([11, 17, 23, 255])
+  }
 })
 
 test('定位缩放不会反复重设画布尺寸，调整窗口仍更新画布', async ({ page }) => {

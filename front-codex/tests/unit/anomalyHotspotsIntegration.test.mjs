@@ -51,8 +51,15 @@ test('the lazy map feature owns its stylesheet instead of expanding the entry CS
   assert.doesNotMatch(globalStyles, /\.anomaly-hotspots-panel/)
 })
 
+test('only leaderboard result rows scroll, keeping search, state and time stable', () => {
+  assert.match(scopedStyles, /\.anomaly-hotspots-content\s*\{[^}]*overflow:\s*hidden/)
+  assert.match(scopedStyles, /\.anomaly-hotspots-rows\s*\{[^}]*overflow-y:\s*auto/)
+  assert.match(scopedStyles, /\.anomaly-hotspots-rows\s*\{[^}]*flex:\s*1 1 auto/)
+  assert.match(scopedStyles, /\.anomaly-hotspots-heading[^}]*flex:\s*0 0 auto/)
+})
+
 test('releasing an existing map drag over the panel clears interaction without selecting a star', () => {
-  const handler = map.match(/const finishOverlayDrag = \(\) => \{([\s\S]*?)\n  \}/)?.[1]
+  const handler = map.match(/const finishOverlayDrag = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[finishInteraction\]\)/)?.[1]
   assert.ok(handler, 'the overlay drag-release cleanup is not implemented')
   const dragRef = { current: { moved: true, x: 100, y: 100 } }
   let interacting = true

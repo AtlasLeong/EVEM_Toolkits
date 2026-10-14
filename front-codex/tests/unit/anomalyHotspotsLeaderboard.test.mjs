@@ -24,9 +24,22 @@ const snapshot = { version: 1, collected_at_ms: Date.UTC(2026, 9, 13, 15, 5, 2),
     { solar_system_id: 2, destroy_num: 0, system_name: null, region_id: null, region_name: null },
   ] }
 function render(props) {
-  assert.equal(typeof Component, 'function', 'AnomalyHotspotLeaderboard is not implemented')
+  assert.ok(Component, 'AnomalyHotspotLeaderboard is not implemented')
   return renderToStaticMarkup(React.createElement(Component, props))
 }
+
+test('the named panel keeps last-success Shanghai time in its non-scrolling header', () => {
+  const html = render({ snapshot: { ...snapshot, last_attempt_at_ms: Date.UTC(2026, 9, 14, 0, 0, 0) } })
+  assert.match(html, /aria-label="犁地热点排行榜"/)
+  assert.match(html, /<strong>犁地热点<\/strong>/)
+  assert.ok(html.indexOf('2026/10/13 23:05:02') < html.indexOf('anomaly-hotspots-content'))
+  assert.doesNotMatch(html, /2026\/10\/14 08:00:00/)
+  assert.match(html, /aria-label="榜内搜索"/)
+})
+
+test('the panel export is memoized so unrelated camera renders can be skipped', () => {
+  assert.equal(Component.$$typeof, Symbol.for('react.memo'))
+})
 
 test('the panel renders exact ranked counts, Shanghai time and the unconfirmed statistics window', () => {
   const html = render({ snapshot, canLocateSystem: id => id === 1 })

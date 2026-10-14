@@ -17,6 +17,7 @@ const timestamp = value => value === null || integer(value)
 const nullableName = value => value === null || (typeof value === 'string' && value.length <= 255)
 const compareCountAndId = (idKey) => (left, right) => right.destroy_num - left.destroy_num || left[idKey] - right[idKey]
 const displayName = (name, fallback) => typeof name === 'string' && name.trim() ? name.trim() : fallback
+let updatedAtFormatter
 
 export function validateAnomalySnapshot(value) {
   const invalid = () => { throw new Error('异常热点数据无效') }
@@ -102,10 +103,11 @@ export function formatAnomalyUpdatedAt(value) {
   if (value === null || value === undefined) return '暂无成功快照'
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) return '更新时间无效'
-  const parts = new Intl.DateTimeFormat('en-GB', {
+  updatedAtFormatter ||= new Intl.DateTimeFormat('en-GB', {
     timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date)
+  })
+  const parts = updatedAtFormatter.formatToParts(date)
   const part = name => parts.find(item => item.type === name)?.value
   return `${part('year')}/${part('month')}/${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
 }
@@ -147,9 +149,41 @@ export function fitAnomalyHotspots(points, size, { minZoom = .1, maxZoom = 10, p
   }
 }
 
+// Each document retains only the current DPR's three display bands. Reusing
+// raster circles preserves per-point source-over overlap, unlike batching all
+// equal-color points into a single path (which changes overlap opacity).
+const heatSpriteCaches = new WeakMap()
+function heatSprite(ctx, band, ratio) {
+  const doc = ctx.canvas?.ownerDocument
+  if (!doc?.createElement || typeof ctx.drawImage !== 'function') return null
+  let cache = heatSpriteCaches.get(doc)
+  if (!cache || cache.ratio !== ratio) {
+    cache = { ratio, bands: new Map() }
+    heatSpriteCaches.set(doc, cache)
+  }
+  if (cache.bands.has(band.name)) return cache.bands.get(band.name)
+  const canvas = doc.createElement('canvas')
+  // One CSS pixel of transparent padding keeps the edge's antialiasing intact.
+  canvas.width = canvas.height = Math.ceil((band.radius + 1) * 2 * ratio)
+  const spriteCtx = canvas.getContext('2d')
+  if (!spriteCtx) return null
+  spriteCtx.setTransform(ratio, 0, 0, ratio, 0, 0)
+  spriteCtx.fillStyle = band.color
+  const center = canvas.width / ratio / 2
+  for (const [radiusFactor, alpha] of [[1, .12], [.55, .22]]) {
+    spriteCtx.globalAlpha = alpha
+    spriteCtx.beginPath()
+    spriteCtx.arc(center, center, band.radius * radiusFactor, 0, Math.PI * 2)
+    spriteCtx.fill()
+  }
+  cache.bands.set(band.name, canvas)
+  return canvas
+}
+
 export function drawAnomalyHeat(ctx, points, view, viewport) {
   if (!Number.isFinite(view.zoom) || view.zoom <= 0) return
   ctx.save()
+  const ratio = Number.isFinite(viewport.ratio) && viewport.ratio > 0 ? viewport.ratio : 1
   for (const point of points) {
     const band = anomalyHeatBand(point.destroy_num)
     if (!band) continue
@@ -157,6 +191,14 @@ export function drawAnomalyHeat(ctx, points, view, viewport) {
     const screenY = point.py * view.zoom + view.panY
     if (screenX < -band.radius || screenX > viewport.width + band.radius
       || screenY < -band.radius || screenY > viewport.height + band.radius) continue
+    const sprite = heatSprite(ctx, band, ratio)
+    if (sprite) {
+      const diameter = sprite.width / ratio / view.zoom
+      ctx.globalAlpha = 1
+      ctx.drawImage(sprite, point.px - diameter / 2, point.py - diameter / 2, diameter, diameter)
+      continue
+    }
+    // No DOM/2D backing surface (e.g. SSR): retain the original vector path.
     ctx.fillStyle = band.color
     for (const [radiusFactor, alpha] of [[1, .12], [.55, .22]]) {
       ctx.globalAlpha = alpha

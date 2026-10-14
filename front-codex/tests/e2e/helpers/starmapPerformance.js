@@ -5,7 +5,10 @@ import { installApiMock, json } from './api'
 // This lives only in the test harness, never in the shipped renderer.
 export async function observeMapDrawing(page) {
   await page.addInitScript(() => {
-    window.__mapPerf = { frames: [], resizes: 0 }
+    window.__mapPerf = { frames: [], resizes: 0, formatters: 0 }
+    Intl.DateTimeFormat = new Proxy(Intl.DateTimeFormat, {
+      construct(target, args) { window.__mapPerf.formatters += 1; return Reflect.construct(target, args) },
+    })
     for (const property of ['width', 'height']) {
       const descriptor = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, property)
       Object.defineProperty(HTMLCanvasElement.prototype, property, {
@@ -16,14 +19,14 @@ export async function observeMapDrawing(page) {
         },
       })
     }
-    for (const name of ['clearRect', 'arc', 'lineTo', 'fillText', 'restore']) {
+    for (const name of ['clearRect', 'arc', 'lineTo', 'fillText', 'drawImage', 'restore']) {
       const original = CanvasRenderingContext2D.prototype[name]
       CanvasRenderingContext2D.prototype[name] = function (...args) {
         const result = original.apply(this, args)
         if (!this.canvas.classList.contains('tactical-map-canvas')) return result
         const perf = window.__mapPerf
         if (name === 'clearRect') {
-          perf.frames.push({ arcs: 0, lines: 0, labels: 0, started: performance.now(), drawMs: 0 })
+          perf.frames.push({ arcs: 0, lines: 0, labels: 0, images: 0, started: performance.now(), drawMs: 0 })
           if (perf.frames.length > 1000) perf.frames.shift()
         }
         const frame = perf.frames.at(-1)
@@ -31,6 +34,7 @@ export async function observeMapDrawing(page) {
           if (name === 'arc') frame.arcs += 1
           if (name === 'lineTo') frame.lines += 1
           if (name === 'fillText') frame.labels += 1
+          if (name === 'drawImage') frame.images += 1
           if (name === 'restore') frame.drawMs = performance.now() - frame.started
         }
         return result
@@ -39,10 +43,14 @@ export async function observeMapDrawing(page) {
   })
 }
 
-export async function installMapData(page, systems, stargates = []) {
+export async function installMapData(page, systems, stargates = [], hotspots = null) {
   await installApiMock(page, async ({ url }) => {
     if (url.pathname === '/api/boardsystems') return json(systems)
     if (url.pathname === '/api/boardstargate') return json(stargates)
+    if (url.pathname === '/api/anomaly-hotspots/' && hotspots) return json({
+      version: 1, collected_at_ms: Date.now(), last_attempt_at_ms: Date.now(),
+      status: 'ok', statistics_window: null, systems: hotspots,
+    })
     return json([])
   })
 }

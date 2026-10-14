@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, RefreshCw, X } from 'lucide-react'
 import { formatSecurityLabel, getSecurityMapColor, getSecurityTextColor } from '../../utils/securityColor'
 import { drawAnomalyHeat, fitAnomalyHotspots, mappedAnomalyPoints } from '../../utils/anomalyHotspots'
@@ -46,15 +46,12 @@ function getDirectDistanceInLightYears(start, end) {
   return distanceInMeters / LIGHT_YEAR_IN_METERS
 }
 
-function createMapModel(systems, stargates, constellations, regions) {
+function createSystemModel(systems) {
   const validSystems = (systems || []).filter((item) => Number.isFinite(Number(item.x)) && Number.isFinite(Number(item.z)))
   if (!validSystems.length) {
     return {
       systems: [],
       systemMap: new Map(),
-      stargates: [],
-      gateCount: 0,
-      regions: [],
     }
   }
 
@@ -81,6 +78,12 @@ function createMapModel(systems, stargates, constellations, regions) {
   }))
 
   const systemMap = new Map(normalizedSystems.map((item) => [item.system_id, item]))
+  return { systems: normalizedSystems, systemMap, normalizeX, normalizeY }
+}
+
+function createMapModel(systemModel, stargates, constellations, regions) {
+  if (!systemModel.systems.length) return { ...systemModel, stargates: [], gateCount: 0, regions: [] }
+  const { systemMap, normalizeX, normalizeY } = systemModel
   const gateKeys = new Set()
   let gateCount = 0
   const stargateLines = (stargates || [])
@@ -131,8 +134,7 @@ function createMapModel(systems, stargates, constellations, regions) {
     .filter(Boolean)
 
   return {
-    systems: normalizedSystems,
-    systemMap,
+    ...systemModel,
     stargates: stargateLines,
     gateCount,
     regions: regionLabels,
@@ -264,9 +266,12 @@ export default function TacticalStarMap({
   const [regionLabelAlpha, setRegionLabelAlpha] = useState(0)
   const [hotspotLayerVisible, setHotspotLayerVisible] = useState(true)
 
+  // Optional layers may arrive later. They must not renormalize stars or
+  // rebuild camera-independent aliases and heat-point maps.
+  const systemModel = useMemo(() => createSystemModel(systems), [systems])
   const model = useMemo(
-    () => createMapModel(systems, stargates, constellations, regions),
-    [systems, stargates, constellations, regions],
+    () => createMapModel(systemModel, stargates, constellations, regions),
+    [systemModel, stargates, constellations, regions],
   )
 
   const systemAliasMap = useMemo(() => {
@@ -363,10 +368,10 @@ export default function TacticalStarMap({
   // Keep the input camera current immediately, while React/DOM updates happen
   // at most once per animation frame. An effect syncing old state back into
   // this ref would overwrite wheel input that arrived before the next frame.
-  const updateView = (nextView) => {
+  const updateView = useCallback((nextView) => {
     viewRef.current = nextView
     setView(nextView)
-  }
+  }, [])
 
   const queueInputView = (nextView) => {
     viewRef.current = nextView
@@ -377,7 +382,7 @@ export default function TacticalStarMap({
     })
   }
 
-  const finishInteraction = () => {
+  const finishInteraction = useCallback(() => {
     window.clearTimeout(interactionTimerRef.current)
     interactionTimerRef.current = null
     if (inputFrameRef.current != null) {
@@ -386,7 +391,7 @@ export default function TacticalStarMap({
       setView(viewRef.current)
     }
     setIsInteracting(false)
-  }
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -546,14 +551,14 @@ export default function TacticalStarMap({
     regionLabelFadeFrameRef.current = window.requestAnimationFrame(step)
   }, [isViewMoving])
 
-  const stopViewAnimation = () => {
+  const stopViewAnimation = useCallback(() => {
     if (!animationFrameRef.current) return
     window.cancelAnimationFrame(animationFrameRef.current)
     animationFrameRef.current = null
     setIsViewAnimating(false)
-  }
+  }, [])
 
-  const animateToView = (targetView, duration = 520) => {
+  const animateToView = useCallback((targetView, duration = 520) => {
     stopViewAnimation()
     finishInteraction()
     dragRef.current = null
@@ -581,7 +586,7 @@ export default function TacticalStarMap({
     }
 
     animationFrameRef.current = window.requestAnimationFrame(step)
-  }
+  }, [finishInteraction, stopViewAnimation, updateView])
 
   useEffect(() => {
     if (!canvasRef.current || !size.width || !size.height) return
@@ -759,7 +764,7 @@ export default function TacticalStarMap({
     ctx.restore()
   }, [isViewMoving, model, pathSegments, regionLabelAlpha, size.height, size.width, size.ratio, startSystemRecord, endSystemRecord, systemLabelAlpha, view, hotspotPoints, hotspotLayerVisible])
 
-  const centerOnSystem = (system) => {
+  const centerOnSystem = useCallback((system) => {
     if (!system || !size.width || !size.height) return
 
     const targetZoom = clamp(LOCATE_ZOOM, fitScaleRef.current, fitScaleRef.current * 28)
@@ -770,7 +775,7 @@ export default function TacticalStarMap({
     }
     animateToView(nextView, 860)
     setSelectedSystemId(system.system_id)
-  }
+  }, [animateToView, size.width, size.height])
 
   const handleLocate = (systemOverride = null) => {
     const exactQuery = locateQuery.trim().toLowerCase()
@@ -781,12 +786,14 @@ export default function TacticalStarMap({
     centerOnSystem(target)
   }
 
-  const hotspotMemberPoints = region => region.memberSystemIds.map(id => hotspotPointMap.get(id)).filter(Boolean)
-  const locateHotspotSystem = id => {
+  const hotspotMemberPoints = useCallback(region => region.memberSystemIds.map(id => hotspotPointMap.get(id)).filter(Boolean), [hotspotPointMap])
+  const canLocateHotspotSystem = useCallback(id => hotspotPointMap.has(id), [hotspotPointMap])
+  const canLocateHotspotRegion = useCallback(region => region.memberSystemIds.some(id => hotspotPointMap.has(id)), [hotspotPointMap])
+  const locateHotspotSystem = useCallback(id => {
     const system = model.systemMap.get(id) || model.systemMap.get(String(id))
     if (system && hotspotPointMap.has(id)) centerOnSystem(system)
-  }
-  const locateHotspotRegion = region => {
+  }, [centerOnSystem, model.systemMap, hotspotPointMap])
+  const locateHotspotRegion = useCallback(region => {
     const target = fitAnomalyHotspots(hotspotMemberPoints(region), size, {
       minZoom: fitScaleRef.current, maxZoom: fitScaleRef.current * 28,
       // Reserve both the ranking and the existing system detail card. At
@@ -794,7 +801,7 @@ export default function TacticalStarMap({
       padding: { left: Math.min(300, size.width * .32), right: Math.min(360, size.width * .30), top: 80, bottom: 40 },
     })
     if (target) animateToView(target, 860)
-  }
+  }, [animateToView, hotspotMemberPoints, size])
 
   const resetView = () => {
     if (!size.width || !size.height) return
@@ -848,11 +855,11 @@ export default function TacticalStarMap({
     })
   }
 
-  const finishOverlayDrag = () => {
+  const finishOverlayDrag = useCallback(() => {
     if (!dragRef.current) return
     dragRef.current = null
     finishInteraction()
-  }
+  }, [finishInteraction])
 
   const handlePointerUp = (event) => {
     if (!dragRef.current) return
@@ -1004,8 +1011,8 @@ export default function TacticalStarMap({
         <canvas ref={canvasRef} className="tactical-map-canvas" />
         <div className="anomaly-hotspots-map-overlay">
           <AnomalyHotspotLeaderboard snapshot={hotspotSnapshot} requestFailed={hotspotRequestFailed}
-            loading={hotspotLoading} canLocateSystem={id => hotspotPointMap.has(id)}
-            canLocateRegion={region => hotspotMemberPoints(region).length > 0}
+            loading={hotspotLoading} canLocateSystem={canLocateHotspotSystem}
+            canLocateRegion={canLocateHotspotRegion}
             onLocateSystem={locateHotspotSystem} onLocateRegion={locateHotspotRegion}
             onMapInteractionEnd={finishOverlayDrag}
             layerVisible={hotspotLayerVisible} onLayerVisibilityChange={setHotspotLayerVisible} />

@@ -15,6 +15,7 @@ import { getSecurityTextColor } from '../utils/securityColor'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 
 const STATIC_MAP_CACHE_TIME = 60 * 60 * 1000
+const EMPTY_MAP_ROWS = Object.freeze([])
 
 function getSystemDisplayName(system) {
   return system?.zh_name || system?.name || system?.en_name || system?.system_name || ''
@@ -270,6 +271,13 @@ export default function TacticalBoardPage() {
     gcTime: STATIC_MAP_CACHE_TIME,
   })
 
+  const mapLayerMessage = [
+    systemsQuery.isError ? '星系数据加载失败，请刷新重试' : '',
+    stargateQuery.isPending ? '星门网络加载中' : stargateQuery.isError ? '星门网络加载失败' : '',
+    constellationsQuery.isPending || regionsQuery.isPending ? '星域标签加载中'
+      : constellationsQuery.isError || regionsQuery.isError ? '星域标签加载失败' : '',
+  ].filter(Boolean).join('；')
+
   const systemAliasMap = useMemo(() => {
     const map = new Map()
     ;(systemsQuery.data || []).forEach((item) => {
@@ -368,14 +376,18 @@ export default function TacticalBoardPage() {
 
       <div className="layout-main-stack">
         <Panel className="tactical-map-panel" title="交互星图" subtitle="支持搜索定位、拖拽缩放、点击星系设起终点和路径高亮">
-          {systemsQuery.isPending || stargateQuery.isPending || constellationsQuery.isPending || regionsQuery.isPending ? (
+          {systemsQuery.isPending ? (
             <LoadingBar />
           ) : (
+            <>
+            <p className="anomaly-hotspots-note" role="status" style={{ minHeight: 20, margin: '0 0 8px' }}>
+              {mapLayerMessage}
+            </p>
             <TacticalStarMap
-              systems={systemsQuery.data || []}
-              stargates={stargateQuery.data || []}
-              constellations={constellationsQuery.data || []}
-              regions={regionsQuery.data || []}
+              systems={systemsQuery.data || EMPTY_MAP_ROWS}
+              stargates={stargateQuery.data || EMPTY_MAP_ROWS}
+              constellations={constellationsQuery.data || EMPTY_MAP_ROWS}
+              regions={regionsQuery.data || EMPTY_MAP_ROWS}
               pathRows={pathRows}
               startSystem={startSystem}
               endSystem={endSystem}
@@ -386,6 +398,7 @@ export default function TacticalBoardPage() {
               hotspotRequestFailed={hotspotsQuery.isError}
               hotspotLoading={hotspotsQuery.isPending}
             />
+            </>
           )}
         </Panel>
 
