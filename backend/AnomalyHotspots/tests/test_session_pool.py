@@ -200,4 +200,3 @@ class PoolTests(unittest.TestCase):
         directory.symlink_to(self.parent, target_is_directory=True)
         with self.assertRaises(api.SessionBundleError):
             self.select({**self.environment, 'ANOMALY_SESSION_CURSOR_FILE': str(directory / 'cursor.json')})
-
