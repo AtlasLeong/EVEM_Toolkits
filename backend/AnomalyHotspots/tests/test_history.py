@@ -20,13 +20,93 @@ class HistoryTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(importlib.util.find_spec('AnomalyHotspots.history'), 'sanitized history module missing')
         self.api = importlib.import_module('AnomalyHotspots.history')
+        self.clock_ms = 0
+        clock = patch.object(self.api.time, 'time', side_effect=lambda: self.clock_ms / 1000)
+        clock.start()
+        self.addCleanup(clock.stop)
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.directory = Path(self.temporary.name)
         if os.name == 'posix': self.directory.chmod(0o2750)
 
     def record(self, stamp, **counts):
+        if type(stamp) is int and self.clock_ms < stamp <= 2**53 - 1: self.clock_ms = stamp
         self.api.record_success(self.directory, rows(**counts), now_ms=stamp)
+
+    def test_expired_history_is_not_servable_without_a_new_collection(self):
+        self.record(1000, **{'1': 1})
+        self.record(2000, **{'1': 2})
+        self.record(3000, **{'1': 3})
+        self.clock_ms = 1000 + self.api.RETENTION_MS + 1
+        value = self.api.read_changes(self.directory)
+        self.assertEqual([item['id'] for item in value['intervals']], [3000])
+        self.assertEqual(value['interval']['start_at_ms'], 2000)
+        with self.assertRaises(self.api.HistoryError):
+            self.api.read_changes(self.directory, interval=2000)
+        self.clock_ms = 3000 + self.api.RETENTION_MS + 1
+        value = self.api.read_changes(self.directory)
+        self.assertEqual(value['status'], 'unavailable')
+        self.assertEqual(value['systems'], [])
+        self.assertEqual(value['intervals'], [])
+        with self.assertRaises(self.api.HistoryError):
+            self.api.read_changes(self.directory, interval=3000)
+
+    def test_one_remaining_retained_sample_is_baseline_and_read_clock_is_strict(self):
+        self.record(1000, **{'1': 1})
+        self.record(2000, **{'1': 2})
+        try: value = self.api.read_changes(self.directory, now_ms=1000 + self.api.RETENTION_MS + 1)
+        except TypeError: self.fail('history reads need a deterministic retention clock')
+        self.assertEqual(value['status'], 'baseline')
+        for value in (True, -1, '1000', 2**53):
+            with self.subTest(value=value), self.assertRaises(self.api.HistoryError):
+                self.api.read_changes(self.directory, now_ms=value)
+
+    def test_manifest_crash_has_only_one_bounded_staged_sample_of_headroom(self):
+        self.assertEqual(getattr(self.api, 'MAX_STAGED_SAMPLES', None), 1,
+                         'physical staging headroom must be explicit and bounded')
+        self.record(1000, **{'1': 1})
+        self.record(2000, **{'1': 2})
+        committed_bytes = sum(path.stat().st_size for path in self.directory.glob('sample-*.json'))
+        real_replace = os.replace
+        def fail_manifest(source, target):
+            if Path(target).name == 'manifest.json': raise OSError('simulated manifest crash')
+            return real_replace(source, target)
+        with patch.object(self.api, 'MAX_SAMPLES', 2), \
+                patch.object(self.api, 'MAX_HISTORY_BYTES', committed_bytes), \
+                patch.object(self.api.os, 'replace', side_effect=fail_manifest):
+            for stamp in (3000, 4000, 5000):
+                with self.assertRaises(self.api.HistoryError): self.record(stamp, **{'1': 3})
+                samples = list(self.directory.glob('sample-*.json'))
+                self.assertLessEqual(len(samples), 2 + self.api.MAX_STAGED_SAMPLES)
+                self.assertLessEqual(sum(path.stat().st_size for path in samples),
+                                     committed_bytes + self.api.MAX_SAMPLE_BYTES)
+                self.assertTrue((self.directory / 'sample-1000.json').exists())
+                self.assertTrue((self.directory / 'sample-2000.json').exists())
+                manifest = json.loads((self.directory / 'manifest.json').read_text())
+                self.assertEqual([item['id'] for item in manifest['samples']], [1000, 2000])
+                self.assertFalse(list(self.directory.glob('.history-tmp-*')))
+        self.assertEqual(self.api.MAX_PHYSICAL_HISTORY_BYTES,
+            self.api.MAX_HISTORY_BYTES + self.api.MAX_SAMPLE_BYTES + 2 * self.api.MAX_MANIFEST_BYTES
+            + self.api.MAX_ATTEMPT_BYTES)
+
+    def test_budget_file_checks_reject_regular_looking_windows_reparse_points(self):
+        info = SimpleNamespace(st_mode=stat.S_IFREG | 0o640, st_nlink=1, st_size=1,
+                               st_file_attributes=getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400))
+        with self.assertRaises(self.api.HistoryError): self.api._file_info(info, Mock(), 100)
+
+    def test_attempt_history_status_is_fixed_enum_and_source_status_stays_distinct(self):
+        try:
+            self.api.record_attempt(self.directory, 'ok', now_ms=1000, system_count=2,
+                                    history_status='unavailable')
+        except TypeError: self.fail('history publication status must be separately recordable')
+        self.assertEqual(self.api.read_attempts(self.directory), [
+            {'at_ms': 1000, 'status': 'ok', 'system_count': 2, 'history_status': 'unavailable'}])
+        for status in ('ok', 'disabled'):
+            self.api.record_attempt(self.directory, 'network_error', now_ms=2000, history_status=status)
+            self.assertEqual(self.api.read_attempts(self.directory)[0]['history_status'], status)
+        for invalid in ('private exception', True, 1, {}):
+            with self.subTest(invalid=invalid), self.assertRaises(self.api.HistoryError):
+                self.api.record_attempt(self.directory, 'ok', now_ms=3000, history_status=invalid)
 
     def test_first_sample_is_baseline_not_invented_zero(self):
         self.assertEqual(self.api.read_changes(self.directory)['status'], 'unavailable')

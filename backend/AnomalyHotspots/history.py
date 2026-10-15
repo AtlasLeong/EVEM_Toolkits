@@ -16,6 +16,7 @@ import time
 from .snapshot import STATUSES
 from .validation import AnomalyValidationError, MAX_SAFE_INTEGER, MAX_SYSTEMS, validate_rows
 
+# These two limits bound committed manifest references, not crash staging.
 RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 MAX_SAMPLES = 4321
 MAX_HISTORY_BYTES = 512 * 1024 * 1024
@@ -23,6 +24,15 @@ MAX_SAMPLE_BYTES = 2 * 1024 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_ATTEMPTS = 200
 MAX_ATTEMPT_BYTES = 128 * 1024
+# One serialized writer may stage one sample before replacing the index. Old
+# referenced files cannot be pruned before that commit. A metadata replacement
+# may temporarily coexist with its old generation. Count unique inodes, since
+# the immutable hardlink publication briefly has two names for the same bytes.
+# These are collector-managed artifacts; unrelated operator files are untouched.
+MAX_STAGED_SAMPLES = 1
+MAX_PHYSICAL_SAMPLE_FILES = MAX_SAMPLES + MAX_STAGED_SAMPLES
+MAX_PHYSICAL_HISTORY_BYTES = (MAX_HISTORY_BYTES + MAX_SAMPLE_BYTES
+                              + 2 * MAX_MANIFEST_BYTES + MAX_ATTEMPT_BYTES)
 MAX_DIRECTORY_ENTRIES = 20_000
 SAMPLE_NAME = re.compile(r'sample-(0|[1-9][0-9]{0,15})\.json\Z')
 TEMPORARY_NAME = re.compile(r'\.history-tmp-[a-zA-Z0-9_-]{8,64}\Z')
@@ -31,6 +41,7 @@ AUDIT_REASONS = (STATUSES - {'ok', 'unavailable'}) | frozenset({
     'timeout', 'connection_unavailable', 'session_closed', 'unsupported_rpc'})
 # Mirror the collector's bounded pool without importing its private runtime.
 MAX_POOL_SIZE = 201
+HISTORY_STATUSES = frozenset({'ok', 'unavailable', 'disabled'})
 
 
 class HistoryError(Exception):
@@ -70,7 +81,8 @@ def _directory(directory, *, write=False):
 
 
 def _file_info(info, owner, maximum):
-    if not stat.S_ISREG(info.st_mode) or info.st_size > maximum or info.st_nlink != 1:
+    if (not stat.S_ISREG(info.st_mode) or info.st_size > maximum or info.st_nlink != 1
+            or getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)):
         raise HistoryError()
     if os.name == 'posix' and (stat.S_IMODE(info.st_mode) != 0o640 or info.st_uid != owner.st_uid
                               or info.st_gid != owner.st_gid): raise HistoryError()
@@ -121,6 +133,7 @@ def _atomic(path, owner, encoded, *, immutable=False):
     try:
         _no_links(path)
         if path.exists(): _file_info(path.lstat(), owner, max(MAX_MANIFEST_BYTES, MAX_ATTEMPT_BYTES))
+        _physical_budget(path.parent, owner, len(encoded), sample=immutable)
         descriptor, temporary = tempfile.mkstemp(prefix='.history-tmp-', dir=path.parent)
         with os.fdopen(descriptor, 'wb') as stream:
             if os.name == 'posix':
@@ -239,6 +252,35 @@ def _cleanup_temporaries(directory, owner):
     _sync_directory(directory)
 
 
+def _physical_budget(directory, owner, additional_bytes, *, sample=False):
+    """Bound recognized physical storage including crash-staged generations.
+
+    Reject excess rather than deleting referenced data to make staging space.
+    Caller holds the collector's single-writer lock. Existing orphan cleanup
+    runs before the next publication, preventing accumulation across retries.
+    """
+    sample_count, total, seen = 0, additional_bytes, set()
+    for index, path in enumerate(directory.iterdir()):
+        if index >= MAX_DIRECTORY_ENTRIES: raise HistoryError()
+        is_sample = SAMPLE_NAME.fullmatch(path.name)
+        if not is_sample and path.name not in {'manifest.json', 'attempts.json'}: continue
+        # The private parent was checked before entering publication; lstat
+        # plus _file_info rejects leaf symlinks/reparse points without walking
+        # the same ancestry thousands of times per bounded budget scan.
+        info = path.lstat()
+        maximum = MAX_SAMPLE_BYTES if is_sample else (
+            MAX_MANIFEST_BYTES if path.name == 'manifest.json' else MAX_ATTEMPT_BYTES)
+        _file_info(info, owner, maximum)
+        sample_count += bool(is_sample)
+        identity = (info.st_dev, info.st_ino)
+        if identity not in seen:
+            total += info.st_size
+            seen.add(identity)
+    if (sample_count + sample > MAX_SAMPLES + MAX_STAGED_SAMPLES
+            or total > MAX_HISTORY_BYTES + MAX_SAMPLE_BYTES + 2 * MAX_MANIFEST_BYTES + MAX_ATTEMPT_BYTES):
+        raise HistoryError()
+
+
 def record_success(directory, rows, *, now_ms=None):
     try:
         stamp = _now(now_ms)
@@ -287,16 +329,20 @@ def _interval(previous, current):
             'elapsed_ms': current['id'] - previous['id']}
 
 
-def read_changes(directory, *, interval=None, before=None, limit=100):
+def read_changes(directory, *, interval=None, before=None, limit=100, now_ms=None):
     try:
         if interval is not None: _integer(interval)
         if before is not None: _integer(before)
         _integer(limit, minimum=1, maximum=100)
+        current_time = _now(now_ms)
         if directory is None or directory == '': return _empty()
         try: parent, owner = _directory(directory)
         except FileNotFoundError: return _empty()
-        entries = _manifest(parent, owner)
-        if not entries: return _empty()
+        entries = [entry for entry in _manifest(parent, owner)
+                   if current_time - RETENTION_MS <= entry['id'] <= current_time]
+        if not entries:
+            if interval is not None: raise HistoryError()
+            return _empty()
         if len(entries) == 1:
             _read_sample(parent, owner, entries[0])
             if interval is not None: raise HistoryError()
@@ -328,7 +374,7 @@ def read_changes(directory, *, interval=None, before=None, limit=100):
 
 def _attempt(value):
     required = {'at_ms', 'status', 'system_count'}
-    optional = {'session_slot', 'pool_size', 'rpc_count', 'stage', 'reason'}
+    optional = {'session_slot', 'pool_size', 'rpc_count', 'stage', 'reason', 'history_status'}
     if (not isinstance(value, dict) or not required <= set(value) or set(value) - required - optional
             or value['status'] not in STATUSES): raise HistoryError()
     _integer(value['at_ms'])
@@ -339,6 +385,7 @@ def _attempt(value):
     if 'rpc_count' in value: _integer(value['rpc_count'], maximum=5)
     if 'stage' in value and value['stage'] not in AUDIT_STAGES: raise HistoryError()
     if 'reason' in value and value['reason'] not in AUDIT_REASONS: raise HistoryError()
+    if 'history_status' in value and value['history_status'] not in HISTORY_STATUSES: raise HistoryError()
     return value
 
 
@@ -351,11 +398,13 @@ def _attempts(parent, owner):
     return [_attempt(item) for item in value['attempts']]
 
 
-def record_attempt(directory, status, *, now_ms=None, system_count=0, session_slot=None, pool_size=None, audit=None):
+def record_attempt(directory, status, *, now_ms=None, system_count=0, session_slot=None, pool_size=None,
+                   audit=None, history_status=None):
     try:
         item = {'at_ms': _now(now_ms), 'status': status, 'system_count': system_count}
         if session_slot is not None: item['session_slot'] = session_slot
         if pool_size is not None: item['pool_size'] = pool_size
+        if history_status is not None: item['history_status'] = history_status
         if isinstance(audit, dict):
             rpc_count = audit.get('rpc_count')
             if type(rpc_count) is int and 0 <= rpc_count <= 5: item['rpc_count'] = rpc_count

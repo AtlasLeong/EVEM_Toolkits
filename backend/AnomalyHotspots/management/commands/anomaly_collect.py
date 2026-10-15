@@ -48,7 +48,7 @@ class Command(BaseCommand):
                 except HistoryError: history_status = 'unavailable'
             try:
                 record_attempt(history, status, now_ms=accepted_at_ms, system_count=count,
-                               **selection, audit=safe_audit(audit))
+                               **selection, audit=safe_audit(audit), history_status=history_status)
             except HistoryError:
                 history_status = 'unavailable'
         self.stdout.write(json.dumps({'status': status, 'system_count': count,

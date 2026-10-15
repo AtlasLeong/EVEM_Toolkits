@@ -33,7 +33,7 @@ class CommandTests(SimpleTestCase):
                         [{'solar_system_id': 1, 'destroy_num': 17}]]) as collect:
                 for _ in range(3): call_command('anomaly_collect', stdout=output)
             self.assertEqual(collect.call_count, 3)
-            changes = read_changes(history)
+            changes = read_changes(history, now_ms=1201000)
             self.assertEqual(changes['status'], 'ok')
             self.assertEqual(changes['interval']['start_at_ms'], 1000)
             self.assertEqual(changes['interval']['end_at_ms'], read_snapshot(snapshot)['collected_at_ms'])
@@ -60,6 +60,21 @@ class CommandTests(SimpleTestCase):
             self.assertEqual(json.loads(output.getvalue())['status'], 'ok')
             self.assertEqual(json.loads(output.getvalue()).get('history_status'), 'unavailable')
             self.assertNotIn(str(parent), output.getvalue())
+
+    def test_source_success_with_history_failure_is_visible_in_persisted_attempt(self):
+        from AnomalyHotspots.history import HistoryError, read_attempts
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            if os.name == 'posix': parent.chmod(0o750)
+            output, snapshot = io.StringIO(), parent / 'snapshot.json'
+            with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot), ANOMALY_HISTORY_DIR=str(parent)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'A', 0, 1)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[{'solar_system_id': 1, 'destroy_num': 9}]), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.record_success', side_effect=HistoryError()):
+                call_command('anomaly_collect', stdout=output)
+            attempt = read_attempts(parent)[0]
+            self.assertEqual(attempt['status'], 'ok')
+            self.assertEqual(attempt.get('history_status'), 'unavailable')
 
     def test_unconfigured_history_is_opt_in_without_filesystem_access(self):
         with tempfile.TemporaryDirectory() as directory:
