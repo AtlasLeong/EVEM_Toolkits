@@ -3,6 +3,7 @@ export const SITE_DESCRIPTION = 'EVE Echoes 玩家工具箱，提供市场行情
 
 // Keep titles public and stable: never interpolate account, organization or item data.
 const MODULE_TITLES = [
+  ['/admin-console', '管理中心'],
   ['/manufacturing', '制造估价'],
   ['/market/admin', '市场管理'],
   ['/market', '市场价格'],
