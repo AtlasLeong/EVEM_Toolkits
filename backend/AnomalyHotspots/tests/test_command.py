@@ -17,6 +17,65 @@ from GameSessions.coordination import provision
 
 
 class CommandTests(SimpleTestCase):
+    def test_history_uses_same_success_time_and_failed_pass_keeps_baseline(self):
+        from AnomalyHotspots.history import read_changes, read_attempts
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            if os.name == 'posix': parent.chmod(0o750)
+            snapshot, history = parent / 'snapshot.json', parent / 'history'
+            history.mkdir(mode=0o750)
+            output = io.StringIO()
+            with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot), ANOMALY_HISTORY_DIR=str(history)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'B', 1, 7)), \
+                    patch('time.time', side_effect=[1, 601, 1201]), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', side_effect=[
+                        [{'solar_system_id': 1, 'destroy_num': 10}], CollectorError('rate_limited'),
+                        [{'solar_system_id': 1, 'destroy_num': 17}]]) as collect:
+                for _ in range(3): call_command('anomaly_collect', stdout=output)
+            self.assertEqual(collect.call_count, 3)
+            changes = read_changes(history)
+            self.assertEqual(changes['status'], 'ok')
+            self.assertEqual(changes['interval']['start_at_ms'], 1000)
+            self.assertEqual(changes['interval']['end_at_ms'], read_snapshot(snapshot)['collected_at_ms'])
+            self.assertEqual(changes['interval']['elapsed_ms'], 1200000)
+            self.assertEqual(changes['systems'][0]['delta'], 7)
+            self.assertEqual([item['status'] for item in read_attempts(history)], ['ok', 'rate_limited', 'ok'])
+            journal = [json.loads(line) for line in output.getvalue().splitlines()]
+            self.assertEqual([item['history_status'] for item in journal], ['ok', 'ok', 'ok'])
+
+    def test_history_publication_failure_does_not_replace_source_success(self):
+        from AnomalyHotspots.history import HistoryError
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            if os.name == 'posix': parent.chmod(0o750)
+            output, snapshot = io.StringIO(), parent / 'snapshot.json'
+            with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot), ANOMALY_HISTORY_DIR=str(parent)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'A', 0, 1)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[{'solar_system_id': 1, 'destroy_num': 9}]) as collect, \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.record_success', side_effect=HistoryError(), create=True), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.record_attempt', side_effect=HistoryError(), create=True):
+                call_command('anomaly_collect', stdout=output)
+            self.assertEqual(collect.call_count, 1)
+            self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 9}])
+            self.assertEqual(json.loads(output.getvalue())['status'], 'ok')
+            self.assertEqual(json.loads(output.getvalue()).get('history_status'), 'unavailable')
+            self.assertNotIn(str(parent), output.getvalue())
+
+    def test_unconfigured_history_is_opt_in_without_filesystem_access(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            if os.name == 'posix': parent.chmod(0o750)
+            output = io.StringIO()
+            with override_settings(ANOMALY_SNAPSHOT_FILE=str(parent / 'snapshot.json'), ANOMALY_HISTORY_DIR=''), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'A', 0, 1)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[]), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.record_success', create=True) as history, \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.record_attempt', create=True) as attempts:
+                call_command('anomaly_collect', stdout=output)
+            history.assert_not_called()
+            attempts.assert_not_called()
+            self.assertEqual(json.loads(output.getvalue()).get('history_status'), 'disabled')
+
     def test_seven_real_pool_passes_select_once_journal_slots_and_bind_actual_account(self):
         with tempfile.TemporaryDirectory() as directory:
             parent = Path(directory)
