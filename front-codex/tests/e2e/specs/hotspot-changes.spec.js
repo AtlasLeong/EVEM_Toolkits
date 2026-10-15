@@ -223,6 +223,38 @@ test('授权幂等返回同一版本时明确提示没有发生重复更新', as
   await expect(page.getByRole('status').filter({ hasText: '权限未变化，无需重复更新' })).toBeVisible()
 })
 
+for (const width of [390, 800]) test(`管理中心 ${width}px 长邮箱、流水与审计仅表格自身横滚`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 960 })
+  const longName = '管理员名称'.repeat(20)
+  await setup(page, { role: 'owner', api: ({ url }) => {
+    if (url.pathname === '/api/control-center/grants/') return json({ results: [{ ...user,
+      username: longName, email: `${'long-email-address-'.repeat(10)}@example.com`, grant: { enabled: true, version: 1 } }], next_before: null })
+    if (url.pathname === '/api/control-center/audit/') return json({ results: [{ id: 1,
+      actor: { id: 1, username: longName }, target: { id: 2, username: longName },
+      before: { enabled: false, version: 0 }, after: { enabled: true, version: 1 }, reason: '无空格的长审计原因'.repeat(50),
+      created_at: '2026-10-15T09:00:00+08:00', request_id: 'safe-id' }], next_before: null })
+  } })
+  await page.goto('/admin-console')
+  await expect(page.getByRole('region', { name: '采集状态与失败记录' })).toContainText('网络失败')
+  await expect(page.getByRole('region', { name: '权限操作审计' })).toContainText(longName)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  const geometry = await page.locator('.admin-console').evaluate(element => {
+    const bounds = node => { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right } }
+    return { root: bounds(element), cards: [...element.querySelectorAll('.admin-console-section, .admin-console-stats > div, .admin-console-modules > a')].map(bounds),
+      tables: [...element.querySelectorAll('.admin-console-table-wrap')].map(node => ({ ...bounds(node), overflow: getComputedStyle(node).overflowX,
+        clientWidth: node.clientWidth, scrollWidth: node.scrollWidth })) }
+  })
+  for (const box of [geometry.root, ...geometry.cards, ...geometry.tables]) {
+    expect(box.left).toBeGreaterThanOrEqual(0)
+    expect(box.right).toBeLessThanOrEqual(width)
+  }
+  for (const table of geometry.tables) {
+    expect(table.overflow).toBe('auto')
+    if (width === 390) expect(table.scrollWidth).toBeGreaterThan(table.clientWidth)
+  }
+  await page.screenshot({ path: test.info().outputPath(`admin-${width}.png`), fullPage: true })
+})
+
 test('普通账号直达管理中心不请求管理数据', async ({ page }) => {
   const requests = await setup(page, { role: 'ordinary' })
   await page.goto('/admin-console')

@@ -1,4 +1,4 @@
-.admin-console { max-width: 1160px; margin: 0 auto; color: var(--text); min-width: 0; }
+.admin-console { box-sizing: border-box; width: 100%; max-width: 1160px; margin: 0 auto; color: var(--text); min-width: 0; }
 .admin-console header { margin-bottom: 24px; }
 .admin-console h1 { margin: 6px 0 10px; font-size: clamp(26px, 4vw, 36px); }
 .admin-console p { color: var(--text-soft); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
