@@ -14,11 +14,18 @@ class ViewerAccessMiddleware:
         self.authentication = JWTAuthentication()
 
     def __call__(self, request):
+        private_feature = request.path.startswith('/api/control-center/') or request.path == '/api/anomaly-hotspots/changes/'
+        def finish(response):
+            if private_feature:
+                from django.utils.cache import patch_vary_headers
+                response['Cache-Control'] = 'private, no-store'
+                patch_vary_headers(response, ['Authorization'])
+            return response
         if (
             not request.path.startswith('/api/')
             or allows_anonymous_api_request(request.path, request.method)
         ):
-            return self.get_response(request)
+            return finish(self.get_response(request))
 
         try:
             authenticated = self.authentication.authenticate(request)
@@ -26,16 +33,16 @@ class ViewerAccessMiddleware:
             authenticated = None
 
         if authenticated is None:
-            return JsonResponse(
+            return finish(JsonResponse(
                 {'detail': 'Authentication credentials were not provided.'},
                 status=401,
                 headers={'WWW-Authenticate': 'Bearer'},
-            )
+            ))
 
         user, _token = authenticated
         if not getattr(user, 'is_authenticated', False) or not getattr(user, 'is_active', False):
-            return JsonResponse({'detail': '账号不可用。'}, status=403)
+            return finish(JsonResponse({'detail': '账号不可用。'}, status=403))
         if request.path == LEGACY_UPLOAD_PATH and not allows_legacy_upload(user):
             return JsonResponse({'detail': '当前账号暂无上传权限。'}, status=403)
 
-        return self.get_response(request)
+        return finish(self.get_response(request))

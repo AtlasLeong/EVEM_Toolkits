@@ -132,6 +132,7 @@ INSTALLED_APPS = [
     'Market',
     'Killboard',
     'AnomalyHotspots',
+    'ControlCenter',
 ]
 
 MIDDLEWARE = [
@@ -236,6 +237,9 @@ REST_FRAMEWORK = {
         'market_public': '120/hour',
         'killboard_public': '120/hour',
         'anomaly_hotspots': '120/hour',
+        'control_center': '600/hour',
+        'control_center_access': '360/hour',
+        'anomaly_changes': '360/hour',
         'killboard_private': '120/hour',
     }
 }
@@ -274,6 +278,9 @@ KILLBOARD_OWNER_EMAIL = config('KILLBOARD_OWNER_EMAIL', default='')
 KILLBOARD_COLLECTION_ENABLED = str(config('KILLBOARD_COLLECTION_ENABLED', default='false')).lower() in {'1', 'true', 'yes'}
 KILLBOARD_MIN_ISK_LOST = config('KILLBOARD_MIN_ISK_LOST', default='20000000000.00')
 ANOMALY_SNAPSHOT_FILE = config('ANOMALY_SNAPSHOT_FILE', default='')
+ANOMALY_HISTORY_DIR = config('ANOMALY_HISTORY_DIR', default='')
+# Pin the verified default-database account; email or staff status alone is insufficient.
+CONTROL_CENTER_OWNER_ID = config('CONTROL_CENTER_OWNER_ID', default='')
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
