@@ -85,7 +85,10 @@ NON_RUNTIME_FILES = frozenset({
     'backend/Community/tests_preflight.py',
     'backend/Community/tests_query_bounds.py',
     'backend/Community/tests_request_boundaries.py',
+    'backend/ControlCenter/tests.py',
     'backend/EVE_MDjango/tests_deployment.py',
+    'backend/EVE_MDjango/control_center_test_settings.py',
+    'backend/EVE_MDjango/control_center_test_urls.py',
     'backend/EVE_MDjango/tests_market_mysql_ci_settings.py',
     'backend/EVE_MDjango/tests_market_mysql_integration.py',
     'backend/EVE_MDjango/tests_market_rehearsal_settings.py',
@@ -173,6 +176,8 @@ CI_CONTROL_STEPS = {
         ('21d3533955f5641e715013cd9938d3f5a9d3ee92fc4d891630610b3b42760a9c',),
     'Community QA tool safety tests (no database or credentials)':
         ('b59d580c62fc7363ac7623553ec877876701d602502704954a05e8a9f6b6f1c2',),
+    'Control center authorization and private hotspot changes (isolated)':
+        ('828a9c0724363e5c6497c75ff234ef6ba61e1011752479c79998855138d8ab62',),
     'Enforce frontend bundle budget':
         ('a4ce14ff086ca7ad241a7c46948d35ea6540ca7cc8c03625a217e56e9856b758',),
     'Frontend dependencies ready':

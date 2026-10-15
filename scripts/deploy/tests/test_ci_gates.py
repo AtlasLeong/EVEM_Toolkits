@@ -121,6 +121,26 @@ class CIGatesTests(unittest.TestCase):
                      'scripts/killboard/tests', 'scripts/game_data/client_assets/tests'):
             self.assertIn(gate, workflow)
 
+    def test_control_center_has_its_own_isolated_tests_and_migration_check(self):
+        content = workflow('ci.yml')
+        name = 'Control center authorization and private hotspot changes (isolated)'
+        gate = step(content, name)
+        self.assertIn('working-directory: backend', gate)
+        self.assertIn('set -euo pipefail', gate)
+        for command in (
+            'python manage.py test ControlCenter --settings=EVE_MDjango.control_center_test_settings --noinput',
+            'python manage.py makemigrations ControlCenter --check --dry-run --settings=EVE_MDjango.control_center_test_settings',
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, gate)
+        self.assertIn('tee ../ci-evidence/control-center-tests.log', gate)
+        self.assertIn('tee ../ci-evidence/control-center-migration-check.log', gate)
+        self.assertNotIn('EVE_MDjango.settings', gate)
+        self.assertNotIn('continue-on-error', gate)
+        self.assertNotIn('if:', gate)
+        self.assertNotRegex(gate, r'manage\.py migrate(?:\s|$)')
+        self.assertLess(content.index(name), content.index('Plan publishable source changes'))
+
     def test_ci_packages_only_after_all_jobs_and_reuses_one_plan_and_build(self):
         content = workflow('ci.yml')
         validate = job(content, 'validate')

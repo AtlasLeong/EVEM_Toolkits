@@ -119,6 +119,12 @@ jobs:
       - name: Anomaly hotspots strict protocol, snapshot and public read boundary (isolated)
         working-directory: backend
         run: python manage.py test AnomalyHotspots --settings=EVE_MDjango.anomaly_test_settings --noinput 2>&1 | tee ../ci-evidence/anomaly-hotspots-tests.log
+      - name: Control center authorization and private hotspot changes (isolated)
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          python manage.py test ControlCenter --settings=EVE_MDjango.control_center_test_settings --noinput 2>&1 | tee ../ci-evidence/control-center-tests.log
+          python manage.py makemigrations ControlCenter --check --dry-run --settings=EVE_MDjango.control_center_test_settings 2>&1 | tee ../ci-evidence/control-center-migration-check.log
       - name: Frontend dependencies ready
         working-directory: front-codex
         run: node --version

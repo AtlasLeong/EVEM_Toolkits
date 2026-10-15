@@ -149,6 +149,54 @@ class SourcePlanTests(unittest.TestCase):
             self.commit('anomaly collector/api runtime change')
             self.assert_changed('backend')
 
+    def test_control_center_isolated_tests_and_exact_settings_are_non_runtime(self):
+        for name in (
+            'backend/ControlCenter/tests.py',
+            'backend/EVE_MDjango/control_center_test_settings.py',
+            'backend/EVE_MDjango/control_center_test_urls.py',
+        ):
+            with self.subTest(name=name):
+                self.assertFalse(source_plan.runtime_path(name), name)
+            self.write(name, '# reviewed isolated control center tests\n')
+        self.commit('reviewed control center test-only fixtures')
+        self.assertEqual(self.plan()['action'], 'noop')
+        for name in (
+            'backend/ControlCenter/tests_runtime.py',
+            'backend/ControlCenter/tests/test_unreviewed.py',
+            'backend/ControlCenter/views.py',
+            'backend/ControlCenter/models.py',
+            'backend/ControlCenter/migrations/0001_initial.py',
+            'backend/EVE_MDjango/control_center_settings.py',
+            'backend/EVE_MDjango/control_center_test_settings_extra.py',
+            'backend/EVE_MDjango/control_center_test_urls_extra.py',
+        ):
+            with self.subTest(runtime_neighbor=name):
+                self.assertTrue(source_plan.runtime_path(name), name)
+
+    def test_control_center_reviewed_ci_is_exact_and_cannot_hide_changed_commands(self):
+        ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        commands = (
+            'python manage.py test ControlCenter --settings=EVE_MDjango.control_center_test_settings --noinput',
+            'python manage.py makemigrations ControlCenter --check --dry-run --settings=EVE_MDjango.control_center_test_settings',
+        )
+        for command in commands:
+            self.assertIn(command, ci)
+        self.assertEqual(source_plan.frontend_build_context(ci.encode()),
+                         source_plan.frontend_build_context(CI_WORKFLOW.encode()))
+        for command in commands:
+            with self.subTest(command=command):
+                altered = ci.replace(command, command + ' --failfast')
+                self.assertNotEqual(altered, ci)
+                self.assertTrue(source_plan.frontend_build_context(altered.encode()).startswith(
+                    b'opaque-ci-build-v1\0'))
+        altered = ci.replace(
+            '      - name: Control center authorization and private hotspot changes (isolated)\n',
+            '      - name: Control center authorization and private hotspot changes (isolated)\n'
+            '        env:\n          UNREVIEWED_BUILD_INPUT: enabled\n')
+        self.assertNotEqual(altered, ci)
+        self.assertTrue(source_plan.frontend_build_context(altered.encode()).startswith(
+            b'opaque-ci-build-v1\0'))
+
     def test_anomaly_exact_units_and_reviewed_ci_are_controls_but_tampering_is_not(self):
         for name in ('scripts/deploy/evem-anomaly-collector.service.example',
                      'scripts/deploy/evem-anomaly-collector.timer.example'):
