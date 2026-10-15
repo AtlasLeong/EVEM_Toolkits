@@ -1,0 +1,31 @@
+.admin-console { box-sizing: border-box; width: 100%; max-width: 1160px; margin: 0 auto; color: var(--text); min-width: 0; }
+.admin-console header { margin-bottom: 24px; }
+.admin-console h1 { margin: 6px 0 10px; font-size: clamp(26px, 4vw, 36px); }
+.admin-console p { color: var(--text-soft); font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.admin-console-section { margin: 18px 0; padding: clamp(14px, 2.5vw, 24px); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); min-width: 0; }
+.admin-console-section h2 { margin: 0 0 12px; font-size: 20px; }
+.admin-console-section h3 { margin: 22px 0 10px; font-size: 15px; }
+.admin-console-search { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.admin-console-search label { flex: 1 1 240px; min-width: 0; }
+.admin-console label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-soft); }
+.admin-console input { box-sizing: border-box; width: 100%; min-width: 0; color: var(--text); border: 1px solid var(--control-line); background: var(--bg); border-radius: 6px; padding: 10px; }
+.admin-console-reason { margin-top: 16px; }
+.admin-console-user-list { list-style: none; padding: 0; margin: 0; }
+.admin-console-user-list li { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.admin-console-user-list li > div { min-width: 0; flex: 1 1 200px; overflow-wrap: anywhere; }
+.admin-console-user-list small,.admin-console-user-list span { display: block; font-size: 12px; margin-top: 5px; color: var(--text-soft); }
+.admin-console-message { border-left: 3px solid var(--accent); padding: 8px 12px; }
+.admin-console-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.admin-console-stats div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.admin-console-stats dt { color: var(--text-soft); font-size: 11px; }
+.admin-console-stats dd { margin: 7px 0 0; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; font-size: 14px; }
+.admin-console-table-wrap { max-width: 100%; overflow-x: auto; }
+.admin-console table { width: 100%; border-collapse: collapse; min-width: 480px; text-align: left; font-size: 12px; }
+.admin-console th,.admin-console td { padding: 11px 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; max-width: 350px; }
+.admin-console th { color: var(--text-soft); font-weight: 500; }
+.admin-console td small { display: block; color: var(--text-soft); margin-top: 4px; }
+.admin-console-pagination { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.admin-console-modules { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(210px,100%),1fr)); gap: 12px; }
+.admin-console-modules a { color: var(--text); border: 1px solid var(--line); padding: 16px; border-radius: 8px; text-decoration: none; }
+.admin-console-modules span { display: block; color: var(--accent); font-size: 12px; margin-top: 12px; }
+@media(max-width:767px) { .admin-console-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }

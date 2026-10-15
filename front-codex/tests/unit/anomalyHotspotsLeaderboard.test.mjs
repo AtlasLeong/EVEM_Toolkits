@@ -73,3 +73,41 @@ test('the initial no-data state never implies a measured zero', () => {
   assert.match(html, /暂无成功快照/)
   assert.doesNotMatch(html, /阿尔法/)
 })
+
+const changes = { version: 1, status: 'ok', statistics_window: null,
+  interval: { id: 2, start_at_ms: Date.UTC(2026, 9, 15, 1), end_at_ms: Date.UTC(2026, 9, 15, 1, 25), elapsed_ms: 25 * 60_000 },
+  coverage: { comparable: 1, new: 2, missing: 3, negative: 4, unchanged: 0 }, intervals: [], next_before: null,
+  systems: [{ solar_system_id: 42, previous_destroy_num: 30, destroy_num: 70, delta: 40, system_name: '私密星系', region_id: null, region_name: null }] }
+test('unauthorized panel never renders supplied private rows or change controls', () => {
+  const html = render({ snapshot, changes: { allowed: false, mode: 'changes', data: changes } })
+  assert.doesNotMatch(html, /私密星系|犁地变化榜|变化排名/)
+})
+test('authorized change panel shows positive difference, real gap and exclusions', () => {
+  const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data: changes }, allowLocate: false })
+  assert.match(html, /私密星系/)
+  assert.match(html, /\+40/)
+  assert.match(html, /30 → 70/)
+  assert.match(html, /25 分钟/)
+  assert.match(html, /新增 2.*缺失 3.*回落 4/)
+  assert.match(html, /快照净增量/)
+  assert.doesNotMatch(html, /定位星系/)
+})
+test('baseline change panel waits for the second success instead of showing a zero', () => {
+  const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data: { ...changes, status: 'baseline', interval: null, systems: [] } } })
+  assert.match(html, /等待第二次成功采集/)
+  assert.doesNotMatch(html, /私密星系|净增量为 0/)
+})
+
+test('only latest change selection warns about stale collection and preserves its actual time', () => {
+  const end = Date.now() - 21 * 60_000
+  const stale = { ...changes, interval: { id: end, start_at_ms: end - 10 * 60_000, end_at_ms: end, elapsed_ms: 10 * 60_000 } }
+  const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data: stale, interval: null } })
+  assert.match(html, /最新区间已超过 20 分钟未更新/)
+  assert.match(html, /实际间隔 10 分钟/)
+  assert.match(html, /私密星系/)
+  const historical = render({ snapshot, changes: { allowed: true, mode: 'changes', data: stale, interval: end } })
+  assert.doesNotMatch(historical, /最新区间已超过 20 分钟未更新/)
+  const fresh = render({ snapshot, changes: { allowed: true, mode: 'changes', data: { ...changes, interval: {
+    id: Date.now(), start_at_ms: Date.now() - 10 * 60_000, end_at_ms: Date.now(), elapsed_ms: 10 * 60_000 } } } })
+  assert.doesNotMatch(fresh, /最新区间已超过 20 分钟未更新/)
+})

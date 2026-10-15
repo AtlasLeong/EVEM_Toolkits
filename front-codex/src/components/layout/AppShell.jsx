@@ -5,6 +5,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { AuthContext } from '../../context/AuthContext'
 import useTacticalUsageAccess from '../../hooks/useTacticalUsageAccess'
 import useKillboardAccess from '../../hooks/useKillboardAccess'
+import useControlCenterAccess from '../../hooks/useControlCenterAccess'
 import { pageTransitionKey } from '../../utils/routeTransition.js'
 import { loginReturnPath } from '../../utils/loginDestination'
 import IndustryJourney from './IndustryJourney'
@@ -28,6 +29,7 @@ const navGroups = [
     { to: '/starsea', label: '星海见闻', icon: Compass },
     { to: '/feedback', label: '需求与反馈', icon: MessageSquare },
     { to: '/infocenter', label: '使用与权限', icon: CircleHelp },
+    { to: '/admin-console', label: '管理中心', icon: Shield },
   ] },
 ]
 
@@ -53,11 +55,13 @@ export default function AppShell() {
   const { isAuthenticated, userInfo, logout } = useContext(AuthContext)
   const usageAccess = useTacticalUsageAccess()
   const killboardAccess = useKillboardAccess()
+  const controlAccess = useControlCenterAccess()
   const canViewUsage = usageAccess.allowed
   const exactNavigationMatch = to => to === '/tactical' || (to === '/killboard' && /^\/killboard\/admin(?:\/|$)/.test(location.pathname))
   const availableNavGroups = navGroups.map(group => ({ ...group, items: group.items.filter(item => {
     if (item.to.startsWith('/killboard')) return killboardAccess.allowed
     if (item.to === '/tactical/usage') return canViewUsage
+    if (item.to === '/admin-console') return controlAccess.canManage
     return true
   }) }))
   const reduceMotion = useReducedMotion()

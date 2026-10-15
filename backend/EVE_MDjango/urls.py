@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from .deployment import deployment_version
 
 urlpatterns = [
+    path('api/control-center/', include('ControlCenter.urls')),
     path('api/anomaly-hotspots/', include('AnomalyHotspots.urls')),
     path('api/game-data/', include('GameData.urls')),
     path('api/market/', include('Market.urls')),

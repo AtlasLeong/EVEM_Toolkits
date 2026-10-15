@@ -21,4 +21,4 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
 ReadOnlyDirectories=/EVEMTK
-ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock /var/lib/evem-killboard /EVEMTK/deploy/shared/anomaly/snapshots
+ReadWriteDirectories=/EVEMTK/deploy/shared/killboard/collector.lock /var/lib/evem-killboard /EVEMTK/deploy/shared/anomaly/snapshots /EVEMTK/deploy/shared/anomaly/history

@@ -11,6 +11,7 @@ DATABASES = {'default': {'ENGINE': 'django.db.backends.dummy'}}
 DATABASE_ROUTERS = []
 CACHES = {'default': {'BACKEND': 'django.core.cache.backends.dummy.DummyCache'}}
 ANOMALY_SNAPSHOT_FILE = os.environ.get('ANOMALY_SNAPSHOT_FILE', '')
+ANOMALY_HISTORY_DIR = os.environ.get('ANOMALY_HISTORY_DIR', '')
 TIME_ZONE = 'Asia/Shanghai'
 USE_TZ = True
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

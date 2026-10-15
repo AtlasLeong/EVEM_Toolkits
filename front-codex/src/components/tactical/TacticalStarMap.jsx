@@ -242,6 +242,7 @@ export default function TacticalStarMap({
   hotspotSnapshot,
   hotspotRequestFailed = false,
   hotspotLoading = false,
+  hotspotChanges = null,
 }) {
   const containerRef = useRef(null)
   const searchRef = useRef(null)
@@ -787,12 +788,15 @@ export default function TacticalStarMap({
   }
 
   const hotspotMemberPoints = useCallback(region => region.memberSystemIds.map(id => hotspotPointMap.get(id)).filter(Boolean), [hotspotPointMap])
-  const canLocateHotspotSystem = useCallback(id => hotspotPointMap.has(id), [hotspotPointMap])
+  const canLocateHotspotSystem = useCallback(id => {
+    const system = model.systemMap.get(id) || model.systemMap.get(String(id))
+    return Boolean(system && Number.isFinite(system.px) && Number.isFinite(system.py))
+  }, [model.systemMap])
   const canLocateHotspotRegion = useCallback(region => region.memberSystemIds.some(id => hotspotPointMap.has(id)), [hotspotPointMap])
   const locateHotspotSystem = useCallback(id => {
     const system = model.systemMap.get(id) || model.systemMap.get(String(id))
-    if (system && hotspotPointMap.has(id)) centerOnSystem(system)
-  }, [centerOnSystem, model.systemMap, hotspotPointMap])
+    if (system && canLocateHotspotSystem(id)) centerOnSystem(system)
+  }, [centerOnSystem, model.systemMap, canLocateHotspotSystem])
   const locateHotspotRegion = useCallback(region => {
     const target = fitAnomalyHotspots(hotspotMemberPoints(region), size, {
       minZoom: fitScaleRef.current, maxZoom: fitScaleRef.current * 28,
@@ -1011,6 +1015,7 @@ export default function TacticalStarMap({
         <canvas ref={canvasRef} className="tactical-map-canvas" />
         <div className="anomaly-hotspots-map-overlay">
           <AnomalyHotspotLeaderboard snapshot={hotspotSnapshot} requestFailed={hotspotRequestFailed}
+            changes={hotspotChanges}
             loading={hotspotLoading} canLocateSystem={canLocateHotspotSystem}
             canLocateRegion={canLocateHotspotRegion}
             onLocateSystem={locateHotspotSystem} onLocateRegion={locateHotspotRegion}

@@ -78,6 +78,12 @@ button.anomaly-hotspots-row:disabled { opacity: 1; cursor: default; }
 .anomaly-hotspots-legend .is-high { background: #ef4444; }
 .anomaly-hotspots-updated { margin: 0 12px 8px; font-size: 11px; line-height: 1.5; color: var(--text); font-variant-numeric: tabular-nums; }
 .anomaly-hotspots-updated span { font-size: 10px; color: var(--text-soft); }
+.anomaly-hotspots-modes { margin-bottom: 7px; }
+.anomaly-changes-history { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; color: var(--text-soft); font-size: 10px; flex-shrink: 0; }
+.anomaly-changes-history select { width: 100%; min-width: 0; max-width: 100%; border: 1px solid var(--control-line); border-radius: 4px; background: var(--bg); color: var(--text); padding: 5px; font-size: 10px; }
+.anomaly-changes-more { flex-shrink: 0; padding: 4px; background: transparent; border: 0; color: var(--accent); font-size: 10px; cursor: pointer; }
+.anomaly-changes-period { font-variant-numeric: tabular-nums; }
+.anomaly-changes-count { color: var(--accent); }
 
 @media (max-width: 767px) {
   .anomaly-hotspots-mobile { display: block; min-width: 0; }

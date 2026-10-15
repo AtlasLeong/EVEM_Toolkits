@@ -31,6 +31,7 @@ const MarketPricesPage = lazy(() => import('./pages/MarketPrices'))
 const ManufacturingEstimatorPage = lazy(() => import('./pages/ManufacturingEstimator'))
 const MarketAdminPage = lazy(() => import('./pages/MarketAdmin'))
 const TacticalUsagePage = lazy(() => import('./pages/TacticalUsage'))
+const AdminConsolePage = lazy(() => import('./pages/AdminConsole'))
 const IconVerificationPage = import.meta.env.DEV ? lazy(() => import('./pages/IconVerification')) : null
 const KillboardPage = lazy(() => import('./pages/Killboard'))
 const KillboardCollectorAdminPage = lazy(() => import('./pages/KillboardCollectorAdmin'))
@@ -117,6 +118,7 @@ export default function App() {
               <Route path="/tactical" element={appRoute(<TacticalCollaborationPage />)} />
             </Route>
             <Route path="/market/admin" element={<RequireAuth>{appRoute(<MarketAdminPage />)}</RequireAuth>} />
+            <Route path="/admin-console" element={<RequireAuth>{appRoute(<AdminConsolePage />)}</RequireAuth>} />
             <Route path="/killboard/admin" element={<RequireKillboardAccess>{appRoute(<KillboardCollectorAdminPage />)}</RequireKillboardAccess>} />
             <Route path="/killboard/:killId?" element={<RequireKillboardAccess>{appRoute(<KillboardPage />)}</RequireKillboardAccess>} />
             <Route path="/feedback" element={<RequireAuth>{appRoute(<FeedbackPage />)}</RequireAuth>} />

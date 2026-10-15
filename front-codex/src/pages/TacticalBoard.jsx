@@ -11,6 +11,7 @@ import {
 } from '../services/apiTacticalBoard'
 import TacticalStarMap from '../components/tactical/TacticalStarMap'
 import AnomalyHotspotLeaderboard from '../components/tactical/AnomalyHotspotLeaderboard'
+import useHotspotChanges from '../hooks/useHotspotChanges'
 import { getSecurityTextColor } from '../utils/securityColor'
 import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/ui/Primitives'
 
@@ -226,6 +227,7 @@ export default function TacticalBoardPage() {
   const [pathRows, setPathRows] = useState([])
   const [error, setError] = useState('')
   const [isPageVisible, setIsPageVisible] = useState(() => typeof document === 'undefined' || document.visibilityState !== 'hidden')
+  const hotspotChanges = useHotspotChanges(isPageVisible)
 
   useEffect(() => {
     const updateVisibility = () => setIsPageVisible(document.visibilityState !== 'hidden')
@@ -397,6 +399,7 @@ export default function TacticalBoardPage() {
               hotspotSnapshot={hotspotsQuery.data}
               hotspotRequestFailed={hotspotsQuery.isError}
               hotspotLoading={hotspotsQuery.isPending}
+              hotspotChanges={hotspotChanges}
             />
             </>
           )}
@@ -404,7 +407,7 @@ export default function TacticalBoardPage() {
 
         <div className="anomaly-hotspots-mobile">
           <AnomalyHotspotLeaderboard snapshot={hotspotsQuery.data} requestFailed={hotspotsQuery.isError}
-            loading={hotspotsQuery.isPending} allowLocate={false} />
+            loading={hotspotsQuery.isPending} allowLocate={false} changes={hotspotChanges} />
         </div>
 
         <Panel

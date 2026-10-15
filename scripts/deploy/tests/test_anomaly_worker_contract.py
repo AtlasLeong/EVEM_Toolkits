@@ -20,10 +20,18 @@ class AnomalyWorkerContractTests(unittest.TestCase):
         self.assertIn('flock --nonblock /EVEMTK/deploy/shared/killboard/collector.lock', runner.read_text())
         self.assertIn('anomaly_collect', runner.read_text())
         self.assertIn('EVE_MDjango.anomaly_worker_settings', runner.read_text())
-        self.assertIn('OnUnitActiveSec=5min', timer.read_text())
-        self.assertIn('RandomizedDelaySec=5min', timer.read_text())
+        self.assertIn('OnUnitActiveSec=10min', timer.read_text())
+        self.assertIn('RandomizedDelaySec=30s', timer.read_text())
+        self.assertIn('ANOMALY_HISTORY_DIR', settings.read_text())
         self.assertNotIn('KILLBOARD_DB_', settings.read_text())
         self.assertNotIn('EVE_MDjango.settings', settings.read_text())
+
+    def test_private_history_has_an_explicit_write_directory_not_web_database_access(self):
+        unit = (ROOT / 'scripts/deploy/evem-anomaly-collector.service.example').read_text()
+        self.assertIn('/EVEMTK/deploy/shared/anomaly/history', unit)
+        history = (ROOT / 'backend/AnomalyHotspots/history.py').read_text()
+        for forbidden in ('from django', 'import django', 'session_bundle', 'collector_transport', 'from .collector'):
+            self.assertNotIn(forbidden, history)
 
     def test_ci_executes_anomaly_app_and_offline_capture_suites(self):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
