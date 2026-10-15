@@ -5,6 +5,8 @@ from .validation import (MAX_SYSTEMS, MAX_SAFE_INTEGER, validate_rows,
                          AnomalyValidationError as AnomalyProtocolError)
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+# Both IDs were observed for this same exact two-field statistics record.
+OBSERVED_STATISTICS_SCHEMAS = frozenset({112, 113})
 
 
 def _unpack(data):
@@ -34,7 +36,7 @@ def decode_statistics(value):
             raise AnomalyProtocolError()
         record = _unpack(extension.data)
         if (not isinstance(record, list) or len(record) != 2
-                or type(record[0]) is not int or record[0] != 112):
+                or type(record[0]) is not int or record[0] not in OBSERVED_STATISTICS_SCHEMAS):
             raise AnomalyProtocolError()
         rows.append(_unpack(record[1]))
     return validate_rows(rows)

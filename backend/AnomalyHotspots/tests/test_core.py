@@ -26,8 +26,8 @@ def bundle():
                 for method in methods}}
 
 
-def wire(rows):
-    return msgpack.ExtType(10, pack([msgpack.ExtType(19, pack([112, pack(row)])) for row in rows]))
+def wire(rows, schema=112):
+    return msgpack.ExtType(10, pack([msgpack.ExtType(19, pack([schema, pack(row)])) for row in rows]))
 
 
 class ModuleTests(unittest.TestCase):
@@ -51,6 +51,41 @@ class ProtocolTests(ModuleTests):
         self.assertEqual(api.decode_statistics(msgpack.unpackb(wire(rows).data, raw=False)), expected)
         self.assertEqual(api.decode_statistics(wire([])), [])
 
+    def test_observed_schema_113_preserves_the_exact_row_contract(self):
+        api = self.require('protocol')
+        rows = [{'solar_system_id': 30001211, 'destroy_num': 5},
+                {'solar_system_id': 30000001, 'destroy_num': 0}]
+        expected = sorted(rows, key=lambda row: row['solar_system_id'])
+        response = wire(rows, schema=113)
+        self.assertEqual(api.decode_statistics(response), expected)
+        self.assertEqual(api.decode_statistics(msgpack.unpackb(response.data, raw=False)), expected)
+
+    def test_schema_113_does_not_relax_field_value_or_record_validation(self):
+        api = self.require('protocol')
+        good = {'solar_system_id': 30001211, 'destroy_num': 5}
+        invalid_rows = [[good, good], [{**good, 'private': 'secret'}],
+                        [{'system_id': 1, 'destroy_num': 1}],
+                        [{'solar_system_id': True, 'destroy_num': 1}],
+                        [{'solar_system_id': 1, 'destroy_num': True}],
+                        [{'solar_system_id': 1, 'destroy_num': -1}],
+                        [{'solar_system_id': 1, 'destroy_num': 2**53}]]
+        candidates = [wire(rows, schema=113) for rows in invalid_rows]
+        candidates.extend([
+            [msgpack.ExtType(58, pack([113, pack(good)]))],
+            [msgpack.ExtType(19, pack([113, good]))],
+            [msgpack.ExtType(19, pack([113, pack(good), 'extra']))],
+        ])
+        for response in candidates:
+            with self.subTest(response=type(response).__name__), self.assertRaises(api.AnomalyProtocolError):
+                api.decode_statistics(response)
+
+    def test_unobserved_schema_ids_and_non_integer_schema_types_remain_rejected(self):
+        api = self.require('protocol')
+        row = {'solar_system_id': 30001211, 'destroy_num': 5}
+        for schema in (111, 114, 115, True, 112.0, 113.0, '113', None):
+            with self.subTest(schema=schema), self.assertRaises(api.AnomalyProtocolError):
+                api.decode_statistics(wire([row], schema=schema))
+
     def test_rejects_drift_duplicates_bool_negative_and_unsafe_numbers(self):
         api = self.require('protocol')
         good = {'solar_system_id': 30001211, 'destroy_num': 155}
@@ -63,7 +98,7 @@ class ProtocolTests(ModuleTests):
                       {'nested': [good]}, [good], msgpack.ExtType(55, pack([good])),
                       msgpack.ExtType(10, pack(wire([good]))),
                       [msgpack.ExtType(58, pack([112, pack(good)]))],
-                      [msgpack.ExtType(19, pack([113, pack(good)]))],
+                      [msgpack.ExtType(19, pack([114, pack(good)]))],
                       [msgpack.ExtType(19, pack([112, good]))],
                       [msgpack.ExtType(19, pack([112, pack(good), 'extra']))],
                       [msgpack.ExtType(19, b'x' * (api.MAX_RESPONSE_BYTES + 1))]]
