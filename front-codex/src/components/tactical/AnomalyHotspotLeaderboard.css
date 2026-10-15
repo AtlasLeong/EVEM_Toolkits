@@ -3,7 +3,7 @@
   position: absolute;
   top: 76px;
   left: 18px;
-  width: 272px;
+  width: 286px;
   max-width: calc(100% - 36px);
   height: min(600px, calc(100% - 96px));
   display: flex;
@@ -57,7 +57,7 @@
 .anomaly-hotspots-note { flex: 0 0 auto; margin: 3px 0; color: var(--text-soft); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .anomaly-hotspots-search-summary { flex: 0 0 auto; margin: 4px 0; color: var(--text); font-size: 10px; line-height: 1.5; }
 .anomaly-hotspots-search-summary span { color: var(--text-soft); }
-.anomaly-hotspots-rows { min-height: 0; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; scrollbar-gutter: stable; scrollbar-width: thin; }
+.anomaly-hotspots-rows { box-sizing: border-box; min-height: 0; padding-inline-end: 16px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; scrollbar-gutter: stable; scrollbar-width: thin; }
 .anomaly-hotspots-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) 72px; align-items: center; gap: 6px; width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: 9px 0; background: transparent; color: var(--text); text-align: left; }
 button.anomaly-hotspots-row { cursor: pointer; }
 button.anomaly-hotspots-row:hover:not(:disabled) { background: var(--console-raised); }

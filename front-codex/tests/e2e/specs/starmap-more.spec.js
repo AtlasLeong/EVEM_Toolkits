@@ -148,7 +148,7 @@ for (const width of [768, 800, 1036, 1440, 1920, 390]) {
       const rows = element.querySelector('.anomaly-hotspots-rows')
       const controls = ['.anomaly-hotspots-heading', '.anomaly-hotspots-search', '.anomaly-hotspots-tabs', '.anomaly-hotspots-status', '.anomaly-hotspots-footer']
         .map(selector => bounds(element.querySelector(selector)))
-      return { parent, controls, row: bounds(rows), scrollable: rows.scrollHeight > rows.clientHeight,
+      return { parent, controls, row: { ...bounds(rows), clientRight: rows.getBoundingClientRect().left + rows.clientWidth }, scrollable: rows.scrollHeight > rows.clientHeight,
         contentOverflow: getComputedStyle(element.querySelector('.anomaly-hotspots-content')).overflowY,
         columns: [...rows.querySelectorAll('.anomaly-hotspots-row')].map(row => ({
           rank: bounds(row.querySelector('.anomaly-hotspots-rank')),
@@ -172,6 +172,7 @@ for (const width of [768, 800, 1036, 1440, 1920, 390]) {
       expect(columns.count.w).toBe(geometry.columns[0].count.w)
       expect(columns.rank.x + columns.rank.w).toBeLessThan(columns.name.x)
       expect(columns.name.x + columns.name.w).toBeLessThan(columns.count.x)
+      expect(geometry.row.clientRight - (columns.count.x + columns.count.w)).toBeGreaterThanOrEqual(10)
     }
     if (width >= 768) {
       for (const item of geometry.adjacent) {
