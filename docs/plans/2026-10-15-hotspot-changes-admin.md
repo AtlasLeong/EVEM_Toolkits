@@ -54,3 +54,21 @@ No server/game calls, push or deployment are part of local implementation. All n
 2. Run fresh complete affected suites, application migration/system checks with isolated settings, worker boundary contracts, unit/build/budget and focused browser suite. Inspect git diff for credentials/unrelated files.
 3. Document exact operator steps: provision private directory/group modes, owner stable ID resolution, migration, opt-in history configuration and timer reload. Preserve original shared game coordinator and KM-disabled flags; no extra probe requests.
 4. Report implemented behavior/test evidence and that production activation needs deployment plus two successful new samples. Do not claim live data/backfilled history or push/deploy without a subsequent release instruction.
+
+## Completion record — 2026-10-15
+
+Local implementation completed on `codex/hotspot-changes-admin-20261015`; the verified product commit is `b5915b3b09592a91dc65e1fd738e8646c8bded3e`. History, backend, CI/operations documentation and frontend each passed independent specification and quality review. Review regressions fixed read-time expiry/staging bounds, audit bulk-upsert protection, private cache revocation, history pagination retry and mobile admin flex-width overflow.
+
+Fresh final product checks:
+
+- Frontend unit suite: 726 passed, no skips/failures.
+- Production Vite build and bundle-budget check: passed.
+- Root browser integration selection: 75 passed on isolated port 4197, including authentication/cache isolation, guest access, navigation/accessibility, management, private changes, and original map spacing/camera cases.
+- ControlCenter: 41 passed; migration drift and Django system checks passed.
+- AnomalyHotspots: 75 discovered, successful run with 6 platform-specific skips; existing authentication/public-read selections: 59 passed.
+- Release-tool baseline regression: 343 discovered, successful run with 16 platform skips. Updated CI/source-plan/worker selection: 71 passed.
+- Manual Playwright CLI checks used synthetic API responses only: desktop and 390px private ranking, owner search/grant/audit, mobile management, retained 16px row spacing and no horizontal page overflow. Corrected mobile management measured viewport/scroll width 390/390, root width 358, table client/scroll width 328/480. The task's CLI browser and root preview service were stopped afterward.
+
+No production server/game requests, database migrations, configuration changes, pushes or deployment were performed for this feature. Public totals and KM shutdown remain unchanged in production. Linux ownership/group permissions, filesystem durability, actual MySQL concurrency, protected-policy installation, default-database migration and owner/history configuration remain deployment gates described in `docs/hotspot-changes-admin-operations.md`. Previously unrecorded samples cannot be backfilled; the private leaderboard needs two normal successful recorded collections after activation.
+
+The isolated worktree and committed feature branch are retained; unrelated pre-existing untracked operational artifacts and the original dirty worktree were not included or modified.
