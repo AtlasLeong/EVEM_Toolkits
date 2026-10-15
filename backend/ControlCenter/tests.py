@@ -1,6 +1,7 @@
 """Real disposable accounts, JWTs and history files; never production data."""
 import tempfile
 import time
+from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import DatabaseError, IntegrityError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
@@ -472,3 +474,48 @@ class ControlCenterTests(TestCase):
         self.auth(self.viewer)
         self.assertEqual(self.grant(user=self.ordinary).status_code, 403)
         self.assertEqual(self.client.get('/api/control-center/users/', {'q': self.ordinary.pk}).status_code, 403)
+
+    def test_audit_upsert_cannot_rewrite_existing_request(self):
+        self.auth(self.owner)
+        self.grant(reason='original')
+        Audit = self.models()[1]
+        original = Audit.objects.get()
+        replacement = Audit(actor=self.owner, target=self.viewer, before_enabled=False,
+                            after_enabled=True, before_version=0, after_version=1,
+                            request_id=original.request_id, reason='rewritten')
+        with self.assertRaises(ValueError):
+            Audit.objects.bulk_create([replacement], update_conflicts=True,
+                                      update_fields=['reason'], unique_fields=['request_id'])
+        original.refresh_from_db()
+        self.assertEqual(original.reason, 'original')
+
+    def test_audit_plain_bulk_insert_and_ignore_conflicts_preserve_records(self):
+        self.auth(self.owner)
+        self.grant(reason='original')
+        Audit = self.models()[1]
+        original = Audit.objects.get()
+        duplicate = Audit(actor=self.owner, target=self.viewer, before_enabled=False,
+                          after_enabled=True, before_version=0, after_version=1,
+                          request_id=original.request_id, reason='rewritten')
+        Audit.objects.bulk_create([duplicate], ignore_conflicts=True)
+        self.assertEqual(Audit.objects.count(), 1)
+        original.refresh_from_db()
+        self.assertEqual(original.reason, 'original')
+
+    @override_settings(USE_TZ=False)
+    def test_naive_production_audit_time_is_explicit_shanghai_not_client_local(self):
+        self.auth(self.owner)
+        stamp = datetime(2026, 10, 15, 15, 25, 30)
+        with patch('django.utils.timezone.now', return_value=stamp):
+            self.grant()
+        with timezone.override('America/New_York'):
+            response = self.client.get('/api/control-center/audit/')
+        self.assertEqual(response.json()['results'][0]['created_at'], '2026-10-15T15:25:30+08:00')
+
+    def test_aware_utc_audit_time_is_explicit_shanghai(self):
+        self.auth(self.owner)
+        stamp = datetime(2026, 10, 15, 7, 25, 30, tzinfo=datetime_timezone.utc)
+        with patch('django.utils.timezone.now', return_value=stamp):
+            self.grant()
+        response = self.client.get('/api/control-center/audit/')
+        self.assertEqual(response.json()['results'][0]['created_at'], '2026-10-15T15:25:30+08:00')

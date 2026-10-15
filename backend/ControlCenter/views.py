@@ -1,9 +1,11 @@
 """Owner-only feature grants and links; never broaden existing module rights."""
+from zoneinfo import ZoneInfo
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import DatabaseError, transaction
+from django.utils import timezone
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
@@ -12,6 +14,16 @@ from AnomalyHotspots.snapshot import read_snapshot
 from django.conf import settings
 from .access import CAPABILITY, can_view_changes, current_user, is_owner
 from .http import PrivateView, integer, query_values
+
+SHANGHAI = ZoneInfo('Asia/Shanghai')
+
+
+def audit_time(value):
+    # Production stores naive Shanghai time; aware database/test values must
+    # describe the same instant with an explicit offset for remote browsers.
+    if timezone.is_naive(value):
+        value = timezone.make_aware(value, SHANGHAI)
+    return value.astimezone(SHANGHAI).isoformat()
 
 
 def account(user, grant=None):
@@ -133,7 +145,7 @@ class AuditView(OwnerView):
              'target': {'id': row.target_id, 'username': row.target.get_username()},
              'before': {'enabled': row.before_enabled, 'version': row.before_version},
              'after': {'enabled': row.after_enabled, 'version': row.after_version},
-             'reason': row.reason, 'created_at': row.created_at.isoformat(), 'request_id': str(row.request_id)}
+             'reason': row.reason, 'created_at': audit_time(row.created_at), 'request_id': str(row.request_id)}
             for row in rows[:100]], 'next_before': rows[99].pk if len(rows) > 100 else None})
 
 
