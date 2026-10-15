@@ -97,3 +97,17 @@ test('baseline change panel waits for the second success instead of showing a ze
   assert.match(html, /等待第二次成功采集/)
   assert.doesNotMatch(html, /私密星系|净增量为 0/)
 })
+
+test('only latest change selection warns about stale collection and preserves its actual time', () => {
+  const end = Date.now() - 21 * 60_000
+  const stale = { ...changes, interval: { id: end, start_at_ms: end - 10 * 60_000, end_at_ms: end, elapsed_ms: 10 * 60_000 } }
+  const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data: stale, interval: null } })
+  assert.match(html, /最新区间已超过 20 分钟未更新/)
+  assert.match(html, /实际间隔 10 分钟/)
+  assert.match(html, /私密星系/)
+  const historical = render({ snapshot, changes: { allowed: true, mode: 'changes', data: stale, interval: end } })
+  assert.doesNotMatch(historical, /最新区间已超过 20 分钟未更新/)
+  const fresh = render({ snapshot, changes: { allowed: true, mode: 'changes', data: { ...changes, interval: {
+    id: Date.now(), start_at_ms: Date.now() - 10 * 60_000, end_at_ms: Date.now(), elapsed_ms: 10 * 60_000 } } } })
+  assert.doesNotMatch(fresh, /最新区间已超过 20 分钟未更新/)
+})

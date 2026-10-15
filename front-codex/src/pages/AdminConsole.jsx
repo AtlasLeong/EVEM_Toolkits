@@ -35,8 +35,9 @@ function ConsoleData({ identity }) {
     controller.current?.abort()
     controller.current = new AbortController()
     return updateHotspotGrant(user.id, { enabled, version: user.grant.version, reason }, { signal: controller.current.signal })
-  }, onSuccess: () => {
-    setMessage('权限已更新，下一次请求即按新权限校验。')
+  }, onSuccess: (result, variables) => {
+    setMessage(result.grant.version > variables.user.grant.version
+      ? '权限已更新，下一次请求即按新权限校验。' : '权限未变化，无需重复更新。')
     void client.invalidateQueries({ queryKey: [...root, 'grants'] })
     void client.invalidateQueries({ queryKey: [...root, 'audit'] })
     void client.invalidateQueries({ queryKey: [...root, 'users'] })

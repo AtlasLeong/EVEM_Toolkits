@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
 import { createFakeJwt, seedAuthenticatedSession } from '../helpers/auth'
+import { formatAnomalyUpdatedAt } from '../../../src/utils/anomalyHotspots.js'
 
 const start = Date.UTC(2026, 9, 15, 1)
 const interval = (id, end = start + 25 * 60_000) => ({ id, start_at_ms: start, end_at_ms: end, elapsed_ms: end - start })
@@ -96,6 +97,41 @@ test('授权私榜正增长排序、搜索、历史分页与历史星系定位�
   expect(requests.filter(path => path.includes('/board')).length).toBe(staticCalls)
 })
 
+test('历史分页503只警告不抹掉有效区间，同一cursor可直接重试成功', async ({ page }) => {
+  const cursors = []
+  await setup(page, { api: ({ url }) => {
+    if (url.pathname !== '/api/anomaly-hotspots/changes/' || !url.searchParams.has('before')) return undefined
+    cursors.push(url.searchParams.get('before'))
+    return cursors.length === 1 ? json({ detail: 'temporary private failure' }, 503)
+      : json({ ...privateData, intervals: [interval(1000)], next_before: null })
+  } })
+  await page.goto('/starmap')
+  const panel = panelFor(page)
+  await panel.getByRole('tab', { name: '变化', exact: true }).click()
+  await expect(panel).toContainText('私密阿尔法')
+  await panel.getByRole('button', { name: '加载更早区间', exact: true }).click()
+  await expect(panel.getByRole('alert')).toContainText('历史区间加载失败')
+  await expect(panel).toContainText('私密阿尔法')
+  await expect(panel).not.toContainText('变化榜暂时无法读取')
+  await panel.getByRole('button', { name: /加载更早区间/ }).click()
+  await expect(panel.getByRole('combobox').locator('option[value="1000"]')).toHaveCount(1)
+  await expect(panel.getByRole('alert')).toHaveCount(0)
+  expect(cursors).toEqual(['2000', '2000'])
+})
+
+test('最新区间陈旧可见但选择历史区间不误报当前采集延迟', async ({ page }) => {
+  const end = Date.now() - 21 * 60_000
+  await setup(page, { changes: { ...privateData, interval: { id: 3000, start_at_ms: end - 25 * 60_000, end_at_ms: end, elapsed_ms: 25 * 60_000 } } })
+  await page.goto('/starmap')
+  const panel = panelFor(page)
+  await panel.getByRole('tab', { name: '变化', exact: true }).click()
+  await expect(panel).toContainText('最新区间已超过 20 分钟未更新')
+  await expect(panel.locator('.anomaly-hotspots-updated')).toContainText(formatAnomalyUpdatedAt(end))
+  await panel.getByRole('combobox').selectOption('2000')
+  await expect(panel).toContainText('私密阿尔法')
+  await expect(panel).not.toContainText('最新区间已超过 20 分钟未更新')
+})
+
 test('403 撤权清除私榜并阻止稍后 capability 成功恢复入口', async ({ page }) => {
   let denied = false
   await setup(page, { changes: () => denied ? json({ detail: 'secret' }, 403) : json(privateData) })
@@ -175,6 +211,16 @@ test('管理中心仅服务器确认的 owner 可见，精确搜索、授权与�
   await expect(page).toHaveTitle('管理中心 · EVEM 工具箱')
   await expect(page.getByRole('region', { name: '权限操作审计' })).toContainText('测试授权')
   expect(requests.some(path => path.includes('/users/?q=viewer%40example.com'))).toBe(true)
+})
+
+test('授权幂等返回同一版本时明确提示没有发生重复更新', async ({ page }) => {
+  await setup(page, { role: 'owner', api: ({ url, method, body }) => url.pathname === '/api/control-center/grants/2/' && method === 'PUT'
+    ? json({ ...user, grant: { enabled: body.enabled, version: body.version } }) : undefined })
+  await page.goto('/admin-console')
+  await page.getByRole('searchbox', { name: '完整邮箱或用户 ID' }).fill('viewer@example.com')
+  await page.getByRole('button', { name: '精确查询', exact: true }).click()
+  await page.getByRole('region', { name: '用户查询结果' }).getByRole('button', { name: '授予查看权限' }).click()
+  await expect(page.getByRole('status').filter({ hasText: '权限未变化，无需重复更新' })).toBeVisible()
 })
 
 test('普通账号直达管理中心不请求管理数据', async ({ page }) => {

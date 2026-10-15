@@ -41,10 +41,13 @@ export default function useHotspotChanges(visible) {
   return useMemo(() => ({
     allowed: access.canViewChanges, mode: access.canViewChanges ? mode : 'total',
     data: access.canViewChanges && !query.isError ? query.data : null,
-    loading: query.isPending, error: query.isError || older.isError,
+    loading: query.isPending, error: query.isError, historyError: older.isError,
     interval, intervals: access.canViewChanges ? history.intervals : [],
     nextBefore: access.canViewChanges ? history.nextBefore : null,
     historyLoading: older.isFetching, onModeChange: setMode, onSelectInterval: setInterval,
-    onLoadOlder: () => setBefore(history.nextBefore),
-  }), [access.canViewChanges, mode, query.data, query.isPending, query.isError, older.isError, older.isFetching, interval, history])
+    onLoadOlder: () => {
+      if (before === history.nextBefore) void older.refetch()
+      else setBefore(history.nextBefore)
+    },
+  }), [access.canViewChanges, mode, query.data, query.isPending, query.isError, older.isError, older.isFetching, older.refetch, before, interval, history])
 }

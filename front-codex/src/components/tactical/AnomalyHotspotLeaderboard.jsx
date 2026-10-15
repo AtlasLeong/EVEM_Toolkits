@@ -10,7 +10,7 @@ const cannotLocate = () => false
 const DEFAULT_RESULT_LIMIT = 10
 const SEARCH_RESULT_LIMIT = 100
 
-function ChangesContent({ changes, allowLocate, canLocateSystem, onLocateSystem }) {
+function ChangesContent({ changes, allowLocate, canLocateSystem, onLocateSystem, now }) {
   const [query, setQuery] = useState('')
   const rowsRef = useRef(null)
   const rows = useMemo(() => rankHotspotChanges(changes.data?.systems), [changes.data?.systems])
@@ -19,6 +19,8 @@ function ChangesContent({ changes, allowLocate, canLocateSystem, onLocateSystem 
     .some(value => String(value ?? '').toLocaleLowerCase().includes(search))), [rows, search])
   useEffect(() => { if (rowsRef.current) rowsRef.current.scrollTop = 0 }, [search, changes.data?.interval?.id])
   const data = changes.error ? null : changes.data
+  const latestStale = changes.interval == null && data?.status === 'ok'
+    && now - data.interval.end_at_ms >= 20 * 60_000
   return <>
     <div className="anomaly-hotspots-search">
       <Search size={14} aria-hidden="true" />
@@ -34,11 +36,13 @@ function ChangesContent({ changes, allowLocate, canLocateSystem, onLocateSystem 
       </select>
     </label>
     {changes.nextBefore ? <button className="anomaly-changes-more" type="button" disabled={changes.historyLoading} onClick={changes.onLoadOlder}>
-      {changes.historyLoading ? '正在读取历史…' : '加载更早区间'}</button> : null}
+      {changes.historyLoading ? '正在读取历史…' : changes.historyError ? '重试加载更早区间' : '加载更早区间'}</button> : null}
+    {changes.historyError ? <p className="anomaly-hotspots-note" role="alert">历史区间加载失败，当前区间仍可查看。点击上方按钮重试。</p> : null}
     <p className="anomaly-hotspots-status" role="status">{changes.error ? '变化榜暂时无法读取，请稍后重试。'
       : changes.loading ? '正在读取变化榜'
         : data?.status === 'baseline' ? '等待第二次成功采集'
           : data?.status === 'ok' ? '相邻成功快照净增量' : '暂无可比较快照'}</p>
+    {latestStale ? <p className="anomaly-hotspots-status is-warning" role="status">最新区间已超过 20 分钟未更新。</p> : null}
     {data?.interval ? <p className="anomaly-hotspots-note anomaly-changes-period">
       {formatAnomalyUpdatedAt(data.interval.start_at_ms)}<br />→ {formatAnomalyUpdatedAt(data.interval.end_at_ms)}
       <br />实际间隔 {formatHotspotElapsed(data.interval.elapsed_ms)}
@@ -137,7 +141,7 @@ function AnomalyHotspotLeaderboard({
           <button type="button" role="tab" aria-selected={!isChanges} onClick={() => changes.onModeChange?.('total')}>总量</button>
           <button type="button" role="tab" aria-selected={isChanges} onClick={() => changes.onModeChange?.('changes')}>变化</button>
         </div> : null}
-        {isChanges ? <ChangesContent changes={changes} allowLocate={allowLocate} canLocateSystem={canLocateSystem} onLocateSystem={onLocateSystem} /> : <>
+        {isChanges ? <ChangesContent changes={changes} allowLocate={allowLocate} canLocateSystem={canLocateSystem} onLocateSystem={onLocateSystem} now={now} /> : <>
         <div className="anomaly-hotspots-search">
           <Search size={14} aria-hidden="true" />
           <input type="search" aria-label="榜内搜索" placeholder="搜索名称、星域或 ID"
