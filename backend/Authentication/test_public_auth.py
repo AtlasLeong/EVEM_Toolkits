@@ -238,7 +238,48 @@ class PublicAuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn('验证码发送失败', response.data['error'])
         self.assertEqual(len(getattr(mail, 'outbox', [])), 0)
+        self.assertFalse(EmailVerificationCode.objects.filter(email=self.email).exists())
         send_mail.assert_called_once()
+
+    @patch('Authentication.views.send_mail', side_effect=RuntimeError('controlled SMTP failure'))
+    def test_failed_resend_preserves_the_delivered_code_and_its_expiry(self, send_mail):
+        verification = self.code(age=120)
+        original_timestamp = verification.created_at
+        response = self.post('emailcode', {'email': self.email})
+        self.assertEqual(response.status_code, 500)
+        verification.refresh_from_db()
+        self.assertEqual(verification.code, '123456')
+        self.assertEqual(verification.created_at, original_timestamp)
+        self.assertEqual(self.post('register', self.registration()).status_code, 201)
+
+    @patch('Authentication.views.send_mail', return_value=0)
+    def test_zero_messages_sent_is_a_failure_without_a_usable_new_code(self, send_mail):
+        response = self.post('emailcode', {'email': self.email})
+        self.assertEqual(response.status_code, 500)
+        self.assertFalse(EmailVerificationCode.objects.filter(email=self.email).exists())
+        self.assertEqual(self.post('register', self.registration()).status_code, 400)
+
+    @patch('Authentication.views.send_mail', return_value=0)
+    def test_zero_messages_on_resend_keeps_the_previous_code(self, send_mail):
+        verification = self.code(age=120)
+        original_timestamp = verification.created_at
+        response = self.post('emailcode', {'email': self.email})
+        self.assertEqual(response.status_code, 500)
+        verification.refresh_from_db()
+        self.assertEqual(verification.code, '123456')
+        self.assertEqual(verification.created_at, original_timestamp)
+
+    @patch('Authentication.views.secrets.randbelow', return_value=554321)
+    def test_delivered_resend_replaces_old_code_and_new_code_is_consumed_once(self, randbelow):
+        self.code(age=120)
+        response = self.post('emailcode', {'email': self.email})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('654321', mail.outbox[0].body)
+        self.assertEqual(self.post('register', self.registration()).status_code, 400)
+        self.assertFalse(EVEMUser.objects.exists())
+        self.assertEqual(self.post('register', self.registration(verificationCode='654321')).status_code, 201)
+        self.assertFalse(EmailVerificationCode.objects.exists())
 
     def test_refresh_identity_and_display_claims_follow_current_database_user(self):
         user = self.user()

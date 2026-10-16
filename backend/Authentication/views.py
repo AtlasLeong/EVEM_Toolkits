@@ -158,16 +158,20 @@ class EmailVerification(APIView):
             return Response({'error': 'Enter a valid email.'}, status=status.HTTP_400_BAD_REQUEST)
 
         code = str(secrets.randbelow(900000) + 100000)
-        EmailVerificationCode.objects.update_or_create(
-            email=email,
-            defaults={'code': code, 'created_at': time.time()},
-        )
-
         mail_subject = 'Your verification code'
         mail_body = f'Your verification code is: {code}'
 
         try:
-            send_mail(mail_subject, mail_body, 'EVEMTK@163.com', [email])
+            # update_or_create locks an existing row. Keep that lock through
+            # delivery so a failed resend rolls back to the last delivered code,
+            # including its original expiry, and concurrent sends cannot reorder it.
+            with transaction.atomic():
+                EmailVerificationCode.objects.update_or_create(
+                    email=email,
+                    defaults={'code': code, 'created_at': time.time()},
+                )
+                if send_mail(mail_subject, mail_body, 'EVEMTK@163.com', [email]) != 1:
+                    raise RuntimeError('Verification email was not accepted by the mail backend')
         except Exception:
             logger.exception('Failed to send verification code email to %s', email)
             return Response({'error': '验证码发送失败，请查看后端日志'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

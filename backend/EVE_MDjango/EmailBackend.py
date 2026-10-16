@@ -12,12 +12,21 @@ class CustomEmailBackend(EmailBackend):
     def open(self):
         if self.connection:
             return False
+        connection = None
         try:
             context = ssl.create_default_context(cafile=certifi.where())
-            self.connection = smtplib.SMTP_SSL(self.host, self.port, context=context)
+            connection = smtplib.SMTP_SSL(
+                self.host, self.port, context=context,
+                timeout=self.timeout if self.timeout is not None else 20,
+            )
             if self.username and self.password:
-                self.connection.login(self.username, self.password)
+                connection.login(self.username, self.password)
         except Exception:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass  # Preserve the original connection/login failure.
             logger.exception(
                 'Failed to open SMTP connection host=%s port=%s username=%s',
                 self.host,
@@ -27,4 +36,5 @@ class CustomEmailBackend(EmailBackend):
             if not self.fail_silently:
                 raise
             return False
+        self.connection = connection
         return True
