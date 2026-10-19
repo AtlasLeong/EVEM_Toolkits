@@ -68,3 +68,29 @@
    repair findings and rerun affected tests.
 6. Commit only scoped source/tests/docs. Do not commit diagnostic output,
    captures or account files. Do not push, merge or publish without a request.
+
+## Verified execution results
+
+- Clean baseline: 31 focused frontend tests passed on `52affbc1f`.
+- TDD red: 6 expected failures demonstrated the missing five-level palette,
+  invalid-level handling, distinct actual canvas colors, five-surface cache,
+  and shared five-item legend before production edits.
+- Implementation: `e624a265b4875d5a3fea385bc969a3235cc811bd`; 34 focused tests
+  passed. Independent specification and subsequent code-quality reviews both
+  approved the six-file repair, with no outstanding findings.
+- Full frontend unit suite: 729/729 passed, zero skipped or failed.
+- `npm run build`: passed, including `check:bundle`.
+- Real Chromium CLI: five distinct colored/increasing circles and matching
+  legend visually inspected at 1600×1000. Heat checkbox toggled off/on.
+- Browser pixel checks: 20 combinations (five levels × two zooms × DPR 1/2)
+  passed; maximum sprite/reference channel difference was 2. Existing overlap,
+  screen radius and security-core checks were retained. This was CLI visual/
+  pixel verification, not a claim to have run the entire Playwright suite.
+- Narrow layout: 390×844, all five legend entries remained inside the panel,
+  five distinct computed swatch colors, no horizontal page overflow; screenshot
+  inspected. No application page errors. Canvas readback performance advisories
+  originated solely from the synthetic pixel-check harness.
+- Local-only artifacts are under `output/playwright/hotspot-five-level-*20261019*`;
+  no private account/capture data was used for browser verification.
+- No production configuration, accounts, timers or published code changed.
+  Branch and existing managed worktree are retained for a later publish request.
