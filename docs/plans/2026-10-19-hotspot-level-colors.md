@@ -15,6 +15,7 @@
 **Files:**
 - Modify: `front-codex/src/utils/anomalyHotspots.js`
 - Test: `front-codex/tests/unit/anomalyHotspots.test.mjs`
+- Update existing regression fixtures: `front-codex/tests/e2e/specs/starmap-performance.spec.js`
 
 1. Replace the old three-count-band regression with exact expectations for levels
    1–5 from the design palette; assert five unique colors and increasing radii.
@@ -29,6 +30,9 @@
    `anomalyHeatBand(level)` return its exact level's record or null.
 6. Update cache documentation from three to five; keep drawing and alpha
    behavior otherwise unchanged. Rerun the focused suite green.
+7. Update the existing performance regression's old count-valued heat fixtures
+   to levels 1–5 and its pixel-comparison matrix from 12 to 20 cases. Do not
+   weaken its overlap, core-security-pixel, zoom or DPR assertions.
 
 ### Task 2: Keep the five-level legend on the same source
 
