@@ -110,13 +110,30 @@ test('timestamps are always 24-hour Asia/Shanghai and no timestamp is not epoch 
   assert.equal(use('formatAnomalyUpdatedAt', null), '暂无成功快照')
 })
 
-test('display bands use an explicit local boundary rather than claiming a game timeframe', () => {
-  assert.equal(use('anomalyHeatBand', 0), null)
-  assert.equal(use('anomalyHeatBand', 1).name, '1–80')
-  assert.equal(use('anomalyHeatBand', 80).name, '1–80')
-  assert.equal(use('anomalyHeatBand', 81).name, '81–200')
-  assert.equal(use('anomalyHeatBand', 200).name, '81–200')
-  assert.equal(use('anomalyHeatBand', 201).name, '>200')
+const heatBands = [
+  { level: 1, name: '1–50', color: '#34d399', radius: 14 },
+  { level: 2, name: '51–100', color: '#bef264', radius: 18 },
+  { level: 3, name: '101–150', color: '#fbbf24', radius: 22 },
+  { level: 4, name: '151–200', color: '#fb923c', radius: 26 },
+  { level: 5, name: '>200', color: '#f43f5e', radius: 30 },
+]
+
+test('five immutable heat bands map discrete game levels to distinct colors and increasing screen radii', () => {
+  assert.deepEqual(helpers.ANOMALY_HEAT_BANDS, heatBands)
+  assert.ok(Object.isFrozen(helpers.ANOMALY_HEAT_BANDS))
+  assert.ok(helpers.ANOMALY_HEAT_BANDS.every(Object.isFrozen))
+  for (const expected of heatBands) {
+    assert.deepEqual(use('anomalyHeatBand', expected.level), expected)
+    assert.equal(use('anomalyHeatBand', expected.level), helpers.ANOMALY_HEAT_BANDS[expected.level - 1])
+  }
+  assert.equal(new Set(heatBands.map(band => band.color)).size, 5)
+  assert.ok(heatBands.every((band, index) => index === 0 || band.radius > heatBands[index - 1].radius))
+})
+
+test('heat levels reject invalid inputs and never reinterpret numeric values as legacy counts', () => {
+  for (const invalid of [0, -1, true, false, '1', '5', 1.5, 6, 50, 80, 155, 200, 201, NaN, Infinity, -Infinity, null, undefined]) {
+    assert.equal(use('anomalyHeatBand', invalid), null, `invalid level ${String(invalid)}`)
+  }
 })
 
 test('mapped heat points use only known finite normalized coordinates and retain unknown ranking rows', () => {
@@ -147,19 +164,37 @@ test('heat circles cull with their full radius and reset alpha before route and 
   const ctx = {
     globalAlpha: 1, fillStyle: '',
     save() { calls.push('save') }, restore() { calls.push('restore') },
-    beginPath() {}, arc(x, y, radius) { calls.push({ x, y, radius, alpha: this.globalAlpha }) }, fill() {},
+    beginPath() {}, arc(x, y, radius) { calls.push({ x, y, radius, alpha: this.globalAlpha, color: this.fillStyle }) }, fill() {},
   }
   use('drawAnomalyHeat', ctx, [
-    { px: -15, py: 20, destroy_num: 155 },
-    { px: -80, py: 20, destroy_num: 155 },
+    { px: -15, py: 20, destroy_num: 3 },
+    { px: -80, py: 20, destroy_num: 3 },
     { px: 20, py: 20, destroy_num: 0 },
   ], { zoom: 2, panX: 20, panY: 0 }, { width: 300, height: 200 })
   const arcs = calls.filter(item => typeof item === 'object')
   assert.ok(arcs.length > 0, 'a circle intersecting the edge is visible')
   assert.ok(arcs.every(item => item.x === -15 && item.alpha > 0 && item.alpha < 1))
+  assert.deepEqual(arcs.map(item => item.color), ['#fbbf24', '#fbbf24'])
   assert.equal(ctx.globalAlpha, 1)
   assert.equal(calls[0], 'save')
   assert.equal(calls.at(-1), 'restore')
+})
+
+test('direct heat circles use all five actual colors with constant CSS-pixel radii at different zooms', () => {
+  for (const zoom of [.5, 2]) {
+    const arcs = []
+    const ctx = { globalAlpha: 1, globalCompositeOperation: 'source-over', save() {}, restore() {}, beginPath() {}, fill() {},
+      arc(x, y, radius) { arcs.push({ x, y, radius, alpha: this.globalAlpha, color: this.fillStyle, composite: this.globalCompositeOperation }) } }
+    const points = heatBands.map(band => ({ px: 50, py: 50, destroy_num: band.level }))
+    use('drawAnomalyHeat', ctx, [...points, { px: 50, py: 50, destroy_num: 6 }],
+      { zoom, panX: 0, panY: 0 }, { width: 300, height: 200 })
+    assert.equal(arcs.length, 10)
+    assert.deepEqual(arcs.map(item => item.color), heatBands.flatMap(band => [band.color, band.color]))
+    assert.deepEqual(arcs.map(item => item.radius * zoom), heatBands.flatMap(band => [band.radius, band.radius * .55]))
+    assert.deepEqual(arcs.map(item => item.alpha), heatBands.flatMap(() => [.12, .22]))
+    assert.ok(arcs.every(item => item.composite === 'source-over'))
+    assert.equal(ctx.globalAlpha, 1)
+  }
 })
 
 test('snapshot time formatting reuses one formatter instead of constructing it per camera frame', async () => {
@@ -176,31 +211,41 @@ test('snapshot time formatting reuses one formatter instead of constructing it p
   } finally { Intl.DateTimeFormat = Original }
 })
 
-test('DPR-aware heat sprites draw once per visible point and reuse at most three bands', () => {
+test('DPR-aware heat sprites preserve five colors and per-point overlap while reusing five bands per DPR', () => {
   const sprites = [], images = [], sourceArcs = []
   const ownerDocument = { createElement(tag) {
     assert.equal(tag, 'canvas')
     const canvas = { width: 0, height: 0, getContext: () => ({
       setTransform(...args) { canvas.transform = args }, beginPath() {}, fill() {},
-      arc(x, y, radius) { sourceArcs.push({ radius, alpha: this.globalAlpha }) },
+      globalCompositeOperation: 'source-over',
+      arc(x, y, radius) { sourceArcs.push({ radius, alpha: this.globalAlpha, color: this.fillStyle, composite: this.globalCompositeOperation }) },
     }) }
     sprites.push(canvas)
     return canvas
   } }
-  const ctx = { canvas: { ownerDocument }, globalAlpha: 1, save() {}, restore() {},
-    drawImage(...args) { images.push(args) }, beginPath() { assert.fail('heat paths should be cached') },
+  const composites = []
+  const ctx = { canvas: { ownerDocument }, globalAlpha: 1, globalCompositeOperation: 'source-over', save() {}, restore() {},
+    drawImage(...args) { images.push(args); composites.push(this.globalCompositeOperation) }, beginPath() { assert.fail('heat paths should be cached') },
     arc() { assert.fail('heat arcs should be cached') }, fill() {} }
-  const points = [1, 81, 201].map((destroy_num, index) => ({ px: 40 + index * 40, py: 50, destroy_num }))
+  const points = [1, 2, 3, 4, 5].map(destroy_num => ({ px: 40, py: 50, destroy_num }))
+  points.push({ px: -1000, py: 50, destroy_num: 5 }, { px: 40, py: 50, destroy_num: 6 })
   const view = { zoom: .5, panX: 0, panY: 0 }, viewport = { width: 300, height: 200, ratio: 2 }
   use('drawAnomalyHeat', ctx, points, view, viewport)
   use('drawAnomalyHeat', ctx, points, view, viewport)
-  assert.equal(sprites.length, 3)
-  assert.equal(sourceArcs.length, 6)
-  assert.deepEqual(sourceArcs.map(arc => arc.alpha), [.12, .22, .12, .22, .12, .22])
-  assert.equal(images.length, 6)
+  assert.equal(sprites.length, 5)
+  assert.equal(sourceArcs.length, 10)
+  assert.deepEqual(sourceArcs.map(arc => arc.alpha), heatBands.flatMap(() => [.12, .22]))
+  assert.deepEqual(sourceArcs.map(arc => arc.color), heatBands.flatMap(band => [band.color, band.color]))
+  assert.deepEqual(sourceArcs.map(arc => arc.radius), heatBands.flatMap(band => [band.radius, band.radius * .55]))
+  assert.ok(sourceArcs.every(arc => arc.composite === 'source-over'))
+  assert.equal(images.length, 10)
+  assert.ok(composites.every(composite => composite === 'source-over'))
+  assert.deepEqual(images.slice(0, 5).map(([canvas]) => canvas), images.slice(5).map(([canvas]) => canvas))
   assert.ok(sprites.every(canvas => canvas.width === canvas.height && canvas.transform[0] === 2))
   assert.ok(images.every(([canvas, , , width, height]) => width === canvas.width / 2 / view.zoom && height === width))
   assert.equal(ctx.globalAlpha, 1)
   use('drawAnomalyHeat', ctx, points, view, { ...viewport, ratio: 1 })
-  assert.equal(sprites.length, 6, 'changing DPR replaces the three active raster surfaces')
+  assert.equal(sprites.length, 10, 'changing DPR replaces the five active raster surfaces')
+  use('drawAnomalyHeat', ctx, points, view, { ...viewport, ratio: 1 })
+  assert.equal(sprites.length, 10, 'unchanged DPR keeps the five new surfaces')
 })
