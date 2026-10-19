@@ -57,7 +57,7 @@ test('星门和区域资料延迟时先展示星系，补齐图层不重置定�
 test('真实规模热圈拖动使用缓存图像且不随相机重复格式化榜单时间', async ({ page }, testInfo) => {
   const data = largeMapData()
   const hotspots = Array.from({ length: 1754 }, (_, index) => ({
-    solar_system_id: index + 1, destroy_num: [80, 200, 300][index % 3],
+    solar_system_id: index + 1, destroy_num: [1, 2, 3, 4, 5][index % 5],
     system_name: data.systems[index].zh_name, region_id: 10, region_name: '测试星域',
   }))
   await installMapData(page, data.systems, data.stargates, hotspots)
@@ -111,10 +111,10 @@ test('热圈缓存保留双层重叠透明度、屏幕半径及安等核心像�
   const comparisons = await page.evaluate(async () => {
     const { drawAnomalyHeat, anomalyHeatBand } = await import('/src/utils/anomalyHotspots.js')
     const result = []
-    for (const ratio of [1, 2]) for (const zoom of [.37, 7.56]) for (const count of [50, 155, 201]) {
+    for (const ratio of [1, 2]) for (const zoom of [.37, 7.56]) for (const level of [1, 2, 3, 4, 5]) {
       const viewport = { width: 160, height: 140, ratio }
       const view = { zoom, panX: 5, panY: 7 }
-      const points = [65, 75].map(x => ({ px: (x - view.panX) / zoom, py: (70 - view.panY) / zoom, destroy_num: count }))
+      const points = [65, 75].map(x => ({ px: (x - view.panX) / zoom, py: (70 - view.panY) / zoom, destroy_num: level }))
       const canvases = ['sprite', 'vector'].map(() => {
         const canvas = document.createElement('canvas')
         canvas.width = viewport.width * ratio; canvas.height = viewport.height * ratio
@@ -125,7 +125,7 @@ test('热圈缓存保留双层重叠透明度、屏幕半径及安等核心像�
         return { canvas, ctx }
       })
       drawAnomalyHeat(canvases[0].ctx, points, view, viewport)
-      const reference = canvases[1].ctx, band = anomalyHeatBand(count)
+      const reference = canvases[1].ctx, band = anomalyHeatBand(level)
       for (const point of points) for (const [radiusFactor, alpha] of [[1, .12], [.55, .22]]) {
         reference.fillStyle = band.color; reference.globalAlpha = alpha
         reference.beginPath(); reference.arc(point.px, point.py, band.radius * radiusFactor / zoom, 0, Math.PI * 2); reference.fill()
@@ -136,12 +136,13 @@ test('热圈缓存保留双层重叠透明度、屏幕半径及安等核心像�
       }
       const sample = (ctx, x, y) => [...ctx.getImageData(Math.floor(x * ratio), Math.floor(y * ratio), 1, 1).data]
       const samplePoints = [[65, 70], [70, 70], [55, 70], [115, 70]]
-      result.push({ ratio, zoom, count, samples: samplePoints.map(([x, y]) => ({ x, y,
+      result.push({ ratio, zoom, level, color: band.color, samples: samplePoints.map(([x, y]) => ({ x, y,
         actual: sample(canvases[0].ctx, x, y), expected: sample(canvases[1].ctx, x, y) })) })
     }
     return result
   })
-  expect(comparisons).toHaveLength(12)
+  expect(comparisons).toHaveLength(20)
+  expect([...new Set(comparisons.map(comparison => comparison.color))]).toEqual(['#34d399', '#bef264', '#fbbf24', '#fb923c', '#f43f5e'])
   for (const comparison of comparisons) for (const sample of comparison.samples) {
     sample.actual.forEach((channel, index) => expect(Math.abs(channel - sample.expected[index])).toBeLessThanOrEqual(2))
     if (sample.x === 115) expect(sample.actual).toEqual([11, 17, 23, 255])

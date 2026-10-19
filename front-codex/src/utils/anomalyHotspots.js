@@ -112,12 +112,19 @@ export function formatAnomalyUpdatedAt(value) {
   return `${part('year')}/${part('month')}/${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
 }
 
-// These are website display bands; the game API's statistics window is unconfirmed.
-export function anomalyHeatBand(count) {
-  if (!integer(count, 1)) return null
-  if (count <= 80) return { name: '1–80', color: '#facc15', radius: 14 }
-  if (count <= 200) return { name: '81–200', color: '#fb923c', radius: 22 }
-  return { name: '>200', color: '#ef4444', radius: 29 }
+// The current game payload supplies levels, not exact destruction counts.
+// Their range labels do not establish the API's still-unconfirmed time window.
+export const ANOMALY_HEAT_BANDS = Object.freeze([
+  { level: 1, name: '1–50', color: '#34d399', radius: 14 },
+  { level: 2, name: '51–100', color: '#bef264', radius: 18 },
+  { level: 3, name: '101–150', color: '#fbbf24', radius: 22 },
+  { level: 4, name: '151–200', color: '#fb923c', radius: 26 },
+  { level: 5, name: '>200', color: '#f43f5e', radius: 30 },
+].map(band => Object.freeze(band)))
+
+export function anomalyHeatBand(level) {
+  if (!integer(level, 1) || level > ANOMALY_HEAT_BANDS.length) return null
+  return ANOMALY_HEAT_BANDS[level - 1]
 }
 
 export function mappedAnomalyPoints(rows, systemMap) {
@@ -149,7 +156,7 @@ export function fitAnomalyHotspots(points, size, { minZoom = .1, maxZoom = 10, p
   }
 }
 
-// Each document retains only the current DPR's three display bands. Reusing
+// Each document retains only the current DPR's five display bands. Reusing
 // raster circles preserves per-point source-over overlap, unlike batching all
 // equal-color points into a single path (which changes overlap opacity).
 const heatSpriteCaches = new WeakMap()

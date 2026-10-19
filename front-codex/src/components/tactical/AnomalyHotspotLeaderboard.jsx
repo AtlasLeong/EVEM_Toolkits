@@ -1,6 +1,6 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
-import { anomalySnapshotState, formatAnomalyUpdatedAt, rankAnomalyRegions, rankAnomalySystems } from '../../utils/anomalyHotspots'
+import { ANOMALY_HEAT_BANDS, anomalySnapshotState, formatAnomalyUpdatedAt, rankAnomalyRegions, rankAnomalySystems } from '../../utils/anomalyHotspots'
 import { formatHotspotElapsed, rankHotspotChanges } from '../../utils/hotspotChanges'
 import './AnomalyHotspotLeaderboard.css'
 
@@ -196,10 +196,12 @@ function AnomalyHotspotLeaderboard({
           <label className="anomaly-hotspots-layer"><input type="checkbox" checked={layerVisible}
             onChange={event => onLayerVisibilityChange(event.target.checked)} />显示热圈</label>
         ) : null}
-        <div className="anomaly-hotspots-legend" aria-label="网站显示分档">
-          <span><i className="is-low" />1–80</span><span><i className="is-medium" />81–200</span><span><i className="is-high" />&gt;200</span>
+        <div className="anomaly-hotspots-legend" aria-label="热点等级与范围">
+          {ANOMALY_HEAT_BANDS.map(band => <span key={band.level} data-level={band.level} aria-label={`${band.level}级热点，范围 ${band.name}`}>
+            <i aria-hidden="true" style={{ backgroundColor: band.color }} />{band.level}级 {band.name}
+          </span>)}
         </div>
-        <p className="anomaly-hotspots-note">统计时间范围尚未确认；以上为网站显示分档。</p>
+        <p className="anomaly-hotspots-note">统计时间范围尚未确认；等级范围不是精确摧毁数。</p>
         </div>
         </>}
       </div>

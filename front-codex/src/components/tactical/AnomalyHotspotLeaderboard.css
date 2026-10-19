@@ -70,12 +70,9 @@ button.anomaly-hotspots-row:disabled { opacity: 1; cursor: default; }
 .anomaly-hotspots-count small { display: block; font-size: 9px; font-weight: 400; color: var(--text-soft); }
 .anomaly-hotspots-footer { flex: 0 0 auto; padding-top: 5px; }
 .anomaly-hotspots-layer { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; cursor: pointer; }
-.anomaly-hotspots-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px; font-size: 10px; color: var(--text-soft); }
-.anomaly-hotspots-legend span { display: inline-flex; align-items: center; gap: 4px; }
-.anomaly-hotspots-legend i { width: 7px; height: 7px; border-radius: 50%; }
-.anomaly-hotspots-legend .is-low { background: #facc15; }
-.anomaly-hotspots-legend .is-medium { background: #fb923c; }
-.anomaly-hotspots-legend .is-high { background: #ef4444; }
+.anomaly-hotspots-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; font-size: 10px; color: var(--text-soft); }
+.anomaly-hotspots-legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.anomaly-hotspots-legend i { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; }
 .anomaly-hotspots-updated { margin: 0 12px 8px; font-size: 11px; line-height: 1.5; color: var(--text); font-variant-numeric: tabular-nums; }
 .anomaly-hotspots-updated span { font-size: 10px; color: var(--text-soft); }
 .anomaly-hotspots-modes { margin-bottom: 7px; }

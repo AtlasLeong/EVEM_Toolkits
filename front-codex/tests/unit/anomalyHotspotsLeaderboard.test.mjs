@@ -52,6 +52,23 @@ test('the panel renders exact ranked counts, Shanghai time and the unconfirmed s
   assert.doesNotMatch(html, /最近 24 小时|最近 1 小时/)
 })
 
+test('the panel legend renders five labeled levels and matching palette ranges rather than legacy count thresholds', () => {
+  const html = render({ snapshot })
+  const legend = html.match(/<div class="anomaly-hotspots-legend"[^>]*>(.*?)<\/div>/)?.[1]
+  assert.ok(legend, 'the level legend is rendered')
+  const expected = [
+    [1, '1–50', '#34d399'], [2, '51–100', '#bef264'], [3, '101–150', '#fbbf24'],
+    [4, '151–200', '#fb923c'], [5, '&gt;200', '#f43f5e'],
+  ]
+  assert.equal((legend.match(/data-level=/g) || []).length, 5)
+  for (const [level, range, color] of expected) {
+    assert.match(legend, new RegExp(`<span data-level="${level}" aria-label="${level}级热点[^\"]*"><i[^>]*style="background-color:${color}"[^>]*><\\/i>${level}级[^<]*${range}<\\/span>`))
+  }
+  assert.doesNotMatch(legend, /1–80|81–200|is-low|is-medium|is-high/)
+  assert.match(html, /统计时间范围尚未确认/)
+  assert.match(html, /等级范围不是精确摧毁数/)
+})
+
 test('a failed refresh shows retained data, not an empty loading replacement', () => {
   const html = render({ snapshot, requestFailed: true })
   assert.match(html, /更新失败/)
