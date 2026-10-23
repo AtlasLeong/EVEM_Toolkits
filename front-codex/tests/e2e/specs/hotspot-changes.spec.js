@@ -5,11 +5,12 @@ import { formatAnomalyUpdatedAt } from '../../../src/utils/anomalyHotspots.js'
 
 const start = Date.UTC(2026, 9, 15, 1)
 const interval = (id, end = start + 25 * 60_000) => ({ id, start_at_ms: start, end_at_ms: end, elapsed_ms: end - start })
-const deltaRow = (id, delta, name) => ({ solar_system_id: id, system_name: name, previous_destroy_num: 20,
-  destroy_num: 20 + delta, delta, region_id: 10, region_name: '测试区域' })
-const privateData = { version: 1, status: 'ok', statistics_window: null, interval: interval(3000),
+const metric = { kind: 'activity_level', range_version: 1 }
+const deltaRow = (id, delta, name) => ({ solar_system_id: id, system_name: name, previous_destroy_num: 1,
+  destroy_num: 1 + delta, delta, region_id: 10, region_name: '测试区域' })
+const privateData = { version: 2, metric, status: 'ok', statistics_window: null, interval: interval(3000),
   coverage: { comparable: 2, new: 1, missing: 2, negative: 3, unchanged: 0 },
-  systems: [deltaRow(2, 80, '私密贝塔'), deltaRow(1, 90, '私密阿尔法'), deltaRow(3, -10, '回落星系'), deltaRow(4, 0, '未变星系')],
+  systems: [deltaRow(2, 3, '私密贝塔'), deltaRow(1, 4, '私密阿尔法'), deltaRow(3, -1, '回落星系'), deltaRow(4, 0, '未变星系')],
   intervals: [interval(3000), interval(2000)], next_before: 2000 }
 const user = { id: 2, username: '获准用户', email: 'viewer@example.com', grant: { enabled: false, version: 0 } }
 async function setup(page, { role = 'viewer', changes, api } = {}) {
@@ -22,8 +23,8 @@ async function setup(page, { role = 'viewer', changes, api } = {}) {
     if (custom !== undefined) return custom
     if (url.pathname === '/api/control-center/access/') return json({ can_manage: role === 'owner', can_view_hotspot_changes: ['viewer', 'owner'].includes(role) })
     if (url.pathname === '/api/anomaly-hotspots/changes/') return typeof changes === 'function' ? changes(context) : json(changes || privateData)
-    if (url.pathname === '/api/anomaly-hotspots/') return json({ version: 1, collected_at_ms: start, last_attempt_at_ms: start,
-      status: 'ok', statistics_window: null, systems: [{ solar_system_id: 1, destroy_num: 50, system_name: '公开星系', region_id: 10, region_name: '测试区域' }] })
+    if (url.pathname === '/api/anomaly-hotspots/') return json({ version: 2, metric, collected_at_ms: start, last_attempt_at_ms: start,
+      status: 'ok', statistics_window: null, systems: [{ solar_system_id: 1, destroy_num: 3, system_name: '公开星系', region_id: 10, region_name: '测试区域' }] })
     if (url.pathname === '/api/boardsystems') return json([{ system_id: 1, zh_name: '阿尔法', en_name: 'ALPHA-1', x: 0, y: 0, z: 0, security_status: .5 },
       { system_id: 2, zh_name: '贝塔', en_name: 'BETA-2', x: 9.461e15, y: 0, z: 0, security_status: .1 }])
     if (url.pathname === '/api/boardregions') return json([{ region_id: 10, zh_name: '测试区域' }])
@@ -56,7 +57,7 @@ async function installPollProbe(page) {
   })
 }
 
-for (const role of ['guest', 'ordinary']) test(`${role} 只看到总量且不请求私有榜`, async ({ page }) => {
+for (const role of ['guest', 'ordinary']) test(`${role} 只看到热度且不请求私有榜`, async ({ page }) => {
   const requests = await setup(page, { role })
   await page.goto('/starmap')
   await expect(panelFor(page)).toContainText('公开星系')
@@ -65,11 +66,11 @@ for (const role of ['guest', 'ordinary']) test(`${role} 只看到总量且不请
   expect(requests.some(path => path.includes('/changes/'))).toBe(false)
 })
 
-test('授权私榜正增长排序、搜索、历史分页与历史星系定位不重置相机', async ({ page }) => {
+test('授权私榜等级上升排序、搜索、历史分页与历史星系定位不重置相机', async ({ page }) => {
   const requests = await setup(page, { api: ({ url }) => {
     if (url.pathname !== '/api/anomaly-hotspots/changes/') return undefined
     if (url.searchParams.has('before')) return json({ ...privateData, intervals: [interval(1000)], next_before: null })
-    if (url.searchParams.get('interval') === '1000') return json({ ...privateData, interval: interval(1000), systems: [deltaRow(2, 44, '历史私密贝塔')] })
+    if (url.searchParams.get('interval') === '1000') return json({ ...privateData, interval: interval(1000), systems: [deltaRow(2, 2, '历史私密贝塔')] })
     return json(privateData)
   } })
   await page.goto('/starmap')
@@ -77,7 +78,9 @@ test('授权私榜正增长排序、搜索、历史分页与历史星系定位�
   await panel.getByRole('tab', { name: '变化', exact: true }).click()
   await expect(panel.locator('.anomaly-hotspots-row').first()).toContainText('私密阿尔法')
   await expect(panel).toContainText('25 分钟')
-  await expect(panel).toContainText('20 → 110')
+  await expect(panel).toContainText('1级 → 5级')
+  await expect(panel).toContainText('升4级')
+  await expect(panel).not.toContainText('净增量')
   await expect(panel).not.toContainText('回落星系')
   await expect(panel).not.toContainText('未变星系')
   const camera = await page.locator('.tactical-map-hud').textContent()
@@ -117,6 +120,22 @@ test('历史分页503只警告不抹掉有效区间，同一cursor可直接重�
   await expect(panel.getByRole('combobox').locator('option[value="1000"]')).toHaveCount(1)
   await expect(panel.getByRole('alert')).toHaveCount(0)
   expect(cursors).toEqual(['2000', '2000'])
+})
+
+test('混合口径历史区间保留时间和选择器但不伪造数量变化榜', async ({ page }) => {
+  await setup(page, { api: ({ url }) => url.pathname === '/api/anomaly-hotspots/changes/' && url.searchParams.get('interval') === '2000'
+    ? json({ ...privateData, metric: { kind: 'legacy_unclassified', range_version: null }, status: 'incomparable',
+      interval: interval(2000), systems: [], coverage: { comparable: 0, new: 0, missing: 0, negative: 0, unchanged: 0 } }) : undefined })
+  await page.goto('/starmap')
+  const panel = panelFor(page)
+  await panel.getByRole('tab', { name: '变化', exact: true }).click()
+  await expect(panel).toContainText('升4级')
+  await panel.getByRole('combobox').selectOption('2000')
+  await expect(panel).toContainText('口径不兼容')
+  await expect(panel).toContainText('实际间隔 25 分钟')
+  await expect(panel.locator('.anomaly-hotspots-row')).toHaveCount(0)
+  await expect(panel.getByRole('combobox')).toBeVisible()
+  await expect(panel).not.toContainText('净增量')
 })
 
 test('最新区间陈旧可见但选择历史区间不误报当前采集延迟', async ({ page }) => {

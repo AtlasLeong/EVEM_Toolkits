@@ -1,6 +1,6 @@
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
-import { ANOMALY_HEAT_BANDS, anomalySnapshotState, formatAnomalyUpdatedAt, rankAnomalyRegions, rankAnomalySystems } from '../../utils/anomalyHotspots'
+import { ANOMALY_HEAT_BANDS, anomalyHeatBand, anomalySnapshotState, formatAnomalyUpdatedAt, isAnomalyActivitySnapshot, rankAnomalyRegions, rankAnomalySystems } from '../../utils/anomalyHotspots'
 import { formatHotspotElapsed, rankHotspotChanges } from '../../utils/hotspotChanges'
 import './AnomalyHotspotLeaderboard.css'
 
@@ -19,6 +19,8 @@ function ChangesContent({ changes, allowLocate, canLocateSystem, onLocateSystem,
     .some(value => String(value ?? '').toLocaleLowerCase().includes(search))), [rows, search])
   useEffect(() => { if (rowsRef.current) rowsRef.current.scrollTop = 0 }, [search, changes.data?.interval?.id])
   const data = changes.error ? null : changes.data
+  const comparable = data?.status === 'ok' && isAnomalyActivitySnapshot(data)
+  const incompatible = data?.status === 'incomparable' || data?.status === 'ok' && !comparable
   const latestStale = changes.interval == null && data?.status === 'ok'
     && now - data.interval.end_at_ms >= 20 * 60_000
   return <>
@@ -41,32 +43,33 @@ function ChangesContent({ changes, allowLocate, canLocateSystem, onLocateSystem,
     <p className="anomaly-hotspots-status" role="status">{changes.error ? '变化榜暂时无法读取，请稍后重试。'
       : changes.loading ? '正在读取变化榜'
         : data?.status === 'baseline' ? '等待第二次成功采集'
-          : data?.status === 'ok' ? '相邻成功快照净增量' : '暂无可比较快照'}</p>
+          : incompatible ? '历史或混合快照口径不兼容，无法比较等级'
+            : comparable ? '相邻成功快照 · 热度等级上升' : '暂无可比较快照'}</p>
     {latestStale ? <p className="anomaly-hotspots-status is-warning" role="status">最新区间已超过 20 分钟未更新。</p> : null}
     {data?.interval ? <p className="anomaly-hotspots-note anomaly-changes-period">
       {formatAnomalyUpdatedAt(data.interval.start_at_ms)}<br />→ {formatAnomalyUpdatedAt(data.interval.end_at_ms)}
       <br />实际间隔 {formatHotspotElapsed(data.interval.elapsed_ms)}
     </p> : null}
-    {search && data?.status === 'ok' ? <p className="anomaly-hotspots-search-summary">匹配 {matching.length} 条 · 保留全榜排名</p> : null}
+    {search && comparable ? <p className="anomaly-hotspots-search-summary">匹配 {matching.length} 条 · 保留全榜排名</p> : null}
     <div ref={rowsRef} className="anomaly-hotspots-rows" role="tabpanel" aria-label="变化排名">
-      {data?.status === 'ok' && matching.slice(0, search ? 100 : 10).map(row => {
+      {comparable && matching.slice(0, search ? 100 : 10).map(row => {
         const canLocate = canLocateSystem(row.solar_system_id)
         const content = <>
           <span className="anomaly-hotspots-rank">{row.globalRank}</span>
           <span className="anomaly-hotspots-name"><strong>{row.displayName}</strong><small>{row.region_name || '星域归属待确认'}</small>
-            <small>{countLabel(row.previous_destroy_num)} → {countLabel(row.destroy_num)}</small>
+            <small>{countLabel(row.previous_destroy_num)}级 → {countLabel(row.destroy_num)}级</small>
             {allowLocate && !canLocate ? <small>暂无地图坐标</small> : null}</span>
-          <span className="anomaly-hotspots-count anomaly-changes-count">+{countLabel(row.delta)}<small>净增量</small></span>
+          <span className="anomaly-hotspots-count anomaly-changes-count">升{countLabel(row.delta)}级<small>等级变化</small></span>
         </>
         return allowLocate ? <button className="anomaly-hotspots-row" key={row.solar_system_id} type="button" disabled={!canLocate}
-          aria-label={`定位星系 ${row.displayName}，净增量 ${row.delta}`} onClick={() => onLocateSystem?.(row.solar_system_id)}>{content}</button>
+          aria-label={`定位星系 ${row.displayName}，热度升${row.delta}级`} onClick={() => onLocateSystem?.(row.solar_system_id)}>{content}</button>
           : <div className="anomaly-hotspots-row" key={row.solar_system_id}>{content}</div>
       })}
-      {data?.status === 'ok' && !matching.length ? <p className="anomaly-hotspots-note">{search ? '没有匹配的星系。' : '该区间没有可确认的正增长星系。'}</p> : null}
+      {comparable && !matching.length ? <p className="anomaly-hotspots-note">{search ? '没有匹配的星系。' : '该区间没有热度等级上升的星系。'}</p> : null}
     </div>
     <div className="anomaly-hotspots-footer">
-      {data?.coverage && data.status === 'ok' ? <p className="anomaly-hotspots-note">可比 {data.coverage.comparable} · 新增 {data.coverage.new} · 缺失 {data.coverage.missing} · 回落 {data.coverage.negative}</p> : null}
-      <p className="anomaly-hotspots-note">仅排行正增长；新增、缺失、回落不计。失败不会记为零。统计周期未确认，快照净增量不等于精确新增摧毁量。</p>
+      {data?.coverage && comparable ? <p className="anomaly-hotspots-note">可比 {data.coverage.comparable} · 新增 {data.coverage.new} · 缺失 {data.coverage.missing} · 回落 {data.coverage.negative}</p> : null}
+      <p className="anomaly-hotspots-note">仅排行等级上升；等级未变不代表没有活动。新增、缺失、回落不计，失败不记为零。统计时间范围未确认，等级变化不是精确摧毁数量变化。</p>
     </div>
   </>
 }
@@ -85,6 +88,7 @@ function AnomalyHotspotLeaderboard({
   const rowsRef = useRef(null)
   const contentId = useId()
   const rows = snapshot?.systems
+  const activityLevels = isAnomalyActivitySnapshot(snapshot)
   const systems = useMemo(() => rankAnomalySystems(rows, rows?.length || 0)
     .map((row, index) => ({ ...row, globalRank: index + 1 })), [rows])
   const regionData = useMemo(() => {
@@ -131,14 +135,14 @@ function AnomalyHotspotLeaderboard({
       <div className="anomaly-hotspots-header">
         <button type="button" className="anomaly-hotspots-heading" aria-expanded={!collapsed}
           aria-controls={contentId} onClick={() => setCollapsed(value => !value)}>
-          <span><strong>{isChanges ? '犁地变化榜' : '犁地热点'}</strong><small>{isChanges ? '相邻快照 · 正增长 TOP 10' : '星系 / 星域 TOP 10'}</small></span>
+          <span><strong>{isChanges ? '犁地变化榜' : '犁地热点'}</strong><small>{isChanges ? '相邻快照 · 等级上升 TOP 10' : '星系 / 星域 TOP 10'}</small></span>
           {collapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </button>
         <p className="anomaly-hotspots-updated"><span>{isChanges ? '区间结束时间（北京时间）' : '更新时间（北京时间）'}</span><br />{isChanges ? changes.error ? '暂时无法读取' : formatAnomalyUpdatedAt(changes.data?.interval?.end_at_ms) : updatedAt}</p>
       </div>
       <div id={contentId} className="anomaly-hotspots-content" hidden={collapsed}>
         {changes?.allowed === true ? <div className="anomaly-hotspots-tabs anomaly-hotspots-modes" role="tablist" aria-label="热点榜单类型">
-          <button type="button" role="tab" aria-selected={!isChanges} onClick={() => changes.onModeChange?.('total')}>总量</button>
+          <button type="button" role="tab" aria-selected={!isChanges} onClick={() => changes.onModeChange?.('total')}>热度</button>
           <button type="button" role="tab" aria-selected={isChanges} onClick={() => changes.onModeChange?.('changes')}>变化</button>
         </div> : null}
         {isChanges ? <ChangesContent changes={changes} allowLocate={allowLocate} canLocateSystem={canLocateSystem} onLocateSystem={onLocateSystem} now={now} /> : <>
@@ -167,17 +171,21 @@ function AnomalyHotspotLeaderboard({
             const isSystem = tab === 'systems'
             const id = isSystem ? row.solar_system_id : row.region_id
             const canLocate = isSystem ? canLocateSystem(id) : canLocateRegion(row)
+            const value = isSystem ? row.destroy_num : row.peak_value
+            const band = activityLevels ? anomalyHeatBand(value) : null
+            const valueLabel = activityLevels ? `${value}级` : countLabel(value)
+            const detailLabel = activityLevels ? isSystem ? band?.name || '无热度' : '最高热度' : '历史原始值'
             const content = <>
               <span className="anomaly-hotspots-rank">{row.globalRank}</span>
               <span className="anomaly-hotspots-name"><strong>{row.displayName}</strong>
-                <small>{isSystem ? row.region_name || '星域归属待确认' : `${row.memberSystemIds.length} 个有记录星系`}</small>
+                <small>{isSystem ? row.region_name || '星域归属待确认' : `${row.hotspotSystemCount} 个${activityLevels ? '热点' : '有非零记录'}星系`}</small>
                 {allowLocate && !canLocate ? <small>暂无地图坐标</small> : null}
               </span>
-              <span className="anomaly-hotspots-count">{countLabel(row.destroy_num)}<small>摧毁</small></span>
+              <span className="anomaly-hotspots-count">{valueLabel}<small>{detailLabel}</small></span>
             </>
             return allowLocate ? (
               <button key={id} type="button" className="anomaly-hotspots-row" disabled={!canLocate}
-                aria-label={`${isSystem ? '定位星系' : '定位该星域热点'} ${row.displayName}，异常摧毁 ${row.destroy_num}`}
+                aria-label={`${isSystem ? '定位星系' : '定位该星域热点'} ${row.displayName}，${activityLevels ? isSystem ? '热度' : '最高热度' : '历史原始值'} ${valueLabel}`}
                 title={canLocate ? isSystem ? '定位星系' : '定位该星域热点' : '暂无地图坐标'}
                 onClick={() => isSystem ? onLocateSystem?.(id) : onLocateRegion?.(row)}>{content}</button>
             ) : <div key={id} className="anomaly-hotspots-row">{content}</div>
@@ -190,18 +198,18 @@ function AnomalyHotspotLeaderboard({
         <div className="anomaly-hotspots-footer">
         {tab === 'regions' && regionData.unknownRegionSystems > 0 ? (
           <p className="anomaly-hotspots-note">{countLabel(regionData.unknownRegionSystems)} 个星系归属待确认，
-            共 {countLabel(regionData.unknownRegionDestroyCount)} 次摧毁未计入星域排名。</p>
+            未计入星域排名。</p>
         ) : null}
-        {allowLocate && onLayerVisibilityChange ? (
+        {activityLevels && allowLocate && onLayerVisibilityChange ? (
           <label className="anomaly-hotspots-layer"><input type="checkbox" checked={layerVisible}
             onChange={event => onLayerVisibilityChange(event.target.checked)} />显示热圈</label>
         ) : null}
-        <div className="anomaly-hotspots-legend" aria-label="热点等级与范围">
+        {activityLevels ? <div className="anomaly-hotspots-legend" aria-label="热点等级与范围">
           {ANOMALY_HEAT_BANDS.map(band => <span key={band.level} data-level={band.level} aria-label={`${band.level}级热点，范围 ${band.name}`}>
             <i aria-hidden="true" style={{ backgroundColor: band.color }} />{band.level}级 {band.name}
           </span>)}
-        </div>
-        <p className="anomaly-hotspots-note">统计时间范围尚未确认；等级范围不是精确摧毁数。</p>
+        </div> : null}
+        <p className="anomaly-hotspots-note">{activityLevels ? '统计时间范围尚未确认；等级范围不是精确摧毁数。' : '历史原始值口径未确认，不推测热点等级或绘制热圈。'}</p>
         </div>
         </>}
       </div>

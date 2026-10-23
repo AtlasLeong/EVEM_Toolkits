@@ -114,7 +114,7 @@ test('热圈缓存保留双层重叠透明度、屏幕半径及安等核心像�
     for (const ratio of [1, 2]) for (const zoom of [.37, 7.56]) for (const level of [1, 2, 3, 4, 5]) {
       const viewport = { width: 160, height: 140, ratio }
       const view = { zoom, panX: 5, panY: 7 }
-      const points = [65, 75].map(x => ({ px: (x - view.panX) / zoom, py: (70 - view.panY) / zoom, destroy_num: level }))
+      const points = [65, 75].map(x => ({ px: (x - view.panX) / zoom, py: (70 - view.panY) / zoom, destroy_num: level, activity_level: level }))
       const canvases = ['sprite', 'vector'].map(() => {
         const canvas = document.createElement('canvas')
         canvas.width = viewport.width * ratio; canvas.height = viewport.height * ratio

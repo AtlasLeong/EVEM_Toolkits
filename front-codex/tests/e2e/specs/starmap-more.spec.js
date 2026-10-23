@@ -71,6 +71,9 @@ test('犁地热点搜索全榜保留原排名并且不改变地图或发送查�
   const panel = page.locator('.anomaly-hotspots-map-overlay').getByRole('region', { name: '犁地热点排行榜' })
   const rows = panel.locator('.anomaly-hotspots-row')
   await expect(rows).toHaveCount(10)
+  await expect(panel).toContainText('历史原始值口径未确认')
+  await expect(panel.locator('[data-level]')).toHaveCount(0)
+  await expect(panel.getByLabel('显示热圈')).toHaveCount(0)
   const camera = await page.locator('.tactical-map-hud').textContent()
   const originalRequests = requests
   const search = panel.getByRole('searchbox', { name: '榜内搜索' })
@@ -106,6 +109,37 @@ test('犁地热点搜索全榜保留原排名并且不改变地图或发送查�
   expect(await results.evaluate(element => element.scrollTop)).toBe(0)
   expect(requests).toBe(originalRequests)
   await expect(page.locator('.tactical-map-hud')).toHaveText(camera)
+})
+
+for (const width of [390, 1440]) test(`当前等级榜 ${width}px 区分等级范围并按星域最高热度及热点数排序`, async ({ page }) => {
+  await page.setViewportSize({ width, height: 960 })
+  const metric = { kind: 'activity_level', range_version: 1 }
+  const systems = [
+    { solar_system_id: 1, destroy_num: 5, system_name: '甲星', region_id: 20, region_name: '甲域' },
+    { solar_system_id: 2, destroy_num: 5, system_name: '乙星', region_id: 10, region_name: '乙域' },
+    { solar_system_id: 3, destroy_num: 1, system_name: '丙星', region_id: 20, region_name: '甲域' },
+    { solar_system_id: 4, destroy_num: 0, system_name: '零星', region_id: 10, region_name: '乙域' },
+  ]
+  await installStarMapMock(page, { version: 2, metric, collected_at_ms: Date.now(), last_attempt_at_ms: Date.now(),
+    status: 'ok', statistics_window: null, systems })
+  await page.goto('/starmap')
+  const panel = page.locator(width < 768 ? '.anomaly-hotspots-mobile' : '.anomaly-hotspots-map-overlay')
+    .getByRole('region', { name: '犁地热点排行榜' })
+  const rows = panel.locator('.anomaly-hotspots-row')
+  await expect(rows.first()).toContainText('5级')
+  await expect(rows.first()).toContainText('>200')
+  await expect(rows.last()).toContainText('0级')
+  await expect(rows.last()).toContainText('无热度')
+  await expect(panel).not.toContainText('最近 24 小时')
+  await panel.getByRole('tab', { name: '星域', exact: true }).click()
+  await expect(rows.first()).toContainText('甲域')
+  await expect(rows.first()).toContainText('2 个热点星系')
+  await expect(rows.first()).toContainText('5级')
+  await expect(rows.first()).toContainText('最高热度')
+  await expect(rows.last()).toContainText('乙域')
+  await expect(rows.last()).toContainText('1 个热点星系')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('hotspot-current-levels.png'), fullPage: true })
 })
 
 for (const width of [768, 800, 1036, 1440, 1920, 390]) {

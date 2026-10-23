@@ -45,3 +45,26 @@ test('baseline has no invented rows or interval and elapsed labels show actual g
   assert.equal(use('formatHotspotElapsed', 90_000), '1 分 30 秒')
   assert.throws(() => use('validateHotspotChanges', { ...baseline, systems: [row(1, 2, 8)] }), /变化榜数据无效/)
 })
+
+const metric = { kind: 'activity_level', range_version: 1 }
+const current = systems => ({ ...data(systems), version: 2, metric })
+test('v2 comparable changes are explicit bounded level differences, not destruction count growth', () => {
+  const input = current([row(1, 1, 5), row(2, 4, 4), row(3, 3, 1)])
+  assert.equal(use('validateHotspotChanges', input), input)
+  assert.deepEqual(use('rankHotspotChanges', input.systems).map(item => item.delta), [4])
+  for (const invalid of [current([row(1, 0, 6)]), current([row(1, 6, 5)]),
+    { ...input, metric: { kind: 'legacy_unclassified', range_version: null } },
+    { ...input, metric: { kind: 'activity_level', range_version: 0 } }]) {
+    assert.throws(() => use('validateHotspotChanges', invalid), /变化榜数据无效/)
+  }
+})
+test('incomparable legacy or mixed pair retains its real interval and choices without invented rows', () => {
+  const input = { ...current([]), status: 'incomparable', metric: { kind: 'legacy_unclassified', range_version: null },
+    coverage: { comparable: 0, new: 0, missing: 0, negative: 0, unchanged: 0 } }
+  assert.equal(use('validateHotspotChanges', input), input)
+  for (const invalid of [{ ...input, interval: null }, { ...input, systems: [row(1, 1, 2)] },
+    { ...input, metric },
+    { ...input, coverage: { ...input.coverage, comparable: 1 } }]) {
+    assert.throws(() => use('validateHotspotChanges', invalid), /变化榜数据无效/)
+  }
+})

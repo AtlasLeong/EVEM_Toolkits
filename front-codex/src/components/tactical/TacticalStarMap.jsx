@@ -286,8 +286,8 @@ export default function TacticalStarMap({
   }, [model.systems])
 
   const hotspotPoints = useMemo(
-    () => mappedAnomalyPoints(hotspotSnapshot?.systems, model.systemMap),
-    [hotspotSnapshot?.systems, model.systemMap],
+    () => mappedAnomalyPoints(hotspotSnapshot?.systems, model.systemMap, hotspotSnapshot?.metric),
+    [hotspotSnapshot?.systems, hotspotSnapshot?.metric, model.systemMap],
   )
   const hotspotPointMap = useMemo(
     () => new Map(hotspotPoints.map(point => [point.solar_system_id, point])),
