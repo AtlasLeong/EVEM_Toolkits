@@ -56,7 +56,7 @@ function CapacityNotice({ config }) {
   if (config.enabled_item_count == null || config.max_items_per_run == null || !Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(perRun) || perRun <= 0 || !Number.isFinite(minSeconds) || minSeconds <= 0 || !Number.isFinite(maxSeconds) || maxSeconds < minSeconds) return null
 
   if (config.collection_health) return <p className="market-capacity" role="status">
-    当前启用 {count} 件；配置单轮上限 {perRun} 件。实际共享上限以最近采集计划为准。按分层配额分配时，不能用全部商品数除以配置上限推算统一轮转时间；实际计划、覆盖率与能力提示见下方。
+    当前启用 {count} 件；当前策略单轮上限 {perRun} 件。实际共享上限以最近采集计划为准。按分层配额分配时，不能用全部商品数除以配置上限推算统一轮转时间；实际计划、覆盖率与能力提示见下方。
   </p>
 
   const rounds = Math.ceil(count / perRun)
