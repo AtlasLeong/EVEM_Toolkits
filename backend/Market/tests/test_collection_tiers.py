@@ -236,6 +236,35 @@ class MarketCollectionHealthTests(TestCase):
         self.assertIsNone(health['tiers']['ordinary']['age_median_ms'])
         self.assertIsNone(health['tiers']['priority']['max_age_ms'])
 
+    def assert_concurrently_removed_age_is_unknown(self, **changes):
+        item = self.observed(1, HOUR, priority=True)
+        changed = False
+        def concurrent_edit(execute, sql, params, many, context):
+            nonlocal changed
+            if not changed and sql.startswith('SELECT') and 'observed_at_ms' in sql and 'LIMIT 1' in sql:
+                changed = True
+                MarketItem.objects.filter(pk=item.pk).update(**changes)
+            return execute(sql, params, many, context)
+        with CaptureQueriesContext(connection) as queries, connection.execute_wrapper(concurrent_edit):
+            health = self.health()
+        self.assertTrue(changed)
+        self.assertLessEqual(len(queries), 16)
+        priority = health['tiers']['priority']
+        self.assertEqual(priority['observed'], 1)
+        for field in ('age_median_ms', 'age_p95_ms', 'max_age_ms'):
+            self.assertIsNone(priority[field])
+        # Quantiles return one value per query, never the whole item cohort.
+        age_reads = [query['sql'] for query in queries if query['sql'].startswith('SELECT')
+                     and 'observed_at_ms' in query['sql'] and 'COUNT(' not in query['sql']]
+        self.assertTrue(age_reads)
+        self.assertTrue(all('LIMIT 1' in sql for sql in age_reads))
+
+    def test_priority_changed_between_aggregate_and_rank_read_returns_unknown_ages(self):
+        self.assert_concurrently_removed_age_is_unknown(collection_priority=False)
+
+    def test_disabled_between_aggregate_and_rank_read_returns_unknown_ages(self):
+        self.assert_concurrently_removed_age_is_unknown(enabled=False)
+
     def test_actual_shared_plan_not_web_eighty_setting_drives_capacity_and_stale_label(self):
         MarketItem.objects.bulk_create([MarketItem(id=i, name=str(i), collection_priority=i <= 50) for i in range(1, 251)])
         old = CollectionRun.objects.create(trigger='scheduled', status='succeeded', created_at_ms=self.now-3*HOUR,

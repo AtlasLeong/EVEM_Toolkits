@@ -2,6 +2,8 @@
 
 Planning targets are not the public two-hour freshness contract or guarantees.
 SQL aggregate/offset reads keep returned rows bounded as the inventory grows.
+Counts and ages are best-effort observations, not a transactional snapshot.
+If a cohort shrinks between reads, its unavailable ages remain unknown.
 """
 import math
 
@@ -31,7 +33,14 @@ def _tier_health(items, target_ms, now_ms):
     if count:
         # Nearest-rank p95; even median is the mean of the two central ages.
         indexes = {(count-1)//2, count//2, math.ceil(count*.95)-1, count-1}
-        ages = {index: max(0, now_ms-observed[index]) for index in indexes}
+        ages = {}
+        for index in sorted(indexes):
+            row = list(observed[index:index+1])
+            # Admin edits may disable or move a row after the aggregate. Keep
+            # all ages unknown rather than crashing or reporting a false zero.
+            if not row:
+                return result
+            ages[index] = max(0, now_ms-row[0])
         result.update(age_median_ms=(ages[(count-1)//2]+ages[count//2])/2,
                       age_p95_ms=ages[math.ceil(count*.95)-1], max_age_ms=ages[count-1])
     return result
