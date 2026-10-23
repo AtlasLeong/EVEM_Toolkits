@@ -284,6 +284,56 @@ class MarketCollectionHealthTests(TestCase):
         self.assertIsNone(health['capacity']['estimated_items_per_hour'])
         self.assertIsNone(health['throughput']['per_hour'])
 
+    def test_priority_target_requires_complete_discrete_passes_not_fluid_throughput(self):
+        MarketItem.objects.bulk_create([
+            MarketItem(id=i, name=str(i), collection_priority=True) for i in range(1, 41)
+        ] + [MarketItem(id=1000+i, name=str(i)) for i in range(40)])
+        # Default mean interval is 43 minutes; two minutes actually collecting
+        # yields a 45-minute mean cycle. Forty priority rows need two passes.
+        CollectionRun.objects.create(trigger='scheduled', status='succeeded',
+            created_at_ms=self.now-HOUR, started_at_ms=self.now-HOUR,
+            finished_at_ms=self.now-HOUR+120_000, item_limit=40, expected_count=40, success_count=40)
+        capacity = self.health()['capacity']
+        self.assertEqual(capacity['priority_slots'], 20)
+        self.assertTrue(capacity['priority_target_feasible'])
+        hourly_estimate = capacity['estimated_items_per_hour']
+        MarketItem.objects.create(id=41, name='Priority forty-one', collection_priority=True)
+        capacity = self.health()['capacity']
+        self.assertEqual(capacity['priority_slots'], 20)
+        # The final row requires a third pass, 135 minutes, outside the 2h goal.
+        self.assertFalse(capacity['priority_target_feasible'])
+        self.assertIn('priority_target_infeasible', capacity['warnings'])
+        self.assertEqual(capacity['estimated_items_per_hour'], hourly_estimate)
+
+    def test_ordinary_target_accepts_exact_six_hour_pass_boundary_not_partial_extra_pass(self):
+        MarketItem.objects.bulk_create([
+            MarketItem(id=i, name=str(i), collection_priority=True) for i in range(1, 21)
+        ] + [MarketItem(id=1000+i, name=str(i)) for i in range(160)])
+        CollectionRun.objects.create(trigger='scheduled', status='succeeded',
+            created_at_ms=self.now-HOUR, started_at_ms=self.now-HOUR,
+            finished_at_ms=self.now-HOUR+120_000, item_limit=40, expected_count=40, success_count=40)
+        capacity = self.health()['capacity']
+        self.assertEqual(capacity['ordinary_slots'], 20)
+        self.assertTrue(capacity['ordinary_target_feasible'])
+        MarketItem.objects.create(id=1160, name='Ordinary one hundred sixty-one')
+        capacity = self.health()['capacity']
+        self.assertFalse(capacity['ordinary_target_feasible'])
+        self.assertIn('ordinary_target_infeasible', capacity['warnings'])
+
+    def test_empty_tier_is_feasible_but_enabled_tier_without_slots_is_not(self):
+        CollectionRun.objects.create(trigger='scheduled', status='failed',
+            created_at_ms=self.now-HOUR, started_at_ms=self.now-HOUR,
+            finished_at_ms=self.now-HOUR+120_000, item_limit=40, expected_count=0)
+        capacity = self.health()['capacity']
+        self.assertTrue(capacity['priority_target_feasible'])
+        self.assertTrue(capacity['ordinary_target_feasible'])
+        MarketItem.objects.create(id=1, name='New priority', collection_priority=True)
+        MarketItem.objects.create(id=2, name='New ordinary')
+        capacity = self.health()['capacity']
+        self.assertEqual((capacity['priority_slots'], capacity['ordinary_slots']), (0, 0))
+        self.assertFalse(capacity['priority_target_feasible'])
+        self.assertFalse(capacity['ordinary_target_feasible'])
+
     def test_private_pause_codes_keep_invalid_material_distinct_from_confirmed_auth_and_hide_text(self):
         mappings = {'invalid_session':'invalid_material', 'auth_rejected':'authentication_rejected',
             'service_rejected':'service_refused', 'account_busy':'account_busy', 'budget_exhausted':'budget_exhausted',

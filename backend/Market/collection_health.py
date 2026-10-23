@@ -124,7 +124,12 @@ def collection_health(config, now_ms=None):
         capacity.update(estimated_items_per_hour=limit*HOUR_MS/interval,
                         priority_slots=priority, ordinary_slots=ordinary)
         for key, slots in (('priority', priority), ('ordinary', ordinary)):
-            feasible = slots*tiers[key]['target_ms']/interval >= tiers[key]['enabled']
+            enabled = tiers[key]['enabled']
+            # Oldest-first visits complete batches: even one leftover item
+            # needs another cycle, not a fraction of average hourly capacity.
+            feasible = enabled == 0 or (
+                slots > 0 and math.ceil(enabled/slots)*interval <= tiers[key]['target_ms']
+            )
             capacity[f'{key}_target_feasible'] = feasible
             if not feasible:
                 warnings.append(f'{key}_target_infeasible')
