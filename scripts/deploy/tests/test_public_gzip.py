@@ -73,6 +73,7 @@ class PublicGzipTests(unittest.TestCase):
         # Real file reads/replacements are retained. Only privileged host policy
         # is isolated; metadata refusal is independently checked below.
         stack.enter_context(patch.object(self.helper, '_validate_metadata'))
+        stack.enter_context(patch.object(self.helper, '_check_trusted_directory'))
         stack.enter_context(patch.object(self.helper, '_check_private_directory'))
         return stack
 
@@ -254,6 +255,61 @@ class PublicGzipTests(unittest.TestCase):
             with patch.object(Path, 'lstat', return_value=SimpleNamespace(**{**good, **changes})):
                 with self.assertRaises(self.helper.PublicGzipError):
                     self.helper._check_private_directory(self.backups)
+
+    def test_backup_accepts_trusted_parent_modes_without_relaxing_backup_privacy(self):
+        original_lstat = Path.lstat
+        for mode in (0o550, 0o700, 0o755):
+            def inspected(path, *args, **kwargs):
+                if path == self.root:
+                    return SimpleNamespace(st_mode=stat.S_IFDIR | mode, st_uid=0)
+                if path == self.backups:
+                    return SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_uid=0)
+                return original_lstat(path, *args, **kwargs)
+
+            with self.subTest(parent_mode=oct(mode)), patch.object(self.helper, 'BACKUP_ROOT', self.backups), \
+                    patch.object(Path, 'lstat', inspected):
+                backup = self.helper._backup(SITE, self.site.stat(), {'status': 'test'})
+                self.assertEqual(backup.parent, self.backups)
+                self.assertEqual((backup / 'evemtk.conf').read_bytes(), SITE)
+                self.assertEqual(json.loads((backup / 'receipt.json').read_text())['status'], 'test')
+                if os.name == 'posix':
+                    self.assertEqual(stat.S_IMODE(self.backups.stat().st_mode), 0o700)
+                    self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o700)
+                    for name in ('evemtk.conf', 'receipt.json'):
+                        self.assertEqual(stat.S_IMODE((backup / name).stat().st_mode), 0o600)
+        self.assertEqual(self.site.read_bytes(), SITE)
+        self.assertEqual(self.commands, [])
+
+    def test_backup_refuses_untrusted_parent_before_creating_backup_root(self):
+        good = dict(st_mode=stat.S_IFDIR | 0o550, st_uid=0)
+        for changes in ({'st_mode': stat.S_IFDIR | 0o775}, {'st_mode': stat.S_IFDIR | 0o757},
+                        {'st_mode': stat.S_IFLNK | 0o700}, {'st_mode': stat.S_IFREG | 0o700},
+                        {'st_uid': 123}):
+            with self.subTest(changes=changes), patch.object(self.helper, 'BACKUP_ROOT', self.backups), \
+                    patch.object(Path, 'lstat', return_value=SimpleNamespace(**{**good, **changes})):
+                with self.assertRaises(self.helper.PublicGzipError):
+                    self.helper._backup(SITE, self.site.stat(), {})
+            self.assertFalse(self.backups.exists())
+        self.assertEqual(self.site.read_bytes(), SITE)
+        self.assertEqual(self.commands, [])
+
+    def test_backup_refuses_existing_nonprivate_backup_root_under_trusted_parent(self):
+        self.backups.mkdir(mode=0o755)
+        original_lstat = Path.lstat
+
+        def inspected(path, *args, **kwargs):
+            if path == self.root:
+                return SimpleNamespace(st_mode=stat.S_IFDIR | 0o700, st_uid=0)
+            if path == self.backups:
+                return SimpleNamespace(st_mode=stat.S_IFDIR | 0o755, st_uid=0)
+            return original_lstat(path, *args, **kwargs)
+
+        with patch.object(self.helper, 'BACKUP_ROOT', self.backups), patch.object(Path, 'lstat', inspected):
+            with self.assertRaises(self.helper.PublicGzipError):
+                self.helper._backup(SITE, self.site.stat(), {})
+        self.assertEqual(list(self.backups.iterdir()), [])
+        self.assertEqual(self.site.read_bytes(), SITE)
+        self.assertEqual(self.commands, [])
 
     @unittest.skipUnless(os.name == 'posix', 'real flock is a Linux/Unix apply-only boundary')
     def test_release_guard_uses_existing_lock_and_refuses_unfinished_transaction(self):

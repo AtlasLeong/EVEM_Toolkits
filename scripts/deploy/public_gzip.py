@@ -125,6 +125,12 @@ def _release_guard():
         os.close(descriptor)
 
 
+def _check_trusted_directory(path):
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o022:
+        raise PublicGzipError('backup parent must be a root-owned non-symlink directory, not group/world writable')
+
+
 def _check_private_directory(path):
     info = path.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or stat.S_IMODE(info.st_mode) & 0o077:
@@ -132,7 +138,7 @@ def _check_private_directory(path):
 
 
 def _backup(source, info, receipt):
-    _check_private_directory(BACKUP_ROOT.parent)
+    _check_trusted_directory(BACKUP_ROOT.parent)
     if not BACKUP_ROOT.exists():
         BACKUP_ROOT.mkdir(mode=0o700)
     _check_private_directory(BACKUP_ROOT)
