@@ -39,7 +39,7 @@ test('侧栏使用实心透明罗盘与 EVEM 字标并保留冰蓝指针', async
   await installApiMock(page, async () => json([]))
   await page.goto('/planetary')
   const icon = page.locator('.brand-icon')
-  await expect(icon).toHaveAttribute('src', '/evem-compass-solid.png')
+  await expect(icon).toHaveAttribute('src', '/brand/mark-96.png')
   await expect(page.locator('.brand-name')).toHaveText('EVEM')
   await expect(page.getByText('星际工具', { exact: true })).toHaveCount(0)
   await expect(icon).toHaveCSS('filter', 'none')
@@ -75,14 +75,16 @@ test('侧栏使用实心透明罗盘与 EVEM 字标并保留冰蓝指针', async
     for (let i = 0; i < center.length; i += 4) {
       if (center[i + 3] > 240 && center[i] < 80 && center[i + 1] < 80 && center[i + 2] < 80) filledCenter++
     }
-    return { transparent: transparent / (data.length / 4), opaque, dark, cyan, cornerAlpha: data[3], square: img.naturalWidth === img.naturalHeight, filledCenter: filledCenter / (center.length / 4) }
+    const area = data.length / 4
+    return { transparent: transparent / area, opaque: opaque / area, dark: dark / area, cyan: cyan / area, cornerAlpha: data[3], square: img.naturalWidth === img.naturalHeight, filledCenter: filledCenter / (center.length / 4) }
   })
   expect(pixels.cornerAlpha).toBe(0)
   expect(pixels.transparent).toBeGreaterThan(0.4)
   expect(pixels.transparent).toBeLessThan(0.9)
-  expect(pixels.opaque).toBeGreaterThan(100)
-  expect(pixels.dark).toBeGreaterThan(100)
-  expect(pixels.cyan).toBeGreaterThan(100)
+  // Coverage, rather than native pixel count, remains meaningful for resized assets.
+  expect(pixels.opaque).toBeGreaterThan(0.1)
+  expect(pixels.dark).toBeGreaterThan(0.1)
+  expect(pixels.cyan).toBeGreaterThan(0.005)
   expect(pixels.square).toBe(true)
   expect(pixels.filledCenter).toBeGreaterThan(0.9)
   await page.getByRole('button', { name: '收起导航' }).click()
@@ -101,7 +103,9 @@ test('浏览器与触屏收藏图标统一使用可加载的罗盘 PNG', async (
   const icons = page.locator('link[rel~="icon"], link[rel="apple-touch-icon"]')
   await expect(icons).toHaveCount(2)
   for (const icon of await icons.all()) {
-    await expect(icon).toHaveAttribute('href', await page.locator('.brand-icon').getAttribute('src'))
+    const touch = await icon.getAttribute('rel') === 'apple-touch-icon'
+    await expect(icon).toHaveAttribute('href', touch ? '/brand/touch-180.png' : '/brand/favicon-32.png')
+    await expect(icon).toHaveAttribute('sizes', touch ? '180x180' : '32x32')
     const response = await page.request.get(await icon.getAttribute('href'))
     expect(response.ok()).toBe(true)
     expect(response.headers()['content-type']).toContain('image/png')

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Boxes, Check, ChevronDown, ChevronRight, Factory, Minus, Plus, RefreshCw, Search, Settings2, ShoppingCart, Wrench, X } from 'lucide-react'
-import { loadManufacturingCatalog } from '../utils/manufacturingCatalog'
+import { manufacturingCatalogQuery } from '../services/manufacturingCatalogResource'
 import { createManufacturingPlan, summarizeManufacturingPlan, DEFAULT_MATERIAL_EFFICIENCY, MIN_MATERIAL_EFFICIENCY, resolveMaterialEfficiency, resolveManufacturingQuote, resolveManualPurchasePrice } from '../utils/manufacturingPlan'
 import { fetchManufacturingQuotes } from '../services/apiManufacturing'
 import { MANUFACTURING_QUOTE_AGE_TICK_MS, manufacturingQuoteIdsDue, mergeManufacturingQuoteSnapshots } from '../utils/manufacturingQuoteCache'
@@ -327,8 +328,9 @@ export default function ManufacturingEstimatorPage() {
   const headingRef = useRef(null)
   const navigationRef = useRef(null)
   const [desktopLayout, setDesktopLayout] = useState(() => window.matchMedia('(min-width: 1100px)').matches)
-  const [catalog, setCatalog] = useState(null)
-  const [catalogError, setCatalogError] = useState('')
+  const catalogQuery = useQuery(manufacturingCatalogQuery())
+  const catalog = catalogQuery.data
+  const catalogError = catalogQuery.isError && !catalog ? '制造目录暂时无法加载，请稍后重试。' : ''
   const [selectedId, setSelectedId] = useState('')
   const [search, setSearch] = useState('')
   const [quantity, setQuantity] = useState(1)
@@ -353,27 +355,16 @@ export default function ManufacturingEstimatorPage() {
     return () => media.removeEventListener('change', updateLayout)
   }, [])
 
-  const loadCatalog = useCallback(async () => {
-    setCatalogError('')
-    try {
-      const response = await fetch('/industry/manufacturing-scope.json', { cache: 'no-store' })
-      if (!response.ok) throw new Error(`catalog ${response.status}`)
-      const loaded = loadManufacturingCatalog(await response.json())
-      setCatalog(loaded)
-      setSelectedId(previous => previous && loaded.byId.has(previous) ? previous : loaded.recipes[0]?.productId || '')
-    } catch (error) {
-      setCatalogError('制造目录暂时无法加载，请稍后重试。')
-    }
-  }, [])
-
-  useEffect(() => { loadCatalog() }, [loadCatalog])
+  useEffect(() => {
+    if (catalog) setSelectedId(previous => previous && catalog.byId.has(previous) ? previous : catalog.recipes[0]?.productId || '')
+  }, [catalog])
 
   useEffect(() => {
     setExpandedNodes(new Set(['0']))
   }, [selectedId])
 
   const plan = useMemo(() => {
-    if (!catalog || !selectedId) return null
+    if (!catalog || !selectedId || !catalog.byId.has(selectedId)) return null
     return createManufacturingPlan(catalog, { targetId: selectedId, quantity, overrides, purchasePrices, marketQuotes, settings: { ...settings, now: quoteNow } })
   }, [catalog, selectedId, quantity, overrides, purchasePrices, marketQuotes, settings, quoteNow])
   const summary = useMemo(() => plan ? summarizeManufacturingPlan(catalog, plan) : null, [catalog, plan])
@@ -565,7 +556,7 @@ export default function ManufacturingEstimatorPage() {
   const expandAll = () => setExpandedNodes(new Set(treePaths))
   const collapseAll = () => setExpandedNodes(new Set())
 
-  if (catalogError) return <main className="manufacturing-page"><div className="manufacturing-error"><Factory size={30} /><h1>制造估价</h1><p>{catalogError}</p><button type="button" onClick={loadCatalog}>重新加载目录</button></div></main>
+  if (catalogError) return <main className="manufacturing-page"><div className="manufacturing-error"><Factory size={30} /><h1>制造估价</h1><p>{catalogError}</p><button type="button" onClick={() => catalogQuery.refetch()}>重新加载目录</button></div></main>
   if (!catalog || !summary) return <main className="manufacturing-page"><div className="manufacturing-loading"><Factory size={24} /><span>正在加载制造目录…</span></div></main>
   const selectedRecipe = catalog.byId.get(selectedId)
 
