@@ -95,6 +95,48 @@ v1 不自动安装生产依赖，不自动执行数据库迁移。
 
 ## 故障处理
 
+### 公开静态 gzip（独立运维步骤，2026-10-23）
+
+`public_gzip.py` 只为已审核布局中的 `/assets/` 与精确
+`/industry/manufacturing-scope.json` 开启 gzip：压缩等级 5、最小 1024 字节、
+`Vary: Accept-Encoding`，类型仅 CSS、JavaScript、JSON（Nginx 另外默认包含 HTML）。
+不在 `http`/`server` 开启，不改 `/api/`、TLS、WebSocket、上传图片、发布器或采集配置。
+保留 assets 的 immutable 缓存；catalog 保留 `no-cache` 重新验证及默认 ETag/Last-Modified。
+不要将该 JSON 改成共享的长时效缓存，更不能将相同设置复制到私有响应。
+
+该工具固定读取 `/etc/nginx/conf.d/evemtk.conf` 和 `/etc/nginx/nginx.conf`，
+没有自定义配置路径参数，不是通用 root 文件编辑器。CI 只运行隔离测试，**不安装、不执行线上 apply**。
+运维应先审核工具与 `nginx -T/-V`，确认原始路由、MIME 类型、模块和 include 布局，
+再通过既有 root 管理通道，将审核过的工具放入私有目录执行：
+
+```text
+python3 -B public_gzip.py
+python3 -B public_gzip.py --apply --expected-site-sha <已审核站点SHA256> --expected-main-sha <已审核主配置SHA256>
+```
+
+第一条默认 dry-run，只输出原始/候选配置摘要，不写文件、不 reload；返回的摘要不能替代人工审核。
+第二条要求两个精确小写 SHA256，拒绝 root 以外、符号链接、非 root 所有、组/全局可写、硬链接、
+重复或未知锚点及已执行布局。复用现有 `publish.lock` 且不创建/替换锁；发布忙或存在
+`transaction.json` 时停止，不调整锁属主权限。维护窗口内不要并行手工编辑 Nginx。
+
+应用前在固定 `/root/evem-public-gzip-backups/activation-*` 私有目录保存原始字节与 metadata，
+备份不覆盖且不放入 Nginx include 树。只原子替换站点文件并保留其属主/权限，
+先 `nginx -t` 成功，再 graceful reload 和 `is-active`；不 restart。
+配置验证、reload、进程检查或可注入验证回调失败（含可处理的中断）时，恢复精确原始配置、
+metadata，再验证、reload 和检查。恢复失败返回单独的 `recovery_failed` 及私有备份位置，
+必须人工排查，不能宣称恢复成功。SIGKILL/断电无法由 Python 捕获；保留私有备份供恢复。
+默认 CLI 不做公网验收，`applied` 只证明配置应用/进程检查，**不代表业务上线验收完成**。
+
+运维随后必须用真实 GET 验证 >1KB JS、CSS、catalog 的 gzip 与 identity 解压字节一致、
+`Vary` 正确、catalog 条件请求仍可 304、原 immutable/no-cache 不变；检查小 PNG 不二次压缩，
+首页/API/版本/WebSocket 及私有授权/cache 边界保持原状。若这些后验检查失败，
+按私有 receipt 中原 metadata 原子恢复备份，`nginx -t` 后 reload 并复核旧站，不能直接把
+0600 备份权限当作原配置权限。成功前不清理备份，不改变 collector 或其预算。
+
+离线验证：`python -B -m unittest discover -s scripts/deploy/tests -p test_public_gzip.py -v`。
+Windows 会明确跳过真实 flock 用例；必须由 Linux CI 和目标主机的真实 Nginx parser 补足，
+不能把替身命令测试当作生产配置验证。
+
 ### 战术板 WebSocket 侧车
 
 `/api/` 继续由 WSGI 服务处理；`/ws/tactical/` 独立代理到回环 ASGI 服务。发布器在服务器配置 `tactical_ws: true` 后同时重启两个服务，并把公开 WebSocket 升级（HTTP 101）纳入发布/回滚健康检查。前端仍保留经认证的 HTTP 同步兜底。

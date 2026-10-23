@@ -26,12 +26,13 @@ async function fixture(page, resolveQuote, { sharedPurchase = false, catalogOver
   const data = catalogOverride ?? (sharedPurchase ? { ...catalog, recipes: catalog.recipes.map(recipe => recipe.name === 'Quote target B' ? { ...recipe, materials: [{ itemId: materialA, quantity: 2 }] } : recipe) } : catalog)
   await page.route('**/industry/manufacturing-scope.json', route => route.fulfill(json(data)))
   await installApiMock(page, async ({ method, url }) => {
-    if (method === 'GET' && url.pathname === '/api/market/items/') {
-      const itemId = url.searchParams.get('q')
-      const request = { itemId, count: requests.filter(entry => entry.itemId === itemId).length + 1 }
+    if (method === 'GET' && url.pathname === '/api/market/quotes/') {
+      const itemIds = url.searchParams.get('ids').split(',')
+      const itemId = itemIds[0]
+      const request = { itemId, itemIds, count: requests.filter(entry => entry.itemId === itemId).length + 1 }
       requests.push(request)
       const resolved = await resolveQuote(request)
-      return resolved ?? json({ count: 1, results: [quote(itemId)] })
+      return resolved ?? json({ count: itemIds.length, results: itemIds.map(id => quote(id)) })
     }
     return json({ detail: 'Unknown API is prohibited in this sealed fixture' }, 501)
   })
@@ -144,9 +145,9 @@ test('a failed manual refresh preserves the latest valid cached price and clearl
   expect(requests).toHaveLength(2)
 })
 
-test('one failed item cancels the other in-flight quotes, leaves the ninth unscheduled, and cannot leak into a new target', async ({ page }) => {
+test('one failed batch cancels sibling batches, leaves the ninth unscheduled, and cannot leak into a new target', async ({ page }) => {
   await page.clock.setFixedTime(now)
-  const itemIds = Array.from({ length: 9 }, (_, index) => String(42000000000 + index))
+  const itemIds = Array.from({ length: 401 }, (_, index) => String(42000000000 + index))
   const manyItems = {
     ...catalog,
     recipes: catalog.recipes.map(recipe => recipe.name === 'Quote target A'
@@ -155,44 +156,44 @@ test('one failed item cancels the other in-flight quotes, leaves the ninth unsch
     items: [...catalog.items, ...itemIds.map((itemId, index) => ({ itemId, name: `Batch material ${index + 1}` }))],
   }
   const firstFailure = deferred(), siblings = deferred()
-  const abortedItems = new Set(), releasedItems = new Set(), pageErrors = []
+  const abortedBatches = new Set(), releasedBatches = new Set(), pageErrors = []
   page.on('pageerror', error => pageErrors.push(error.message))
   page.on('requestfailed', request => {
     const url = new URL(request.url())
-    const itemId = url.searchParams.get('q')
-    if (url.pathname === '/api/market/items/' && itemIds.includes(itemId)) abortedItems.add(itemId)
+    const batch = url.searchParams.get('ids')
+    if (url.pathname === '/api/market/quotes/' && itemIds.includes(batch?.split(',')[0])) abortedBatches.add(batch)
   })
-  const requests = await fixture(page, async ({ itemId, count }) => {
+  const requests = await fixture(page, async ({ itemId, itemIds: batchIds, count }) => {
     if (itemIds.includes(itemId) && count === 2) {
       if (itemId === itemIds[0]) {
         await firstFailure.promise
         return json({ detail: 'one stored quote failed' }, 503)
       }
       await siblings.promise
-      releasedItems.add(itemId)
-      return json({ count: 1, results: [quote(itemId, { best_sell: '999999' })] })
+      releasedBatches.add(batchIds.join(','))
+      return json({ count: batchIds.length, results: batchIds.map(id => quote(id, { best_sell: '999999' })) })
     }
-    return json({ count: 1, results: [quote(itemId, { best_sell: itemId === materialB ? '2000' : '1200' })] })
+    return json({ count: batchIds.length, results: batchIds.map(id => quote(id, { best_sell: id === materialB ? '2000' : '1200' })) })
   }, { catalogOverride: manyItems })
   try {
     await page.goto('/manufacturing')
-    await expect(total(page)).toHaveText('32,407 ISK')
+    await expect(total(page)).toHaveText('1,443,607 ISK')
     expect(requests).toHaveLength(9)
     await refreshButton(page).click()
     await expect.poll(() => requests.filter(request => request.count === 2).length).toBe(8)
     firstFailure.release()
     await expect(page.locator('.manufacturing-inline-error')).toContainText('\u5df2\u4fdd\u7559\u73b0\u6709\u62a5\u4ef7')
-    await expect(total(page)).toHaveText('32,407 ISK')
+    await expect(total(page)).toHaveText('1,443,607 ISK')
     await expect(refreshButton(page)).toBeEnabled()
     // These are actual browser fetch cancellations while their responses are held.
-    await expect.poll(() => abortedItems.size).toBe(7)
+    await expect.poll(() => abortedBatches.size).toBe(7)
     await selectTarget(page, 'Quote target B')
     await expect(total(page)).toHaveText('6,011 ISK')
     siblings.release()
-    await expect.poll(() => releasedItems.size).toBe(7)
+    await expect.poll(() => releasedBatches.size).toBe(7)
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
     expect(requests.filter(request => request.count === 2)).toHaveLength(8)
-    expect(requests.some(request => request.itemId === itemIds[8] && request.count === 2)).toBe(false)
+    expect(requests.some(request => request.itemId === itemIds[400] && request.count === 2)).toBe(false)
     expect(requests.filter(request => request.itemId === materialB)).toHaveLength(1)
     await expect(total(page)).toHaveText('6,011 ISK')
     await expect(refreshButton(page)).toBeEnabled()

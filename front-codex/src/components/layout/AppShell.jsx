@@ -170,7 +170,7 @@ export default function AppShell() {
       <DesktopOnlyMask />
       <header className="mobile-shell-header">
         <Link className="mobile-brand" to="/" aria-label="EVEMToolkit 首页">
-          <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="mobile-brand-icon" /></span>
+          <span className="brand-mark"><img src="/brand/mark-96.png" alt="" className="mobile-brand-icon" /></span>
           <span className="mobile-brand-name">EVEM</span>
         </Link>
         {location.pathname === '/market' && <Link ref={mobileIndustryNextRef} className="mobile-industry-next" to="/manufacturing" aria-label="下一步：制造估价">
@@ -223,7 +223,7 @@ export default function AppShell() {
         <aside className="shell-sidebar" aria-label="工具导航">
           <div className="sidebar-brand-row">
           <Link className="brand" to="/" aria-label="EVEMToolkit 首页">
-            <span className="brand-mark"><img src="/evem-compass-solid.png" alt="" className="brand-icon" /></span>
+            <span className="brand-mark"><img src="/brand/mark-96.png" alt="" className="brand-icon" /></span>
             <span className="brand-name">EVEM</span>
           </Link>
           <button className="sidebar-toggle" type="button" aria-label={collapsed ? '展开导航' : '收起导航'} title={collapsed ? '展开导航' : '收起导航'} aria-expanded={!collapsed} aria-controls="primary-navigation" onClick={() => setCollapsed(value => !value)}>

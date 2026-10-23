@@ -34,16 +34,17 @@ async function installPurchaseFixture(page, { copyFails = false, catalogDelay = 
     await route.fulfill(json(catalogData))
   })
   await installApiMock(page, ({ method, url }) => {
-    if (method === 'GET' && url.pathname === '/api/market/items/') {
-      const itemId = url.searchParams.get('q')
-      requests.push(itemId)
+    if (method === 'GET' && url.pathname === '/api/market/quotes/') {
+      const itemIds = url.searchParams.get('ids').split(',')
+      requests.push(...itemIds)
       const quotes = {
         '200': { best_sell: '9007199254740993.125', status: 'fresh', observed_at: new Date().toISOString() },
         '201': { best_sell: '2.5', status: 'stale', observed_at: '2020-01-01T00:00:00Z' },
         '203': { best_sell: null, best_buy: '999', status: 'empty', observed_at: '2021-03-02T04:05:06Z' },
         '204': { best_sell: '-4.5', status: 'fresh', observed_at: '2022-04-03T05:06:07Z' },
       }
-      return json({ count: quotes[itemId] ? 1 : 0, results: quotes[itemId] ? [{ item_id: itemId, ...quotes[itemId] }] : [] })
+      const results = itemIds.filter(itemId => quotes[itemId]).map(item_id => ({ item_id, ...quotes[item_id] }))
+      return json({ count: results.length, results })
     }
     return json({})
   })

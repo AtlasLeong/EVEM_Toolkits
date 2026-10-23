@@ -42,9 +42,9 @@ test('Twitter share metadata uses the public identity without an invented share 
   assert.equal(metaContent('twitter:image'), undefined)
 })
 
-test('the existing compass favicon and Apple icon remain unchanged', () => {
-  assert.match(html, /<link rel="icon" type="image\/png" href="\/evem-compass-solid\.png" \/>/)
-  assert.match(html, /<link rel="apple-touch-icon" href="\/evem-compass-solid\.png" \/>/)
+test('compass favicon and Apple icon use dedicated size-appropriate PNG derivatives', () => {
+  assert.match(html, /<link rel="icon" type="image\/png" sizes="32x32" href="\/brand\/favicon-32\.png" \/>/)
+  assert.match(html, /<link rel="apple-touch-icon" sizes="180x180" href="\/brand\/touch-180\.png" \/>/)
 })
 
 test('public metadata constants match the initial document metadata', async () => {

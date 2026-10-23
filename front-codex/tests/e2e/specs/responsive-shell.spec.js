@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { installApiMock, json } from '../helpers/api'
+import { seedAuthenticatedSession } from '../helpers/auth'
 
 test.beforeEach(async ({ page }) => {
   await installApiMock(page, async () => json([]))
@@ -16,7 +17,7 @@ for (const width of [390, 768]) {
     await expect(page.locator('.shell-sidebar')).toBeHidden()
     await expect(page.locator('.mobile-brand-name')).toHaveText('EVEM')
     const brandIcon = page.locator('.mobile-brand-icon')
-    await expect(brandIcon).toHaveAttribute('src', '/evem-compass-solid.png')
+    await expect(brandIcon).toHaveAttribute('src', '/brand/mark-96.png')
     await expect(brandIcon).toHaveCSS('filter', 'none')
     await expect(brandIcon).toHaveCSS('width', '32px')
     await expect(brandIcon).toHaveCSS('height', '32px')
@@ -33,6 +34,8 @@ for (const width of [390, 768]) {
 }
 
 test('移动导航切换时同步 aria-expanded 并可进入反馈页', async ({ page }) => {
+  // Feedback remains private; navigation tests must establish an authenticated session.
+  await seedAuthenticatedSession(page)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/planetary')
   const toggle = page.getByRole('button', { name: '打开导航' })
@@ -41,5 +44,14 @@ test('移动导航切换时同步 aria-expanded 并可进入反馈页', async ({
   await expect(page.getByRole('button', { name: '关闭导航' })).toHaveAttribute('aria-expanded', 'true')
   await page.getByRole('navigation', { name: '移动主导航' }).getByRole('link', { name: '需求与反馈' }).click()
   await expect(page).toHaveURL(/\/feedback$/)
+  await expect(page.locator('.mobile-nav')).toBeHidden()
+})
+
+test('游客从移动导航进入反馈时仍需登录', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/planetary')
+  await page.getByRole('button', { name: '打开导航' }).click()
+  await page.getByRole('navigation', { name: '移动主导航' }).getByRole('link', { name: '需求与反馈' }).click()
+  await expect(page).toHaveURL(/\/login$/)
   await expect(page.locator('.mobile-nav')).toBeHidden()
 })

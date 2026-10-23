@@ -3,12 +3,11 @@ import fetchWithAuth from './fetchWithAuth'
 import { resolveManufacturingQuote } from '../utils/manufacturingPlan'
 
 /**
- * The public market list endpoint caps a page at one hundred records.  The
- * manufacturing catalog is a small, known set of item IDs, so quote lookups
- * use the existing numeric `q` filter one ID at a time.  IDs are scheduled in
- * bounded chunks to avoid opening an unbounded number of requests at once.
+ * Read exact stored quotes in batches of at most fifty IDs. Batch reads do
+ * not trigger game collection or fall back to individual requests on errors.
  */
 export const MARKET_PAGE_SIZE = 100
+export const QUOTE_BATCH_SIZE = 50
 export const DEFAULT_QUOTE_CONCURRENCY = 8
 
 const QUOTE_STATUSES = new Set(['fresh', 'stale', 'empty', 'invalid', 'uncollected', 'absent'])
@@ -26,6 +25,7 @@ export class ManufacturingMarketError extends Error {
 function normalizeItemId(value) {
   const id = String(value ?? '').trim()
   if (!/^[1-9][0-9]*$/u.test(id)) return null
+  if (id.length > 19 || (id.length === 19 && id > '9223372036854775807')) return null
   return id
 }
 
@@ -45,7 +45,7 @@ function normalizeItemIds(itemIds) {
 }
 
 /** Return de-duplicated numeric item IDs in chunks no larger than `size`. */
-export function chunkItemIds(itemIds, size = MARKET_PAGE_SIZE) {
+export function chunkItemIds(itemIds, size = QUOTE_BATCH_SIZE) {
   const chunkSize = Number(size)
   if (!Number.isSafeInteger(chunkSize) || chunkSize < 1) {
     throw new TypeError('chunk size must be a positive safe integer')
@@ -86,7 +86,7 @@ function normalizeRow(row, itemId) {
 }
 
 /**
- * Convert one or more public `/market/items/` payloads into an ID-keyed
+ * Convert one or more public `/market/quotes/` payloads into an ID-keyed
  * record.  Requested IDs not present in a response are retained as `absent`
  * instead of being dropped, so callers can show an explicit missing-quote
  * state and never mistake it for a zero price.
@@ -113,14 +113,12 @@ export const normalizeMarketQuotes = normalizeManufacturingQuotes
 export const normalizeQuoteResponse = normalizeManufacturingQuotes
 export const chunkManufacturingItemIds = chunkItemIds
 
-function buildItemsUrl(apiUrl, itemId) {
+function buildQuotesUrl(apiUrl, itemIds) {
   const base = String(apiUrl ?? '').replace(/\/+$/u, '')
   const params = new URLSearchParams({
-    q: itemId,
-    page: '1',
-    page_size: String(MARKET_PAGE_SIZE),
+    ids: itemIds.join(','),
   })
-  return `${base}/market/items/?${params}`
+  return `${base}/market/quotes/?${params}`
 }
 
 function errorMessage(payload, status) {
@@ -129,11 +127,11 @@ function errorMessage(payload, status) {
   return typeof message === 'string' && message.trim() ? message : `请求失败（${status}）`
 }
 
-async function fetchOneQuote(itemId, { apiUrl, fetchImpl, signal }) {
+async function fetchQuoteBatch(itemIds, { apiUrl, fetchImpl, signal }) {
   signal?.throwIfAborted()
   let response
   try {
-    response = await fetchImpl(buildItemsUrl(apiUrl, itemId), {
+    response = await fetchImpl(buildQuotesUrl(apiUrl, itemIds), {
       signal,
     })
   } catch (cause) {
@@ -161,7 +159,7 @@ async function fetchOneQuote(itemId, { apiUrl, fetchImpl, signal }) {
     })
   }
   signal?.throwIfAborted()
-  return normalizeManufacturingQuotes(payload, [itemId])
+  return normalizeManufacturingQuotes(payload, itemIds)
 }
 
 async function mapWithConcurrency(values, worker, concurrency) {
@@ -205,29 +203,25 @@ export async function fetchManufacturingQuotes(itemIds, options = {}) {
   options.signal?.throwIfAborted()
   options.signal?.addEventListener('abort', abortFromCaller, { once: true })
   try {
-    for (const chunk of chunkItemIds(requested, MARKET_PAGE_SIZE)) {
-      controller.signal.throwIfAborted()
-      const records = await mapWithConcurrency(
-        chunk,
-        async itemId => {
-          try {
-            return await fetchOneQuote(itemId, {
-              apiUrl: options.apiUrl ?? options.baseUrl ?? API_URL,
-              fetchImpl,
-              signal: controller.signal,
-            })
-          } catch (error) {
-            // Promise.all can reject before its other workers finish. Stop
-            // those requests and prevent them scheduling the rest of the batch.
-            // The caller's controller stays live so its error UI can commit.
-            controller.abort(error)
-            throw controller.signal.reason
-          }
-        },
-        concurrency,
-      )
-      for (const record of records) Object.assign(merged, record)
-    }
+    const records = await mapWithConcurrency(
+      chunkItemIds(requested),
+      async chunk => {
+        try {
+          return await fetchQuoteBatch(chunk, {
+            apiUrl: options.apiUrl ?? options.baseUrl ?? API_URL,
+            fetchImpl,
+            signal: controller.signal,
+          })
+        } catch (error) {
+          // A failed batch cancels siblings without aborting the caller's UI.
+          // Preserve its actual failure when a native sibling abort races it.
+          controller.abort(error)
+          throw controller.signal.reason
+        }
+      },
+      concurrency,
+    )
+    for (const record of records) Object.assign(merged, record)
     return merged
   } finally {
     options.signal?.removeEventListener('abort', abortFromCaller)

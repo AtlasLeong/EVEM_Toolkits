@@ -27,14 +27,14 @@ async function navigationFixture(page, { delayQuotes = false } = {}) {
   await page.route('**/industry/manufacturing-scope.json', route => route.fulfill(json(navigationCatalog)))
   await installApiMock(page, async ({ url }) => {
     if (url.pathname === '/api/market/categories/') return json([])
-    if (url.pathname === '/api/market/items/') {
-      const itemId = url.searchParams.get('q')
-      quoteRequests.push(itemId)
+    if (url.pathname === '/api/market/quotes/') {
+      const itemIds = url.searchParams.get('ids').split(',')
+      quoteRequests.push(itemIds)
       await quotesReady
-      const item = navigationItems.find(candidate => candidate.itemId === itemId)
-      return json({ count: item ? 1 : 0, results: item ? [{
+      const items = itemIds.map(itemId => navigationItems.find(candidate => candidate.itemId === itemId)).filter(Boolean)
+      return json({ count: items.length, results: items.map(item => ({
         item_id: item.itemId, name: item.name, status: 'fresh', best_sell: '1.25', observed_at: new Date().toISOString(),
-      }] : [] })
+      })) })
     }
     return json([])
   })
@@ -163,6 +163,7 @@ async function publicFixture(page) {
     requests.push({ method, path: url.pathname })
     if (url.pathname === '/api/market/categories/') return json([])
     if (url.pathname === '/api/market/items/') return json({ count: 0, results: [] })
+    if (url.pathname === '/api/market/quotes/') return json({ count: 0, results: [] })
     return json([])
   })
   return requests
@@ -570,7 +571,7 @@ for (const [narrowWidth, width, textSize, opener] of [[390, 1440, 100, 'change']
     const quoteRequests = []
     await installApiMock(page, ({ method, url }) => {
       quoteRequests.push({ method, path: url.pathname })
-      if (url.pathname === '/api/market/items/') return json({ count: 0, results: [] })
+      if (url.pathname === '/api/market/quotes/') return json({ count: 0, results: [] })
       return json([])
     })
     await page.setViewportSize({ width: narrowWidth, height: 960 })
@@ -581,7 +582,7 @@ for (const [narrowWidth, width, textSize, opener] of [[390, 1440, 100, 'change']
     await expect(price).toBeAttached()
     await expect.poll(() => quoteRequests.length).toBeGreaterThan(0)
     await expect(controls.purchaseSection.getByRole('button', { name: '刷新清单行情', exact: true })).toBeEnabled()
-    expect(quoteRequests.every(({ method, path }) => method === 'GET' && path === '/api/market/items/')).toBe(true)
+    expect(quoteRequests.every(({ method, path }) => method === 'GET' && path === '/api/market/quotes/')).toBe(true)
     await settleNavigation(page)
     if (textSize === 200) { await doublePurchaseText(page); await settleNavigation(page) }
     const plan = { quantity: await controls.quantity.inputValue(), target: await page.locator('.manufacturing-selected-target').innerText() }
@@ -752,7 +753,8 @@ test('late market quotes do not move the purchase view or steal an active price 
     await page.goto('/manufacturing')
     const controls = workflow(page)
     await expect(controls.purchaseSection).toBeVisible()
-    await expect.poll(() => fixture.quoteRequests.length).toBe(navigationItems.length)
+    await expect.poll(() => fixture.quoteRequests.length).toBe(1)
+    expect(fixture.quoteRequests).toEqual([navigationItems.map(item => item.itemId)])
     await controls.purchase.click()
     await expect(controls.purchaseSection).toBeFocused()
     await controls.price.focus()
