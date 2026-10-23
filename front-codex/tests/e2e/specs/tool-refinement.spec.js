@@ -13,10 +13,10 @@ const report = {
 
 async function manufacturingFixture(page, fail = () => false) {
   await installApiMock(page, ({ url }) => {
-    if (url.pathname === '/api/market/items/') {
+    if (url.pathname === '/api/market/quotes/') {
       if (fail()) return json({ detail: 'Synthetic refresh failure' }, 503)
-      const itemId = url.searchParams.get('q')
-      return json({ count: 1, results: [{ item_id: itemId, best_sell: '1200', status: 'fresh', observed_at: '2026-10-03T18:40:00Z' }] })
+      const itemIds = url.searchParams.get('ids').split(',')
+      return json({ count: itemIds.length, results: itemIds.map(itemId => ({ item_id: itemId, best_sell: '1200', status: 'fresh', observed_at: '2026-10-03T18:40:00Z' })) })
     }
     return json({})
   })

@@ -75,3 +75,9 @@
 - Independent catalog/logo spec and quality reviews and batch/gzip quality reviews approved; no critical/important issues remain. Runtime gzip activation, complete CI and exact-version online acceptance are still pending, not claimed complete.
 - Final integrated spec review approved the complete range through `53253a0af`. The controller independently reran all 364 deploy safety tests (347 passed, 17 explicit platform skips) and the final production build/budget.
 - Real built-preview desktop/mobile inspection: small 96px navigation artwork, no document overflow at 1440/390px; catalog fetched once across SPA route re-entry. Switching from the initial eight-material target to the 48-material target requested the 41 uncached IDs in one batch, reusing seven cached quotes. Full adapter tests separately prove 48 fresh IDs in one request. Public production readback remains pending.
+
+## CI fixture follow-up
+
+- The first PR CI attempt was stopped after investigation found two remaining cross-feature E2E fixtures still simulating the old per-ID quote route. Local red reproduction confirmed missing eight quote requests and the unchanged total-price assertion failing; this was not a production-service failure.
+- Migrated only `industry-journey.spec.js` and `tool-refinement.spec.js` to explicit batch DTOs. The delayed-request assertion now requires one batch containing all eight exact IDs; original prices, 503 failure preservation, focus, layout and accessibility assertions remain unchanged. Independent quality review approved.
+- Both complete suites passed 58/58 with no skips/retries. A separate controller-run 641-case frontend suite is also in progress. Full new PR/master CI and production acceptance are still required before release.
