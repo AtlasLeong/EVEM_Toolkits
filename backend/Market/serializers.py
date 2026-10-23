@@ -52,6 +52,9 @@ def item_payload(item, now_ms=None):
         'best_buy': str(snapshot.best_buy) if snapshot and snapshot.best_buy is not None else None,
         'best_sell': str(snapshot.best_sell) if snapshot and snapshot.best_sell is not None else None,
         'observed_at': utc_iso(observed_at_ms),
+        'age_ms': max(0, now_ms - observed_at_ms) if observed_at_ms is not None else None,
+        'collection_tier': 'priority' if item.collection_priority else 'ordinary',
+        'collection_target_ms': STALE_AFTER_MS if item.collection_priority else 3 * STALE_AFTER_MS,
         'status': status,
     }
     image = image_metadata(item.pk)
@@ -94,12 +97,20 @@ class ConfigPatchSerializer(StrictSerializer):
         return attrs
 
 
+class StrictBooleanField(serializers.BooleanField):
+    def to_internal_value(self, data):
+        if type(data) is not bool:
+            raise serializers.ValidationError('Expected a JSON boolean.')
+        return data
+
+
 class ItemCreateSerializer(StrictSerializer):
     item_id = serializers.RegexField(r'^[1-9][0-9]*$', max_length=19)
     name = serializers.CharField(max_length=255)
     category = serializers.CharField(max_length=120, allow_blank=True, required=False, default='')
     scope = serializers.ChoiceField(choices=['global'], required=False, default='global')
     enabled = serializers.BooleanField(required=False, default=True)
+    collection_priority = StrictBooleanField(required=False, default=False)
 
     def validate_item_id(self, value):
         if int(value) > 2**63 - 1:
@@ -112,6 +123,7 @@ class ItemPatchSerializer(StrictSerializer):
     category = serializers.CharField(max_length=120, allow_blank=True, required=False)
     scope = serializers.ChoiceField(choices=['global'], required=False)
     enabled = serializers.BooleanField(required=False)
+    collection_priority = StrictBooleanField(required=False)
 
 
 def admin_item_payload(item):
@@ -121,6 +133,7 @@ def admin_item_payload(item):
         'category': item.category,
         'scope': item.scope,
         'enabled': item.enabled,
+        'collection_priority': bool(item.collection_priority),
         'last_failure': safe_error_code(item.last_error_code) or None,
     }
 
@@ -129,7 +142,7 @@ def safe_error_code(value):
     safe_codes = {
         'AUTH_EXPIRED', 'ORDER_TIMEOUT', 'COLLECTION_ERROR',
         'needs_auth', 'lease_expired', 'no_enabled_items', 'item_error', 'collection_error',
-        'invalid_session', 'auth_rejected', 'rate_limited', 'service_rejected',
+        'invalid_session', 'auth_rejected', 'unauthorized', 'rate_limited', 'service_rejected',
         'configuration_error', 'account_busy', 'budget_exhausted', 'lease_lost',
         'network_error', 'timeout', 'runtime_budget', 'incomplete_run', 'shared_budget',
     }

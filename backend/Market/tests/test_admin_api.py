@@ -281,7 +281,7 @@ class MarketAdminAPITests(TestCase):
         self.allow('marketitem')
         created = self.client.post(url, payload, format='json')
         self.assertEqual(created.status_code, 201)
-        self.assertEqual(created.json(), {**payload, 'last_failure': None})
+        self.assertEqual(created.json(), {**payload, 'collection_priority': False, 'last_failure': None})
         self.assertEqual(self.client.post(url, payload, format='json').status_code, 400)
         self.assertEqual(self.client.post(url, {**payload, 'item_id': '0'}, format='json').status_code, 400)
         self.assertEqual(self.client.post(url, {**payload, 'item_id': '44', 'scope': 'unknown'}, format='json').status_code, 400)

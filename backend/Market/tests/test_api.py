@@ -73,7 +73,11 @@ class PublicMarketItemsTests(TestCase):
         response = self.client.get('/api/market/items/', {'q': 'trit'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {
+        body = response.json()
+        age_ms = body['results'][0].pop('age_ms')
+        self.assertGreaterEqual(age_ms, 0)
+        self.assertLess(age_ms, 1000)
+        self.assertEqual(body, {
             'count': 1,
             'market_scope': {
                 'key': 'jita_h4',
@@ -93,6 +97,7 @@ class PublicMarketItemsTests(TestCase):
                 'best_buy': '9.25', 'best_sell': '10.50',
                 'observed_at': datetime.fromtimestamp(observed_at_ms / 1000, timezone.utc).isoformat().replace('+00:00', 'Z'),
                 'status': 'fresh',
+                'collection_tier': 'ordinary', 'collection_target_ms': 6 * 60 * 60 * 1000,
             }],
         })
 

@@ -19,6 +19,8 @@ class MarketItem(models.Model):
     market_bucket = models.CharField(max_length=16, default='other', db_index=True)
     scope = models.CharField(max_length=80, default='global')
     enabled = models.BooleanField(default=True)
+    # NULL is ordinary too, allowing pre-migration releases to keep inserting.
+    collection_priority = models.BooleanField(default=False, null=True, blank=True)
     # Tracks only rows enabled by the manufacturing coverage migration.
     manufacturing_coverage_seeded = models.BooleanField(null=True, blank=True)
     last_attempt_at_ms = models.BigIntegerField(null=True, blank=True)
