@@ -54,13 +54,15 @@ WEB_PROCESS = textwrap.dedent(r'''
             assert response.status_code == 200
             assert response.json()['status'] == 'unavailable'
             assert response['Cache-Control'] == 'no-store'
-            write_success(snapshot, [{'solar_system_id': 30001211, 'destroy_num': 155}], now_ms=1000)
+            write_success(snapshot, [{'solar_system_id': 30001211, 'destroy_num': 5}], now_ms=1000)
             response = client.get('/api/anomaly-hotspots/')
             assert response.status_code == 200
             payload = response.json()
             assert payload['collected_at_ms'] == 1000
-            assert payload['systems'] == [{'solar_system_id': 30001211, 'destroy_num': 155,
+            assert payload['systems'] == [{'solar_system_id': 30001211, 'destroy_num': 5,
                 'system_name': None, 'region_id': None, 'region_name': None}]
+            assert payload['version'] == 2
+            assert payload['metric'] == {'kind': 'activity_level', 'range_version': 1}
             assert payload['statistics_window'] is None
             assert client.head('/api/anomaly-hotspots/').status_code == 200
         assert read_snapshot('relative-snapshot.json')['status'] == 'unavailable'

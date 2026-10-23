@@ -333,6 +333,18 @@ def _heartbeat_run(run, now_ms):
         locked_run.save(update_fields=['lease_expires_at_ms'])
 
 
+def _select_items(limit):
+    """Reserve half for ordinary rows, donating unused slots in either tier."""
+    items = MarketItem.objects.filter(enabled=True).order_by('last_attempt_at_ms', 'id')
+    priority = list(items.filter(collection_priority=True)[:limit])
+    ordinary = list(items.filter(Q(collection_priority=False) | Q(collection_priority__isnull=True))
+                    .exclude(pk__in=[item.pk for item in priority])[:limit])
+    priority_count = min(len(priority), limit // 2)
+    ordinary_count = min(len(ordinary), limit - priority_count)
+    priority_count = min(len(priority), limit - ordinary_count)
+    return priority[:priority_count] + ordinary[:ordinary_count]
+
+
 def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                 randint=random.randint, sleep=time.sleep, lease_factory=account_lease,
                 monotonic=time.monotonic):
@@ -360,10 +372,7 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
     policy = _prepare_batch_policy(run, now_ms)
     run.item_limit = min(MAX_ITEMS_PER_RUN, policy['max_items_per_run'])
     run.batch_fallback_reason = policy['batch_fallback_reason']
-    items = list(
-        MarketItem.objects.filter(enabled=True)
-        .order_by('last_attempt_at_ms', 'id')[:run.item_limit]
-    )
+    items = _select_items(run.item_limit)
     _save_plan(run, items, now_ms)
     if not items:
         run.status = 'failed'
@@ -453,7 +462,9 @@ def collect_due(*, clock_ms=epoch_ms, bundle_loader=None, session_factory=None,
                 run._shared_budget_limited = True
                 run.item_limit = min(run.item_limit, permitted_items)
                 run.batch_fallback_reason = 'shared_budget'
-                items = items[:run.item_limit]
+                # Replan at the real account cap, not a prefix of the 80-row
+                # plan (whose first forty might all belong to one tier).
+                items = _select_items(run.item_limit)
                 _save_plan(run, items, now_ms)
         with shared_lease if shared_lease is not None else nullcontext():
             try:

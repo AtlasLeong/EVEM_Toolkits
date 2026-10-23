@@ -14,7 +14,8 @@ import tempfile
 import time
 
 from .snapshot import STATUSES
-from .validation import AnomalyValidationError, MAX_SAFE_INTEGER, MAX_SYSTEMS, validate_rows
+from .validation import AnomalyValidationError, MAX_SAFE_INTEGER, MAX_SYSTEMS
+from .metric import activity_metric, legacy_metric, validate_metric, validate_metric_rows
 
 # These two limits bound committed manifest references, not crash staging.
 RETENTION_MS = 30 * 24 * 60 * 60 * 1000
@@ -162,12 +163,14 @@ def _sample_name(stamp):
 
 
 def _sample(value):
-    if (not isinstance(value, dict) or set(value) != {'version', 'collected_at_ms', 'statistics_window', 'systems'}
-            or type(value['version']) is not int or value['version'] != 1
+    legacy_keys = {'version', 'collected_at_ms', 'statistics_window', 'systems'}
+    if (not isinstance(value, dict) or type(value.get('version')) is not int or value['version'] not in (1, 2)
+            or set(value) != (legacy_keys if value['version'] == 1 else legacy_keys | {'metric'})
             or value['statistics_window'] is not None): raise HistoryError()
+    metric = legacy_metric() if value['version'] == 1 else validate_metric(value['metric'])
     stamp = _integer(value['collected_at_ms'])
-    return {'version': 1, 'collected_at_ms': stamp, 'statistics_window': None,
-            'systems': validate_rows(value['systems'])}
+    return {'version': 2, 'collected_at_ms': stamp, 'statistics_window': None,
+            'metric': metric, 'systems': validate_metric_rows(value['systems'], metric)}
 
 
 def _entry(stamp, encoded):
@@ -284,7 +287,8 @@ def _physical_budget(directory, owner, additional_bytes, *, sample=False):
 def record_success(directory, rows, *, now_ms=None):
     try:
         stamp = _now(now_ms)
-        value = _sample({'version': 1, 'collected_at_ms': stamp, 'statistics_window': None, 'systems': rows})
+        value = _sample({'version': 2, 'collected_at_ms': stamp, 'statistics_window': None,
+                         'metric': activity_metric(), 'systems': rows})
         encoded = _encode(value, MAX_SAMPLE_BYTES)
         if len(encoded) > MAX_HISTORY_BYTES: raise HistoryError()
         parent, owner = _directory(directory, write=True)
@@ -318,8 +322,9 @@ def record_success(directory, rows, *, now_ms=None):
         raise HistoryError() from None
 
 
-def _empty(status='unavailable'):
-    return {'version': 1, 'status': status, 'statistics_window': None, 'interval': None,
+def _empty(status='unavailable', *, metric=None):
+    return {'version': 2, 'status': status, 'statistics_window': None, 'interval': None,
+            'metric': legacy_metric() if metric is None else metric,
             'coverage': {'comparable': 0, 'new': 0, 'missing': 0, 'negative': 0, 'unchanged': 0},
             'systems': [], 'intervals': [], 'next_before': None}
 
@@ -344,9 +349,9 @@ def read_changes(directory, *, interval=None, before=None, limit=100, now_ms=Non
             if interval is not None: raise HistoryError()
             return _empty()
         if len(entries) == 1:
-            _read_sample(parent, owner, entries[0])
+            sample = _read_sample(parent, owner, entries[0])
             if interval is not None: raise HistoryError()
-            return _empty('baseline')
+            return _empty('baseline', metric=sample['metric'])
         choices = [_interval(entries[index - 1], entries[index]) for index in range(len(entries) - 1, 0, -1)]
         selected = next((item for item in choices if item['id'] == interval), None) if interval is not None else choices[0]
         if selected is None: raise HistoryError()
@@ -355,6 +360,9 @@ def read_changes(directory, *, interval=None, before=None, limit=100, now_ms=Non
         by_id = {entry['id']: entry for entry in entries}
         old = _read_sample(parent, owner, by_id[selected['start_at_ms']])
         current = _read_sample(parent, owner, by_id[selected['end_at_ms']])
+        if old['metric'] != activity_metric() or current['metric'] != activity_metric():
+            return {**_empty('incomparable'), 'interval': selected,
+                    'intervals': page[:limit], 'next_before': next_before}
         previous_counts = {row['solar_system_id']: row['destroy_num'] for row in old['systems']}
         current_counts = {row['solar_system_id']: row['destroy_num'] for row in current['systems']}
         comparable = previous_counts.keys() & current_counts.keys()
@@ -362,7 +370,8 @@ def read_changes(directory, *, interval=None, before=None, limit=100, now_ms=Non
                     'destroy_num': current_counts[identifier],
                     'delta': current_counts[identifier] - previous_counts[identifier]}
                    for identifier in sorted(comparable)]
-        return {'version': 1, 'status': 'ok', 'statistics_window': None, 'interval': selected,
+        return {'version': 2, 'status': 'ok', 'statistics_window': None, 'interval': selected,
+                'metric': activity_metric(),
                 'coverage': {'comparable': len(comparable), 'new': len(current_counts.keys() - previous_counts.keys()),
                              'missing': len(previous_counts.keys() - current_counts.keys()),
                              'negative': sum(row['delta'] < 0 for row in systems),

@@ -48,7 +48,7 @@ export async function installMapData(page, systems, stargates = [], hotspots = n
     if (url.pathname === '/api/boardsystems') return json(systems)
     if (url.pathname === '/api/boardstargate') return json(stargates)
     if (url.pathname === '/api/anomaly-hotspots/' && hotspots) return json({
-      version: 1, collected_at_ms: Date.now(), last_attempt_at_ms: Date.now(),
+      version: 2, metric: { kind: 'activity_level', range_version: 1 }, collected_at_ms: Date.now(), last_attempt_at_ms: Date.now(),
       status: 'ok', statistics_window: null, systems: hotspots,
     })
     return json([])

@@ -14,3 +14,9 @@ export function marketBookEmptyLabel(item, field) {
   if (item[field] !== null && item[field] !== undefined) return '未提供多档报价'
   return '暂无挂单'
 }
+
+export function marketSamplingLabel(item) {
+  if (item?.collection_tier === 'priority' && item.collection_target_ms === 7_200_000) return '重点 · 2 小时采样目标（非保证）'
+  if (item?.collection_tier === 'ordinary' && item.collection_target_ms === 21_600_000) return '普通 · 6 小时采样目标（非保证）'
+  return null
+}

@@ -5,6 +5,7 @@ import { EmptyState, LoadingBar, PageHeader, Panel, Pill } from '../components/u
 import { createMarketItem, enqueueMarketRun, getMarketConfig, listMarketAdminItems, listMarketRuns, updateMarketConfig, updateMarketItem } from '../services/apiMarket'
 import { formatMarketTime, marketScopeLabel } from './MarketPrices'
 import { marketRefetchInterval } from '../utils/marketPolling'
+import CollectionHealthPanel from '../components/market/CollectionHealthPanel'
 import '../styles/market.css'
 
 const EMPTY_ITEM = { item_id: '', name: '', category: '', scope: 'global', enabled: true }
@@ -53,6 +54,10 @@ function CapacityNotice({ config }) {
   const minSeconds = Number(config.min_interval_seconds)
   const maxSeconds = Number(config.max_interval_seconds)
   if (config.enabled_item_count == null || config.max_items_per_run == null || !Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(perRun) || perRun <= 0 || !Number.isFinite(minSeconds) || minSeconds <= 0 || !Number.isFinite(maxSeconds) || maxSeconds < minSeconds) return null
+
+  if (config.collection_health) return <p className="market-capacity" role="status">
+    当前启用 {count} 件；当前策略单轮上限 {perRun} 件。实际共享上限以最近采集计划为准。按分层配额分配时，不能用全部商品数除以配置上限推算统一轮转时间；实际计划、覆盖率与能力提示见下方。
+  </p>
 
   const rounds = Math.ceil(count / perRun)
   const minMinutes = Math.ceil(rounds * minSeconds / 60)
@@ -115,7 +120,7 @@ function SchedulePanel({ config, onSave, pending }) {
   </Panel>
 }
 
-function CatalogPanel({ search, onSearchChange, items, count, page, onPageChange, onCreate, onToggle, pending, loading, error }) {
+function CatalogPanel({ search, onSearchChange, items, count, page, onPageChange, onCreate, onToggle, onPriority, pending, loading, error }) {
   const [form, setForm] = useState(EMPTY_ITEM)
   function submit(event) {
     event.preventDefault()
@@ -130,13 +135,17 @@ function CatalogPanel({ search, onSearchChange, items, count, page, onPageChange
     {error ? <EmptyState title="目录暂时无法加载" desc={error.message} /> : null}
     {!loading && !error && items.length === 0 ? <EmptyState title={search.trim() ? '没有找到目录物品' : '目录暂无物品'} desc="试试其他名称或物品 ID；目录缺失时可手动添加。" /> : null}
     {!loading && !error && items.length > 0 ? <div className="market-table-shell"><table className="market-table market-admin-table">
-      <thead><tr><th>物品</th><th>范围</th><th>状态</th><th>最近失败</th><th>操作</th></tr></thead>
+      <thead><tr><th>物品</th><th>范围</th><th>状态</th><th>采集层级</th><th>最近失败</th><th>操作</th></tr></thead>
       <tbody>{items.map(item => <tr key={`${item.item_id}-${item.scope}`}>
         <td data-label="物品"><strong className="market-item-name">{item.name}</strong><span className="market-item-detail">{item.category || '未分类'} · ID {item.item_id}</span></td>
         <td data-label="范围">{marketScopeLabel(item.scope)}</td>
         <td data-label="状态"><Pill tone={item.enabled ? 'success' : 'neutral'}>{item.enabled ? '已启用' : '已停用'}</Pill></td>
+        <td data-label="采集层级"><Pill tone={item.collection_priority ? 'warning' : 'neutral'}>{item.collection_priority ? '重点' : '普通'}</Pill></td>
         <td data-label="最近失败">{item.last_failure || item.last_error || '—'}</td>
-        <td data-label="操作"><button type="button" className="ghost-btn compact" aria-label={`${item.enabled ? '停用' : '启用'}${item.name}`} disabled={pending} onClick={() => onToggle(item)}>{item.enabled ? '停用' : '启用'}</button></td>
+        <td data-label="操作"><div className="market-admin-item-actions">
+          <button type="button" className="ghost-btn compact" aria-label={`${item.enabled ? '停用' : '启用'}${item.name}`} disabled={pending} onClick={() => onToggle(item)}>{item.enabled ? '停用' : '启用'}</button>
+          <button type="button" className="ghost-btn compact" aria-label={`${item.collection_priority ? '改为普通' : '设为重点'}采集：${item.name}`} disabled={pending} onClick={() => onPriority(item)}>{item.collection_priority ? '改为普通' : '设为重点'}</button>
+        </div></td>
       </tr>)}</tbody>
     </table></div> : null}
     {!loading && !error && (page > 1 || page * 50 < count) ? <div className="market-pagination">
@@ -202,6 +211,7 @@ export default function MarketAdminPage() {
   const configMutation = useMutation({ mutationFn: updateMarketConfig, ...mutationOptions('采集设置已保存', ['market-admin-config']) })
   const createMutation = useMutation({ mutationFn: createMarketItem, ...mutationOptions('采集物品已添加', ['market-admin-items', 'market-admin-config']) })
   const toggleMutation = useMutation({ mutationFn: item => updateMarketItem(item.item_id, { enabled: !item.enabled }), ...mutationOptions('物品状态已更新', ['market-admin-items', 'market-admin-config']) })
+  const priorityMutation = useMutation({ mutationFn: item => updateMarketItem(item.item_id, { collection_priority: !item.collection_priority }), ...mutationOptions('采集层级已更新', ['market-admin-items', 'market-admin-config']) })
   const runMutation = useMutation({ mutationFn: enqueueMarketRun, ...mutationOptions('采集任务已排队', ['market-admin-runs']) })
 
   return <div className="page-stack market-page market-admin-page">
@@ -212,7 +222,8 @@ export default function MarketAdminPage() {
     {!denied && configQuery.isError ? <EmptyState title="采集配置暂时无法加载" desc={configQuery.error.message} /> : null}
     {!denied && configQuery.isSuccess ? <>
       <SchedulePanel config={configQuery.data} onSave={payload => configMutation.mutate(payload)} pending={configMutation.isPending || writeDenied} />
-      <CatalogPanel search={itemSearch} onSearchChange={setItemSearch} items={itemsQuery.data?.results || []} count={itemsQuery.data?.count || 0} page={itemPage} onPageChange={setItemPage} onCreate={(payload, done) => createMutation.mutate(payload, { onSuccess: done })} onToggle={item => toggleMutation.mutate(item)} pending={createMutation.isPending || toggleMutation.isPending || writeDenied} loading={itemsQuery.isPending} error={itemsQuery.error} />
+      <CollectionHealthPanel health={configQuery.data.collection_health} formatTime={formatEpoch} />
+      <CatalogPanel search={itemSearch} onSearchChange={setItemSearch} items={itemsQuery.data?.results || []} count={itemsQuery.data?.count || 0} page={itemPage} onPageChange={setItemPage} onCreate={(payload, done) => createMutation.mutate(payload, { onSuccess: done })} onToggle={item => toggleMutation.mutate(item)} onPriority={item => priorityMutation.mutate(item)} pending={createMutation.isPending || toggleMutation.isPending || priorityMutation.isPending || writeDenied} loading={itemsQuery.isPending} error={itemsQuery.error} />
       {runsQuery.isPending ? <LoadingBar /> : null}
       {runsQuery.isError ? <EmptyState title="任务记录暂时无法加载" desc={runsQuery.error.message} /> : null}
       {runsQuery.isSuccess ? <RunsPanel runs={runsQuery.data.results || []} lastSuccessAt={configQuery.data.last_success_at} onRefresh={() => runsQuery.refetch()} onRun={() => runMutation.mutate()} pending={runMutation.isPending || writeDenied} /> : null}

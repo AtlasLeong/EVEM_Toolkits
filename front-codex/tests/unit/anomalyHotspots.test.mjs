@@ -56,16 +56,70 @@ test('system ranking is exact descending count then ID with default top ten and 
   assert.deepEqual(use('rankAnomalySystems', [...rows].reverse()), result)
 })
 
-test('region ranking sums only supplied membership, excludes unknowns and preserves members', () => {
+test('region ranking uses peak value, then positive hotspot membership, never summed levels', () => {
   const rows = [row(4, 80), row(2, 30, { region_id: 20, region_name: '乙域' }),
     row(1, 50, { region_id: 10, region_name: '甲域' }), row(3, 20, { region_id: 20, region_name: '乙域' }), row(5, 0)]
   const result = use('rankAnomalyRegions', rows)
-  assert.deepEqual(result.regions.map(item => [item.region_id, item.destroy_num]), [[10, 50], [20, 50]])
+  assert.deepEqual(result.regions.map(item => [item.region_id, item.peak_value, item.hotspotSystemCount]), [[10, 50, 1], [20, 30, 2]])
   assert.deepEqual(result.regions[1].memberSystemIds, [2, 3])
   assert.equal(result.unknownRegionSystems, 2)
-  assert.equal(result.unknownRegionDestroyCount, 80)
   assert.deepEqual(use('rankAnomalyRegions', [...rows].reverse()), result)
   assert.equal(use('rankAnomalyRegions', [row(1, 2, { region_id: 10 })]).regions[0].displayName, '星域 10')
+})
+
+const activityMetric = { kind: 'activity_level', range_version: 1 }
+const currentSnapshot = (systems = [], overrides = {}) => snapshot(systems, { version: 2, metric: activityMetric, ...overrides })
+
+test('explicit v2 metrics bound current levels but preserve historical raw data without inference', () => {
+  const current = currentSnapshot([row(1, 0), row(2, 5)])
+  assert.equal(use('validateAnomalySnapshot', current), current)
+  assert.equal(use('isAnomalyActivitySnapshot', current), true)
+  assert.equal(use('isAnomalyActivitySnapshot', snapshot([row(1, 1)])), false)
+  const legacy = currentSnapshot([row(1, 155)], { metric: { kind: 'legacy_unclassified', range_version: null } })
+  assert.equal(use('validateAnomalySnapshot', legacy), legacy)
+  assert.equal(use('isAnomalyActivitySnapshot', legacy), false)
+  for (const invalid of [currentSnapshot([row(1, 6)]), currentSnapshot([row(1, -1)]),
+    currentSnapshot([], { metric: { kind: 'activity_level', range_version: 2 } }),
+    currentSnapshot([], { metric: { kind: 'legacy_unclassified', range_version: 1 } }),
+    currentSnapshot([], { metric: { ...activityMetric, arbitrary: true } }),
+    snapshot([], { metric: activityMetric }), currentSnapshot([], { statistics_window: '24h' })]) {
+    assert.throws(() => use('validateAnomalySnapshot', invalid), /异常热点数据无效/)
+  }
+})
+
+test('unavailable fallback retains matching version, metric, raw rows and original success time', () => {
+  const previous = currentSnapshot([row(1, 4)])
+  const unavailable = currentSnapshot([], { collected_at_ms: null, last_attempt_at_ms: 2000,
+    status: 'unavailable', metric: { kind: 'legacy_unclassified', range_version: null } })
+  const retained = use('retainLastGoodAnomalySnapshot', previous, unavailable)
+  assert.deepEqual(retained.metric, activityMetric)
+  assert.equal(retained.version, 2)
+  assert.equal(retained.collected_at_ms, 1000)
+  assert.equal(retained.last_attempt_at_ms, 2000)
+  assert.equal(retained.systems, previous.systems)
+  assert.equal(use('validateAnomalySnapshot', retained), retained)
+  const legacyRetained = use('retainLastGoodAnomalySnapshot', snapshot([row(1, 155)]), unavailable)
+  assert.equal(legacyRetained.version, 1)
+  assert.equal(Object.hasOwn(legacyRetained, 'metric'), false)
+  assert.equal(use('validateAnomalySnapshot', legacyRetained), legacyRetained)
+})
+
+test('heat mapping requires explicit activity metric even for small legacy values', () => {
+  const rows = [row(1, 1), row(2, 5), row(3, 0)]
+  const map = new Map(rows.map(item => [item.solar_system_id, { px: 10, py: 20 }]))
+  assert.ok(use('mappedAnomalyPoints', rows, map).every(point => point.activity_level == null))
+  assert.deepEqual(use('mappedAnomalyPoints', rows, map, activityMetric).map(point => point.activity_level), [1, 5, 0])
+  const arcs = []
+  const ctx = { save() {}, restore() {}, beginPath() {}, fill() {}, arc() { arcs.push(true) } }
+  use('drawAnomalyHeat', ctx, use('mappedAnomalyPoints', rows, map), { zoom: 1, panX: 0, panY: 0 }, { width: 100, height: 100 })
+  assert.equal(arcs.length, 0, 'legacy values must not acquire guessed level colors')
+})
+
+test('equal-peak region ordering uses positive hotspot member count then stable ID', () => {
+  const result = use('rankAnomalyRegions', [row(1, 5, { region_id: 30 }), row(2, 5, { region_id: 20 }),
+    row(3, 1, { region_id: 20 }), row(4, 0, { region_id: 30 }), row(5, 5, { region_id: 10 }), row(6, 2, { region_id: 10 })])
+  assert.deepEqual(result.regions.map(item => [item.region_id, item.peak_value, item.hotspotSystemCount]), [[10, 5, 2], [20, 5, 2], [30, 5, 1]])
+  assert.deepEqual(result.regions[2].memberSystemIds, [1])
 })
 
 test('failed refresh keeps the last-good rows and time while explicitly reporting failure', () => {
@@ -167,9 +221,9 @@ test('heat circles cull with their full radius and reset alpha before route and 
     beginPath() {}, arc(x, y, radius) { calls.push({ x, y, radius, alpha: this.globalAlpha, color: this.fillStyle }) }, fill() {},
   }
   use('drawAnomalyHeat', ctx, [
-    { px: -15, py: 20, destroy_num: 3 },
-    { px: -80, py: 20, destroy_num: 3 },
-    { px: 20, py: 20, destroy_num: 0 },
+    { px: -15, py: 20, destroy_num: 3, activity_level: 3 },
+    { px: -80, py: 20, destroy_num: 3, activity_level: 3 },
+    { px: 20, py: 20, destroy_num: 0, activity_level: 0 },
   ], { zoom: 2, panX: 20, panY: 0 }, { width: 300, height: 200 })
   const arcs = calls.filter(item => typeof item === 'object')
   assert.ok(arcs.length > 0, 'a circle intersecting the edge is visible')
@@ -185,7 +239,7 @@ test('direct heat circles use all five actual colors with constant CSS-pixel rad
     const arcs = []
     const ctx = { globalAlpha: 1, globalCompositeOperation: 'source-over', save() {}, restore() {}, beginPath() {}, fill() {},
       arc(x, y, radius) { arcs.push({ x, y, radius, alpha: this.globalAlpha, color: this.fillStyle, composite: this.globalCompositeOperation }) } }
-    const points = heatBands.map(band => ({ px: 50, py: 50, destroy_num: band.level }))
+    const points = heatBands.map(band => ({ px: 50, py: 50, destroy_num: band.level, activity_level: band.level }))
     use('drawAnomalyHeat', ctx, [...points, { px: 50, py: 50, destroy_num: 6 }],
       { zoom, panX: 0, panY: 0 }, { width: 300, height: 200 })
     assert.equal(arcs.length, 10)
@@ -227,7 +281,7 @@ test('DPR-aware heat sprites preserve five colors and per-point overlap while re
   const ctx = { canvas: { ownerDocument }, globalAlpha: 1, globalCompositeOperation: 'source-over', save() {}, restore() {},
     drawImage(...args) { images.push(args); composites.push(this.globalCompositeOperation) }, beginPath() { assert.fail('heat paths should be cached') },
     arc() { assert.fail('heat arcs should be cached') }, fill() {} }
-  const points = [1, 2, 3, 4, 5].map(destroy_num => ({ px: 40, py: 50, destroy_num }))
+  const points = [1, 2, 3, 4, 5].map(destroy_num => ({ px: 40, py: 50, destroy_num, activity_level: destroy_num }))
   points.push({ px: -1000, py: 50, destroy_num: 5 }, { px: 40, py: 50, destroy_num: 6 })
   const view = { zoom: .5, panX: 0, panY: 0 }, viewport = { width: 300, height: 200, ratio: 2 }
   use('drawAnomalyHeat', ctx, points, view, viewport)

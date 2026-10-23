@@ -16,6 +16,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from Authentication.permissions import IsAllowlistedViewer
 
 from .batch_policy import batch_policy
+from .collection_health import collection_health
 from .models import CollectionRun, MarketConfig, MarketConfigAudit, MarketItem, PriceSnapshot, epoch_ms
 from .serializers import (
     ConfigPatchSerializer, ItemCreateSerializer, ItemPatchSerializer, admin_item_payload,
@@ -461,6 +462,7 @@ def config_payload(config):
         **batch_policy(config),
         'last_success_at': utc_iso(last_success.finished_at_ms) if last_success else None,
         'last_run_failure_count': last_run.failure_count if last_run else 0,
+        'collection_health': collection_health(config),
     }
 
 

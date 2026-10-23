@@ -1,7 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { QueryClient, QueryObserver } from '@tanstack/react-query'
-import { marketBookEmptyLabel, marketReadOptions } from '../../src/utils/marketDataState.js'
+import { marketBookEmptyLabel, marketReadOptions, marketSamplingLabel } from '../../src/utils/marketDataState.js'
+
+test('tier planning labels require explicit matching metadata and never redefine quote freshness', () => {
+  assert.equal(marketSamplingLabel({ collection_tier: 'priority', collection_target_ms: 7_200_000 }), '重点 · 2 小时采样目标（非保证）')
+  assert.equal(marketSamplingLabel({ collection_tier: 'ordinary', collection_target_ms: 21_600_000 }), '普通 · 6 小时采样目标（非保证）')
+  assert.equal(marketSamplingLabel({}), null)
+  assert.equal(marketSamplingLabel({ collection_tier: 'ordinary', collection_target_ms: 7_200_000 }), null)
+  assert.equal(marketSamplingLabel({ collection_tier: '/private/secret', collection_target_ms: 21_600_000 }), null)
+})
 
 for (const nextKey of [['market-series', '1002', 1], ['market-series', '1001', 7], ['market-items', '', 'minerals', 1]]) {
   test(`a pending ${JSON.stringify(nextKey)} cannot inherit another key's data`, async () => {

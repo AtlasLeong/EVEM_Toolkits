@@ -17,10 +17,10 @@ if (existsSync(entry)) {
   vm.runInContext(compiled.outputFiles[0].text, context)
   Component = context.hotspotPanel.default
 }
-const snapshot = { version: 1, collected_at_ms: Date.UTC(2026, 9, 13, 15, 5, 2),
+const snapshot = { version: 2, metric: { kind: 'activity_level', range_version: 1 }, collected_at_ms: Date.UTC(2026, 9, 13, 15, 5, 2),
   last_attempt_at_ms: Date.UTC(2026, 9, 13, 15, 5, 2), status: 'ok', statistics_window: null,
   systems: [
-    { solar_system_id: 1, destroy_num: 155, system_name: '阿尔法', region_id: 10, region_name: '甲域' },
+    { solar_system_id: 1, destroy_num: 4, system_name: '阿尔法', region_id: 10, region_name: '甲域' },
     { solar_system_id: 2, destroy_num: 0, system_name: null, region_id: null, region_name: null },
   ] }
 function render(props) {
@@ -41,15 +41,29 @@ test('the panel export is memoized so unrelated camera renders can be skipped', 
   assert.equal(Component.$$typeof, Symbol.for('react.memo'))
 })
 
-test('the panel renders exact ranked counts, Shanghai time and the unconfirmed statistics window', () => {
+test('the current panel labels grade and client range, never a precise destruction count', () => {
   const html = render({ snapshot, canLocateSystem: id => id === 1 })
   assert.match(html, /阿尔法/)
-  assert.match(html, /155/)
+  assert.match(html, /4级/)
+  assert.match(html, /151–200/)
+  assert.match(html, /0级/)
   assert.match(html, /星系 2/)
   assert.match(html, /2026\/10\/13 23:05:02/)
   assert.match(html, /统计时间范围尚未确认/)
   assert.match(html, /暂无地图坐标/)
   assert.doesNotMatch(html, /最近 24 小时|最近 1 小时/)
+  assert.doesNotMatch(html, /<small>摧毁<\/small>|异常摧毁 4/)
+})
+
+test('legacy small and large values stay historical raw data without a guessed grade legend', () => {
+  const { metric, ...legacy } = snapshot
+  legacy.version = 1
+  legacy.systems = snapshot.systems.map((row, index) => ({ ...row, destroy_num: index ? 155 : 1 }))
+  const html = render({ snapshot: legacy })
+  assert.match(html, /历史原始值/)
+  assert.match(html, /口径未确认/)
+  assert.match(html, /155/)
+  assert.doesNotMatch(html, /data-level=|1级|155次|<small>摧毁<\/small>/)
 })
 
 test('the panel legend renders five labeled levels and matching palette ranges rather than legacy count thresholds', () => {
@@ -91,23 +105,36 @@ test('the initial no-data state never implies a measured zero', () => {
   assert.doesNotMatch(html, /阿尔法/)
 })
 
-const changes = { version: 1, status: 'ok', statistics_window: null,
+const changes = { version: 2, metric: { kind: 'activity_level', range_version: 1 }, status: 'ok', statistics_window: null,
   interval: { id: 2, start_at_ms: Date.UTC(2026, 9, 15, 1), end_at_ms: Date.UTC(2026, 9, 15, 1, 25), elapsed_ms: 25 * 60_000 },
   coverage: { comparable: 1, new: 2, missing: 3, negative: 4, unchanged: 0 }, intervals: [], next_before: null,
-  systems: [{ solar_system_id: 42, previous_destroy_num: 30, destroy_num: 70, delta: 40, system_name: '私密星系', region_id: null, region_name: null }] }
+  systems: [{ solar_system_id: 42, previous_destroy_num: 1, destroy_num: 4, delta: 3, system_name: '私密星系', region_id: null, region_name: null }] }
 test('unauthorized panel never renders supplied private rows or change controls', () => {
   const html = render({ snapshot, changes: { allowed: false, mode: 'changes', data: changes } })
   assert.doesNotMatch(html, /私密星系|犁地变化榜|变化排名/)
 })
-test('authorized change panel shows positive difference, real gap and exclusions', () => {
+test('authorized change panel shows grade increases, actual gap and non-count caveats', () => {
   const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data: changes }, allowLocate: false })
   assert.match(html, /私密星系/)
-  assert.match(html, /\+40/)
-  assert.match(html, /30 → 70/)
+  assert.match(html, /升3级/)
+  assert.match(html, /1级 → 4级/)
   assert.match(html, /25 分钟/)
   assert.match(html, /新增 2.*缺失 3.*回落 4/)
-  assert.match(html, /快照净增量/)
+  assert.match(html, /等级未变不代表没有活动/)
+  assert.doesNotMatch(html, /净增量|新增摧毁/)
   assert.doesNotMatch(html, /定位星系/)
+})
+
+test('legacy and mixed changes expose interval and history but cannot present count-difference ranks', () => {
+  const incompatible = { ...changes, status: 'incomparable', metric: { kind: 'legacy_unclassified', range_version: null }, systems: [] }
+  const { metric, ...legacy } = changes
+  for (const data of [incompatible, { ...legacy, version: 1 }]) {
+    const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data } })
+    assert.match(html, /口径不兼容/)
+    assert.match(html, /实际间隔 25 分钟/)
+    assert.match(html, /变化榜历史区间/)
+    assert.doesNotMatch(html, /私密星系|升3级/)
+  }
 })
 test('baseline change panel waits for the second success instead of showing a zero', () => {
   const html = render({ snapshot, changes: { allowed: true, mode: 'changes', data: { ...changes, status: 'baseline', interval: null, systems: [] } } })

@@ -16,6 +16,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from AnomalyHotspots.history import record_success, record_attempt
 from AnomalyHotspots.snapshot import write_success
+from AnomalyHotspots.tests.test_metric_contract import legacy_sample
 
 
 class ControlCenterTests(TestCase):
@@ -221,19 +222,21 @@ class ControlCenterTests(TestCase):
         for path in ['grants/', 'audit/']:
             self.assertEqual(self.client.get('/api/control-center/' + path + '?before_id=-1').status_code, 400)
 
-    def test_private_changes_preserve_signed_counts_and_metadata(self):
+    def test_private_changes_preserve_signed_grade_movement_and_metadata(self):
         self.auth(self.owner)
         with tempfile.TemporaryDirectory() as directory:
             Path(directory).chmod(0o750)
             now = int(time.time() * 1000)
-            record_success(directory, [{'solar_system_id': 1, 'destroy_num': 10}, {'solar_system_id': 2, 'destroy_num': 8}], now_ms=now - 600000)
-            record_success(directory, [{'solar_system_id': 1, 'destroy_num': 25}, {'solar_system_id': 2, 'destroy_num': 3}], now_ms=now)
+            record_success(directory, [{'solar_system_id': 1, 'destroy_num': 0}, {'solar_system_id': 2, 'destroy_num': 5}], now_ms=now - 600000)
+            record_success(directory, [{'solar_system_id': 1, 'destroy_num': 5}, {'solar_system_id': 2, 'destroy_num': 0}], now_ms=now)
             with override_settings(ANOMALY_HISTORY_DIR=directory):
                 response = self.client.get('/api/anomaly-hotspots/changes/')
             self.assertEqual(response.status_code, 200)
             body = response.json()
             self.assertEqual(body['interval']['elapsed_ms'], 600000)
-            self.assertEqual([row['delta'] for row in body['systems']], [15, -5])
+            self.assertEqual([row['delta'] for row in body['systems']], [5, -5])
+            self.assertEqual(body['version'], 2)
+            self.assertEqual(body['metric'], {'kind': 'activity_level', 'range_version': 1})
             self.assertEqual(body['systems'][0]['system_name'], None)
             self.assertEqual(body['coverage']['negative'], 1)
             self.assertIsNone(body['statistics_window'])
@@ -270,11 +273,12 @@ class ControlCenterTests(TestCase):
         # Installed-app checks still deny links to unavailable modules.
         self.assertFalse({row['key']: row for row in self.client.get('/api/control-center/overview/').json()['modules']}['license']['allowed'])
 
-    def test_public_snapshot_contract_not_changed(self):
+    def test_public_snapshot_contract_has_explicit_unknown_metric_without_private_data(self):
         self.client.credentials()
         response = self.client.get('/api/anomaly-hotspots/')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.json()), {'version', 'collected_at_ms', 'last_attempt_at_ms', 'status', 'systems', 'statistics_window'})
+        self.assertEqual(set(response.json()), {'version', 'collected_at_ms', 'last_attempt_at_ms', 'status', 'systems', 'statistics_window', 'metric'})
+        self.assertEqual(response.json()['metric'], {'kind': 'legacy_unclassified', 'range_version': None})
         self.assertEqual(response['Cache-Control'], 'no-store')
 
     @patch('rest_framework.throttling.ScopedRateThrottle.THROTTLE_RATES', {'control_center_access': '1/hour'})
@@ -321,7 +325,7 @@ class ControlCenterTests(TestCase):
         self.auth(self.owner)
         with tempfile.TemporaryDirectory() as directory, override_settings(ANOMALY_HISTORY_DIR=directory):
             Path(directory).chmod(0o750)
-            record_success(directory, [{'solar_system_id': 1, 'destroy_num': 10}])
+            record_success(directory, [{'solar_system_id': 1, 'destroy_num': 5}])
             response = self.client.get('/api/anomaly-hotspots/changes/')
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()['status'], 'baseline')
@@ -338,7 +342,7 @@ class ControlCenterTests(TestCase):
             history = Path(directory, 'history')
             history.mkdir(mode=0o750)
             now = int(time.time() * 1000)
-            rows = [{'solar_system_id': 1, 'destroy_num': 10}]
+            rows = [{'solar_system_id': 1, 'destroy_num': 5}]
             write_success(snapshot, rows, now_ms=now)
             record_success(history, rows, now_ms=now - 600000)
             record_success(history, rows, now_ms=now)
@@ -353,6 +357,34 @@ class ControlCenterTests(TestCase):
             self.assertEqual(body['attempts'][0]['status'], 'rate_limited')
             self.assertEqual(body['latest_interval']['elapsed_ms'], 600000)
             self.assertNotIn(directory, response.content.decode())
+
+    def test_private_legacy_and_mixed_intervals_are_explicitly_incomparable(self):
+        self.auth(self.owner)
+        with tempfile.TemporaryDirectory() as directory, override_settings(ANOMALY_HISTORY_DIR=directory):
+            parent = Path(directory)
+            parent.chmod(0o750)
+            now = int(time.time() * 1000)
+            entries = []
+            legacy_sample(parent, now - 1200000, 155, entries)
+            legacy_sample(parent, now - 600000, 1, entries)
+            record_success(parent, [{'solar_system_id': 30001211, 'destroy_num': 5}], now_ms=now)
+            for selected in (now - 600000, now):
+                response = self.client.get('/api/anomaly-hotspots/changes/', {'interval': selected, 'limit': 1})
+                self.assertEqual(response.status_code, 200)
+                body = response.json()
+                self.assertEqual(body['version'], 2)
+                self.assertEqual(body['metric'], {'kind': 'legacy_unclassified', 'range_version': None})
+                self.assertEqual(body['status'], 'incomparable')
+                self.assertEqual(body['systems'], [])
+                self.assertEqual(body['interval']['id'], selected)
+                self.assertEqual(body['interval']['elapsed_ms'], 600000)
+                self.assertTrue(body['intervals'])
+                self.assertNotIn(directory, response.content.decode())
+                self.private_headers(response)
+            self.auth(self.ordinary)
+            denied = self.client.get('/api/anomaly-hotspots/changes/')
+            self.assertEqual(denied.status_code, 403)
+            self.private_headers(denied)
 
     def test_no_management_read_changes_killboard_flags_or_account_roles(self):
         self.auth(self.owner)

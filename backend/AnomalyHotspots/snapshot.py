@@ -6,13 +6,15 @@ import stat
 import tempfile
 import time
 
-from .validation import validate_rows, AnomalyValidationError, MAX_SAFE_INTEGER
+from .validation import AnomalyValidationError, MAX_SAFE_INTEGER
+from .metric import activity_metric, legacy_metric, validate_metric, validate_metric_rows
 
 MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
 STATUSES = frozenset({'ok', 'unavailable', 'unauthorized', 'rate_limited', 'network_error',
                       'malformed', 'budget_exhausted', 'lease_lost', 'configuration_error',
                       'service_rejected', 'account_busy'})
-KEYS = frozenset({'version', 'collected_at_ms', 'last_attempt_at_ms', 'status', 'systems', 'statistics_window'})
+LEGACY_KEYS = frozenset({'version', 'collected_at_ms', 'last_attempt_at_ms', 'status', 'systems', 'statistics_window'})
+KEYS = LEGACY_KEYS | {'metric'}
 
 
 class SnapshotError(Exception):
@@ -21,8 +23,9 @@ class SnapshotError(Exception):
 
 
 def unavailable():
-    return {'version': 1, 'collected_at_ms': None, 'last_attempt_at_ms': None,
-            'status': 'unavailable', 'systems': [], 'statistics_window': None}
+    return {'version': 2, 'collected_at_ms': None, 'last_attempt_at_ms': None,
+            'status': 'unavailable', 'systems': [], 'statistics_window': None,
+            'metric': legacy_metric()}
 
 
 def _timestamp(value, nullable=False):
@@ -33,16 +36,19 @@ def _timestamp(value, nullable=False):
 
 def validate_snapshot(value):
     try:
-        if (not isinstance(value, dict) or set(value) != KEYS or type(value['version']) is not int
-                or value['version'] != 1 or value['statistics_window'] is not None
+        if (not isinstance(value, dict) or type(value['version']) is not int
+                or value['version'] not in (1, 2)
+                or set(value) != (LEGACY_KEYS if value['version'] == 1 else KEYS)
+                or value['statistics_window'] is not None
                 or value['status'] not in STATUSES): raise SnapshotError()
+        metric = legacy_metric() if value['version'] == 1 else validate_metric(value['metric'])
         collected = _timestamp(value['collected_at_ms'], True)
         attempted = _timestamp(value['last_attempt_at_ms'], True)
-        rows = validate_rows(value['systems'])
+        rows = validate_metric_rows(value['systems'], metric)
         if (collected is None and rows or value['status'] == 'ok' and collected is None
                 or collected is not None and (attempted is None or attempted < collected)):
             raise SnapshotError()
-        return {**value, 'systems': rows}
+        return {**value, 'version': 2, 'systems': rows, 'metric': metric}
     except (KeyError, TypeError, AnomalyValidationError):
         raise SnapshotError() from None
 
@@ -132,8 +138,9 @@ def _write(path, value):
 
 def write_success(path, rows, *, now_ms=None):
     now = _timestamp(int(time.time() * 1000) if now_ms is None else now_ms)
-    _write(path, {'version': 1, 'collected_at_ms': now, 'last_attempt_at_ms': now,
-                  'status': 'ok', 'systems': rows, 'statistics_window': None})
+    _write(path, {'version': 2, 'collected_at_ms': now, 'last_attempt_at_ms': now,
+                  'status': 'ok', 'systems': rows, 'statistics_window': None,
+                  'metric': activity_metric()})
 
 
 def write_failure(path, status, *, now_ms=None):

@@ -19,15 +19,31 @@ const compareCountAndId = (idKey) => (left, right) => right.destroy_num - left.d
 const displayName = (name, fallback) => typeof name === 'string' && name.trim() ? name.trim() : fallback
 let updatedAtFormatter
 
+export function isAnomalyActivityMetric(metric) {
+  return exactKeys(metric, ['kind', 'range_version']) && metric.kind === 'activity_level' && metric.range_version === 1
+}
+
+export function validAnomalyMetric(metric) {
+  return isAnomalyActivityMetric(metric) || exactKeys(metric, ['kind', 'range_version'])
+    && metric.kind === 'legacy_unclassified' && metric.range_version === null
+}
+
+export function isAnomalyActivitySnapshot(snapshot) {
+  return snapshot?.version === 2 && isAnomalyActivityMetric(snapshot.metric)
+}
+
 export function validateAnomalySnapshot(value) {
   const invalid = () => { throw new Error('异常热点数据无效') }
-  if (!exactKeys(value, SNAPSHOT_KEYS) || value.version !== 1 || value.statistics_window !== null
+  const keys = value?.version === 2 ? [...SNAPSHOT_KEYS, 'metric'] : SNAPSHOT_KEYS
+  if (!exactKeys(value, keys) || ![1, 2].includes(value.version) || value.statistics_window !== null
+    || value.version === 2 && !validAnomalyMetric(value.metric)
     || !STATUSES.has(value.status) || !timestamp(value.collected_at_ms) || !timestamp(value.last_attempt_at_ms)
     || !Array.isArray(value.systems) || value.systems.length > MAX_SYSTEMS) invalid()
   const seen = new Set()
   let total = 0
   for (const row of value.systems) {
     if (!exactKeys(row, ROW_KEYS) || !integer(row.solar_system_id, 1) || !integer(row.destroy_num)
+      || isAnomalyActivitySnapshot(value) && row.destroy_num > 5
       || seen.has(row.solar_system_id) || !nullableName(row.system_name) || !nullableName(row.region_name)
       || !(row.region_id === null || integer(row.region_id, 1))) invalid()
     seen.add(row.solar_system_id)
@@ -43,7 +59,7 @@ export function retainLastGoodAnomalySnapshot(previous, next) {
   if (next.collected_at_ms !== null || previous?.collected_at_ms == null) return next
   // A missing/unreadable server file produces a logical unavailable sentinel.
   // Do not confuse that with a successful measured empty snapshot.
-  return { ...next, collected_at_ms: previous.collected_at_ms, systems: previous.systems,
+  return { ...previous, status: next.status,
     last_attempt_at_ms: Math.max(previous.last_attempt_at_ms, next.last_attempt_at_ms || 0) }
 }
 
@@ -56,28 +72,30 @@ export function rankAnomalySystems(rows, limit = 10) {
 export function rankAnomalyRegions(rows, limit = 10) {
   const grouped = new Map()
   let unknownRegionSystems = 0
-  let unknownRegionDestroyCount = 0
   // ID order makes member lists and name fallback deterministic across refreshes.
   for (const row of [...(rows || [])].sort((a, b) => a.solar_system_id - b.solar_system_id)) {
     if (!integer(row.region_id, 1)) {
       unknownRegionSystems += 1
-      unknownRegionDestroyCount += row.destroy_num
       continue
     }
     let region = grouped.get(row.region_id)
     if (!region) {
-      region = { region_id: row.region_id, region_name: null, destroy_num: 0, memberSystemIds: [] }
+      region = { region_id: row.region_id, region_name: null, peak_value: 0, hotspotSystemCount: 0, memberSystemIds: [] }
       grouped.set(row.region_id, region)
     }
     if (!region.region_name && row.region_name?.trim()) region.region_name = row.region_name.trim()
-    region.destroy_num += row.destroy_num
-    region.memberSystemIds.push(row.solar_system_id)
+    region.peak_value = Math.max(region.peak_value, row.destroy_num)
+    if (row.destroy_num > 0) {
+      region.hotspotSystemCount += 1
+      region.memberSystemIds.push(row.solar_system_id)
+    }
   }
   return {
-    regions: [...grouped.values()].sort(compareCountAndId('region_id')).slice(0, limit).map(region => ({
+    regions: [...grouped.values()].sort((a, b) => b.peak_value - a.peak_value
+      || b.hotspotSystemCount - a.hotspotSystemCount || a.region_id - b.region_id).slice(0, limit).map(region => ({
       ...region, displayName: displayName(region.region_name, `星域 ${region.region_id}`),
     })),
-    unknownRegionSystems, unknownRegionDestroyCount,
+    unknownRegionSystems,
   }
 }
 
@@ -87,7 +105,9 @@ export function anomalySnapshotState(snapshot, { now = Date.now(), requestFailed
   const status = snapshot?.status || 'unavailable'
   const failed = requestFailed || status !== 'ok'
   let label = requestFailed ? '热点更新失败' : STATUS_LABELS[status]
-  if (!failed) label = snapshot.systems.length ? '异常摧毁快照' : '当前快照无异常摧毁记录'
+  if (!failed) label = isAnomalyActivitySnapshot(snapshot)
+    ? snapshot.systems.length ? '异常热点等级快照' : '当前快照无异常热点记录'
+    : snapshot.systems.length ? '历史原始值 · 口径未确认' : '当前快照无异常摧毁记录'
   if (!hasSnapshot && loading && !requestFailed) label = '正在读取热点'
   return {
     hasSnapshot, stale,
@@ -127,11 +147,12 @@ export function anomalyHeatBand(level) {
   return ANOMALY_HEAT_BANDS[level - 1]
 }
 
-export function mappedAnomalyPoints(rows, systemMap) {
+export function mappedAnomalyPoints(rows, systemMap, metric = null) {
   return (rows || []).flatMap(row => {
     const system = systemMap?.get(row.solar_system_id) || systemMap?.get(String(row.solar_system_id))
     if (!Number.isFinite(system?.px) || !Number.isFinite(system?.py)) return []
-    return [{ ...row, px: system.px, py: system.py }]
+    return [{ ...row, px: system.px, py: system.py,
+      activity_level: isAnomalyActivityMetric(metric) ? row.destroy_num : null }]
   })
 }
 
@@ -192,7 +213,7 @@ export function drawAnomalyHeat(ctx, points, view, viewport) {
   ctx.save()
   const ratio = Number.isFinite(viewport.ratio) && viewport.ratio > 0 ? viewport.ratio : 1
   for (const point of points) {
-    const band = anomalyHeatBand(point.destroy_num)
+    const band = anomalyHeatBand(point.activity_level)
     if (!band) continue
     const screenX = point.px * view.zoom + view.panX
     const screenY = point.py * view.zoom + view.panY

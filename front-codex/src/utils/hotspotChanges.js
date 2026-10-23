@@ -1,3 +1,5 @@
+import { isAnomalyActivityMetric, validAnomalyMetric } from './anomalyHotspots.js'
+
 const invalid = () => { throw new Error('变化榜数据无效') }
 const integer = value => Number.isSafeInteger(value) && value >= 0
 const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
@@ -8,13 +10,20 @@ function validInterval(value) {
     && value.end_at_ms > value.start_at_ms && value.elapsed_ms === value.end_at_ms - value.start_at_ms
 }
 export function validateHotspotChanges(data) {
-  if (!exact(data, ['version', 'status', 'statistics_window', 'interval', 'coverage', 'systems', 'intervals', 'next_before'])
-    || data.version !== 1 || !['ok', 'baseline', 'unavailable'].includes(data.status) || data.statistics_window !== null
+  const keys = ['version', 'status', 'statistics_window', 'interval', 'coverage', 'systems', 'intervals', 'next_before']
+  if (data?.version === 2) keys.push('metric')
+  const comparable = data?.version === 2 && isAnomalyActivityMetric(data.metric)
+  if (!exact(data, keys) || ![1, 2].includes(data.version)
+    || !(data.version === 2 ? ['ok', 'baseline', 'unavailable', 'incomparable'] : ['ok', 'baseline', 'unavailable']).includes(data.status)
+    || data.version === 2 && (!validAnomalyMetric(data.metric) || data.status === 'ok' && !comparable)
+    || data.statistics_window !== null
     || !exact(data.coverage, ['comparable', 'new', 'missing', 'negative', 'unchanged'])
     || !Object.values(data.coverage).every(integer) || !Array.isArray(data.systems) || data.systems.length > 10_000
     || !Array.isArray(data.intervals) || data.intervals.length > 100 || !data.intervals.every(validInterval)
     || !(data.next_before === null || integer(data.next_before) && data.next_before > 0)
-    || (data.status === 'ok' ? !validInterval(data.interval) : data.interval !== null || data.systems.length !== 0)) invalid()
+    || (['ok', 'incomparable'].includes(data.status) ? !validInterval(data.interval) : data.interval !== null)
+    || data.status !== 'ok' && data.systems.length !== 0
+    || data.status === 'incomparable' && (comparable || Object.values(data.coverage).some(value => value !== 0))) invalid()
   const ids = new Set(), intervals = new Set()
   for (const item of data.intervals) {
     if (intervals.has(item.id)) invalid()
@@ -24,6 +33,7 @@ export function validateHotspotChanges(data) {
     if (!exact(row, ['solar_system_id', 'previous_destroy_num', 'destroy_num', 'delta', 'system_name', 'region_id', 'region_name'])
       || !integer(row.solar_system_id) || row.solar_system_id === 0 || ids.has(row.solar_system_id)
       || !integer(row.previous_destroy_num) || !integer(row.destroy_num) || !Number.isSafeInteger(row.delta)
+      || comparable && (row.previous_destroy_num > 5 || row.destroy_num > 5)
       || row.destroy_num - row.previous_destroy_num !== row.delta
       || !(row.region_id === null || integer(row.region_id) && row.region_id > 0)
       || !['system_name', 'region_name'].every(key => row[key] === null || typeof row[key] === 'string' && row[key].length <= 500)) invalid()
