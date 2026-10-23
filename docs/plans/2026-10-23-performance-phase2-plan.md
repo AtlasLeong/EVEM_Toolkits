@@ -92,7 +92,7 @@ Final CI still runs the complete main-browser, preview, tactical and MySQL gates
   Market specification review passed after fixing two presentation gaps: show
   public tier/target as a non-guarantee, and avoid estimating actual rotation
   from the configured cap when stored effective-plan evidence is available.
-- Root independently reran 287 Market/GameSessions/settings tests, 90 anomaly
+- Root independently reran 289 Market/GameSessions/settings tests, 90 anomaly
   tests (6 existing Windows/POSIX skips), 42 ControlCenter tests and clean Market
   migration drift. Focused Market browsers: 33 passed; hotspot reviewers ran
   44/31 focused browsers independently with no failures.
@@ -102,6 +102,13 @@ Final CI still runs the complete main-browser, preview, tactical and MySQL gates
   setting `ANOMALY_HISTORY_DIR` empty for both the web and collector runtimes
   disables history safely during an operational downgrade. Preserve the store;
   a compatible forward fix is required before enabling history again.
-- Full frontend units/build and full browser regression, final independent
-  Market quality review, PR/master CI and protected production acceptance are
-  release gates, not implied by the focused results above.
+- Market quality review found a concurrent-cohort age lookup failure; real DB
+  regressions proved the failure for tier/enable edits. Bounded one-row reads
+  now return unknown ages, without locks, retries or extra queries. Independent
+  quality re-review passed and the root reran the full 289-test suite.
+- Root full frontend units: 751 passed; production build/bundle budget passed.
+  Full main-browser run: 648 passed, plus both subsequently added display tests
+  passed in the 33-test focused market suite. Exact final-commit CI must run all
+  650 main-browser cases plus the unchanged preview/tactical/MySQL gates.
+- PR/master CI and protected production acceptance remain pending release
+  gates. No successful deployment is implied by local checks.
