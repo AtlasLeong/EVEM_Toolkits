@@ -1,4 +1,7 @@
-"""Offline history contracts; synthetic counts only, never game credentials."""
+"""Offline history contracts; explicit current grades, never game credentials.
+
+Actual legacy v1 numeric fixtures live in test_metric_contract and stay v1.
+"""
 import importlib
 import importlib.util
 import json
@@ -110,54 +113,55 @@ class HistoryTests(unittest.TestCase):
 
     def test_first_sample_is_baseline_not_invented_zero(self):
         self.assertEqual(self.api.read_changes(self.directory)['status'], 'unavailable')
-        self.record(1000, **{'1': 40})
+        self.record(1000, **{'1': 4})
         value = self.api.read_changes(self.directory)
-        self.assertEqual(value, {'version': 1, 'status': 'baseline', 'statistics_window': None,
+        self.assertEqual(value, {'version': 2, 'status': 'baseline', 'statistics_window': None,
+                                'metric': {'kind': 'activity_level', 'range_version': 1},
                                 'interval': None, 'coverage': {'comparable': 0, 'new': 0, 'missing': 0,
                                                             'negative': 0, 'unchanged': 0},
                                 'systems': [], 'intervals': [], 'next_before': None})
 
-    def test_signed_comparable_deltas_unknown_new_missing_and_true_elapsed(self):
-        self.record(1000, **{'1': 10, '2': 20, '3': 30, '4': 40})
+    def test_signed_comparable_grade_deltas_unknown_new_missing_and_true_elapsed(self):
+        self.record(1000, **{'1': 1, '2': 4, '3': 3, '4': 4})
         self.api.record_attempt(self.directory, 'rate_limited', now_ms=600000)
-        self.record(1201000, **{'1': 15, '2': 17, '3': 30, '5': 100})
+        self.record(1201000, **{'1': 4, '2': 1, '3': 3, '5': 5})
         value = self.api.read_changes(self.directory)
         self.assertEqual(value['interval'], {'id': 1201000, 'start_at_ms': 1000,
                                             'end_at_ms': 1201000, 'elapsed_ms': 1200000})
         self.assertEqual(value['coverage'], {'comparable': 3, 'new': 1, 'missing': 1,
                                             'negative': 1, 'unchanged': 1})
         self.assertEqual(value['systems'], [
-            {'solar_system_id': 1, 'previous_destroy_num': 10, 'destroy_num': 15, 'delta': 5},
-            {'solar_system_id': 2, 'previous_destroy_num': 20, 'destroy_num': 17, 'delta': -3},
-            {'solar_system_id': 3, 'previous_destroy_num': 30, 'destroy_num': 30, 'delta': 0}])
+            {'solar_system_id': 1, 'previous_destroy_num': 1, 'destroy_num': 4, 'delta': 3},
+            {'solar_system_id': 2, 'previous_destroy_num': 4, 'destroy_num': 1, 'delta': -3},
+            {'solar_system_id': 3, 'previous_destroy_num': 3, 'destroy_num': 3, 'delta': 0}])
         self.assertIsNone(value['statistics_window'])
 
-    def test_identical_later_counts_are_valid_interval_duplicate_is_idempotent(self):
-        self.record(1000, **{'1': 10})
+    def test_identical_later_grades_are_valid_interval_duplicate_is_idempotent(self):
+        self.record(1000, **{'1': 1})
         before = {path.name: path.read_bytes() for path in self.directory.iterdir()}
-        self.record(1000, **{'1': 10})
+        self.record(1000, **{'1': 1})
         self.assertEqual({path.name: path.read_bytes() for path in self.directory.iterdir()}, before)
-        self.record(2000, **{'1': 10})
+        self.record(2000, **{'1': 1})
         self.assertEqual(self.api.read_changes(self.directory)['coverage']['unchanged'], 1)
 
     def test_conflicting_or_out_of_order_sample_preserves_committed_history(self):
-        self.record(1000, **{'1': 10})
-        self.record(2000, **{'1': 20})
+        self.record(1000, **{'1': 1})
+        self.record(2000, **{'1': 2})
         before = {path.name: path.read_bytes() for path in self.directory.iterdir()}
-        for stamp, count in ((2000, 21), (500, 1), (1000, 10)):
+        for stamp, count in ((2000, 3), (500, 1), (1000, 1)):
             with self.subTest(stamp=stamp), self.assertRaises(self.api.HistoryError):
                 self.record(stamp, **{'1': count})
             self.assertEqual({path.name: path.read_bytes() for path in self.directory.iterdir()}, before)
 
     def test_interval_selection_and_bounded_older_pagination(self):
-        for stamp in range(1000, 7000, 1000): self.record(stamp, **{'1': stamp})
+        for stamp in range(1000, 7000, 1000): self.record(stamp, **{'1': stamp // 1000 - 1})
         value = self.api.read_changes(self.directory, limit=2)
         self.assertEqual([entry['id'] for entry in value['intervals']], [6000, 5000])
         self.assertEqual(value['next_before'], 5000)
         older = self.api.read_changes(self.directory, interval=3000, before=5000, limit=2)
         self.assertEqual([entry['id'] for entry in older['intervals']], [4000, 3000])
         self.assertEqual(older['interval']['id'], 3000)
-        self.assertEqual(older['systems'][0]['delta'], 1000)
+        self.assertEqual(older['systems'][0]['delta'], 1)
         for kwargs in ({'interval': True}, {'interval': '3000'}, {'before': -1},
                        {'limit': 0}, {'limit': 101}, {'limit': True}, {'interval': 9999}):
             with self.subTest(kwargs=kwargs), self.assertRaises(self.api.HistoryError):

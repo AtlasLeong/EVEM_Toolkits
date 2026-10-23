@@ -17,6 +17,26 @@ from GameSessions.coordination import provision
 
 
 class CommandTests(SimpleTestCase):
+    def test_current_grade_drift_is_malformed_and_preserves_last_good_metric(self):
+        from AnomalyHotspots.snapshot import write_success
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            if os.name == 'posix': parent.chmod(0o750)
+            snapshot, output = parent / 'snapshot.json', io.StringIO()
+            write_success(snapshot, [{'solar_system_id': 1, 'destroy_num': 5}], now_ms=1000)
+            with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'A', 0, 1)), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once',
+                          return_value=[{'solar_system_id': 1, 'destroy_num': 6}]) as collect:
+                call_command('anomaly_collect', stdout=output)
+            collect.assert_called_once()
+            value = read_snapshot(snapshot)
+            self.assertEqual(value['status'], 'malformed')
+            self.assertEqual(value['systems'], [{'solar_system_id': 1, 'destroy_num': 5}])
+            self.assertEqual(value['collected_at_ms'], 1000)
+            self.assertEqual(value['metric'], {'kind': 'activity_level', 'range_version': 1})
+            self.assertEqual(json.loads(output.getvalue())['status'], 'malformed')
+
     def test_history_uses_same_success_time_and_failed_pass_keeps_baseline(self):
         from AnomalyHotspots.history import read_changes, read_attempts
         with tempfile.TemporaryDirectory() as directory:
@@ -29,8 +49,8 @@ class CommandTests(SimpleTestCase):
                     patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'B', 1, 7)), \
                     patch('time.time', side_effect=[1, 601, 1201]), \
                     patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', side_effect=[
-                        [{'solar_system_id': 1, 'destroy_num': 10}], CollectorError('rate_limited'),
-                        [{'solar_system_id': 1, 'destroy_num': 17}]]) as collect:
+                        [{'solar_system_id': 1, 'destroy_num': 1}], CollectorError('rate_limited'),
+                        [{'solar_system_id': 1, 'destroy_num': 5}]]) as collect:
                 for _ in range(3): call_command('anomaly_collect', stdout=output)
             self.assertEqual(collect.call_count, 3)
             changes = read_changes(history, now_ms=1201000)
@@ -38,7 +58,7 @@ class CommandTests(SimpleTestCase):
             self.assertEqual(changes['interval']['start_at_ms'], 1000)
             self.assertEqual(changes['interval']['end_at_ms'], read_snapshot(snapshot)['collected_at_ms'])
             self.assertEqual(changes['interval']['elapsed_ms'], 1200000)
-            self.assertEqual(changes['systems'][0]['delta'], 7)
+            self.assertEqual(changes['systems'][0]['delta'], 4)
             self.assertEqual([item['status'] for item in read_attempts(history)], ['ok', 'rate_limited', 'ok'])
             journal = [json.loads(line) for line in output.getvalue().splitlines()]
             self.assertEqual([item['history_status'] for item in journal], ['ok', 'ok', 'ok'])
@@ -51,12 +71,12 @@ class CommandTests(SimpleTestCase):
             output, snapshot = io.StringIO(), parent / 'snapshot.json'
             with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot), ANOMALY_HISTORY_DIR=str(parent)), \
                     patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'A', 0, 1)), \
-                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[{'solar_system_id': 1, 'destroy_num': 9}]) as collect, \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[{'solar_system_id': 1, 'destroy_num': 5}]) as collect, \
                     patch('AnomalyHotspots.management.commands.anomaly_collect.record_success', side_effect=HistoryError(), create=True), \
                     patch('AnomalyHotspots.management.commands.anomaly_collect.record_attempt', side_effect=HistoryError(), create=True):
                 call_command('anomaly_collect', stdout=output)
             self.assertEqual(collect.call_count, 1)
-            self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 9}])
+            self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 5}])
             self.assertEqual(json.loads(output.getvalue())['status'], 'ok')
             self.assertEqual(json.loads(output.getvalue()).get('history_status'), 'unavailable')
             self.assertNotIn(str(parent), output.getvalue())
@@ -69,7 +89,7 @@ class CommandTests(SimpleTestCase):
             output, snapshot = io.StringIO(), parent / 'snapshot.json'
             with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot), ANOMALY_HISTORY_DIR=str(parent)), \
                     patch('AnomalyHotspots.management.commands.anomaly_collect.load_round_robin_session', return_value=(bundle(), 'A', 0, 1)), \
-                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[{'solar_system_id': 1, 'destroy_num': 9}]), \
+                    patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once', return_value=[{'solar_system_id': 1, 'destroy_num': 5}]), \
                     patch('AnomalyHotspots.management.commands.anomaly_collect.record_success', side_effect=HistoryError()):
                 call_command('anomaly_collect', stdout=output)
             attempt = read_attempts(parent)[0]
@@ -116,7 +136,7 @@ class CommandTests(SimpleTestCase):
             def rpc(session, method, item):
                 if method == collector.HOTSPOT_METHOD:
                     captured.append((session.bundle['hello']['synthetic'], session.account_lease.account_ref))
-                    return wire([{'solar_system_id': 1, 'destroy_num': len(captured)}])
+                    return wire([{'solar_system_id': 1, 'destroy_num': len(captured) % 6}])
                 return {'login_sigma': [0, {'client_id': 42, 'proxy_node_id': 43}],
                         'request_start_wait': [], 'get_newbie_info': [], 'select_character_id': 1}[method]
             handshake = (2, {'accepted': True, 'info': {'node_info': {'node_id': 7}}})
@@ -131,7 +151,7 @@ class CommandTests(SimpleTestCase):
             self.assertEqual(json.loads(cursor.read_text()), 0)
             self.assertEqual([path.read_bytes() for path in paths], before)
             self.assertEqual(set(read_snapshot(snapshot)), {'version', 'collected_at_ms', 'last_attempt_at_ms',
-                                                         'status', 'systems', 'statistics_window'})
+                                                         'status', 'systems', 'statistics_window', 'metric'})
             for private in ('opaque', str(parent), 'account_ref', 'hello', 'templates', 'material'):
                 self.assertNotIn(private, output.getvalue())
 
@@ -141,13 +161,13 @@ class CommandTests(SimpleTestCase):
             parent = Path(directory)
             parent.chmod(0o750)
             snapshot = parent / 'snapshot.json'
-            write_success(snapshot, [{'solar_system_id': 1, 'destroy_num': 8}], now_ms=1000)
+            write_success(snapshot, [{'solar_system_id': 1, 'destroy_num': 5}], now_ms=1000)
             output = io.StringIO()
             with override_settings(ANOMALY_SNAPSHOT_FILE=str(snapshot)), patch.dict(os.environ, {}, clear=True), patch('AnomalyHotspots.management.commands.anomaly_collect.collect_once') as collect:
                 call_command('anomaly_collect', stdout=output)
             collect.assert_not_called()
             self.assertEqual(read_snapshot(snapshot)['collected_at_ms'], 1000)
-            self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 8}])
+            self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 5}])
             entry = json.loads(output.getvalue())
             self.assertNotIn('session_slot', entry)
             self.assertEqual(entry['status'], 'unauthorized')
@@ -160,7 +180,7 @@ class CommandTests(SimpleTestCase):
                 parent.chmod(0o750)
                 snapshot, private = parent / 'snapshot.json', parent / 'private.json'
                 save_session(bundle(), private)
-                write_success(snapshot, [{'solar_system_id': 1, 'destroy_num': 8}], now_ms=1000)
+                write_success(snapshot, [{'solar_system_id': 1, 'destroy_num': 5}], now_ms=1000)
                 output = io.StringIO()
                 def failed(value, **kwargs):
                     kwargs['audit'].update(rpc_count=3, stage='authentication', reason='private-secret',
@@ -170,7 +190,7 @@ class CommandTests(SimpleTestCase):
                     call_command('anomaly_collect', stdout=output)
                 self.assertEqual(collect.call_count, 1)
                 self.assertEqual(read_snapshot(snapshot)['collected_at_ms'], 1000)
-                self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 8}])
+                self.assertEqual(read_snapshot(snapshot)['systems'], [{'solar_system_id': 1, 'destroy_num': 5}])
                 entry = json.loads(output.getvalue())
                 self.assertEqual(entry.get('session_slot'), 'A')
                 self.assertEqual(entry.get('pool_size'), 1)

@@ -194,9 +194,10 @@ class SnapshotTests(ModuleTests):
             self.assertEqual(initial['status'], 'unavailable')
             api.write_success(path, rows, now_ms=1000)
             saved = api.read_snapshot(path)
-            self.assertEqual(saved, {'version': 1, 'collected_at_ms': 1000,
+            self.assertEqual(saved, {'version': 2, 'collected_at_ms': 1000,
                                      'last_attempt_at_ms': 1000, 'status': 'ok',
-                                     'systems': rows, 'statistics_window': None})
+                                     'systems': rows, 'statistics_window': None,
+                                     'metric': {'kind': 'activity_level', 'range_version': 1}})
             api.write_failure(path, 'rate_limited', now_ms=2000)
             failed = api.read_snapshot(path)
             self.assertEqual(failed['systems'], rows)

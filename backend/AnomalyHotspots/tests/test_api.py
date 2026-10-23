@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import tempfile
 import os
 from types import SimpleNamespace
@@ -40,8 +41,13 @@ class APITests(TransactionTestCase):
     def test_sanitized_stored_snapshot_verified_metadata_unknown_preserved_no_rpc(self):
         Region.objects.create(r_id='10000001', r_title='德里克')
         Solarsystem.objects.create(ss_id='30000001', ss_title='星系甲', ss_region_id='10000001')
-        write_success(self.path, [{'solar_system_id': 30000001, 'destroy_num': 20},
-                                  {'solar_system_id': 99999999, 'destroy_num': 5}], now_ms=1000)
+        # An actual v1 fixture remains unclassified, including the small value 5.
+        self.path.write_text(json.dumps({'version': 1, 'collected_at_ms': 1000,
+            'last_attempt_at_ms': 1000, 'status': 'ok', 'statistics_window': None,
+            'systems': [{'solar_system_id': 30000001, 'destroy_num': 20},
+                        {'solar_system_id': 99999999, 'destroy_num': 5}]}))
+        if os.name == 'posix': self.path.chmod(0o640)
+        original = self.path.read_bytes()
         with patch('Market.collector_protocol.socket.create_connection') as opened:
             response = self.client.get('/api/anomaly-hotspots/')
             self.assertEqual(response.status_code, 200)
@@ -51,8 +57,11 @@ class APITests(TransactionTestCase):
                 {'solar_system_id': 99999999, 'destroy_num': 5, 'system_name': None,
                  'region_id': None, 'region_name': None}])
             self.assertEqual(response['Cache-Control'], 'no-store')
+            self.assertEqual(response.data['version'], 2)
+            self.assertEqual(response.data['metric'], {'kind': 'legacy_unclassified', 'range_version': None})
             self.assertIsNone(response.data['statistics_window'])
             opened.assert_not_called()
+        self.assertEqual(self.path.read_bytes(), original)
         write_failure(self.path, 'rate_limited', now_ms=2000)
         self.assertEqual(self.client.get('/api/anomaly-hotspots/').data['collected_at_ms'], 1000)
 
@@ -78,7 +87,10 @@ class APITests(TransactionTestCase):
             self.assertEqual(self.client.get('/api/anomaly-hotspots/').status_code, 429)
 
     def test_metadata_database_failure_preserves_nonempty_counts_time_and_hides_error(self):
-        write_success(self.path, [{'solar_system_id': 30001211, 'destroy_num': 155}], now_ms=1000)
+        self.path.write_text(json.dumps({'version': 1, 'collected_at_ms': 1000,
+            'last_attempt_at_ms': 1000, 'status': 'ok', 'statistics_window': None,
+            'systems': [{'solar_system_id': 30001211, 'destroy_num': 155}]}))
+        if os.name == 'posix': self.path.chmod(0o640)
         with patch('StarFieldSearch.models.Solarsystem.objects.filter', side_effect=DatabaseError('PRIVATE_DATABASE_PASSWORD_MARKER')):
             response = self.client.get('/api/anomaly-hotspots/')
         self.assertEqual(response.status_code, 200)
@@ -88,3 +100,13 @@ class APITests(TransactionTestCase):
         self.assertEqual(response.data['systems'], [{'solar_system_id': 30001211, 'destroy_num': 155,
                                                     'system_name': None, 'region_id': None, 'region_name': None}])
         self.assertNotIn('PRIVATE_DATABASE_PASSWORD_MARKER', response.content.decode())
+
+    def test_current_stored_snapshot_has_explicit_activity_contract(self):
+        write_success(self.path, [{'solar_system_id': 30001211, 'destroy_num': 5}], now_ms=1000)
+        response = self.client.get('/api/anomaly-hotspots/')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['version'], 2)
+        self.assertEqual(response.data['metric'], {'kind': 'activity_level', 'range_version': 1})
+        self.assertEqual(response.data['systems'][0]['destroy_num'], 5)
+        self.assertIsNone(response.data['statistics_window'])
+        self.assertEqual(response['Cache-Control'], 'no-store')

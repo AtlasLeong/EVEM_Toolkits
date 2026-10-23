@@ -8,6 +8,8 @@ from AnomalyHotspots.collector import collect_once, CollectorError, safe_audit
 from AnomalyHotspots.session_bundle import load_round_robin_session, NeedsAuthError
 from AnomalyHotspots.snapshot import write_success, write_failure, STATUSES, SnapshotError
 from AnomalyHotspots.history import record_success, record_attempt, HistoryError
+from AnomalyHotspots.metric import activity_metric, validate_metric_rows
+from AnomalyHotspots.validation import AnomalyValidationError
 
 
 class Command(BaseCommand):
@@ -24,8 +26,11 @@ class Command(BaseCommand):
         try:
             bundle, slot, index, size = load_round_robin_session()
             selection = {'session_slot': slot, 'pool_size': size}
-            rows = collect_once(bundle, session_index=index, pool_size=size, audit=audit)
+            rows = validate_metric_rows(
+                collect_once(bundle, session_index=index, pool_size=size, audit=audit), activity_metric())
             status, count = 'ok', len(rows)
+        except AnomalyValidationError:
+            status = 'malformed'
         except NeedsAuthError:
             status = 'unauthorized'
         except CollectorError as error:
