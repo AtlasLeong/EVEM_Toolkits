@@ -92,7 +92,7 @@ Final CI still runs the complete main-browser, preview, tactical and MySQL gates
   Market specification review passed after fixing two presentation gaps: show
   public tier/target as a non-guarantee, and avoid estimating actual rotation
   from the configured cap when stored effective-plan evidence is available.
-- Root independently reran 289 Market/GameSessions/settings tests, 90 anomaly
+- Root independently reran 292 Market/GameSessions/settings tests, 90 anomaly
   tests (6 existing Windows/POSIX skips), 42 ControlCenter tests and clean Market
   migration drift. Focused Market browsers: 33 passed; hotspot reviewers ran
   44/31 focused browsers independently with no failures.
@@ -105,7 +105,13 @@ Final CI still runs the complete main-browser, preview, tactical and MySQL gates
 - Market quality review found a concurrent-cohort age lookup failure; real DB
   regressions proved the failure for tier/enable edits. Bounded one-row reads
   now return unknown ages, without locks, retries or extra queries. Independent
-  quality re-review passed and the root reran the full 289-test suite.
+  quality re-review passed and the root reran the full suite.
+- A final discrete-pass capacity review caught the 41-priority-items/20-slots
+  boundary: continuous throughput alone misses the third revisit cycle. Only
+  target feasibility now uses whole-cycle ceiling; mean-cycle and continuous
+  hourly throughput are unchanged. The 40/41, ordinary six-hour boundary and
+  zero-count/zero-slot tests passed; independent 21-test quality re-review and
+  root full 292-test verification passed. CI must use the corrected commit.
 - Root full frontend units: 751 passed; production build/bundle budget passed.
   Full main-browser run: 648 passed, plus both subsequently added display tests
   passed in the 33-test focused market suite. Exact final-commit CI must run all
