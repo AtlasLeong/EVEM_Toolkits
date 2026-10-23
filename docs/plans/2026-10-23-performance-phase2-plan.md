@@ -53,3 +53,32 @@ merge to master, require master CI and normal Production success. Verify exact
 runtime metadata/SHAs, private denials, fresh scheduled v2 snapshots, frontend
 layout/function, phase-1 gzip, unchanged timer policy/KM disabled. Record evidence
 and report results/limitations. Do not force-publish or skip gates.
+
+## Concrete verification commands
+
+From `backend/`, using existing isolated dependencies (no production settings):
+
+```text
+python manage.py test Market GameSessions.tests --settings=EVE_MDjango.ci_settings --noinput
+python manage.py makemigrations Market --check --dry-run --settings=EVE_MDjango.ci_settings
+python manage.py test AnomalyHotspots --settings=EVE_MDjango.anomaly_test_settings --noinput
+python manage.py test ControlCenter --settings=EVE_MDjango.control_center_test_settings --noinput
+```
+
+Confirm the ControlCenter settings filename from the existing CI before running;
+never combine app-specific isolated settings that omit the selected app.
+Baseline Market/GameSessions: 256 pass. Anomaly: 78 pass, 6 platform skips on
+Windows. A deliberately combined baseline invocation used the wrong settings;
+its missing-app errors were resolved by running the existing separate suites,
+without any code/config changes.
+
+From `front-codex/`:
+
+```text
+node --test tests/unit/*.test.mjs
+npm run build
+npx playwright test tests/e2e/specs/market-collection-health.spec.js tests/e2e/specs/market-capacity.spec.js tests/e2e/specs/hotspot-changes.spec.js tests/e2e/specs/starmap-performance.spec.js --workers=1
+```
+
+Use separate local ports/output directories for parallel browser verification.
+Final CI still runs the complete main-browser, preview, tactical and MySQL gates.

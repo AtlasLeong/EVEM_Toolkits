@@ -38,8 +38,13 @@ KM remains disabled, and phase-1 public-only gzip remains active.
 - Failure fallback carries metric metadata with the last-good rows and time.
   Map palette, search, focus, interaction performance, security boundaries, and
   raw history retention/physical safety budgets remain intact.
-- Version readers accept legacy data; rollback must be documented honestly:
-  old code does not understand v2 samples. No automatic downgrade/rewrite.
+- Version readers accept legacy data. An isolated downgrade rehearsal must
+  confirm that old latest-snapshot code recovers only on the next successful
+  scheduled pass. Old history code cannot append after a v2 latest sample and
+  does not automatically recover: an operational downgrade must temporarily
+  disable history reads/writes, preserve the entire store, and use a
+  reader-compatible forward fix before restoring history. No automatic
+  downgrade, sample rewrite, or deletion is permitted.
 
 ## Market
 
