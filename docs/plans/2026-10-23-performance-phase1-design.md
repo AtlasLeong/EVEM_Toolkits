@@ -22,4 +22,4 @@ Keep React, React Query, Django/MySQL and the current collection architecture. D
 
 ## Risks and rollout
 
-Backend and frontend can briefly run different versions during component switching. The additive endpoint preserves old frontend compatibility; publish backend before new frontend via the existing publisher behavior and verify. If a new frontend reaches an old backend momentarily, retain old quotes and show the existing recoverable error instead of firing individual fallbacks. No migrations/dependency registration are required. Keep the operational worktree and private/untracked materials intact.
+Backend and frontend can briefly run different versions during the existing component switching sequence; do not change that protected publisher. The additive endpoint preserves old frontend compatibility. If a new frontend reaches an old backend momentarily, retain old quotes and show the existing recoverable error instead of firing individual fallbacks. No migrations/dependency registration are required. Keep the operational worktree and private/untracked materials intact.

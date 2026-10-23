@@ -15,9 +15,9 @@
 - [x] Inspect production-equivalent source, approve design, preserve dirty original workspace.
 - [x] Reuse attached isolated worktree on `codex/performance-phase1-20261023`, based on production master `7ecc4f90`.
 - [x] Baseline frontend: 729 passed, zero failures/skips.
-- [ ] Task 1: bounded batch API/adapter with red-green tests.
-- [ ] Task 2: catalog React Query reuse/revalidation and small logo derivatives with red-green tests.
-- [ ] Task 3: public-only gzip preparation, safety tests and operator procedure.
+- [x] Task 1: bounded batch API/adapter with red-green tests.
+- [x] Task 2: catalog React Query reuse/revalidation and small logo derivatives with red-green tests.
+- [x] Task 3: public-only gzip preparation, safety tests and operator procedure.
 - [ ] Task 4: spec review, quality review, full verification and real local browser.
 - [ ] Task 5: push PR, attach artifact, complete PR/master CI, merge and deploy, activate verified Nginx configuration, verify actual production.
 
@@ -62,3 +62,14 @@
 3. Activate only the reviewed public gzip configuration using existing root operator access, exact backup, `nginx -t`, graceful reload and rollback on failure. Do not stop/restart collectors or clear budgets.
 4. Verify exact frontend/backend SHAs, actual served imports/assets, public endpoint identity/gzip equivalence, 48-ID batch behavior, catalog reuse and private boundaries. Verify market/hotspot timers remain active and KM remains disabled.
 5. Report measured transfer/request reductions, tests and live URL. Do not claim general speedup percentages from byte savings alone.
+
+## Pre-push verification evidence
+
+- Frontend unit + preview: 769 passed, no failures/skips. Build and bundle budget passed.
+- Market + shared-session/worker regressions: 271 passed; production middleware public-read integration: 14 passed; auth policy independently passed.
+- Three existing manufacturing E2E suites: 37 passed. Catalog refresh/reuse, logo and responsive navigation: 12 passed independently and by the controller.
+- New reconnect regression initially reproduced a removed target crashing render. A minimal membership guard closes it; preserved-target and removed-target browser cases both pass.
+- Logo derivatives: favicon 1666 bytes, navigation 6947 bytes, touch 16388 bytes; source retained, dimensions/alpha/pixel derivation validated.
+- Deploy safety suite: 364 tests, no failures, 17 Windows-specific platform skips. Public-gzip subset: 18 tests, no failures, 1 real-flock Windows skip; Linux CI must exercise the non-skipped branch.
+- Target Nginx parser rehearsed against a private temporary candidate using real `nginx -t -c`: passed. Actual site/main hashes remained unchanged, zero reloads. Candidate site digest `71e97668efb0c8b93c17eecf549dea60829278446c2898148ece82b322b8783f`.
+- Independent catalog/logo spec and quality reviews and batch/gzip quality reviews approved; no critical/important issues remain. Runtime gzip activation, complete CI and exact-version online acceptance are still pending, not claimed complete.
