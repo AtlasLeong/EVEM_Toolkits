@@ -68,7 +68,7 @@ python manage.py test ControlCenter --settings=EVE_MDjango.control_center_test_s
 Confirm the ControlCenter settings filename from the existing CI before running;
 never combine app-specific isolated settings that omit the selected app.
 Baseline Market/GameSessions: 256 pass. Anomaly: 78 pass, 6 platform skips on
-Windows. A deliberately combined baseline invocation used the wrong settings;
+Windows. An initial combined baseline invocation used the wrong settings;
 its missing-app errors were resolved by running the existing separate suites,
 without any code/config changes.
 
@@ -82,3 +82,26 @@ npx playwright test tests/e2e/specs/market-collection-health.spec.js tests/e2e/s
 
 Use separate local ports/output directories for parallel browser verification.
 Final CI still runs the complete main-browser, preview, tactical and MySQL gates.
+
+## Review and local evidence (before release)
+
+- Tasks 1–4 implemented as small domain commits. No session material, timer
+  settings, coordinator policy, dependency lockfiles or production credentials
+  are part of the change.
+- Independent hotspot specification and quality reviews passed. Independent
+  Market specification review passed after fixing two presentation gaps: show
+  public tier/target as a non-guarantee, and avoid estimating actual rotation
+  from the configured cap when stored effective-plan evidence is available.
+- Root independently reran 287 Market/GameSessions/settings tests, 90 anomaly
+  tests (6 existing Windows/POSIX skips), 42 ControlCenter tests and clean Market
+  migration drift. Focused Market browsers: 33 passed; hotspot reviewers ran
+  44/31 focused browsers independently with no failures.
+- Isolated unchanged-old-code downgrade rehearsal passed: old latest reads
+  become unavailable until the next old-format success; old history read/append
+  rejects v2, leaving every sample and manifest hash unchanged. Temporarily
+  setting `ANOMALY_HISTORY_DIR` empty for both the web and collector runtimes
+  disables history safely during an operational downgrade. Preserve the store;
+  a compatible forward fix is required before enabling history again.
+- Full frontend units/build and full browser regression, final independent
+  Market quality review, PR/master CI and protected production acceptance are
+  release gates, not implied by the focused results above.

@@ -195,4 +195,3 @@ class MetricContractTests(unittest.TestCase):
         with self.assertRaises(history.HistoryError):
             history.record_success(self.directory, rows(1), now_ms=1000)
         self.assertEqual({path.name: path.read_bytes() for path in self.directory.iterdir()}, original)
-

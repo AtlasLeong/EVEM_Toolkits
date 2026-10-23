@@ -15,13 +15,13 @@ const health = {
   pause: { code: 'invalid_material', retry_at_ms: null, last_attempt_at_ms: now - 1000 }, pool_state: 'unknown',
 }
 
-async function openAdmin(page, { denied = false, value = health } = {}) {
+async function openAdmin(page, { denied = false, value = health, visibleLimit = 40 } = {}) {
   const item = { item_id: '42', name: '测试材料', category: '矿石', scope: 'global', enabled: true, collection_priority: false, last_failure: null }
   const state = { patches: [], item }
   await seedAuthenticatedSession(page)
   await installApiMock(page, ({ method, url, body }) => {
     if (url.pathname === '/api/market/admin/config/') return json({ enabled: true, min_interval_seconds: 2100, max_interval_seconds: 3060,
-      session_status: 'needs_auth', configured_max_items_per_run: 80, max_items_per_run: 40, enabled_item_count: 149,
+      session_status: 'needs_auth', configured_max_items_per_run: 80, max_items_per_run: visibleLimit, enabled_item_count: value.tiers.priority.enabled + value.tiers.ordinary.enabled,
       next_due_at_ms: null, last_success_at: null, collection_health: value })
     if (url.pathname === '/api/market/admin/items/') return json({ count: 1, results: [state.item] })
     if (url.pathname === '/api/market/admin/items/42/' && method === 'PATCH') {
@@ -79,4 +79,26 @@ test('missing plan and insufficient observations remain unknown and fit phone wi
   await expect(panel).not.toContainText('/private/secret.json')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy()
   await page.screenshot({ path: 'output/playwright/phase2-market-health-mobile.png', fullPage: true })
+})
+
+test('ordinary-only actual shared cap cannot be replaced by an optimistic configured-cap rotation estimate', async ({ page }) => {
+  await openAdmin(page, { visibleLimit: 80, value: { ...health, tiers: { priority: tier(0, 0, 0), ordinary: { ...health.tiers.ordinary, enabled: 249 } } } })
+  await expect(page.locator('.market-capacity')).not.toContainText('140–204 分钟')
+  await expect(page.locator('.market-capacity')).toContainText('实际共享上限')
+  await expect(page.getByRole('region', { name: '采样覆盖与新鲜度' })).toContainText('上限 40 件')
+})
+
+test('public observation shows tier planning target without changing two-hour stale status', async ({ page }) => {
+  await installApiMock(page, ({ url }) => {
+    if (url.pathname === '/api/market/categories/') return json([])
+    if (url.pathname === '/api/market/items/') return json({ count: 1, results: [{ item_id: '42', name: '普通材料', category: '矿石', scope: 'global',
+      best_sell: '100.00', best_buy: '90.00', observed_at: new Date(Date.now() - 3 * 3_600_000).toISOString(), status: 'stale',
+      collection_tier: 'ordinary', collection_target_ms: 21_600_000, age_ms: 10_800_000 }] })
+    if (url.pathname === '/api/market/items/42/series/') return json({ points: [], change: {} })
+    return undefined
+  })
+  await page.goto('/market')
+  const meta = page.locator('.market-snapshot-meta')
+  await expect(meta).toContainText('普通 · 6 小时采样目标（非保证）')
+  await expect(meta).toContainText('已过期')
 })

@@ -5,7 +5,7 @@ import { Activity, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, Search } f
 import { AuthContext } from '../context/AuthContext'
 import { LoadingBar } from '../components/ui/Primitives'
 import { getMarketQuality, getMarketSeries, listMarketCategories, listMarketItems } from '../services/apiMarket'
-import { marketBookEmptyLabel, marketReadOptions } from '../utils/marketDataState'
+import { marketBookEmptyLabel, marketReadOptions, marketSamplingLabel } from '../utils/marketDataState'
 import { formatCompactMarketPrice } from '../utils/marketPrice'
 import { marketScopeLabel } from '../utils/marketScope'
 import { qualityRefetchInterval } from '../utils/marketQuality'
@@ -237,7 +237,7 @@ export default function MarketPricesPage() {
             <div className="market-depth-grid"><PriceLadder title="卖价档位" values={selected.sell_prices} tone="sell" emptyLabel={marketBookEmptyLabel(selected, 'best_sell')} /><PriceLadder title="买价档位" values={selected.buy_prices} tone="buy" emptyLabel={marketBookEmptyLabel(selected, 'best_buy')} /></div>
           </section>
           <div className="market-current-quotes" aria-label="当前最低卖价与最高买价">{[['best_sell', '最低卖价', 'sell'], ['best_buy', '最高买价', 'buy']].map(([field, label, tone]) => <div key={field} className={`market-current-quote market-current-quote--${tone}`}><span>{label}</span><strong className="market-quote-value" title={formatMarketPrice(selected[field])}><span aria-hidden="true">{selected[field] == null ? '暂无报价' : formatCompactMarketPrice(selected[field])}</span><span className="sr-only">{formatMarketPrice(selected[field])}</span></strong><small className={`market-quote-change ${formatChange(seriesQuery.data?.change?.[field]).tone}`} title="所选区间首末有效报价涨跌">{formatChange(seriesQuery.data?.change?.[field]).text}</small></div>)}</div>
-          <div className="market-snapshot-meta"><span className="market-snapshot-label">最近采集<span className={`market-snapshot-state ${snapshotStatus.tone}`}>{snapshotStatus.label}</span></span><strong>{selected.observed_at ? <time dateTime={selected.observed_at}>{formatMarketTime(selected.observed_at)}</time> : '尚未采集'}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at, now)}</small> : null}</div>
+          <div className="market-snapshot-meta"><span className="market-snapshot-label">最近采集<span className={`market-snapshot-state ${snapshotStatus.tone}`}>{snapshotStatus.label}</span></span><strong>{selected.observed_at ? <time dateTime={selected.observed_at}>{formatMarketTime(selected.observed_at)}</time> : '尚未采集'}</strong>{selected.observed_at ? <small className="market-sample-age">{ageLabel(selected.observed_at, now)}</small> : null}{marketSamplingLabel(selected) ? <small>{marketSamplingLabel(selected)}</small> : null}</div>
         </> : <p className="market-terminal-hint">选择一件已启用物品后查看报价。</p>}
       </aside>
     </div>
