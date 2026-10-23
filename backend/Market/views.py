@@ -1,3 +1,4 @@
+import re
 import time
 from decimal import Decimal
 
@@ -167,6 +168,43 @@ class PublicItemsView(APIView):
         items = filter_items_by_category(items, request.query_params.get('category_id'))
         items = filter_items_by_query(items, request.query_params.get('q', ''), include_scope=True)
         return paged_response(items, request, item_payload, market_scope=market_scope_payload())
+
+
+def quote_item_ids(query_params):
+    """Bound submitted work before deduplication or building a queryset."""
+    values = query_params.getlist('ids')
+    if set(query_params) != {'ids'} or len(values) != 1:
+        raise ValidationError({'ids': 'Provide exactly one ids parameter and no other parameters.'})
+    raw_ids = values[0]
+    if not raw_ids or len(raw_ids) > 999:
+        raise ValidationError({'ids': 'Provide 1 to 50 positive item IDs, at most 999 characters.'})
+    submitted = raw_ids.split(',')
+    if len(submitted) > 50:
+        raise ValidationError({'ids': 'At most 50 submitted item IDs are allowed.'})
+    ids = []
+    for value in submitted:
+        if not re.fullmatch(r'[1-9][0-9]{0,18}', value) or int(value) > 2**63 - 1:
+            raise ValidationError({'ids': 'Item IDs must be positive signed-64-bit decimal integers.'})
+        ids.append(int(value))
+    return list(dict.fromkeys(ids))
+
+
+class PublicQuotesView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAllowlistedViewer]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'market_public'
+
+    def get(self, request):
+        ids = quote_item_ids(request.query_params)
+        items = {
+            item.pk: item for item in MarketItem.objects.filter(
+                pk__in=ids, enabled=True,
+            ).select_related('latest_price__snapshot')
+        }
+        now_ms = epoch_ms()
+        results = [item_payload(items[item_id], now_ms=now_ms) for item_id in ids if item_id in items]
+        return Response({'count': len(results), 'results': results, 'market_scope': market_scope_payload()})
 
 
 class PublicHistoryView(APIView):

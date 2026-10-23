@@ -15,10 +15,10 @@ async function installBlueprintFixture(page) {
   const quoteRequests = []
   await page.route('**/industry/manufacturing-scope.json', route => route.fulfill(json(blueprintCatalog)))
   await installApiMock(page, ({ method, url }) => {
-    if (method === 'GET' && url.pathname === '/api/market/items/') {
-      const itemId = url.searchParams.get('q')
-      quoteRequests.push(itemId)
-      return json({ count: 1, results: [{ item_id: itemId, best_sell: '1200', status: 'fresh', observed_at: '2026-10-04T03:30:00Z' }] })
+    if (method === 'GET' && url.pathname === '/api/market/quotes/') {
+      const itemIds = url.searchParams.get('ids').split(',')
+      quoteRequests.push(...itemIds)
+      return json({ count: itemIds.length, results: itemIds.map(item_id => ({ item_id, best_sell: '1200', status: 'fresh', observed_at: '2026-10-04T03:30:00Z' })) })
     }
     return json({})
   })
@@ -147,10 +147,10 @@ for (const width of [320, 390]) {
 test('manufacturing estimator selects a target and exposes make/buy route controls', async ({ page }) => {
   const quoteRequests = []
   await installApiMock(page, ({ method, url }) => {
-    if (method === 'GET' && url.pathname === '/api/market/items/') {
-      const itemId = url.searchParams.get('q') || '41000000000'
-      quoteRequests.push(itemId)
-      return json({ count: 1, results: [{ item_id: itemId, name: `市场物品 ${itemId}`, best_sell: '1200', status: 'fresh', observed_at: new Date().toISOString() }] })
+    if (method === 'GET' && url.pathname === '/api/market/quotes/') {
+      const itemIds = url.searchParams.get('ids').split(',')
+      quoteRequests.push(...itemIds)
+      return json({ count: itemIds.length, results: itemIds.map(item_id => ({ item_id, name: `市场物品 ${item_id}`, best_sell: '1200', status: 'fresh', observed_at: new Date().toISOString() })) })
     }
     return undefined
   })

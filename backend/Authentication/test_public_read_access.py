@@ -49,7 +49,7 @@ class PublicReadIntegrationTests(TestCase):
         return token
 
     def test_anonymous_can_read_public_catalogs_and_market_under_the_production_gate(self):
-        for path in ('/api/market/categories/', '/api/market/items/', '/api/community/corporations/', '/api/starsea/posts/'):
+        for path in ('/api/market/categories/', '/api/market/items/', '/api/market/quotes/?ids=1,2', '/api/community/corporations/', '/api/starsea/posts/'):
             for method in ('get', 'head'):
                 with self.subTest(path=path, method=method):
                     response = getattr(self.client, method)(path)
@@ -58,6 +58,7 @@ class PublicReadIntegrationTests(TestCase):
     def test_unknown_and_public_unsafe_requests_never_reach_an_unprotected_new_view(self):
         for method, path in (('get', '/api/future-private/'), ('post', '/api/future-private/'),
                              ('get', '/api/missing-private/'), ('post', '/api/market/items/'),
+                             ('post', '/api/market/quotes/'), ('patch', '/api/market/quotes/'),
                              ('post', '/api/starsea/posts/'), ('delete', '/api/community/corporations/')):
             response = getattr(self.client, method)(path, {}, format='json')
             self.assertEqual(response.status_code, 401, (method, path, response.content))
@@ -73,9 +74,18 @@ class PublicReadIntegrationTests(TestCase):
     @override_settings(PUBLIC_READ_ACCESS_ENABLED=False, VIEWER_PUBLIC_ACCESS_ENABLED=True, VIEWER_ALLOWLIST_ENABLED=False)
     def test_closed_mode_requires_auth_for_reads_but_accepts_an_ordinary_active_account(self):
         self.assertEqual(self.client.get('/api/market/items/').status_code, 401)
+        self.assertEqual(self.client.get('/api/market/quotes/?ids=1').status_code, 401)
         self.sign_in(self.ordinary)
         self.assertEqual(self.client.get('/api/market/items/').status_code, 200)
+        self.assertEqual(self.client.get('/api/market/quotes/?ids=1').status_code, 200)
         self.assertEqual(self.client.get('/api/killboard/reports/').status_code, 403)
+
+    def test_batch_quotes_do_not_ignore_invalid_jwt_or_expand_private_route_access(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer not-a-jwt')
+        self.assertEqual(self.client.get('/api/market/quotes/?ids=1').status_code, 401)
+        self.client.credentials()
+        for path in ('/api/market/quotes/admin/', '/api/market/quotes/1/', '/api/market/admin/config/'):
+            self.assertEqual(self.client.get(path).status_code, 401)
 
     def test_private_gate_rejects_wrong_signature_expired_refresh_inactive_and_deleted_users(self):
         for token in (str(RefreshToken.for_user(self.ordinary)), 'not-a-jwt'):

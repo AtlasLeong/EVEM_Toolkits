@@ -24,14 +24,16 @@ function fixture() {
   return context.manufacturingApi
 }
 
-test('chunks unique numeric item IDs into requests no larger than the market page limit', () => {
+test('chunks unique numeric item IDs into requests no larger than the 50-ID batch limit', () => {
   const api = fixture()
   const ids = Array.from({ length: 201 }, (_, index) => String(index + 1))
   ids.push('1', 2)
 
   assert.deepEqual(JSON.parse(JSON.stringify(api.chunkItemIds(ids))), [
-    ids.slice(0, 100),
-    ids.slice(100, 200),
+    ids.slice(0, 50),
+    ids.slice(50, 100),
+    ids.slice(100, 150),
+    ids.slice(150, 200),
     ids.slice(200, 201),
   ])
 })
@@ -55,13 +57,13 @@ test('normalizes item IDs as strings and preserves quote states, including absen
   assert.deepEqual(JSON.parse(JSON.stringify(normalized['105'])), { item_id: '105', status: 'absent' })
 })
 
-test('fetches each ID through the compatible q filter without anonymous credentials', async () => {
+test('fetches exact IDs in bounded batches without anonymous credentials or per-item fallback', async () => {
   const api = fixture()
   const calls = []
   const fetchImpl = async (url, options) => {
     calls.push({ url, options })
     const parsed = new URL(url)
-    const ids = [parsed.searchParams.get('q')]
+    const ids = parsed.searchParams.get('ids').split(',')
     return {
       ok: true,
       status: 200,
@@ -77,14 +79,50 @@ test('fetches each ID through the compatible q filter without anonymous credenti
     { fetchImpl },
   )
 
-  assert.equal(calls.length, 101)
-  assert.equal(new URL(calls[0].url).searchParams.get('page_size'), '100')
-  assert.equal(new URL(calls[0].url).searchParams.get('q'), '1')
-  assert.equal(new URL(calls.at(-1).url).searchParams.get('q'), '101')
+  assert.equal(calls.length, 3)
+  assert.equal(new URL(calls[0].url).pathname, '/api/market/quotes/')
+  assert.deepEqual([...new URL(calls[0].url).searchParams.keys()], ['ids'])
+  assert.equal(new URL(calls[0].url).searchParams.get('ids'), Array.from({ length: 50 }, (_, i) => i + 1).join(','))
+  assert.equal(new URL(calls.at(-1).url).searchParams.get('ids'), '101')
   assert.equal(calls[0].options.credentials, undefined)
   assert.equal(calls[0].options.headers, undefined)
   assert.equal(quotes['1'].status, 'fresh')
   assert.equal(quotes['101'].best_sell, '10.00')
+})
+
+test('48 manufacture leaves make one request while preserving absent rows, exact decimal strings and metadata', async () => {
+  const api = fixture()
+  const calls = []
+  const ids = Array.from({ length: 48 }, (_, index) => String(index + 1))
+  const result = await api.fetchManufacturingQuotes([...ids, '1'], { fetchImpl: async url => {
+    calls.push(url)
+    return { ok: true, json: async () => ({ results: [
+      { item_id: '1', status: 'stale', best_sell: '9007199254740993.125', sell_prices: ['9007199254740993.125'], observed_at: '2020-01-01T00:00:00Z', image_url: '/exact.png' },
+      { item_id: '2', status: 'empty', best_sell: null, observed_at: '2020-01-01T00:00:00Z' },
+      { item_id: '3', status: 'uncollected', best_sell: null, observed_at: null },
+    ] }) }
+  } })
+  assert.equal(calls.length, 1)
+  assert.equal(new URL(calls[0]).searchParams.get('ids'), ids.join(','))
+  assert.equal(Object.keys(result).length, 48)
+  assert.equal(result['1'].best_sell, '9007199254740993.125')
+  assert.equal(result['1'].sell_prices[0], '9007199254740993.125')
+  assert.equal(result['1'].image_url, '/exact.png')
+  assert.equal(result['1'].status, 'stale')
+  assert.equal(result['2'].status, 'empty')
+  assert.equal(result['3'].status, 'uncollected')
+  assert.equal(result['48'].status, 'absent')
+})
+
+test('skips invalid or overflowing IDs before constructing the bounded request', async () => {
+  const api = fixture()
+  const calls = []
+  await api.fetchManufacturingQuotes(['0', '-1', '01', '１', '1.0', '9223372036854775808', '9223372036854775807'], { fetchImpl: async url => {
+    calls.push(url)
+    return { ok: true, json: async () => ({ results: [] }) }
+  } })
+  assert.equal(calls.length, 1)
+  assert.equal(new URL(calls[0]).searchParams.get('ids'), '9223372036854775807')
 })
 
 test('does not turn an invalid successful JSON response into an absent quote', async () => {
@@ -141,17 +179,18 @@ test('default quote transport never exceeds eight simultaneous stored-snapshot r
   let active = 0
   let peak = 0
   const urls = []
-  const result = await api.fetchManufacturingQuotes(Array.from({ length: 101 }, (_, i) => i + 1), { fetchImpl: async url => {
+  const result = await api.fetchManufacturingQuotes(Array.from({ length: 451 }, (_, i) => i + 1), { fetchImpl: async url => {
     urls.push(url)
     active += 1
     peak = Math.max(peak, active)
     await new Promise(resolve => setTimeout(resolve, 1))
     active -= 1
-    return { ok: true, json: async () => ({ results: [{ item_id: new URL(url).searchParams.get('q'), status: 'fresh', best_sell: '1' }] }) }
+    return { ok: true, json: async () => ({ results: new URL(url).searchParams.get('ids').split(',').map(item_id => ({ item_id, status: 'fresh', best_sell: '1' })) }) }
   } })
-  assert.equal(Object.keys(result).length, 101)
+  assert.equal(Object.keys(result).length, 451)
   assert.equal(peak, 8)
-  assert.ok(urls.every(url => new URL(url).pathname === '/api/market/items/' && new URL(url).searchParams.get('page_size') === '100'))
+  assert.equal(urls.length, 10)
+  assert.ok(urls.every(url => new URL(url).pathname === '/api/market/quotes/' && new URL(url).searchParams.get('ids').split(',').length <= 50))
   assert.ok(urls.every(url => !/[?&](?:force|refresh|collect)=/u.test(url)))
 })
 
@@ -159,7 +198,7 @@ test('aborting a superseded plan stops scheduling remaining items and rejects la
   const api = fixture()
   const controller = new AbortController()
   const calls = []
-  await assert.rejects(api.fetchManufacturingQuotes(['1', '2', '3'], {
+  await assert.rejects(api.fetchManufacturingQuotes(Array.from({ length: 101 }, (_, i) => i + 1), {
     signal: controller.signal, concurrency: 1,
     fetchImpl: async url => {
       calls.push(url)
@@ -169,17 +208,18 @@ test('aborting a superseded plan stops scheduling remaining items and rejects la
   assert.equal(calls.length, 1)
 })
 
-test('one failed item aborts sibling reads and prevents scheduling the remaining batch without aborting the caller', async () => {
+test('one failed batch aborts sibling reads and never falls back or schedules remaining batches without aborting the caller', async () => {
   const api = fixture()
   const parent = new AbortController()
   const calls = []
   let releaseSibling
   let siblingSignal
   const deferred = new Promise(resolve => { releaseSibling = resolve })
-  await assert.rejects(api.fetchManufacturingQuotes(['1', '2', '3'], {
+  const ids = Array.from({ length: 151 }, (_, i) => i + 1)
+  await assert.rejects(api.fetchManufacturingQuotes(ids, {
     signal: parent.signal, concurrency: 2,
     fetchImpl: async (url, options) => {
-      const id = new URL(url).searchParams.get('q')
+      const id = new URL(url).searchParams.get('ids').split(',')[0]
       calls.push(id)
       if (id === '1') return { ok: false, status: 503, json: async () => ({ detail: 'stored snapshot unavailable' }) }
       siblingSignal = options.signal
@@ -189,16 +229,16 @@ test('one failed item aborts sibling reads and prevents scheduling the remaining
   }), error => error.name === 'ManufacturingMarketError' && error.status === 503)
   assert.equal(parent.signal.aborted, false)
   assert.equal(siblingSignal.aborted, true)
-  assert.deepEqual(calls, ['1', '2'])
+  assert.deepEqual(calls, ['1', '51'])
   releaseSibling()
   await new Promise(resolve => setTimeout(resolve, 0))
-  assert.deepEqual(calls, ['1', '2'])
+  assert.deepEqual(calls, ['1', '51'])
   // A native sibling AbortError must not win the aggregate error race and
   // hide the actual HTTP failure from the page's refresh status.
-  await assert.rejects(api.fetchManufacturingQuotes(['1', '2', '3'], {
+  await assert.rejects(api.fetchManufacturingQuotes(ids, {
     concurrency: 2,
     fetchImpl: async (url, options) => {
-      if (new URL(url).searchParams.get('q') === '1') return { ok: false, status: 503, json: async () => ({}) }
+      if (new URL(url).searchParams.get('ids').split(',')[0] === '1') return { ok: false, status: 503, json: async () => ({}) }
       await new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('sibling cancelled', 'AbortError')), { once: true }))
       return { ok: true, json: async () => ({ results: [] }) }
     },
@@ -212,10 +252,10 @@ test('a target cancellation reaches every active child request and never schedul
   const calls = []
   let release
   const deferred = new Promise(resolve => { release = resolve })
-  const pending = api.fetchManufacturingQuotes(['1', '2', '3'], {
+  const pending = api.fetchManufacturingQuotes(Array.from({ length: 151 }, (_, i) => i + 1), {
     signal: parent.signal, concurrency: 2,
     fetchImpl: async (url, options) => {
-      calls.push(new URL(url).searchParams.get('q'))
+      calls.push(new URL(url).searchParams.get('ids').split(',')[0])
       signals.push(options.signal)
       await deferred
       return { ok: true, json: async () => ({ results: [] }) }
@@ -226,6 +266,6 @@ test('a target cancellation reaches every active child request and never schedul
   assert.ok(signals.every(signal => signal.aborted))
   release()
   await assert.rejects(pending, error => error.name === 'AbortError')
-  assert.deepEqual(calls, ['1', '2'])
+  assert.deepEqual(calls, ['1', '51'])
 })
 

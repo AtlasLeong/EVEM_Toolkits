@@ -16,7 +16,7 @@ PUBLIC_GET_EXAMPLES = (
     '/api/community/corporations/', '/api/community/corporations/12/',
     '/api/community/corporations/12/media/34/',
     '/api/game-data/items/', '/api/game-data/items/12/', '/api/game-data/status/',
-    '/api/market/categories/', '/api/market/items/', '/api/market/items/12/series/',
+    '/api/market/categories/', '/api/market/items/', '/api/market/quotes/', '/api/market/items/12/series/',
     '/api/market/items/12/history/',
     '/api/planetresources', '/api/planetresourceprice/default', '/api/regions', '/api/constellations', '/api/solarsystem',
     '/api/starsea/posts/', '/api/starsea/posts/12/', '/api/starsea/media/34/',
@@ -41,7 +41,7 @@ PRIVATE_EXAMPLES = (
 class PublicReadPolicyTests(SimpleTestCase):
     @override_settings(PUBLIC_READ_ACCESS_ENABLED=True)
     def test_all_audited_get_routes_allow_get_and_head_but_not_business_writes(self):
-        self.assertEqual(len(PUBLIC_GET_EXAMPLES), 28)
+        self.assertEqual(len(PUBLIC_GET_EXAMPLES), 29)
         for path in PUBLIC_GET_EXAMPLES:
             for method in ('GET', 'HEAD'):
                 with self.subTest(path=path, method=method):
