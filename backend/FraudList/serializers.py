@@ -1,6 +1,5 @@
 from .models import FraudList, FraudBehaviorFlow, FraudListReportFlow
 from rest_framework import serializers
-from Authentication.models import EVEMUser
 
 
 class FraudListSerializer(serializers.ModelSerializer):
@@ -17,12 +16,8 @@ class FraudBehaviorFlowSerializer(serializers.ModelSerializer):
         model = FraudBehaviorFlow
         fields = '__all__'
 
-    @staticmethod
-    def get_username(obj):
-        # 假设 EVEMUser 是关联的用户模型，并且通过 user_id 字段关联
-        # 如果这里的关联不是直接的，你可能需要调整这个查询
-        user = EVEMUser.objects.filter(id=obj.operation_user_id).first()
-        return user.username if user else None
+    def get_username(self, obj):
+        return self.context.get('actor_names', {}).get(obj.operation_user_id)
 
 
 class FraudListReportFlowSerializer(serializers.ModelSerializer):

@@ -1,13 +1,52 @@
 from collections import defaultdict
+import re
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from Authentication.throttle import BazaarChartThrottle
 from .models import BazaarRank, BazaarBox
 from .serializers import BazaarRankSerializer, BazaarChartSerializer, BazaarBoxSerializer
 
 from django.db.models import Avg, Count, Q
 from datetime import datetime, timedelta
 from rest_framework import status
+
+
+MAX_CHART_SERIES = 8
+MAX_CHART_POINTS_PER_SERIES = 366
+
+
+def chart_requests(data_list):
+    """Validate and de-duplicate the legacy chart shape before database work."""
+    if not isinstance(data_list, list) or len(data_list) > MAX_CHART_SERIES:
+        raise ValueError('每次最多对比 8 条集市曲线，请减少查询项。')
+    requests = []
+    seen = set()
+    for data in data_list:
+        if not isinstance(data, dict) or set(data) != {'bazaarName', 'server', 'rank'}:
+            raise ValueError('每条曲线须包含集市名称、服务器和排名。')
+        name, server, rank = data['bazaarName'], data['server'], data['rank']
+        if not isinstance(name, str) or len(name) > 255 or not name.strip():
+            raise ValueError('请输入不超过 255 字的有效集市名称。')
+        try:
+            name.encode('utf-8')
+        except UnicodeError:
+            raise ValueError('请输入有效集市名称。') from None
+        if not isinstance(server, str) or len(server) > 16 or server.strip().casefold() not in {'china', 'world'}:
+            raise ValueError('服务器须为 china 或 world。')
+        if type(rank) is int:
+            rank_value = rank
+        elif isinstance(rank, str) and re.fullmatch(r'[0-9]{1,2}', rank.strip()):
+            rank_value = int(rank.strip())
+        else:
+            raise ValueError('排名须为 1～50 的整数。')
+        if not 1 <= rank_value <= 50:
+            raise ValueError('排名须为 1～50 的整数。')
+        key = (name.strip(), server.strip().casefold(), rank_value)
+        if key not in seen:
+            seen.add(key)
+            requests.append(key)
+    return requests
 
 
 class BazaarNameListView(APIView):
@@ -102,40 +141,32 @@ class BazaarInfoView(APIView):
 
 
 class BazaarChartInfo(APIView):
-    throttle_classes = []
+    throttle_classes = [BazaarChartThrottle]
 
     @staticmethod
     def post(request):
-        data_list = request.data  # 假设 data_list 是一个列表
-        print(data_list)
-        if not isinstance(data_list, list):
-            return Response({'error': 'Expected a list of items.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        requests = []
-        filters = Q(pk__in=[])
-        for data in data_list:
-            bazaarName = data.get('bazaarName', '').strip()
-            server = data.get('server', '').strip()
-            rank = str(data.get('rank', '')).strip()
-
-            if not all([bazaarName, server, rank]):
-                return Response({'error': 'All fields must be filled and not empty.'},
-                                status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                rank_value = int(rank)
-            except (TypeError, ValueError):
-                return Response({'error': 'rank must be an integer.'}, status=status.HTTP_400_BAD_REQUEST)
-            request_key = (bazaarName, server, rank_value)
-            requests.append(request_key)
-            filters |= Q(bazaar_name=bazaarName, server=server, rank=rank_value)
-
+        try:
+            requests = chart_requests(request.data)
+        except ValueError as error:
+            return Response({'error': str(error)}, status=status.HTTP_400_BAD_REQUEST)
         if not requests:
             return Response([])
 
+        filters = Q(pk__in=[])
+        for name, server, rank in requests:
+            filters |= Q(bazaar_name=name, server__iexact=server, rank=rank)
+        point_limit = len(requests) * MAX_CHART_POINTS_PER_SERIES
+        rows = list(BazaarRank.objects.filter(filters).order_by('date', 'pk')[:point_limit + 1])
+        if len(rows) > point_limit:
+            return Response({'error': '集市历史记录过多，请减少对比项或选择其他集市。'},
+                            status=status.HTTP_400_BAD_REQUEST)
         rows_by_key = defaultdict(list)
-        for row in BazaarRank.objects.filter(filters).order_by('date'):
-            rows_by_key[(row.bazaar_name, row.server, row.rank)].append(row)
+        for row in rows:
+            series = rows_by_key[(row.bazaar_name, row.server.casefold(), row.rank)]
+            series.append(row)
+            if len(series) > MAX_CHART_POINTS_PER_SERIES:
+                return Response({'error': '单条集市曲线超过 366 个历史点，请选择其他集市。'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
         # Preserve the request order while using one database query for all
         # requested series instead of one query per chart.
@@ -175,7 +206,7 @@ def formatData(serializer_data):
 
 
 def formatServer(server):
-    if server == 'China':
+    if server.casefold() == 'china':
         return '国服'
     else:
         return '国际服'

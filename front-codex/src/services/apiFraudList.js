@@ -137,10 +137,11 @@ export async function getFraudAdminGroup() {
   return res.json();
 }
 
-export async function getFraudBehaviorFlow() {
-  const res = await fetchWithAuth(`${API_URL}/fraudbehaviorflow`);
+export async function getFraudBehaviorFlow({ page = 1, pageSize = 20, signal } = {}) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  const res = await fetchWithAuth(`${API_URL}/fraudbehaviorflow?${params}`, { signal });
   if (!res.ok) {
-    throw new Error("获取操作流水失败");
+    await parseError(res, "获取操作流水失败");
   }
   return res.json();
 }

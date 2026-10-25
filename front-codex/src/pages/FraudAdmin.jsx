@@ -460,6 +460,7 @@ export default function FraudAdminPage() {
   const [editingForm, setEditingForm] = useState(createRecordForm())
   const [activeReport, setActiveReport] = useState(null)
   const [activeFlowPair, setActiveFlowPair] = useState(null)
+  const [historyPage, setHistoryPage] = useState(1)
 
   const adminAuthQuery = useQuery({
     queryKey: ['fraud-admin-auth'],
@@ -483,9 +484,10 @@ export default function FraudAdminPage() {
   })
 
   const behaviorQuery = useQuery({
-    queryKey: ['fraud-admin-behavior'],
-    queryFn: getFraudBehaviorFlow,
-    enabled: isAdmin,
+    queryKey: ['fraud-admin-behavior', historyPage],
+    queryFn: ({ signal }) => getFraudBehaviorFlow({ page: historyPage, pageSize: 20, signal }),
+    enabled: isAdmin && activeTab === 'history',
+    retry: false,
   })
 
   const reportListQuery = useQuery({
@@ -556,17 +558,28 @@ export default function FraudAdminPage() {
   const groupOptions = useMemo(() => normalizeGroupOptions(groupQuery.data), [groupQuery.data])
 
   const flowPairs = useMemo(() => {
-    const rows = behaviorQuery.data || []
+    const rows = Array.isArray(behaviorQuery.data) ? behaviorQuery.data : behaviorQuery.data?.results || []
+    const afterByOperation = new Map()
+    for (const row of rows) {
+      const operationId = row.operation_id
+      const hasOperationId = typeof operationId === 'string' ? operationId.trim() !== '' : Number.isSafeInteger(operationId)
+      if (row.change === 'F' && hasOperationId && !afterByOperation.has(operationId)) {
+        afterByOperation.set(row.operation_id, row)
+      }
+    }
     return rows
       .filter((item) => item.change !== 'F')
       .map((item) => ({
         before: item,
-        after:
-          rows.find(
-            (record) => record.operation_id === item.operation_id && record.change === 'F',
-          ) || null,
+        after: afterByOperation.get(item.operation_id) || null,
       }))
   }, [behaviorQuery.data])
+
+  const historyCount = Number.isSafeInteger(behaviorQuery.data?.count) && behaviorQuery.data.count >= 0 ? behaviorQuery.data.count : null
+  const historyCountLabel = historyCount != null ? `共 ${historyCount} 条变更`
+    : Array.isArray(behaviorQuery.data) ? `本页 ${flowPairs.length} 条变更`
+      : behaviorQuery.isError ? '总数暂不可用' : '正在读取…'
+  const historyHasNext = behaviorQuery.data?.has_next === true
 
   if (!isAuthenticated) {
     return <Navigate replace to="/fraudlogin" />
@@ -848,12 +861,13 @@ export default function FraudAdminPage() {
         <Panel
           title="修改流水"
           subtitle="展示管理员对诈骗记录的新增、删除、修改和审核操作。"
-          action={<Pill>{flowPairs.length} 条变更</Pill>}
+          action={<Pill>{historyCountLabel}</Pill>}
         >
           {behaviorQuery.isPending ? <LoadingBar /> : null}
-          {!flowPairs.length ? (
+          {behaviorQuery.isError ? <p role="alert">{behaviorQuery.error.message || '获取操作流水失败，请重试。'}</p> : null}
+          {!flowPairs.length && !behaviorQuery.isPending && !behaviorQuery.isError ? (
             <EmptyState title="暂无变更流水" desc="列表修改后会在这里形成前后版本对照。" />
-          ) : (
+          ) : flowPairs.length ? (
             <div className="table-shell">
               <table className="data-table compact">
                 <thead>
@@ -867,7 +881,7 @@ export default function FraudAdminPage() {
                 </thead>
                 <tbody>
                   {flowPairs.map((pair) => (
-                    <tr key={`${pair.before.operation_id}-${pair.before.change}`}>
+                    <tr key={pair.before.id ?? `${pair.before.operation_id}-${pair.before.change}`}>
                       <td>{formatDate(pair.before.change_time)}</td>
                       <td>{pair.before.username || '-'}</td>
                       <td>{getActionLabel(pair.before.action_type)}</td>
@@ -887,7 +901,12 @@ export default function FraudAdminPage() {
                 </tbody>
               </table>
             </div>
-          )}
+          ) : null}
+          <nav className="admin-row-actions" aria-label="修改流水分页">
+            <button type="button" className="ghost-btn compact" disabled={historyPage <= 1 || behaviorQuery.isFetching} onClick={() => setHistoryPage((page) => page - 1)}>上一页</button>
+            <span className="muted-line">第 {historyPage} 页</span>
+            <button type="button" className="ghost-btn compact" disabled={!historyHasNext || behaviorQuery.isFetching || behaviorQuery.isError} onClick={() => setHistoryPage((page) => page + 1)}>下一页</button>
+          </nav>
         </Panel>
       ) : null}
 

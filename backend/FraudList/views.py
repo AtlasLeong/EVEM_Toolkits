@@ -7,7 +7,9 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Min, Q
+from Authentication.models import EVEMUser
+import re
 import uuid
 import os
 import hashlib
@@ -281,17 +283,51 @@ class GetAdminBehaviorFlow(APIView):
 
     @staticmethod
     def get(request):
+        def respond(data, response_status=status.HTTP_200_OK):
+            response = Response(data, status=response_status)
+            response['Cache-Control'] = 'private, no-store'
+            return response
+
         user_id = request.user.id
-        group_id_list = FraudAuthUserGroup.objects.filter(user_id=user_id).values_list('group_id', flat=True)
+        group_id_list = list(FraudAuthUserGroup.objects.filter(user_id=user_id).values_list('group_id', flat=True))
 
         if len(group_id_list) == 0:
-            return Response({"message": "UnAuthorized Users"}, status=status.HTTP_401_UNAUTHORIZED)
+            return respond({"message": "UnAuthorized Users"}, status.HTTP_401_UNAUTHORIZED)
 
-        admin_behavior_flow = FraudBehaviorFlow.objects.filter(source_group_id__in=group_id_list)
+        params = request.query_params
+        if any(key not in {'page', 'page_size'} or len(params.getlist(key)) != 1 for key in params):
+            return respond({'error': '分页参数无效。'}, status.HTTP_400_BAD_REQUEST)
+        page, page_size = 1, 20
+        for key, default, maximum in (('page', 1, 10000), ('page_size', 20, 50)):
+            value = params.get(key, str(default))
+            if not re.fullmatch(r'[1-9][0-9]{0,4}', value) or int(value) > maximum:
+                return respond({'error': '页码须为 1～10000，每页须为 1～50 条操作。'}, status.HTTP_400_BAD_REQUEST)
+            if key == 'page':
+                page = int(value)
+            else:
+                page_size = int(value)
 
-        serializer = FraudBehaviorFlowSerializer(admin_behavior_flow, many=True)
+        # Page operations, not raw B/F rows. Both versions retain the current ACL.
+        authorized = FraudBehaviorFlow.objects.filter(source_group_id__in=group_id_list)
+        anchors = authorized.exclude(change='F')
+        count = anchors.count()
+        start = (page - 1) * page_size
+        rows = list(anchors.order_by('-pk')[start:start + page_size])
+        operation_ids = {row.operation_id for row in rows if row.operation_id and row.operation_id.strip()}
+        if operation_ids:
+            after_ids = list(authorized.filter(change='F', operation_id__in=operation_ids)
+                             .order_by().values('operation_id').annotate(first_pk=Min('pk'))
+                             .values_list('first_pk', flat=True))
+            rows.extend(authorized.filter(pk__in=after_ids).order_by('pk'))
+        actor_ids = {row.operation_user_id for row in rows if row.operation_user_id is not None}
+        actor_names = dict(EVEMUser.objects.filter(pk__in=actor_ids).values_list('pk', 'username')) if actor_ids else {}
+        data = FraudBehaviorFlowSerializer(rows, many=True, context={'actor_names': actor_names}).data
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        # Old clients consume an array; explicit paging opts into the envelope.
+        if not params:
+            return respond(data)
+        return respond({'count': count, 'results': data, 'page': page, 'page_size': page_size,
+                        'has_next': start + page_size < count})
 
 
 class UploadImageView(APIView):

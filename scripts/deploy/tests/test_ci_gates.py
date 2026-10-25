@@ -74,6 +74,22 @@ def plan_case(action='release'):
 
 
 class CIGatesTests(unittest.TestCase):
+    def test_phase_three_legacy_and_smtp_regressions_are_mandatory_isolated_gates(self):
+        gate = step(workflow('ci.yml'), 'Public access, account verification and refresh-token policy (isolated)')
+        self.assertRegex(gate, r'python manage\.py test [^\n]*Authentication\.test_email_backend[^\n]*--settings=EVE_MDjango\.public_auth_test_settings --noinput')
+        self.assertRegex(gate, r'python manage\.py test [^\n]*Authentication\.test_public_read_access PlanetaryResource StarFieldSearch Bazaar --settings=EVE_MDjango\.public_access_test_settings --noinput')
+        self.assertIn('python manage.py test FraudList --settings=EVE_MDjango.fraud_access_test_settings --noinput', gate)
+        self.assertNotIn('continue-on-error', gate)
+        self.assertNotIn('EVE_MDjango.settings', gate)
+        self.assertNotIn('if:', gate)
+
+    def test_smtp_isolated_dependencies_include_the_existing_runtime_ca_bundle(self):
+        dependency = 'certifi==2023.11.17'
+        raw = (ROOT / 'backend/requirements.txt').read_bytes()
+        runtime = raw.decode('utf-16' if raw.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig')
+        self.assertIn(dependency, runtime.splitlines())
+        self.assertIn(dependency, (ROOT / 'scripts/deploy/requirements-ci.txt').read_text(encoding='utf-8-sig').splitlines())
+
     def test_ci_keeps_all_required_safety_and_ui_gates(self):
         workflow = (Path(__file__).resolve().parents[3] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
         for command in ('python -m unittest discover -s scripts/deploy/tests -v',

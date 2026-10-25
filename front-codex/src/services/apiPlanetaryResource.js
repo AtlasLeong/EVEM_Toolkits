@@ -27,7 +27,11 @@ export async function searchPlanetResources(searchForm) {
     body: JSON.stringify(searchForm),
   })
   if (!res.ok) {
-    throw new Error('Error to fetch Planet Resource')
+    const fallback = res.status === 429 ? '查询过于频繁，请稍后重试。' : '查询失败，请稍后重试。'
+    const payload = await res.json().catch(() => null)
+    const message = payload?.error || payload?.message || payload?.detail
+    throw new Error((res.status === 400 || res.status === 429) && typeof message === 'string'
+      && message.length <= 500 && !/[<>\u0000-\u001f]/.test(message) ? message : fallback)
   }
   return res.json()
 }

@@ -115,3 +115,16 @@ class PasswordResetAccountThrottle(AuthAccountThrottle):
 class TokenRefreshIPThrottle(AuthIPThrottle):
     scope = 'auth_refresh_ip'
     rate = '120/min'
+
+
+# These stored-data read budgets are separate from email/account throttles.
+# Like existing DRF cache throttles, they are approximate, not cross-worker
+# shared enforcement. Hard input/row limits remain the primary work bound.
+class PlanetaryQueryThrottle(AuthIPThrottle):
+    scope = 'planetary_query_ip'
+    rate = '30/min'
+
+
+class BazaarChartThrottle(AuthIPThrottle):
+    scope = 'bazaar_chart_ip'
+    rate = '60/hour'
