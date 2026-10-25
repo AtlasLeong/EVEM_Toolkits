@@ -60,3 +60,25 @@ Files: modify `backend/AnomalyHotspots/views.py` and existing
    cold/multiple-process caveat) and public/private guards. No collection, mail,
    owner credentials or production fixture writes. Report live version, tests,
    actual scope, limits and explicit metric-led deferrals.
+
+## Local verification before remote release
+
+- Genuine failing regression confirmed the second unchanged GET still issued
+  two geography SELECTs before implementation. Real SQLite geography, temporary
+  snapshots and deterministic concurrent cold publication exercise actual code.
+  Fixture cleanup/mode mistakes were corrected separately, not counted as bugs.
+- Root and two independent reviewers each passed101 AnomalyHotspots tests
+  (seven Windows POSIX skips); root and quality reviewer passed42 ControlCenter
+  tests, preserving immediate revoke/deny-before-read. Spec then quality review
+  passed without unresolved issues.
+- Root also passed59 auth/SMTP,53 public/legacy,784 frontend unit/preview tests,
+  production build and bundle budget,370 deployment safety tests (17 existing
+  Windows platform skips), and three capture-tool safety tests. No dependency,
+  CI command, protected publisher policy or production configuration changes.
+- The public projection retains one entry per process, not a shared/distributed
+  cache. Cold workers and expiry still do the two geography queries. No measured
+  P95/load claim, static geography may be60 seconds stale, and file validation,
+  counts/status and every access guard remain current on each request.
+- Full Linux PR/master CI, automatic Production, component-specific version
+  proof, public smoke, actual browser and post-release measurements are pending
+  until the version-bound private release receipt confirms them.
