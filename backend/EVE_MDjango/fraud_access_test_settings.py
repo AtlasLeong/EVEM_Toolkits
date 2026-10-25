@@ -2,3 +2,4 @@
 from .public_auth_test_settings import *  # noqa: F403
 
 INSTALLED_APPS = [*INSTALLED_APPS, 'FraudList']  # noqa: F405
+MIGRATION_MODULES = {**MIGRATION_MODULES, 'FraudList': None}  # noqa: F405

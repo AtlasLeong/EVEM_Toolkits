@@ -25,7 +25,8 @@ not measurements of every production query or a database execution deadline.
 
 Set `EMAIL_TIMEOUT = 10` seconds and ensure CustomEmailBackend actually passes
 its effective timeout to SMTP_SSL. A missing timeout uses the same finite
-default; invalid/nonfinite/nonpositive values are rejected before network I/O.
+default; invalid/nonfinite/nonpositive or over-30-second values are rejected
+before network I/O.
 Preserve SSL certificate validation and current synchronous delivery semantics,
 no automatic retries or background threads. Failed login/open must discard and
 close a partial connection so it cannot be reused as authenticated. A socket
@@ -45,8 +46,12 @@ transport seam, never send real verification mail for acceptance.
   location selection and the existing per-planet first matching resource rule.
 - Full planetary candidate reads use LIMIT 5001 and reject above 5000 before
   ranking. Precomputed/final results use a 10000-row total bound and cap+1
-  detection. Global resource query count is bounded by the resource list; do
-  not claim SQL LIMIT bounds all database scans/aggregate work.
+  detection. A real 10000-row tie fixture reproduced the old correlated MAX
+  query's multiplicative scan (>1 minute in isolated SQLite). Therefore the
+  global path reads selected precomputed rows once (LIMIT10001), rejects overflow,
+  and computes finite maxima/ties per resource/region in that bounded list,
+  retaining requested-resource order and the response shape. No new table/cache.
+  Do not claim SQL LIMIT bounds every underlying database scan or execution time.
 - Rank finite, nonnegative numeric yields; skip null/bool/invalid/NaN/infinite
   values, keep original serialized yield values. Top-three ties are stable.
 - StarField child-directory CSVs: at most 100 submitted IDs/2000 characters,

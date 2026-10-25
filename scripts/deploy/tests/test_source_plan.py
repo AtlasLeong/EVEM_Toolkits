@@ -51,6 +51,27 @@ jobs:
 """)
 
 
+def historical_reviewed_control_ci():
+    """Reconstruct the exact older proof, not silently trust today's new CI.
+
+    Phase three adds isolated test labels. The installed policy deliberately
+    treats that changed block as opaque, conservatively requiring a build.
+    Keep the historical control-only/noop proofs on their reviewed bytes.
+    """
+    ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+    for current, historical in (
+        ('Authentication.tests Authentication.test_email_backend --settings=', 'Authentication.tests --settings='),
+        ('Authentication.test_public_read_access PlanetaryResource StarFieldSearch Bazaar --settings=',
+         'Authentication.test_public_read_access --settings='),
+    ):
+        if ci.count(current) != 1:
+            raise AssertionError('The phase-three test-only CI addition must match exactly once.')
+        ci = ci.replace(current, historical, 1)
+    if not source_plan.frontend_build_context(ci.encode()).startswith(b'reviewed-ci-build-v1\0'):
+        raise AssertionError('Historical CI proof no longer matches the installed exact-block policy.')
+    return ci
+
+
 class SourcePlanTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -119,6 +140,19 @@ class SourcePlanTests(unittest.TestCase):
                              result['inputs'][component]['baseline'])
             self.assertRegex(result['inputs'][component]['head'], r'^[0-9a-f]{64}$')
 
+    def test_phase_three_new_ci_test_labels_fail_closed_as_build_inputs(self):
+        current = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        historical = historical_reviewed_control_ci()
+        context = source_plan.frontend_build_context(current.encode())
+        self.assertTrue(context.startswith(b'opaque-ci-build-v1\0'))
+        self.assertNotEqual(context, source_plan.frontend_build_context(historical.encode()))
+        self.write('.github/workflows/ci.yml', historical)
+        baseline = self.commit('exact historical reviewed CI proof')
+        self.baseline = {component: baseline for component in source_plan.COMPONENTS}
+        self.write('.github/workflows/ci.yml', current)
+        self.commit('new isolated test labels conservatively require frontend verification')
+        self.assert_changed('frontend')
+
     def test_reviewed_test_only_changes_are_noop(self):
         for name in ('backend/Authentication/tests.py',
                      'backend/Market/tests/test_new.py',
@@ -174,7 +208,7 @@ class SourcePlanTests(unittest.TestCase):
                 self.assertTrue(source_plan.runtime_path(name), name)
 
     def test_control_center_reviewed_ci_is_exact_and_cannot_hide_changed_commands(self):
-        ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        ci = historical_reviewed_control_ci()
         commands = (
             'python manage.py test ControlCenter --settings=EVE_MDjango.control_center_test_settings --noinput',
             'python manage.py makemigrations ControlCenter --check --dry-run --settings=EVE_MDjango.control_center_test_settings',
@@ -202,7 +236,7 @@ class SourcePlanTests(unittest.TestCase):
                      'scripts/deploy/evem-anomaly-collector.timer.example'):
             self.assertFalse(source_plan.runtime_path(name), name)
             self.write(name, '# reviewed anomaly deployment control\n')
-        ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        ci = historical_reviewed_control_ci()
         self.assertTrue(source_plan.frontend_build_context(ci.encode()).startswith(b'reviewed-ci-build-v1\0'))
         self.assertEqual(source_plan.frontend_build_context(ci.encode()), source_plan.frontend_build_context(CI_WORKFLOW.encode()))
         altered = ci.replace('test AnomalyHotspots --settings=', 'test AnomalyHotspots --failfast --settings=')
@@ -213,7 +247,7 @@ class SourcePlanTests(unittest.TestCase):
         self.assertEqual(self.plan()['action'], 'noop')
 
     def test_control_only_release_and_later_tests_keep_old_active_baseline_noop(self):
-        final_ci = (DIRECTORY.parents[1] / '.github/workflows/ci.yml').read_text(encoding='utf-8')
+        final_ci = historical_reviewed_control_ci()
         old_context = source_plan.frontend_build_context(CI_WORKFLOW.encode())
         new_context = source_plan.frontend_build_context(final_ci.encode())
         self.assertTrue(old_context.startswith(b'reviewed-ci-build-v1\0'))

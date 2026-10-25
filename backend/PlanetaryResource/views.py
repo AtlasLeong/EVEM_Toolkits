@@ -4,7 +4,6 @@ from .serializers import PlanetResourcePriceSerializer, PlanetaryProgrammeSerial
 
 from django.conf import settings
 from django.contrib.staticfiles.storage import staticfiles_storage
-from django.db.models import Max, F, OuterRef, Subquery
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.shortcuts import render
@@ -17,6 +16,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from Authentication.permissions import PublicReadOrAuthenticated
+from Authentication.throttle import PlanetaryQueryThrottle
+from rest_framework.exceptions import ValidationError
+from .query_limits import CANDIDATE_LIMIT, RESOURCE_LIMIT, RESULT_LIMIT, bounded_rows, location_ids, numeric_yield
 
 import hashlib
 import heapq
@@ -85,13 +87,29 @@ def planet_resource_list(request):
 
 
 class PlanetaryResourceView(APIView):
+    throttle_classes = [PlanetaryQueryThrottle]
+
     def post(self, request, *args, **kwargs):
         data = request.data
-        # 从请求数据中提取地点和资源信息
-        region_value = data.get('regionValue')
-        constellation_value = data.get('constellationValue', None)
-        solar_system_value = data.get('systemValue', None)
-        planetary_resources = data.get('planetaryResources', [])
+        if not isinstance(data, dict):
+            raise ValidationError({'error': '查询条件必须为对象。'})
+        region_value = location_ids(data.get('regionValue', []))
+        constellation_value = location_ids(data.get('constellationValue', []))
+        solar_system_value = location_ids(data.get('systemValue', []))
+        submitted_resources = data.get('planetaryResources', [])
+        if not isinstance(submitted_resources, list) or len(submitted_resources) > RESOURCE_LIMIT:
+            raise ValidationError({'error': '资源最多选择 34 项，请缩小查询条件。'})
+        base_url = request.build_absolute_uri(settings.STATIC_URL)
+        resource_catalog = {option['value']: option for category in getPlanetResourcesList(base_url)
+                            for option in category['options']}
+        planetary_resources, seen = [], set()
+        for resource in submitted_resources:
+            name = resource.get('value') if isinstance(resource, dict) else None
+            if not isinstance(name, str) or name not in RESOURCE_FIELD_MAP or name not in resource_catalog:
+                raise ValidationError({'error': '请选择有效的行星资源。'})
+            if name not in seen:
+                seen.add(name)
+                planetary_resources.append(resource_catalog[name])
 
         queryset = PlanetResource.objects.select_related('p_region', 'p_constellation', 'p_solarsystem')
 
@@ -104,7 +122,7 @@ class PlanetaryResourceView(APIView):
             elif region_value:
                 queryset = queryset.filter(p_region_id__in=region_value)
 
-            if region_value and not planetary_resources:
+            if region_value and not constellation_value and not solar_system_value and not planetary_resources:
                 results = self.get_region_top3_resources(region_value, request)
 
             elif not planetary_resources:  # 如果行星资源为空，查询该地点下所有种类行星资源前三的地点
@@ -123,7 +141,7 @@ class PlanetaryResourceView(APIView):
     def get_resources_by_location_and_type(self, queryset, planetary_resources):
         results = []
 
-        for resource in queryset:
+        for resource in bounded_rows(queryset.order_by('pk'), CANDIDATE_LIMIT):
             for res in planetary_resources:
                 resource_name = res.get('value')
                 field_info = RESOURCE_FIELD_MAP.get(resource_name, {})
@@ -132,7 +150,7 @@ class PlanetaryResourceView(APIView):
                 if resource_level_field and resource_yield_field:
                     resource_level = getattr(resource, resource_level_field, None)
                     resource_yield = getattr(resource, resource_yield_field, None)
-                    if resource_level is not None and resource_yield is not None:
+                    if resource_level is not None and numeric_yield(resource_yield) is not None:
                         result = self.format_resource_result(resource, resource_name, res['icon'],
                                                              resource_level, resource_yield)
 
@@ -141,30 +159,31 @@ class PlanetaryResourceView(APIView):
         return results
 
     def get_top_resources_by_type_across_regions(self, planetary_resources):
-        # 显示每个星域中该行星资源产出最高的地点
+        # Bound the source before finding maxima; correlated MAX used to scan
+        # this same legacy table once per candidate, before its result LIMIT.
+        records = bounded_rows(PreSearchPlanetary.objects.filter(
+            resource_name__in=[resource['value'] for resource in planetary_resources]
+        ).order_by('pk').values(
+            'region_ps_name', 'region_security',
+            'constellation_ps_name', 'constellation_security',
+            'solar_system_ps_name', 'solar_system_security',
+            'planet_id', 'resource_level', 'resource_yield', 'resource_name'
+        ), RESULT_LIMIT)
+        eligible, maxima = [], {}
+        for record in records:
+            amount = numeric_yield(record['resource_yield'])
+            # Legacy SQL equality did not match a NULL region name.
+            if amount is None or record['region_ps_name'] is None:
+                continue
+            key = (record['resource_name'], record['region_ps_name'])
+            eligible.append((record, key, amount))
+            if key not in maxima or amount > maxima[key]:
+                maxima[key] = amount
         results = []
-        # 子查询获取每个 region_id 中给定 resource_name 的最大 resource_yield
         for res in planetary_resources:
-            subquery = PreSearchPlanetary.objects.filter(
-                resource_name=res['value'],
-                region_ps_name=OuterRef('region_ps_name')
-            ).values('region_ps_name').annotate(
-                max_yield=Max('resource_yield')
-            ).values('max_yield')
-            # 主查询，选择与子查询结果匹配的记录
-            max_yield_records = PreSearchPlanetary.objects.filter(
-                resource_name=res['value'],
-                resource_yield=Subquery(subquery)
-            ).values(
-                'region_ps_name', 'region_security',
-                'constellation_ps_name', 'constellation_security',
-                'solar_system_ps_name', 'solar_system_security',
-                'planet_id', 'resource_level', 'resource_yield', 'resource_name'
-            )
-
-            for record in max_yield_records:
-                result = self.format_pre_search_result(record, res['icon'])
-                results.append(result)
+            for record, key, amount in eligible:
+                if record['resource_name'] == res['value'] and amount == maxima[key]:
+                    results.append(self.format_pre_search_result(record, res['icon']))
 
         return results
 
@@ -185,7 +204,9 @@ class PlanetaryResourceView(APIView):
                                                                                     'planet_id', 'resource_level',
                                                                                     'resource_yield', 'resource_name')
 
-        for record in records:
+        for record in bounded_rows(records.order_by('pk'), RESULT_LIMIT):
+            if record['resource_name'] not in icon_lookup or numeric_yield(record['resource_yield']) is None:
+                continue
             result = self.format_pre_search_result(record, icon_lookup[record['resource_name']])
             results.append(result)
         return results
@@ -200,7 +221,7 @@ class PlanetaryResourceView(APIView):
 
         results = []
         # 批量查询所有资源，避免N+1问题
-        all_resources = queryset.select_related('p_region', 'p_constellation', 'p_solarsystem')
+        all_resources = bounded_rows(queryset.order_by('pk'), CANDIDATE_LIMIT)
 
         for field, info in RESOURCE_FIELD_MAP.items():
             resource_level_field = info.get('level')
@@ -210,14 +231,12 @@ class PlanetaryResourceView(APIView):
             # Keep the existing top-three semantics without sorting the full
             # queryset for every resource type (O(n log n)); nlargest keeps a
             # bounded heap and is substantially cheaper for large datasets.
-            top_resources = heapq.nlargest(
-                3,
-                all_resources,
-                key=lambda x: getattr(x, resource_yield_field) or 0,
-            )
+            ranked = [(numeric_yield(getattr(resource, resource_yield_field)), resource)
+                      for resource in all_resources]
+            top_resources = heapq.nlargest(3, (pair for pair in ranked if pair[0] is not None), key=lambda pair: pair[0])
 
             icon_url = icon_lookup[field]
-            for resource in top_resources:
+            for _, resource in top_resources:
                 resource_yield = getattr(resource, resource_yield_field)
                 if resource_yield is not None:
                     result = self.format_resource_result(

@@ -13,13 +13,13 @@
 ## Task 1: SMTP transport and explicit read throttles
 
 Files: `backend/EVE_MDjango/EmailBackend.py`, `backend/EVE_MDjango/settings.py`,
-`backend/Authentication/throttle.py`, `backend/Authentication/tests.py`.
+`backend/Authentication/throttle.py`, `backend/Authentication/test_email_backend.py`.
 
 1. Add tests in the existing discovered auth module: effective configured and
    fallback timeout reaches SMTP_SSL; SSL context preserved; connect/login/send
    timeout raises; failed open closes/discards partial transport and retry uses
    a new one; fail_silently remains respected; endpoint timeout is not success.
-2. Run `python manage.py test Authentication.tests --settings=EVE_MDjango.public_auth_test_settings --noinput`;
+2. Run `python manage.py test Authentication.test_email_backend --settings=EVE_MDjango.public_auth_test_settings --noinput`;
    observe assertion failures for missing timeout/cleanup before implementing.
 3. Set production EMAIL_TIMEOUT10 and minimally fix the existing backend, no
    async/retry platform. Add PlanetaryQueryThrottle30/min and BazaarChartThrottle
@@ -85,7 +85,9 @@ Files: `.github/workflows/ci.yml` only add new isolated tests to existing comman
 appropriate `docs/` operations contracts; no publisher change.
 
 1. Include PlanetaryResource/StarFieldSearch/Bazaar suites under existing isolated
-   public settings; retain all previous auth/MySQL/browser/package gates.
+   public settings; retain all previous auth/MySQL/browser/package gates. Reuse
+   the already pinned runtime certifi version in CI-only dependencies for the
+   real SMTP-backend import; do not change production requirements.
 2. Independent requirements review, then code-quality review for each batch;
    fix/retest/re-review issues. Controller inspects actual diff/test evidence.
 3. Run all auth/fraud/public/legacy suites, relevant frontend browsers, all unit
@@ -99,3 +101,38 @@ appropriate `docs/` operations contracts; no publisher change.
    desktop/mobile relevant-page screenshots. No real mail/private writes/game
    collection. Preserve private outputs and user changes. Report live outcome
    and limits honestly, not invented general speedup percentages.
+
+## Execution evidence before remote release
+
+- Existing attached worktree reused; base master bba09771, original dirty 43c4
+  and private outputs preserved. Baseline46 auth/6 fraud/781 unit-preview passed.
+- Test-first genuine failures confirmed for missing SMTP timeout/failed transport
+  cleanup, unbounded chart rows/inputs/throttle, lexicographic planetary Top3,
+  absent CSV limit, missing operation pagination/actor batching, actionable
+  frontend errors and legacy blank-ID mispairing; setup/encoding/interaction
+  mistakes were corrected separately rather than counted as product failures.
+- A 10000-row real SQLite tie fixture exposed old correlated MAX amplification;
+  approved narrow fix reads the same pretable once with LIMIT10001, keeps finite
+  maxima/ties and original resource order. No new schema/cache.
+- Controller verification:59 auth/SMTP,53 public/legacy,16 fraud backend tests;
+  784 frontend unit/preview tests, production build/bundle budget and136 related
+  browser regressions passed. Complete deployment safety suite370 passed with17
+  existing Windows platform skips; Linux CI must still run its full gates.
+- Independent spec then code-quality reviews passed for all four tasks. The
+  blank legacy operation-ID issue found in review was fixed test-first; numeric
+  legacy IDs and exact nonblank string keys remain compatible. Reviewer separately
+  passed13 SMTP,14 Bazaar,25 planetary/directory,16 fraud,19 adapter/unit tests,
+  plus five targeted CI safety checks.
+- New SMTP tests require the already existing certifi runtime dependency; its
+  same pinned version was added to CI-only requirements, not runtime requirements.
+- Adding isolated CI labels intentionally triggers the frozen policy's opaque
+  build-context fallback. Historical exact-control proofs use an explicitly
+  reconstructed old fixture; a new negative proves actual new CI must rebuild
+  frontend while backend fingerprint is unchanged in that isolated fixture.
+  No source_plan/publisher/Production-policy changes or server policy installation.
+- Read-only production aggregate preflight confirmed one-region planet max1667,
+  pretable5708 rows, max Bazaar series20 points; SMTP timeout was unset. No
+  writes/mail/game calls. Current baseline frontendbba09771/backend0fb8ba166,
+  services/timers healthy and KM disabled; Nginx hashes unchanged.
+- Remote PR/master CI, deployment and actual production page checks remain
+  pending until the version-bound release receipt records them.

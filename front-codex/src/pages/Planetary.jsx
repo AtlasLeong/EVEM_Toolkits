@@ -241,7 +241,7 @@ export default function PlanetaryPage() {
 
   const searchMutation = useMutation({
     mutationFn: searchPlanetResources,
-    onError: () => setSearchHint('查询失败，请稍后重试'),
+    onError: (error) => setSearchHint(error.message || '查询失败，请稍后重试'),
     onSuccess: (data) => {
       setSearchHint('')
       setRows(Array.isArray(data) ? data.map((item, index) => enrichSearchRow(item, index)) : [])

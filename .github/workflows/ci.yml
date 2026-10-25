@@ -82,8 +82,8 @@ jobs:
       - name: Public access, account verification and refresh-token policy (isolated)
         working-directory: backend
         run: |
-          python manage.py test Authentication.test_viewer_access Authentication.test_public_auth Authentication.tests --settings=EVE_MDjango.public_auth_test_settings --noinput 2>&1 | tee ../ci-evidence/auth-policy-tests.log
-          python manage.py test Authentication.test_public_read_access --settings=EVE_MDjango.public_access_test_settings --noinput 2>&1 | tee ../ci-evidence/public-read-tests.log
+          python manage.py test Authentication.test_viewer_access Authentication.test_public_auth Authentication.tests Authentication.test_email_backend --settings=EVE_MDjango.public_auth_test_settings --noinput 2>&1 | tee ../ci-evidence/auth-policy-tests.log
+          python manage.py test Authentication.test_public_read_access PlanetaryResource StarFieldSearch Bazaar --settings=EVE_MDjango.public_access_test_settings --noinput 2>&1 | tee ../ci-evidence/public-read-tests.log
           python manage.py test FraudList --settings=EVE_MDjango.fraud_access_test_settings --noinput 2>&1 | tee ../ci-evidence/fraud-access-tests.log
       - name: License, activation, feedback, community and deployment-version tests (isolated SQLite)
         working-directory: backend
